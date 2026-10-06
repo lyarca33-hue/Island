@@ -5,6 +5,7 @@ import { Game, type HandActions } from './game/Game';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
 import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
+import { NeedsHud, TimeControls } from './ui/TimeHud';
 
 /** On commence par le créateur de personnage, puis « Jouer » ouvre la map avec ce perso. */
 export function App() {
@@ -74,7 +75,9 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
             ))}
           </dl>
         </MenuSection>
-        {/* Réglage de l'heure (cycle jour/nuit) : ajouter ici sa <MenuSection title="Heure"> */}
+        <MenuSection title="Heure" open={section === 'heure'} onToggle={fold('heure')}>
+          <TimeControls game={ready} />
+        </MenuSection>
         <MenuSection title="IA des ordres" open={section === 'ia'} onToggle={fold('ia')}>
           <AiSettingsForm />
         </MenuSection>
@@ -86,6 +89,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
         <button onClick={() => game.current?.rotateCamera(-1)} aria-label="Tourner la caméra à gauche">⟲</button>
         <button onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite">⟳</button>
       </div>
+      <NeedsHud game={ready} />
       {held && (
         <div className="hud-held">
           <button onClick={() => game.current?.drop()}>

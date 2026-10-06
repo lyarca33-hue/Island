@@ -29,6 +29,11 @@ mène à la map, « ✎ Perso » y revient.
   - **💬 Parole** : le perso dit la phrase, dans une bulle au-dessus de sa tête ;
   - **✋ Action** : un ordre au perso (« range tous les livres », « fais-toi un café puis bois »),
     qu'il exécute. Le bouton « Arrêter » l'interrompt.
+- Cycle jour/nuit : le temps du jeu passe 4 fois plus vite que le vrai (une journée = 6 h réelles).
+  Menu → « Heure » : curseur pour changer l'heure à la volée, pause, ×4 ou ×60.
+- Besoins du perso (en haut à droite) : fatigue, faim, soif, hygiène, de 100 à 0. Ils baissent
+  avec l'heure du jeu, plus vite en marchant ou en courant (la fatigue aussi la nuit) ; boire
+  remonte la soif, et un café réveille un peu. Console : `game.needs.set('faim', 10)`.
 
 ### Les ordres
 

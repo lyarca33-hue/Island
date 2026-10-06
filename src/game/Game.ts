@@ -9,12 +9,14 @@
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
+import { applySky, GameClock } from './clock';
 import { createGround, GROUND_HALF } from './ground';
 import { LAY_FLAT, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
 import { Nav } from './nav';
+import { Needs } from './needs';
 import { lightAllPasses, PostFx } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -29,6 +31,10 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2.5;
 /** Hauteur du point suivi au-dessus des pieds du perso (m). */
 const FOCUS_HEIGHT = 0.9;
+
+/** Soif rendue par une tasse pleine bue en entier, et regain d'énergie si c'est du café. */
+const DRINK_THIRST = 35;
+const COFFEE_ENERGY = 12;
 
 /** Objets de test posés autour du point de départ : [id, x, y, z, rotation (rad)]. */
 const START_ITEMS: Array<[string, number, number, number, number]> = [
@@ -80,6 +86,13 @@ export class Game {
   private post: PostFx;
   private character = new Character();
   private sun: THREE.DirectionalLight;
+  private hemi: THREE.HemisphereLight;
+  /** Heure du jeu (4 fois plus rapide que le temps réel) : pilote la lumière et les besoins. */
+  readonly clock = new GameClock();
+  /** Fatigue, faim, soif, hygiène du perso. */
+  readonly needs = new Needs();
+  /** Niveau de la tasse tenue à l'image précédente : ce qui a été bu depuis. */
+  private lastSip: { item: WorldItem; level: number; contents: string | null } | null = null;
   private ground: THREE.Mesh;
   private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3) => void };
   private container: HTMLElement;
@@ -129,8 +142,8 @@ export class Game {
 
     this.scene.background = new THREE.Color(0x2b3a2a);
 
-    // lumière de jour : ciel bleuté + sol vert renvoyé, soleil chaud rasant (ombres longues)
-    const hemi = lightAllPasses(new THREE.HemisphereLight(new THREE.Color(0.75, 0.85, 1.0), new THREE.Color(0.25, 0.32, 0.18), 0.9));
+    // ciel + sol renvoyé, et soleil (ou lune) : couleurs et direction réglées par l'heure (applySky)
+    const hemi = this.hemi = lightAllPasses(new THREE.HemisphereLight(new THREE.Color(0.75, 0.85, 1.0), new THREE.Color(0.25, 0.32, 0.18), 0.9));
     this.sun = lightAllPasses(new THREE.DirectionalLight(new THREE.Color(1.0, 0.92, 0.78), 2.2));
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -711,6 +724,7 @@ export class Game {
     this.riders = this.riders.filter((r) => held.includes(r.base));
     this.prevHeld = held;
     this.tickBrew(dt);
+    this.tickNeeds(dt);
     const names = held.map((h) => {
       const n = h.contents ? `${h.name} de ${h.contents}` : h.name;
       const count = c.handOf(h)?.carried.length ?? 1;
@@ -737,6 +751,22 @@ export class Game {
     this.motes.update(now / 1000, this.character.position);
     this.post.render();
   };
+
+  /** Le temps passe : les besoins baissent ; boire (café) remonte la soif et réveille un peu. */
+  private tickNeeds(dt: number): void {
+    const hours = this.clock.tick(dt);
+    this.needs.tick(hours, this.character.moveGait, this.clock.isNight);
+    // la tasse, dans l'une ou l'autre main
+    const held = this.character.heldItems.find((i) => i.def.fill);
+    if (held) {
+      const drunk = this.lastSip?.item === held ? this.lastSip.level - held.level : 0;
+      if (drunk > 0) {
+        this.needs.restore('soif', drunk * DRINK_THIRST);
+        if (this.lastSip?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
+      }
+      this.lastSip = { item: held, level: held.level, contents: held.contents };
+    } else this.lastSip = null;
+  }
 
   /** Bulle de parole : suit la tête du perso à l'écran, puis disparaît. */
   private placeBubble(): void {
@@ -772,9 +802,8 @@ export class Game {
       this.focus.z + Math.sin(this.yaw) * Math.cos(ISO_ELEVATION) * CAM_DIST,
     );
     c.lookAt(this.focus);
-    // soleil et carte d'ombre suivent le perso
-    this.sun.position.set(this.focus.x - 8, 14, this.focus.z + 5);
-    this.sun.target.position.set(this.focus.x, 0, this.focus.z);
+    // lumière selon l'heure ; soleil et carte d'ombre suivent le perso
+    applySky(this.clock.hour, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus);
     // flou de profondeur : net autour du perso (distance caméra -> point suivi), plus large au dézoom
     this.post.setDof({ focus: CAM_DIST, range: 2.2 / this.zoom, falloff: 6 / this.zoom, strength: 1 });
   }
