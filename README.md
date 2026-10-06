@@ -106,8 +106,13 @@ Les objets posés sur celui qu'on soulève (une tasse sur la caisse) partent ave
 Fiche d'un livre : `stack: 'livre'` (s'empile avec les autres livres), `layFlat: true` (se pose
 couché). Un meuble de rangement donne ses places (`slots`), où les objets se rangent debout.
 
+Machine à café : tasse en main, clic sur la machine. Le perso pose la tasse sous le bec, le café
+coule, puis il reprend la tasse pleine (« tasse de café »). Fiches : `pour` pour la machine (où
+poser le récipient, ce qu'elle remplit, durée), `fill` pour la tasse (hauteur du liquide vide /
+pleine ; la tasse commence vide).
+
 Les meubles (objets non portables) sont des rectangles au sol que le perso contourne
 (`src/game/nav.ts`) : il glisse le long au clavier, et un clic de l'autre côté passe par leurs coins.
 
 Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()`,
-`game.store()` (ranger les livres tenus), `game.itemNames`.
+`game.store()` (ranger les livres tenus), `game.makeCoffee()`, `game.itemNames`.

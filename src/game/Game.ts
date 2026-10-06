@@ -37,6 +37,7 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['lettre', 1.34, TABLE_H, 1.05, Math.PI / 3],
   ['caisse', 0.6, 0, -1.9, 0.2],
   ['bibliotheque', -1.7, 0, -1.2, Math.PI / 4],
+  ['machine-a-cafe', 2.1, 0, -0.8, -Math.PI / 4],
 ];
 
 /** Livres de départ : rangés dans la bibliothèque (place) ou posés à plat ([x, y, z, rotation]). */
@@ -78,6 +79,8 @@ export class Game {
   private heldLabel: string | null = null;
   /** Objets posés sur l'objet tenu (ex. tasse sur la caisse) : ils le suivent. */
   private riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> = [];
+  /** Café en train de couler : la machine, la tasse posée dessous, le temps écoulé (s). */
+  private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null) => void) | null = null;
   /** Petit message à afficher (ex. objet non portable). */
@@ -218,6 +221,73 @@ export class Game {
     return shelf ? this.storeIn(shelf, false) : false;
   }
 
+  /** Se fait un café à la machine la plus proche (il faut tenir la tasse). */
+  makeCoffee(running = false): boolean {
+    const p = this.character.position;
+    const machine = this.items
+      .filter((i) => i.def.pour)
+      .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    return machine ? this.pourAt(machine, running) : false;
+  }
+
+  /**
+   * Va à la machine, pose la tasse sous le bec ; le café coule (frame → tickBrew), puis le perso
+   * reprend la tasse pleine.
+   */
+  private pourAt(machine: WorldItem, running: boolean): boolean {
+    const pour = machine.def.pour!;
+    const cup = this.character.held;
+    if (this.brew) this.onNotice?.(`Le ${pour.liquid} coule déjà.`);
+    else if (!cup || cup.name !== pour.fills || this.character.carried.length > 1) this.onNotice?.(`Prends la ${pour.fills} pour te faire un ${pour.liquid}.`);
+    else if (cup.level > 0.99) this.onNotice?.(`La ${cup.name} est déjà pleine.`);
+    else {
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(machine.object.quaternion);
+      const stand = machine.object.position.clone().addScaledVector(fwd, 0.47);
+      this.character.approachThen(stand, machine.object.position, () => {
+        machine.object.updateMatrixWorld(true);
+        const spot = new THREE.Vector3(...pour.at).applyMatrix4(machine.object.matrixWorld);
+        // la tasse sous le bec, l'anse vers le perso
+        this.character.drop(spot, machine.object.rotation.y, () => {
+          this.brew = { machine, cup, t: 0 };
+        }, true);
+      }, running);
+      return true;
+    }
+    return false;
+  }
+
+  /** Le café coule du bec et remplit la tasse ; ensuite le perso la reprend s'il est resté là. */
+  private tickBrew(dt: number): void {
+    const b = this.brew;
+    if (!b) return;
+    const pour = b.machine.def.pour!;
+    const T = pour.seconds;
+    b.t += dt;
+    const jet = b.machine.part('jet');
+    if (jet) {
+      jet.userData.top ??= jet.position.y;
+      const top: number = jet.userData.top;
+      // le jet descend jusqu'au café dans la tasse (repère de la machine)
+      const fill = b.cup.def.fill;
+      const bottom = pour.at[1] + (fill ? THREE.MathUtils.lerp(fill[0], fill[1], b.cup.level) : 0);
+      const len = (top - bottom) * THREE.MathUtils.clamp((b.t - 0.3) / 0.15, 0, 1);
+      // à la fin, la dernière goutte tombe
+      const cut = THREE.MathUtils.clamp((b.t - T) / 0.15, 0, 1) * (top - bottom);
+      jet.visible = len - cut > 0.002;
+      jet.scale.y = Math.max(0.001, len - cut);
+      jet.position.y = top - cut - jet.scale.y / 2;
+    }
+    b.cup.setLevel((b.t - 0.5) / (T - 0.6));
+    if (b.t < T + 0.4) return;
+    b.cup.setLevel(1);
+    b.cup.contents = pour.liquid;
+    if (jet) jet.visible = false;
+    this.brew = null;
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(b.machine.object.quaternion);
+    const stand = b.machine.object.position.clone().addScaledVector(fwd, 0.47);
+    if (!this.character.held && this.character.position.distanceTo(stand) < 0.8) this.character.pickUp(b.cup, false, fwd);
+  }
+
   /** Clic sur un objet : le prendre, l'ajouter à la pile tenue, ou y ranger ce qu'on tient. */
   private tryPickUp(item: WorldItem, running: boolean): boolean {
     const held = this.character.held;
@@ -225,6 +295,8 @@ export class Game {
     // un livre rangé se prend par l'avant du meuble
     const from = this.shelfOf(item)?.forward;
     if (!this.character.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
+    else if (item.def.pour) return this.pourAt(item, running);
+    else if (item === this.brew?.cup) this.onNotice?.(`Le ${this.brew.machine.def.pour!.liquid} coule encore.`);
     else if (item.def.slots && held) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
     else if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
@@ -452,8 +524,10 @@ export class Game {
       this.heldItem = held;
       if (!held) this.riders = [];
     }
+    this.tickBrew(dt);
     const count = this.character.carried.length;
-    const label = held ? (count > 1 ? `${held.name} ×${count}` : held.name) : null;
+    const name = held?.contents ? `${held.name} de ${held.contents}` : held?.name;
+    const label = held ? (count > 1 ? `${name} ×${count}` : name!) : null;
     if (label !== this.heldLabel) {
       this.heldLabel = label;
       this.onHeldChange?.(label);

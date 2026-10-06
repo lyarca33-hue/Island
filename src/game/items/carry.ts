@@ -26,6 +26,10 @@ export class WorldItem {
   /** Boîte de l'objet dans son propre repère (pour le poser à plat ou debout). */
   readonly box: THREE.Box3;
   readonly gripPoint: THREE.Vector3;
+  /** Niveau de remplissage d'un récipient (0 vide, 1 plein ; voir ItemDef.fill). */
+  level = 0;
+  /** Ce qu'il contient (« café »), ou null. */
+  contents: string | null = null;
 
   constructor(readonly def: ItemDef) {
     const model = def.build();
@@ -35,6 +39,23 @@ export class WorldItem {
     this.box.getSize(this.size);
     this.grip = def.grip ?? guessGrip(this.size);
     this.gripPoint = def.gripPoint ? vec(def.gripPoint) : new THREE.Vector3(0, this.size.y / 2, 0);
+    if (def.fill) this.setLevel(0);
+  }
+
+  /** Pièce nommée du modèle (ex. `liquide`, `jet`). */
+  part(name: string): THREE.Object3D | undefined {
+    return this.object.getObjectByName(name);
+  }
+
+  /** Remplit le récipient (0 à 1) : le liquide monte (et s'élargit, la tasse s'évase). */
+  setLevel(level: number): void {
+    const liquid = this.part('liquide');
+    if (!this.def.fill || !liquid) return;
+    this.level = THREE.MathUtils.clamp(level, 0, 1);
+    liquid.visible = this.level > 0.01;
+    liquid.position.y = THREE.MathUtils.lerp(this.def.fill[0], this.def.fill[1], this.level);
+    const r = THREE.MathUtils.lerp(0.87, 1, this.level);
+    liquid.scale.set(r, 1, r);
   }
 
   get name(): string {
