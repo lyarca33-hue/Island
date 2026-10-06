@@ -77,12 +77,13 @@ export class Game {
   private items: WorldItem[] = [];
   private heldItem: WorldItem | null = null;
   private heldLabel: string | null = null;
+  private drinkable = false;
   /** Objets posés sur l'objet tenu (ex. tasse sur la caisse) : ils le suivent. */
   private riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> = [];
   /** Café en train de couler : la machine, la tasse posée dessous, le temps écoulé (s). */
   private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
-  onHeldChange: ((name: string | null) => void) | null = null;
+  onHeldChange: ((name: string | null, drinkable: boolean) => void) | null = null;
   /** Petit message à afficher (ex. objet non portable). */
   onNotice: ((text: string) => void) | null = null;
 
@@ -219,6 +220,18 @@ export class Game {
       .filter((i) => i.def.slots)
       .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
     return shelf ? this.storeIn(shelf, false) : false;
+  }
+
+  /** Boit une gorgée de ce que contient l'objet tenu (tasse de café). */
+  drink(): boolean {
+    const held = this.character.held;
+    const hands = this.character.hands;
+    if (!held || !hands) return false;
+    if (!held.def.fill) this.onNotice?.(`On ne boit pas dans : ${held.name}.`);
+    else if (!held.contents) this.onNotice?.(`La ${held.name} est vide.`);
+    else if (!hands.drink()) return false;
+    else return true;
+    return false;
   }
 
   /** Se fait un café à la machine la plus proche (il faut tenir la tasse). */
@@ -398,6 +411,7 @@ export class Game {
       this.shift = e.shiftKey;
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
+      if (e.code === 'KeyB' && !e.repeat) this.drink();
     });
     on(window, 'keyup', (e) => {
       this.shift = e.shiftKey;
@@ -528,9 +542,11 @@ export class Game {
     const count = this.character.carried.length;
     const name = held?.contents ? `${held.name} de ${held.contents}` : held?.name;
     const label = held ? (count > 1 ? `${name} ×${count}` : name!) : null;
-    if (label !== this.heldLabel) {
+    const drinkable = !!held?.contents;
+    if (label !== this.heldLabel || drinkable !== this.drinkable) {
       this.heldLabel = label;
-      this.onHeldChange?.(label);
+      this.drinkable = drinkable;
+      this.onHeldChange?.(label, drinkable);
     }
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);

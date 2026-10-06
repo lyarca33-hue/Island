@@ -21,6 +21,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
+  const [drinkable, setDrinkable] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,7 +29,10 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
     const g = new Game(host.current, recipe);
     game.current = g;
     (window as unknown as { game: Game }).game = g; // console : game.rotateCamera(1), game.pickUp('tasse')...
-    g.onHeldChange = setHeld;
+    g.onHeldChange = (name, canDrink) => {
+      setHeld(name);
+      setDrinkable(canDrink);
+    };
     let timer = 0;
     g.onNotice = (text) => {
       setNotice(text);
@@ -56,13 +60,20 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
         <button onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite">⟳</button>
       </div>
       {held && (
-        <button className="hud-held" onClick={() => game.current?.drop()}>
-          En main : {held} · <b>Poser (E)</b>
-        </button>
+        <div className="hud-held">
+          <button onClick={() => game.current?.drop()}>
+            En main : {held} · <b>Poser (E)</b>
+          </button>
+          {drinkable && (
+            <button onClick={() => game.current?.drink()}>
+              <b>Boire (B)</b>
+            </button>
+          )}
+        </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
       <footer className="hud-help">
-        Clic : aller ici · Clic sur un objet : le prendre · E : poser · ZQSD : marcher · Maj : courir
+        Clic : aller ici · Clic sur un objet : le prendre · E : poser · B : boire · ZQSD : marcher · Maj : courir
       </footer>
       {(loading || error) && <div className="hud-loading">{error ?? 'Chargement…'}</div>}
     </div>

@@ -79,9 +79,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s). */
 const STACK_BLEND = 0.4;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -100,6 +100,18 @@ interface StackEntry {
   fromRot: THREE.Quaternion;
   leaving: { pos: THREE.Vector3; rot: THREE.Quaternion } | null;
 }
+/** Boire : montée de la tasse à la bouche, gorgée, descente (s, dans DURATION.drink). */
+const SIP_UP = 0.7;
+const SIP_DOWN = 0.6;
+/** Part du contenu bue par seconde de gorgée. */
+const SIP_RATE = 0.28;
+/** Tasse inclinée vers la bouche (rad). */
+/** Main pendant la gorgée, depuis l'os de la tête (m, repère du buste). */
+const SIP_MOUTH: [number, number, number] = [-0.05, -0.02, 0.13];
+/** Vers où pointe le coude pendant la gorgée (repère du buste). */
+const SIP_POLE: [number, number, number] = [-0.35, -0.9, 0.25];
+const SIP_TILT = THREE.MathUtils.degToRad(55);
+
 /** Temps de fondu de l'objet entre sa pose au sol et sa pose en main (s). */
 const SNAP = 0.25;
 
@@ -143,6 +155,8 @@ export class Carry {
   /** Centre des paumes calculé à cette image (pour placer l'objet tenu). */
   private palms: Partial<Record<Side, THREE.Vector3>> = {};
   private chestRot = new THREE.Quaternion();
+  /** Part du geste « boire » (0 : tasse tenue, 1 : à la bouche). */
+  private sip = 0;
 
   constructor(rig: Rig) {
     this.rig = rig;
@@ -219,6 +233,13 @@ export class Carry {
     return true;
   }
 
+  /** Boit une gorgée de ce que contient l'objet tenu (tasse de café). */
+  drink(onDone?: () => void): boolean {
+    if (!this.item || this.phase !== 'hold' || this.stack.length || !this.item.contents || this.item.level <= 0) return false;
+    this.start('drink', onDone);
+    return true;
+  }
+
   /** Saisit un objet à portée (le perso doit déjà lui faire face). */
   pickUp(item: WorldItem, onDone?: () => void): boolean {
     if (this.item || this.busy || !item.def.portable) return false;
@@ -255,7 +276,7 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
@@ -292,7 +313,8 @@ export class Carry {
     switch (this.phase) {
       case 'reach': return { w: k, r: 1, c: k };
       case 'lift': return { w: 1, r: 1 - k, c: 1 - k };
-      case 'hold': return { w: 1, r: 0, c: 0 };
+      case 'hold':
+      case 'drink': return { w: 1, r: 0, c: 0 };
       case 'lower': return { w: 1, r: k, c: k };
       case 'release': return { w: 1 - k, r: 1, c: 1 - k };
       // on se penche un peu pour attraper / poser un livre sans lâcher la pile
@@ -307,6 +329,12 @@ export class Carry {
     if (this.phase === 'idle' || !this.item) return;
     if (this.phase !== 'reach') for (const e of this.stack) e.age += dt;
     const { w, r, c } = this.weights();
+    this.sip = this.phase === 'drink' ? this.sipAmount() : 0;
+    // gorgée : le niveau baisse quand la tasse est à la bouche
+    if (this.sip > 0.9 && this.item.contents) {
+      this.item.setLevel(this.item.level - SIP_RATE * dt);
+      if (this.item.level <= 0) this.item.contents = null;
+    }
     this.saved = this.touched.map((node) => ({ node, q: node.quaternion.clone(), p: node.position.clone() }));
     const root = this.rig.vrm.scene;
     root.updateMatrixWorld(true);
@@ -326,6 +354,14 @@ export class Carry {
       }
     }
     root.updateMatrixWorld(true);
+  }
+
+  /** Tasse vers la bouche : monte, reste le temps de la gorgée, redescend. */
+  private sipAmount(): number {
+    const t = this.t, T = DURATION.drink;
+    if (t < SIP_UP) return ease(t / SIP_UP);
+    if (t > T - SIP_DOWN) return ease(Math.max(0, (T - t) / SIP_DOWN));
+    return 1;
   }
 
   /** Penche le buste et plie les jambes (pieds fixes) selon la hauteur de la cible. */
@@ -376,6 +412,12 @@ export class Carry {
     const fingers = vec(hand.fingers).normalize().applyQuaternion(this.chestRot);
     const palm = vec(hand.palm).normalize().applyQuaternion(this.chestRot);
     const handRot = basisRotation(rest.fingers, PALM_REST, fingers, palm);
+    const sipping = this.sip > 0 && side === 'right' && !spec.left;
+    if (sipping) {
+      // tasse inclinée vers la bouche : rotation autour de l'axe gauche-droite du buste
+      const across = new THREE.Vector3(1, 0, 0).applyQuaternion(this.chestRot);
+      handRot.premultiply(new THREE.Quaternion().setFromAxisAngle(across, -SIP_TILT * this.sip));
+    }
     // où va le centre de la paume
     let palmTarget: THREE.Vector3;
     if (spec.left) {
@@ -394,14 +436,25 @@ export class Carry {
       const shoulder = rig.worldPos(upper);
       const hold = shoulder.add(vec(hand.reach).multiplyScalar(this.armLength(side)).applyQuaternion(this.chestRot));
       palmTarget = hold.lerp(this.target, r);
+      if (sipping) palmTarget.lerp(this.mouthHold(scale), this.sip);
     }
     const offset = mirror(vec(spec.hold), side).multiplyScalar(scale).applyQuaternion(handRot);
     const wrist = palmTarget.clone().sub(offset);
-    const pole = vec(hand.pole).normalize().applyQuaternion(this.chestRot);
+    const pole = vec(hand.pole).normalize();
+    // gorgée : le coude descend sous la tasse
+    if (sipping) pole.lerp(vec(SIP_POLE).normalize(), this.sip).normalize();
+    pole.applyQuaternion(this.chestRot);
     solveTwoBone(rig, upper, lower, handNode, wrist, pole, rest.dir, rest.hinge);
     rig.setWorldRot(handNode, handRot);
     this.palms[side] = palmTarget;
     this.curl(side, hand);
+  }
+
+  /** Où tenir la main pour que le bord de la tasse touche les lèvres (monde). */
+  private mouthHold(scale: number): THREE.Vector3 {
+    const rig = this.rig;
+    const head = rig.worldPos(rig.node('head')!);
+    return head.add(new THREE.Vector3(...SIP_MOUTH).multiplyScalar(scale).applyQuaternion(this.chestRot));
   }
 
   /** Orientation de l'objet au sol (pour poser les mains sur ses flancs). */

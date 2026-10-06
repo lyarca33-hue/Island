@@ -111,8 +111,12 @@ coule, puis il reprend la tasse pleine (« tasse de café »). Fiches : `pour` p
 poser le récipient, ce qu'elle remplit, durée), `fill` pour la tasse (hauteur du liquide vide /
 pleine ; la tasse commence vide).
 
+Boire : tasse de café en main, bouton « Boire » ou touche B. Le perso porte la tasse à la bouche,
+l'incline et boit une gorgée ; le niveau baisse (environ trois gorgées). Vide, elle se remplit
+de nouveau à la machine.
+
 Les meubles (objets non portables) sont des rectangles au sol que le perso contourne
 (`src/game/nav.ts`) : il glisse le long au clavier, et un clic de l'autre côté passe par leurs coins.
 
 Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()`,
-`game.store()` (ranger les livres tenus), `game.makeCoffee()`, `game.itemNames`.
+`game.store()` (ranger les livres tenus), `game.makeCoffee()`, `game.drink()`, `game.itemNames`.
