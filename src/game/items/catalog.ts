@@ -51,12 +51,17 @@ function group(...parts: THREE.Object3D[]): THREE.Group {
 
 /** Hauteur du plateau de la table (m). */
 export const TABLE_H = 0.74;
-/** Bibliothèque : trois rayons (dessus des planches) et sept places par rayon. */
+/** Épaisseur d'un livre (m) : les places d'un rayon sont collées les unes aux autres. */
+const BOOK_T = 0.045;
+/** Bibliothèque : trois rayons (dessus des planches), places de gauche à droite sur chacun. */
 const SHELF_W = 1.0;
 const SHELF_D = 0.3;
 const SHELF_H = 1.42;
 const SHELVES = [0.06, 0.5, 0.94];
-const SHELF_SLOTS = SHELVES.flatMap((y) => Array.from({ length: 7 }, (_, i): [number, number, number] => [-0.36 + i * 0.12, y, 0]));
+export const SLOTS_PER_SHELF = 20;
+const SHELF_SLOTS = SHELVES.flatMap((y) =>
+  Array.from({ length: SLOTS_PER_SHELF }, (_, i): [number, number, number] => [-0.47 + BOOK_T / 2 + 0.002 + i * (BOOK_T + 0.001), y, 0]),
+);
 
 /**
  * Un livre (fiche commune, couleurs différentes). Debout, haut vers +Y, dos vers -Z ; la paume
@@ -68,11 +73,11 @@ function book(id: string, color: THREE.ColorRepresentation): ItemDef {
     name: 'livre',
     portable: true,
     grip: 'chest',
-    gripPoint: [-0.0225, 0.13, 0],
+    gripPoint: [-BOOK_T / 2, 0.13, 0],
     stack: 'livre',
     layFlat: true,
     build: () => {
-      const cover = mesh(new THREE.BoxGeometry(0.045, 0.24, 0.17), color, 0, 0.12, 0);
+      const cover = mesh(new THREE.BoxGeometry(BOOK_T, 0.24, 0.17), color, 0, 0.12, 0);
       const pages = mesh(new THREE.BoxGeometry(0.038, 0.226, 0.16), 0xf1e7cf, 0, 0.12, 0.007);
       return group(cover, pages);
     },

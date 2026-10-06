@@ -11,7 +11,7 @@ import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { createGround, GROUND_HALF } from './ground';
 import { LAY_FLAT, WorldItem } from './items/carry';
-import { ITEM_BY_ID, TABLE_H } from './items/catalog';
+import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
 import { Nav } from './nav';
 import { lightAllPasses, PostFx } from './postfx';
@@ -41,10 +41,10 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
 
 /** Livres de départ : rangés dans la bibliothèque (place) ou posés à plat ([x, y, z, rotation]). */
 const START_BOOKS: Array<[string, number | [number, number, number, number]]> = [
-  ['livre-rouge', 1],
-  ['livre-vert', 2],
-  ['livre-ocre', 9],
-  ['livre-violet', 10],
+  ['livre-rouge', SLOTS_PER_SHELF],
+  ['livre-vert', SLOTS_PER_SHELF + 1],
+  ['livre-ocre', SLOTS_PER_SHELF + 2],
+  ['livre-violet', 2 * SLOTS_PER_SHELF],
   ['livre', [-1.3, 0, 0.9, 0.4]],
 ];
 
@@ -244,17 +244,20 @@ export class Game {
     return { pos, rot };
   }
 
-  /** Places libres d'un meuble, la plus proche des mains du perso d'abord. */
+  /**
+   * Places libres d'un meuble : sur le rayon le plus à hauteur des mains d'abord, puis de gauche
+   * à droite (les livres se serrent contre les autres, un trou laissé se comble).
+   */
   private freeSlots(shelf: WorldItem): number[] {
-    const p = this.character.position.clone().setY(1);
     const carried = this.character.carried;
+    const height = (i: number) => Math.abs(shelf.def.slots![i][1] + 0.12 - 1);
     return shelf.def.slots!
       .map((_, i) => i)
       .filter((i) => {
         const at = this.slot(shelf, i).pos;
-        return !this.items.some((it) => !carried.includes(it) && it.object.position.distanceTo(at) < 0.05);
+        return !this.items.some((it) => !carried.includes(it) && it.object.position.distanceTo(at) < 0.02);
       })
-      .sort((a, b) => this.slot(shelf, a).pos.distanceTo(p) - this.slot(shelf, b).pos.distanceTo(p));
+      .sort((a, b) => height(a) - height(b) || a - b);
   }
 
   /** Meuble où l'objet est rangé (et l'avant du meuble), ou null. */
@@ -262,7 +265,7 @@ export class Game {
     for (const shelf of this.items) {
       if (!shelf.def.slots) continue;
       for (let i = 0; i < shelf.def.slots.length; i++) {
-        if (this.slot(shelf, i).pos.distanceTo(item.object.position) < 0.05) {
+        if (this.slot(shelf, i).pos.distanceTo(item.object.position) < 0.02) {
           return { shelf, forward: new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion) };
         }
       }
