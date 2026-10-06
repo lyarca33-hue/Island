@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
-import { type AiSettings, type Chat, claudePageChat, loadSettings, openRouterChat, runAi, saveSettings } from './ai';
+import { type Chat, claudePageChat, loadSettings, openRouterChat, runAi } from './ai';
 import { parseOrder } from './parser';
 import { runIntents, type Step } from './tasks';
 
@@ -17,16 +17,14 @@ function stepText(s: Step | null): string {
 /**
  * Zone de saisie en bas de l'écran. Parole : le perso dit la phrase dans le monde. Action : un
  * ordre au perso ; les ordres simples sont compris directement (parser.ts), les autres passent par
- * un modèle de chat (ai.ts, clé OpenRouter dans les réglages).
+ * un modèle de chat (ai.ts, clé OpenRouter dans le menu : `onNeedSettings` l'ouvre).
  */
-export function ChatBar({ game }: { game: Game | null }) {
+export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSettings: () => void }) {
   const [mode, setMode] = useState<Mode>('parole');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<Step | null>(null);
   const [result, setResult] = useState<string | null>(null);
-  const [settings, setSettings] = useState<AiSettings>(loadSettings);
-  const [showSettings, setShowSettings] = useState(false);
   /** Dans l'aperçu claude.ai : Claude pour les ordres libres (OpenRouter y est injoignable). */
   const [claudeChat, setClaudeChat] = useState<Chat | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -65,9 +63,10 @@ export function ChatBar({ game }: { game: Game | null }) {
     }
     if (busy) return;
     const intents = parseOrder(t, game.describe());
+    const settings = loadSettings();
     if (!intents && !claudeChat && !settings.apiKey) {
-      setShowSettings(true);
-      setResult('Ordre non compris. Ajoute une clé OpenRouter pour les ordres libres.');
+      onNeedSettings();
+      setResult('Ordre non compris. Ajoute une clé OpenRouter (Menu → IA des ordres) pour les ordres libres.');
       return;
     }
     setText('');
@@ -101,29 +100,6 @@ export function ChatBar({ game }: { game: Game | null }) {
           )}
         </div>
       )}
-      {showSettings && (
-        <form
-          className="chat-settings"
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveSettings(settings);
-            setShowSettings(false);
-            setResult(null);
-          }}
-        >
-          <label>
-            Clé OpenRouter
-            <input type="password" value={settings.apiKey} placeholder="sk-or-…" onChange={(e) => setSettings({ ...settings, apiKey: e.target.value.trim() })} />
-          </label>
-          <label>
-            Modèle (ordres libres)
-            <input value={settings.model} onChange={(e) => setSettings({ ...settings, model: e.target.value.trim() })} />
-          </label>
-          <small>Gardée dans ce navigateur seulement.</small>
-          {claudeChat && <small>Sur claude.ai, OpenRouter est injoignable : les ordres libres passent par Claude.</small>}
-          <button type="submit">Enregistrer</button>
-        </form>
-      )}
       <form
         className={`chat-bar chat-${mode}`}
         onSubmit={(e) => {
@@ -149,9 +125,6 @@ export function ChatBar({ game }: { game: Game | null }) {
         />
         <button type="submit" className="chat-send" disabled={!text.trim() || (mode === 'action' && busy)}>
           Envoyer
-        </button>
-        <button type="button" className="chat-gear" onClick={() => setShowSettings((s) => !s)} aria-label="Réglages de l’IA" title="Réglages de l’IA">
-          ⚙
         </button>
       </form>
     </div>

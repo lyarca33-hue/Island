@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
 import type { Recipe } from './creator/recipe';
 import { Game } from './game/Game';
+import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
+import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
 
 /** On commence par le créateur de personnage, puis « Jouer » ouvre la map avec ce perso. */
 export function App() {
@@ -15,7 +17,7 @@ export function App() {
   return <World recipe={recipe} onEdit={() => setMode('creator')} />;
 }
 
-/** Scène 3D plein écran + interface minimale (titre, aide, rotation de caméra). */
+/** Scène 3D plein écran + interface minimale (menu, rotation de caméra, saisie). */
 function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
@@ -25,6 +27,10 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [held, setHeld] = useState<string | null>(null);
   const [drinkable, setDrinkable] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  /** Partie du menu dépliée. */
+  const [section, setSection] = useState<string | null>('raccourcis');
+  const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
 
   useEffect(() => {
     if (!host.current) return;
@@ -57,8 +63,25 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   return (
     <div className="app">
       <div ref={host} className="viewport" />
-      <header className="hud-title">Rp Island{recipe ? ` · ${recipe.name}` : ''}</header>
-      <button className="hud-edit" onClick={onEdit}>✎ Perso</button>
+      <Menu open={menuOpen} onToggle={setMenuOpen}>
+        <MenuSection title="Raccourcis" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
+          <dl className="menu-keys">
+            {SHORTCUTS.map(([k, v]) => (
+              <div key={k}>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </MenuSection>
+        {/* Réglage de l'heure (cycle jour/nuit) : ajouter ici sa <MenuSection title="Heure"> */}
+        <MenuSection title="IA des ordres" open={section === 'ia'} onToggle={fold('ia')}>
+          <AiSettingsForm />
+        </MenuSection>
+        <MenuSection title="Personnage" open={section === 'perso'} onToggle={fold('perso')}>
+          <button className="menu-action" onClick={onEdit}>✎ Modifier le personnage</button>
+        </MenuSection>
+      </Menu>
       <div className="hud-cam">
         <button onClick={() => game.current?.rotateCamera(-1)} aria-label="Tourner la caméra à gauche">⟲</button>
         <button onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite">⟳</button>
@@ -76,10 +99,13 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
-      <div className="hud-help">
-        Clic : aller ici · Clic sur un objet : le prendre · E : poser · B : boire · ZQSD : marcher · Maj : courir · Entrée : écrire
-      </div>
-      <ChatBar game={ready} />
+      <ChatBar
+        game={ready}
+        onNeedSettings={() => {
+          setSection('ia');
+          setMenuOpen(true);
+        }}
+      />
       {(loading || error) && <div className="hud-loading">{error ?? 'Chargement…'}</div>}
     </div>
   );

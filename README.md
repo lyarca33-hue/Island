@@ -39,7 +39,7 @@ café, boire, dire (« dis bonjour »), enchaînés avec « puis », « ensuite 
 Les autres (« mets un peu d'ordre ») passent par un modèle de chat via
 [OpenRouter](https://openrouter.ai), par défaut celui de Lumen (`qwen/qwen3.7-flash`). Il choisit
 les tâches une par une en voyant l'état de la pièce, et peut répondre en personnage. Il faut une
-clé OpenRouter : bouton ⚙ à droite de la zone de saisie (gardée dans le navigateur), ou un
+clé OpenRouter : Menu (☰ ou Échap) → « IA des ordres » (gardée dans le navigateur), ou un
 fichier `.env.local` :
 
 ```
@@ -103,7 +103,9 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/items/ik.ts` | Bras / jambe à deux os qui amène la main (le pied) sur un point |
 | `src/game/items/carry.ts` | Prendre, tenir en marchant, reposer, piles d'objets |
 | `src/game/nav.ts` | Contourner les meubles |
-| `src/orders/ChatBar.tsx` | Zone de saisie parole / action, réglages de l'IA |
+| `src/orders/ChatBar.tsx` | Zone de saisie parole / action |
+| `src/orders/AiSettingsForm.tsx` | Réglages de l'IA (clé, modèle), dans le menu |
+| `src/ui/Menu.tsx` | Menu déroulant (raccourcis, IA, perso) : une `<MenuSection>` par réglage, ajoutée dans App.tsx |
 | `src/orders/parser.ts` | Ordres simples compris sans IA |
 | `src/orders/tasks.ts` | Un ordre (ranger les livres, café…) → suite d'actions de base |
 | `src/orders/ai.ts` | Ordres libres : modèle de chat via OpenRouter |
