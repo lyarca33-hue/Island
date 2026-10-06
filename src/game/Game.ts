@@ -47,12 +47,12 @@ const START_BOOKS: Array<[string, number | [number, number, number, number]]> = 
   ['livre-ocre', SLOTS_PER_SHELF + 2],
   ['livre-violet', 2 * SLOTS_PER_SHELF],
   ['livre', [-1.3, 0, 0.9, 0.4]],
-  // de quoi demander à Jev de « ranger tous les livres »
+  // de quoi demander au perso de « ranger tous les livres »
   ['livre-vert', [0.2, 0, 2.1, 1.3]],
   ['livre-ocre', [1.5, TABLE_H, 1.45, 2.2]],
 ];
 
-/** Un objet de la pièce tel que Jev le voit (voir Game.describe). */
+/** Un objet de la pièce tel que les ordres le voient (voir Game.describe). */
 export interface WorldObject {
   ref: string;
   nom: string;
@@ -249,7 +249,7 @@ export class Game {
   }
 
   /**
-   * Repère unique de chaque objet pour Jev : l'id de sa fiche, suivi d'un numéro s'il y en a
+   * Repère unique de chaque objet pour les ordres et l’IA : l'id de sa fiche, suivi d'un numéro s'il y en a
    * plusieurs du même genre (« tasse », « tasse-2 »).
    */
   private ref(item: WorldItem): string {
@@ -261,7 +261,7 @@ export class Game {
     return this.items.find((i) => this.ref(i) === ref);
   }
 
-  /** État de la pièce pour Jev : chaque objet, où il est, et ce qu'on tient. */
+  /** État de la pièce pour les ordres et l’IA : chaque objet, où il est, et ce qu'on tient. */
   describe(): { perso: string; enMain: string[]; objets: WorldObject[] } {
     const p = this.character.position;
     const carried = this.character.carried;

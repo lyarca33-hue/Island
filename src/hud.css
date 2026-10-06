@@ -32,7 +32,7 @@
   background: rgba(60, 24, 24, 0.75); font-size: 14px; pointer-events: none; max-width: calc(100% - 32px); text-align: center;
 }
 
-/* Zone de saisie : parole / action (Jev) */
+/* Zone de saisie : parole / action */
 .chat {
   position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(720px, calc(100% - 32px));
   display: flex; flex-direction: column; gap: 6px;

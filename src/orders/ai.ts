@@ -1,0 +1,160 @@
+/**
+ * Ordres que l'analyseur ne comprend pas (« tu peux mettre un peu d'ordre ? ») : un modèle de chat
+ * via OpenRouter choisit les tâches, une par tour, en voyant l'état de la pièce et le résultat de
+ * la précédente. Il peut aussi faire parler le perso (refus en personnage, réponse).
+ *
+ * Format texte JSON plutôt que l'appel d'outils natif : marche avec n'importe quel modèle.
+ */
+import type { Game } from '../game/Game';
+import { type Intent, runIntents, type Step } from './tasks';
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+/** Envoie la conversation au modèle et rend sa réponse (texte). */
+export type Chat = (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>;
+
+export interface AiSettings {
+  apiKey: string;
+  model: string;
+}
+
+/** Le modèle par défaut de Lumen : rapide et très bon marché. */
+export const DEFAULT_MODEL = 'qwen/qwen3.7-flash';
+const STORAGE_KEY = 'rp-island.ia';
+
+/** Réglages enregistrés dans le navigateur, sinon ceux du fichier .env (VITE_OPENROUTER_API_KEY, VITE_OPENROUTER_MODEL). */
+export function loadSettings(): AiSettings {
+  let saved: Partial<AiSettings> = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+  } catch {
+    // stockage indisponible : réglages par défaut
+  }
+  return {
+    apiKey: saved.apiKey || import.meta.env.VITE_OPENROUTER_API_KEY || '',
+    model: saved.model || import.meta.env.VITE_OPENROUTER_MODEL || DEFAULT_MODEL,
+  };
+}
+
+export function saveSettings(s: AiSettings): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  } catch {
+    // tant pis : valable pour cette session seulement
+  }
+}
+
+/** Appel à OpenRouter (API compatible OpenAI), sans chaîne de pensée (comme Lumen). */
+export function openRouterChat({ apiKey, model }: AiSettings): Chat {
+  return async (messages, signal) => {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'X-Title': 'Rp Island',
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 300, reasoning: { enabled: false } }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error?.message ?? `OpenRouter : erreur ${res.status}`);
+    return data?.choices?.[0]?.message?.content ?? '';
+  };
+}
+
+const SYSTEM = `Tu joues le personnage du joueur dans un petit monde 3D de jeu de rôle. Le joueur te donne un ordre ; tu le réalises en enchaînant les tâches du jeu, une par tour.
+
+Tâches possibles (réponds avec l'une d'elles) :
+- {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable (un livre s'ajoute à la pile de livres tenue ; sinon on pose d'abord ce qu'on tient)
+- {"tache": "poser"} : poser ce qu'on tient devant soi (sur le meuble devant, sinon par terre)
+- {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
+- {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
+- {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
+- {"tache": "boire"} : boire dans la tasse (fait un café d'abord si elle est vide)
+- {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
+- {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
+
+Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
+Si l'ordre est impossible dans ce monde (objet absent, action que le jeu ne sait pas faire), dis-le en personnage avec « dire », puis « fini ».
+
+Réponds UNIQUEMENT par un objet JSON, sans texte autour. Une seule tâche par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
+
+/** Nombre de tâches au plus pour un ordre (garde-fou). */
+const MAX_STEPS = 20;
+
+/** Premier objet JSON trouvé dans la réponse (le modèle ajoute parfois du texte ou des ```). */
+export function parseJson(text: string): Record<string, unknown> | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (c === '\\') i++;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) {
+      try {
+        const obj = JSON.parse(text.slice(start, i + 1));
+        return obj && typeof obj === 'object' ? obj : null;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+/** Traduit la réponse du modèle en tâche du jeu (null : réponse mal formée). */
+function toIntent(o: Record<string, unknown>): Intent | 'fini' | null {
+  const s = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '');
+  switch (o.tache) {
+    case 'prendre': return s('objet') ? { kind: 'prendre', ref: s('objet') } : null;
+    case 'poser': return { kind: 'poser' };
+    case 'aller': return s('objet') ? { kind: 'aller', ref: s('objet') } : null;
+    case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
+    case 'cafe': return { kind: 'cafe' };
+    case 'boire': return { kind: 'boire' };
+    case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
+    case 'fini': return 'fini';
+  }
+  return null;
+}
+
+/** Réalise l'ordre avec le modèle ; rend un message pour le joueur. `onStep(null)` : il réfléchit. */
+export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: Step | null) => void, signal?: AbortSignal): Promise<string> {
+  const state = () => {
+    const w = game.describe();
+    return `État de la pièce : ${JSON.stringify({ enMain: w.enMain, objets: w.objets.map(({ ref, nom, ou }) => ({ ref, nom, ou })) })}`;
+  };
+  const messages: ChatMessage[] = [
+    { role: 'system', content: SYSTEM },
+    { role: 'user', content: `Ordre du joueur : ${order}\n\n${state()}` },
+  ];
+  let misses = 0;
+  for (let step = 0; step < MAX_STEPS; step++) {
+    onStep(null);
+    const reply = await chat(messages, signal);
+    if (signal?.aborted) return 'Interrompu.';
+    messages.push({ role: 'assistant', content: reply });
+    const json = parseJson(reply);
+    const intent = json && toIntent(json);
+    if (!intent) {
+      if (++misses > 2) throw new Error('le modèle ne répond pas dans le bon format.');
+      messages.push({ role: 'user', content: 'Réponds uniquement par un objet JSON {"tache": ...} parmi les tâches possibles.' });
+      continue;
+    }
+    misses = 0;
+    if (intent === 'fini') return typeof json!.message === 'string' && json!.message ? json!.message : 'C’est fait.';
+    const { ok, message } = await runIntents(game, [intent], onStep, signal);
+    if (signal?.aborted) return 'Interrompu.';
+    messages.push({ role: 'user', content: `Résultat : ${ok ? 'ok' : `échec : ${message}`}\n\n${state()}` });
+  }
+  return 'J’ai arrêté : trop d’étapes.';
+}

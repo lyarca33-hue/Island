@@ -27,26 +27,30 @@ mène à la map, « ✎ Perso » y revient.
 - Le perso contourne les meubles (table, bibliothèque) au lieu de les traverser
 - Zone de saisie en bas (Entrée pour y écrire, Tab pour changer de mode) :
   - **💬 Parole** : le perso dit la phrase, dans une bulle au-dessus de sa tête ;
-  - **✋ Action** : la demande (« range tous les livres ») part à **Jev**, une IA qui enchaîne
-    les actions du jeu pour la réaliser. Le bouton « Arrêter » l'interrompt.
+  - **✋ Action** : un ordre au perso (« range tous les livres », « fais-toi un café puis bois »),
+    qu'il exécute. Le bouton « Arrêter » l'interrompt.
 
-### Jev (actions par IA)
+### Les ordres
 
-Jev est le modèle `typesafe/jev-1.13`, appelé via [OpenRouter](https://openrouter.ai). Il faut une
+Les ordres simples sont compris directement par le jeu, sans IA (`src/orders/parser.ts`) :
+prendre, poser (« pose la lettre sur la table »), ranger (les livres), aller (« va à la table »),
+café, boire, dire (« dis bonjour »), enchaînés avec « puis », « ensuite » ou « et ».
+
+Les autres (« mets un peu d'ordre ») passent par un modèle de chat via
+[OpenRouter](https://openrouter.ai), par défaut celui de Lumen (`qwen/qwen3.7-flash`). Il choisit
+les tâches une par une en voyant l'état de la pièce, et peut répondre en personnage. Il faut une
 clé OpenRouter : bouton ⚙ à droite de la zone de saisie (gardée dans le navigateur), ou un
 fichier `.env.local` :
 
 ```
 VITE_OPENROUTER_API_KEY=sk-or-...
-VITE_JEV_MODEL=typesafe/jev-1.13
+VITE_OPENROUTER_MODEL=qwen/qwen3.7-flash
 ```
 
-Jev est un modèle de décision (API Decisions d'OpenRouter) : il n'écrit pas de texte, il choisit
-parmi des options. À chaque étape, le jeu lui envoie la demande, l'état de la pièce (chaque objet,
-où il est, ce qu'on tient) et ce qui est déjà fait, avec la liste des actions possibles à ce
-moment-là (`prendre:livre-vert-2`, `ranger:bibliotheque`, `poser`, `aller:table`, `cafe`, `boire`,
-`fini`). Le jeu exécute l'action choisie, attend la fin du geste, puis recommence jusqu'à `fini`.
-Les actions sont dans `src/jev/actions.ts`, la liste des options et la boucle dans `src/jev/jev.ts`.
+Les tâches (`src/orders/tasks.ts`) traduisent un ordre en actions de base selon l'état de la
+pièce : ranger les livres = les prendre par piles de 6, les ranger, recommencer tant qu'il en
+traîne. L'aperçu publié sur claude.ai ne peut pas appeler OpenRouter : pour les ordres libres,
+lancer le jeu en local.
 
 `npm run build` produit une version publiable dans `dist/`.
 
@@ -99,9 +103,11 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/items/ik.ts` | Bras / jambe à deux os qui amène la main (le pied) sur un point |
 | `src/game/items/carry.ts` | Prendre, tenir en marchant, reposer, piles d'objets |
 | `src/game/nav.ts` | Contourner les meubles |
-| `src/jev/ChatBar.tsx` | Zone de saisie parole / action, réglages de Jev |
-| `src/jev/jev.ts` | Jev : demande → suite d'actions, via OpenRouter |
-| `src/jev/actions.ts` | Actions du jeu que Jev peut enchaîner, attente de la fin du geste |
+| `src/orders/ChatBar.tsx` | Zone de saisie parole / action, réglages de l'IA |
+| `src/orders/parser.ts` | Ordres simples compris sans IA |
+| `src/orders/tasks.ts` | Un ordre (ranger les livres, café…) → suite d'actions de base |
+| `src/orders/ai.ts` | Ordres libres : modèle de chat via OpenRouter |
+| `src/orders/actions.ts` | Actions de base du perso, attente de la fin du geste |
 
 ## Les animations
 

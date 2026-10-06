@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
 import type { Recipe } from './creator/recipe';
 import { Game } from './game/Game';
-import { ChatBar } from './jev/ChatBar';
+import { ChatBar } from './orders/ChatBar';
 
 /** On commence par le créateur de personnage, puis « Jouer » ouvre la map avec ce perso. */
 export function App() {

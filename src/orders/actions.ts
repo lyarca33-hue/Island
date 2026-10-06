@@ -1,12 +1,12 @@
 /**
- * Actions du jeu que Jev peut enchaîner. Chacune lance un geste du perso (comme un clic du
- * joueur) ; perform() attend qu'il soit fini et rend un compte rendu lisible par l'IA.
+ * Actions de base du perso, que les ordres du joueur enchaînent. Chacune lance un geste (comme
+ * un clic du joueur) ; perform() attend qu'il soit fini et rend un compte rendu (lisible par l'IA).
  */
 import type { Game } from '../game/Game';
 
 export interface ActionDef {
   name: string;
-  /** Ce que fait l'action (montré à Jev). */
+  /** Ce que fait l'action (montré à l'IA). */
   description: string;
   /** Paramètres attendus : nom → description. */
   params: Record<string, string>;
@@ -50,11 +50,20 @@ export const ACTIONS: ActionDef[] = [
     params: {},
     run: (g) => g.drink(),
   },
+  {
+    name: 'dire',
+    description: 'Le perso dit une phrase (bulle au-dessus de sa tête).',
+    params: { texte: 'la phrase' },
+    run: (g, a) => {
+      g.say(a.texte);
+      return true;
+    },
+  },
 ];
 
 export const ACTION_BY_NAME = new Map(ACTIONS.map((a) => [a.name, a]));
 
-/** Durée maximale d'une action, en images (40 s à 60 i/s) : au-delà, on rend la main à Jev. */
+/** Durée maximale d'une action, en images (40 s à 60 i/s) : au-delà, on on abandonne. */
 const MAX_FRAMES = 2400;
 
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
