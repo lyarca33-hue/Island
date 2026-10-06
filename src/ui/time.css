@@ -1,0 +1,23 @@
+/* Horloge et besoins (en haut à droite, sous les boutons de caméra) */
+.hud-needs {
+  position: absolute; top: 62px; right: 16px; width: 168px; padding: 8px 10px; border-radius: 12px;
+  background: rgba(20, 24, 40, 0.6); font-size: 12px; display: flex; flex-direction: column; gap: 5px; pointer-events: none;
+}
+.hud-clock { font-size: 13px; margin-bottom: 2px; white-space: nowrap; }
+.hud-clock b { font-variant-numeric: tabular-nums; }
+.need { display: flex; flex-direction: column; gap: 2px; }
+.need-label { opacity: 0.9; }
+.need-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.need-fill { display: block; height: 100%; border-radius: 3px; transition: width 0.25s linear; }
+.need-fill.ok { background: #8fd16a; }
+.need-fill.mid { background: #f0c25a; }
+.need-fill.low { background: #e8664f; }
+@media (max-width: 520px) {
+  .hud-needs { width: 128px; font-size: 11px; }
+}
+
+/* Réglage de l'heure (menu) */
+.time-controls input[type='range'] { width: 100%; padding: 0; border: none; background: none; accent-color: #f0c25a; }
+.time-speeds { display: flex; gap: 6px; }
+.time-speeds button { flex: 1; }
+.time-speeds button.active { background: rgba(255, 196, 110, 0.3); border-color: rgba(255, 196, 110, 0.7); }

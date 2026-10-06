@@ -203,6 +203,11 @@ export class Character {
   }
 
   /** Rien en cours : ni marche vers un point, ni approche d'un objet, ni geste des mains. */
+  /** Allure en cours : immobile, marche, course. */
+  get moveGait(): Gait {
+    return this.gait;
+  }
+
   get idle(): boolean {
     return !this.target && !this.approach && !this.carry?.busy && this.move.lengthSq() === 0;
   }

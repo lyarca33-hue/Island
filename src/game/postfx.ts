@@ -168,6 +168,13 @@ export class PostFx {
     u.dofStrength.value = s.strength;
   }
 
+  /** Étalonnage : gain par couleur et saturation (le cycle jour/nuit les fait varier). */
+  setGrade(gain: THREE.Vector3, saturation: number): void {
+    const u = this.finalMat.uniforms;
+    (u.gain.value as THREE.Vector3).copy(gain);
+    u.saturation.value = saturation;
+  }
+
   setSize(w: number, h: number, pixelRatio: number): void {
     const pw = Math.max(1, Math.round(w * pixelRatio)), ph = Math.max(1, Math.round(h * pixelRatio));
     this.pw = pw;
