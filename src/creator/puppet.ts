@@ -7,7 +7,6 @@ import { Avatar } from './avatar';
 import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
 import { retargetClips } from './retarget';
-import { idleClip } from './idle';
 import { PoseLayer } from './pose';
 import { loadAnimationSource } from './source';
 
@@ -110,8 +109,6 @@ export class Puppet {
   private loadClips(source: Parameters<typeof retargetClips>[0]): void {
     this.actions.clear();
     for (const clip of retargetClips(source, this.avatar.base)) this.actions.set(clip.name, this.mixer.clipAction(clip));
-    // repos : animation écrite pour les VRM plutôt que celle d'X Bot
-    this.actions.set('idle', this.mixer.clipAction(idleClip(this.avatar.base)));
   }
 
   get clips(): string[] {
@@ -144,8 +141,7 @@ export class Puppet {
 
   update(dt: number): void {
     this.mixer.update(dt);
-    const idle = this.actions.get('idle');
-    this.pose.apply(idle?.isRunning() ? 1 - idle.getEffectiveWeight() : 1);
+    this.pose.apply();
     this.hook?.apply(dt);
     // fondu des expressions
     const k = Math.min(1, dt * 10);
