@@ -31,6 +31,11 @@ export interface ItemDef {
    */
   slots?: Array<[number, number, number]>;
   /**
+   * Se lit : le modèle du livre ouvert (pages vers +Z, haut vers +Y, centré), montré à la place
+   * du livre fermé pendant la lecture.
+   */
+  buildOpen?(): THREE.Object3D;
+  /**
    * Récipient qui se remplit (tasse) : sa pièce nommée `liquide` monte avec le niveau, de
    * `fill[0]` (vide) à `fill[1]` (plein) en hauteur dans l'objet. Vide au départ.
    */
@@ -86,6 +91,18 @@ function book(id: string, color: THREE.ColorRepresentation): ItemDef {
     gripPoint: [-BOOK_T / 2, 0.13, 0],
     stack: 'livre',
     layFlat: true,
+    buildOpen: () => {
+      // deux moitiés en léger V autour du dos, pages crème côté lecteur
+      const g = new THREE.Group();
+      for (const s of [-1, 1]) {
+        const half = new THREE.Group();
+        half.add(mesh(new THREE.BoxGeometry(0.17, 0.24, 0.006), color, (s * 0.17) / 2, 0, -0.003));
+        half.add(mesh(new THREE.BoxGeometry(0.16, 0.226, 0.016), 0xf1e7cf, (s * 0.16) / 2, 0, 0.008));
+        half.rotation.y = -s * 0.18;
+        g.add(half);
+      }
+      return g;
+    },
     build: () => {
       const cover = mesh(new THREE.BoxGeometry(BOOK_T, 0.24, 0.17), color, 0, 0.12, 0);
       const pages = mesh(new THREE.BoxGeometry(0.038, 0.226, 0.16), 0xf1e7cf, 0, 0.12, 0.007);

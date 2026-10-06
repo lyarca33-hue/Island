@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
 import type { Recipe } from './creator/recipe';
-import { Game } from './game/Game';
+import { Game, type HandActions } from './game/Game';
 
 /** On commence par le créateur de personnage, puis « Jouer » ouvre la map avec ce perso. */
 export function App() {
@@ -21,7 +21,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
-  const [drinkable, setDrinkable] = useState(false);
+  const [can, setCan] = useState<HandActions>({ drink: false, read: false, reading: false });
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,9 +29,9 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
     const g = new Game(host.current, recipe);
     game.current = g;
     (window as unknown as { game: Game }).game = g; // console : game.rotateCamera(1), game.pickUp('tasse')...
-    g.onHeldChange = (name, canDrink) => {
+    g.onHeldChange = (name, actions) => {
       setHeld(name);
-      setDrinkable(canDrink);
+      setCan(actions);
     };
     let timer = 0;
     g.onNotice = (text) => {
@@ -64,16 +64,21 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
           <button onClick={() => game.current?.drop()}>
             En main : {held} · <b>Poser (E)</b>
           </button>
-          {drinkable && (
+          {can.drink && !can.reading && (
             <button onClick={() => game.current?.drink()}>
               <b>Boire (B)</b>
+            </button>
+          )}
+          {(can.read || can.reading) && (
+            <button onClick={() => (can.reading ? game.current?.stopReading() : game.current?.read())}>
+              <b>{can.reading ? 'Fermer le livre (L)' : 'Lire (L)'}</b>
             </button>
           )}
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
       <footer className="hud-help">
-        Clic : aller ici · Clic sur un objet : le prendre · E : poser · B : boire · ZQSD : marcher · Maj : courir
+        Clic : aller ici · Clic sur un objet : le prendre · E : poser · B : boire · L : lire · ZQSD : marcher · Maj : courir
       </footer>
       {(loading || error) && <div className="hud-loading">{error ?? 'Chargement…'}</div>}
     </div>

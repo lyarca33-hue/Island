@@ -49,6 +49,13 @@ const START_BOOKS: Array<[string, number | [number, number, number, number]]> = 
   ['livre', [-1.3, 0, 0.9, 0.4]],
 ];
 
+/** Ce qu'on peut faire avec ce qu'on tient (boutons de l'interface). */
+export interface HandActions {
+  drink: boolean;
+  read: boolean;
+  reading: boolean;
+}
+
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -75,15 +82,16 @@ export class Game {
 
   private recipe: Recipe | null;
   private items: WorldItem[] = [];
-  private heldItem: WorldItem | null = null;
   private heldLabel: string | null = null;
-  private drinkable = false;
-  /** Objets posés sur l'objet tenu (ex. tasse sur la caisse) : ils le suivent. */
-  private riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> = [];
+  private actionsKey = '';
+  /** Objets posés sur un objet tenu (ex. tasse sur la caisse) : ils suivent `base`. */
+  private riders: Array<{ base: WorldItem; item: WorldItem; rel: THREE.Matrix4 }> = [];
+  /** Objets tenus à l'image précédente (les objets posés dessus suivent jusqu'à la dépose). */
+  private prevHeld: WorldItem[] = [];
   /** Café en train de couler : la machine, la tasse posée dessous, le temps écoulé (s). */
   private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
-  onHeldChange: ((name: string | null, drinkable: boolean) => void) | null = null;
+  onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
   /** Petit message à afficher (ex. objet non portable). */
   onNotice: ((text: string) => void) | null = null;
 
@@ -126,13 +134,14 @@ export class Game {
 
     // au moment de la prise, l'objet est encore posé : on note ce qui est dessus ; les livres
     // posés sur un livre forment la pile qu'on emporte
-    this.character.onGrab = (item) => {
+    this.character.onGrab = (item, hand) => {
       const riders = this.ridersOf(item);
-      const same = item.def.stack ? riders.filter((r) => r.item.def.stack === item.def.stack) : [];
+      // une pile se porte à deux mains : seulement si l'autre main est libre
+      const same = item.def.stack && this.character.otherFree(hand) ? riders.filter((r) => r.item.def.stack === item.def.stack) : [];
       same.sort((a, b) => a.item.object.position.y - b.item.object.position.y);
-      this.character.hands?.adopt(same.map((r) => r.item));
+      hand.adopt(same.map((r) => r.item));
       const kept = new Set(this.character.carried);
-      this.riders = riders.filter((r) => !kept.has(r.item));
+      this.riders = [...this.riders.filter((r) => r.base !== item), ...riders.filter((r) => !kept.has(r.item)).map((r) => ({ base: item, ...r }))];
     };
     const add = (id: string) => {
       const item = new WorldItem(ITEM_BY_ID.get(id)!);
@@ -195,17 +204,54 @@ export class Game {
     return found ? this.tryPickUp(found, false) : false;
   }
 
-  /** Repose l'objet tenu devant le perso : sur le meuble qui s'y trouve (table), sinon au sol. */
-  drop(): boolean {
-    const spot = this.character.dropSpot();
-    const held = this.character.held;
-    if (!spot || !held) return false;
+  /**
+   * Repose un objet tenu devant le perso (le dernier pris, ou celui nommé : « pose: tasse ») : sur
+   * le meuble qui s'y trouve (table), sinon au sol.
+   */
+  drop(name?: string): boolean {
+    const held = name ? this.character.heldItems.find((i) => i.name === name) : this.character.held;
+    if (!held) return false;
+    if (this.closeBookThen(() => this.drop(name))) return true;
+    const spot = this.character.dropSpot(held);
+    if (!spot) return false;
     this.raycaster.set(new THREE.Vector3(spot.x, 3, spot.z), new THREE.Vector3(0, -1, 0));
     const carried = this.character.carried;
     const others = this.items.filter((i) => !carried.includes(i)).map((i) => i.object);
     const hit = this.raycaster.intersectObjects(others, true).find((h) => (h.face?.normal.y ?? 0) > 0.7);
     if (hit) spot.y = hit.point.y;
-    return this.character.drop(spot);
+    return this.character.drop(spot, undefined, undefined, false, held);
+  }
+
+  /** Noms des objets tenus (un par main). */
+  get heldNames(): string[] {
+    return this.character.heldItems.map((i) => i.name);
+  }
+
+  /** Ouvre le livre tenu et le lit (l'autre main doit être libre). */
+  read(): boolean {
+    const c = this.character;
+    if (c.reading) return true;
+    const book = c.heldItems.find((i) => i.def.buildOpen);
+    const hand = book && c.handOf(book);
+    if (!book || !hand) this.onNotice?.('Prends un livre pour le lire.');
+    else if (hand.stacked) this.onNotice?.('Pose les autres livres pour en lire un.');
+    else if (!c.otherFree(hand)) this.onNotice?.('Il faut une main libre pour lire.');
+    else if (c.busy) return false;
+    else return hand.read();
+    return false;
+  }
+
+  /** Ferme le livre qu'on lit. */
+  stopReading(): boolean {
+    return !!this.character.reading?.stopReading();
+  }
+
+  /** Livre ouvert : le referme, puis fait `then` (vrai si on a dû le refermer). */
+  private closeBookThen(then: () => void): boolean {
+    const r = this.character.reading;
+    if (!r) return false;
+    r.stopReading(then);
+    return true;
   }
 
   /** Noms des objets de la scène (pour l'IA de RP). */
@@ -224,13 +270,12 @@ export class Game {
 
   /** Boit une gorgée de ce que contient l'objet tenu (tasse de café). */
   drink(): boolean {
-    const held = this.character.held;
-    const hands = this.character.hands;
-    if (!held || !hands) return false;
-    if (!held.def.fill) this.onNotice?.(`On ne boit pas dans : ${held.name}.`);
-    else if (!held.contents) this.onNotice?.(`La ${held.name} est vide.`);
-    else if (!hands.drink()) return false;
-    else return true;
+    const c = this.character;
+    const cup = c.heldItems.find((i) => i.def.fill);
+    if (!cup) this.onNotice?.('Prends une tasse pour boire.');
+    else if (!cup.contents) this.onNotice?.(`La ${cup.name} est vide.`);
+    else if (this.closeBookThen(() => this.drink())) return true;
+    else return !!c.handOf(cup)?.drink();
     return false;
   }
 
@@ -249,10 +294,11 @@ export class Game {
    */
   private pourAt(machine: WorldItem, running: boolean): boolean {
     const pour = machine.def.pour!;
-    const cup = this.character.held;
+    const cup = this.character.heldItems.find((i) => i.name === pour.fills);
     if (this.brew) this.onNotice?.(`Le ${pour.liquid} coule déjà.`);
-    else if (!cup || cup.name !== pour.fills || this.character.carried.length > 1) this.onNotice?.(`Prends la ${pour.fills} pour te faire un ${pour.liquid}.`);
+    else if (!cup) this.onNotice?.(`Prends la ${pour.fills} pour te faire un ${pour.liquid}.`);
     else if (cup.level > 0.99) this.onNotice?.(`La ${cup.name} est déjà pleine.`);
+    else if (this.closeBookThen(() => this.pourAt(machine, running))) return true;
     else {
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(machine.object.quaternion);
       const stand = machine.object.position.clone().addScaledVector(fwd, 0.47);
@@ -262,7 +308,7 @@ export class Game {
         // la tasse sous le bec, l'anse vers le perso
         this.character.drop(spot, machine.object.rotation.y, () => {
           this.brew = { machine, cup, t: 0 };
-        }, true);
+        }, true, cup);
       }, running);
       return true;
     }
@@ -298,25 +344,28 @@ export class Game {
     this.brew = null;
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(b.machine.object.quaternion);
     const stand = b.machine.object.position.clone().addScaledVector(fwd, 0.47);
-    if (!this.character.held && this.character.position.distanceTo(stand) < 0.8) this.character.pickUp(b.cup, false, fwd);
+    if (this.character.freeHand(b.cup) && this.character.position.distanceTo(stand) < 0.8) this.character.pickUp(b.cup, false, fwd);
   }
 
   /** Clic sur un objet : le prendre, l'ajouter à la pile tenue, ou y ranger ce qu'on tient. */
   private tryPickUp(item: WorldItem, running: boolean): boolean {
-    const held = this.character.held;
-    const hands = this.character.hands;
+    const c = this.character;
+    const held = c.heldItems;
+    const sameStack = held.find((h) => item.def.stack && h.def.stack === item.def.stack);
     // un livre rangé se prend par l'avant du meuble
     const from = this.shelfOf(item)?.forward;
-    if (!this.character.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
+    if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (item.def.pour) return this.pourAt(item, running);
     else if (item === this.brew?.cup) this.onNotice?.(`Le ${this.brew.machine.def.pour!.liquid} coule encore.`);
-    else if (item.def.slots && held) return this.storeIn(item, running);
+    else if (item.def.slots && held.length) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
     else if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
-    else if (held && hands?.canStack(item)) return this.character.collect(item, running, from);
-    else if (held && item.def.stack && item.def.stack === held.def.stack) this.onNotice?.('La pile est complète.');
-    else if (held) this.onNotice?.(`Les mains sont prises (${held.name}). E pour la poser.`);
-    else return this.character.pickUp(item, running, from);
+    else if (this.closeBookThen(() => this.tryPickUp(item, running))) return true;
+    // un livre de plus sur la pile tenue (l'autre main libre), sinon dans l'autre main
+    else if (c.stackHand(item)) return c.collect(item, running, from);
+    else if (c.freeHand(item)) return c.pickUp(item, running, from);
+    else if (sameStack && c.handOf(sameStack)?.stacked) this.onNotice?.('La pile est complète.');
+    else this.onNotice?.(`Les mains sont prises (${held.map((h) => h.name).join(' et ')}). E pour poser.`);
     return false;
   }
 
@@ -360,24 +409,26 @@ export class Game {
 
   /** Va devant le meuble et y range, un par un, les objets tenus. */
   private storeIn(shelf: WorldItem, running: boolean): boolean {
-    const held = this.character.held;
-    if (!held || !this.character.hands) return false;
-    if (held.def.stack !== 'livre') {
-      this.onNotice?.(`On ne range que des livres ici (${held.name} en main).`);
+    const held = this.character.heldItems;
+    const books = held.find((i) => i.def.stack === 'livre');
+    if (!books) {
+      if (held.length) this.onNotice?.(`On ne range que des livres ici (${held.map((h) => h.name).join(' et ')} en main).`);
       return false;
     }
+    if (this.closeBookThen(() => this.storeIn(shelf, running))) return true;
     if (!this.freeSlots(shelf).length) {
       this.onNotice?.('La bibliothèque est pleine.');
       return false;
     }
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion);
     const stand = shelf.object.position.clone().addScaledVector(fwd, 0.55);
-    this.character.approachThen(stand, shelf.object.position, () => this.storeNext(shelf), running);
+    this.character.approachThen(stand, shelf.object.position, () => this.storeNext(shelf, books), running);
     return true;
   }
 
-  private storeNext(shelf: WorldItem): void {
-    const hands = this.character.hands;
+  /** Range un par un les livres de la main qui tient `books` (et ceux empilés dessus). */
+  private storeNext(shelf: WorldItem, books: WorldItem): void {
+    const hands = this.character.handOf(books);
     if (!hands?.held) return;
     const free = this.freeSlots(shelf);
     if (!free.length) {
@@ -385,8 +436,8 @@ export class Game {
       return;
     }
     const { pos, rot } = this.slot(shelf, free[0]);
-    if (hands.stacked) hands.storeTop(pos, rot, () => this.storeNext(shelf));
-    else this.character.drop(pos, new THREE.Euler().setFromQuaternion(rot, 'YXZ').y, undefined, true);
+    if (hands.stacked) hands.storeTop(pos, rot, () => this.storeNext(shelf, books));
+    else this.character.drop(pos, new THREE.Euler().setFromQuaternion(rot, 'YXZ').y, undefined, true, books);
   }
 
   setZoom(factor: number): void {
@@ -412,6 +463,10 @@ export class Game {
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
       if (e.code === 'KeyB' && !e.repeat) this.drink();
+      if (e.code === 'KeyL' && !e.repeat) {
+        if (this.character.reading) this.stopReading();
+        else this.read();
+      }
     });
     on(window, 'keyup', (e) => {
       this.shift = e.shiftKey;
@@ -468,6 +523,7 @@ export class Game {
       this.drop();
       return;
     }
+    if (this.character.busy) return;
     const p = this.character.position;
     const near = this.items
       .filter((i) => i.def.portable && i.object.position.distanceTo(p) < 1.5 + i.object.position.y)
@@ -523,30 +579,37 @@ export class Game {
     this.last = now;
     this.character.setMoveInput(this.keyboardDir(), this.shift);
     this.character.update(dt, GROUND_HALF - 14);
-    const held = this.character.held;
+    const c = this.character;
+    const held = c.heldItems;
     // les objets posés dessus suivent l'objet tenu, jusqu'à sa dernière position une fois reposé
-    const carried = held ?? this.heldItem;
-    if (carried && this.riders.length) {
-      carried.object.updateMatrixWorld(true);
-      for (const r of this.riders) {
-        const o = r.item.object;
-        o.matrix.multiplyMatrices(carried.object.matrixWorld, r.rel);
-        o.matrix.decompose(o.position, o.quaternion, o.scale);
-      }
+    for (const r of this.riders) {
+      if (!held.includes(r.base) && !this.prevHeld.includes(r.base)) continue;
+      r.base.object.updateMatrixWorld(true);
+      const o = r.item.object;
+      o.matrix.multiplyMatrices(r.base.object.matrixWorld, r.rel);
+      o.matrix.decompose(o.position, o.quaternion, o.scale);
     }
-    if (held !== this.heldItem) {
-      this.heldItem = held;
-      if (!held) this.riders = [];
-    }
+    this.riders = this.riders.filter((r) => held.includes(r.base));
+    this.prevHeld = held;
     this.tickBrew(dt);
-    const count = this.character.carried.length;
-    const name = held?.contents ? `${held.name} de ${held.contents}` : held?.name;
-    const label = held ? (count > 1 ? `${name} ×${count}` : name!) : null;
-    const drinkable = !!held?.contents;
-    if (label !== this.heldLabel || drinkable !== this.drinkable) {
+    const names = held.map((h) => {
+      const n = h.contents ? `${h.name} de ${h.contents}` : h.name;
+      const count = c.handOf(h)?.carried.length ?? 1;
+      return count > 1 ? `${n} ×${count}` : n;
+    });
+    const label = names.length ? names.join(' et ') : null;
+    const book = held.find((h) => h.def.buildOpen);
+    const bookHand = book ? c.handOf(book) : null;
+    const can: HandActions = {
+      drink: held.some((h) => !!h.contents),
+      read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
+      reading: !!c.reading,
+    };
+    const key = JSON.stringify(can);
+    if (label !== this.heldLabel || key !== this.actionsKey) {
       this.heldLabel = label;
-      this.drinkable = drinkable;
-      this.onHeldChange?.(label, drinkable);
+      this.actionsKey = key;
+      this.onHeldChange?.(label, can);
     }
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);

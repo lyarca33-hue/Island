@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Puppet } from '../creator/puppet';
 import type { Recipe } from '../creator/recipe';
-import { Carry, type WorldItem } from './items/carry';
+import { Carry, type Side, type WorldItem } from './items/carry';
+import { isTwoHanded } from './items/grips';
 import { Rig } from './items/ik';
 import type { Nav } from './nav';
 import { LAYER_CHARACTER } from './postfx';
@@ -32,6 +33,8 @@ const PALETTE: Record<string, THREE.ColorRepresentation> = {
 
 type Gait = 'idle' | 'walk' | 'run';
 
+const SIDES_: Side[] = ['right', 'left'];
+
 export class Character {
   readonly root = new THREE.Group();
   private mixer: THREE.AnimationMixer | null = null;
@@ -49,10 +52,12 @@ export class Character {
   private heading = 0;
   /** Perso du créateur (sinon : X Bot). */
   private puppet: Puppet | null = null;
-  /** Porter des objets (perso du créateur seulement). */
-  private carry: Carry | null = null;
+  /** Porter des objets, un par main (perso du créateur seulement). */
+  private carries: Record<Side, Carry> | null = null;
+  /** Mains dans l'ordre où elles ont pris leur objet (la dernière se vide en premier). */
+  private order: Side[] = [];
   /** Appelé quand la main se tend vers un objet (il est encore posé). */
-  onGrab: ((item: WorldItem) => void) | null = null;
+  onGrab: ((item: WorldItem, hand: Carry) => void) | null = null;
   /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
   private approach: { face: THREE.Vector3; then: () => void } | null = null;
 
@@ -60,8 +65,24 @@ export class Character {
   async load(recipe?: Recipe | null): Promise<void> {
     if (recipe) {
       this.puppet = await Puppet.create(recipe);
-      this.carry = new Carry(new Rig(this.puppet.vrm));
-      this.puppet.hook = this.carry;
+      const rig = new Rig(this.puppet.vrm);
+      const carries = { right: new Carry(rig, 'right'), left: new Carry(rig, 'left') };
+      this.carries = carries;
+      // les deux mains retouchent la pose : celle qui s'accroupit ou bouge d'abord, l'autre
+      // ensuite (son bras suit le buste penché) ; on rend la pose dans l'ordre inverse
+      let applied: Carry[] = [];
+      this.puppet.hook = {
+        apply: (dt) => {
+          applied = carries.left.busy && !carries.right.busy ? [carries.left, carries.right] : [carries.right, carries.left];
+          for (const c of applied) c.apply(dt);
+        },
+        after: () => {
+          for (const c of applied) c.after();
+        },
+        restore: () => {
+          for (const c of [...applied].reverse()) c.restore();
+        },
+      };
       this.root.add(this.puppet.root);
       this.play('idle', 0);
       return;
@@ -115,19 +136,57 @@ export class Character {
     this.target = this.path.shift() ?? null;
   }
 
-  /** Objet tenu en main (ou null). */
+  /** Objet tenu en main : le dernier pris (ou null). */
   get held(): WorldItem | null {
-    return this.carry?.held ?? null;
+    return this.lastHand?.held ?? null;
   }
 
-  /** Objets portés : celui qu'on tient et ceux empilés dessus. */
+  /** Objets tenus, un par main (la main droite d'abord). */
+  get heldItems(): WorldItem[] {
+    return this.carries ? [this.carries.right.held, this.carries.left.held].filter((i): i is WorldItem => !!i) : [];
+  }
+
+  /** Objets portés : ceux qu'on tient et ceux empilés dessus. */
   get carried(): WorldItem[] {
-    return this.carry?.carried ?? [];
+    return this.carries ? [...this.carries.right.carried, ...this.carries.left.carried] : [];
   }
 
-  /** Accès à la prise (piles, rangement) ; null pour X Bot. */
-  get hands(): Carry | null {
-    return this.carry;
+  /** La main qui a pris son objet en dernier. */
+  private get lastHand(): Carry | null {
+    const side = this.order[this.order.length - 1];
+    return side && this.carries ? this.carries[side] : null;
+  }
+
+  /** La main qui tient `item` (ou l'objet du dessous de sa pile), sinon null. */
+  handOf(item: WorldItem): Carry | null {
+    if (!this.carries) return null;
+    return SIDES_.map((s) => this.carries![s]).find((c) => c.carried.includes(item)) ?? null;
+  }
+
+  /** Main libre pour prendre `item` (null : mains prises). Une caisse prend les deux mains. */
+  freeHand(item: WorldItem): Carry | null {
+    const c = this.carries;
+    if (!c) return null;
+    const { right, left } = c;
+    if (right.bothHands || left.bothHands) return null;
+    if (isTwoHanded(item.grip)) return !right.held && !left.held ? right : null;
+    return !right.held ? right : !left.held ? left : null;
+  }
+
+  /** En train de lire (livre ouvert). */
+  get reading(): Carry | null {
+    return this.carries ? (SIDES_.map((s) => this.carries![s]).find((c) => c.reading) ?? null) : null;
+  }
+
+  /** Une main est-elle en train de prendre, poser ou ranger ? */
+  get busy(): boolean {
+    return !!this.carries && (this.carries.right.busy || this.carries.left.busy);
+  }
+
+  /** L'autre main que `hand` est-elle libre ? */
+  otherFree(hand: Carry): boolean {
+    const c = this.carries;
+    return !!c && !c[hand.side === 'right' ? 'left' : 'right'].held;
   }
 
   /**
@@ -166,36 +225,53 @@ export class Character {
 
   /** Peut-on porter des objets avec ce perso ? (pas X Bot) */
   get canCarry(): boolean {
-    return !!this.carry;
+    return !!this.carries;
   }
 
-  /** Va jusqu'à l'objet et le prend en main. Faux si impossible (mains prises, non portable). */
+  /** Va jusqu'à l'objet et le prend dans une main libre. Faux si impossible (mains prises, non portable). */
   pickUp(item: WorldItem, running = false, from?: THREE.Vector3): boolean {
-    if (!this.carry || this.carry.held || this.carry.busy || !item.def.portable) return false;
+    if (!this.freeHand(item) || this.busy || !item.def.portable) return false;
     this.approachThen(this.standFor(item, from), item.object.position, () => {
-      if (this.carry?.pickUp(item)) this.onGrab?.(item);
+      const hand = this.freeHand(item);
+      if (hand?.pickUp(item)) {
+        this.order = [...this.order.filter((s) => s !== hand.side), hand.side];
+        this.onGrab?.(item, hand);
+      }
     }, running);
     return true;
   }
 
+  /** Peut-on ajouter `item` à la pile d'une main (l'autre main doit être libre) ? */
+  stackHand(item: WorldItem): Carry | null {
+    if (!this.carries) return null;
+    return SIDES_.map((s) => this.carries![s]).find((c) => c.canStack(item) && this.otherFree(c)) ?? null;
+  }
+
   /** Va prendre `item` pour l'ajouter à la pile tenue (livres). */
   collect(item: WorldItem, running = false, from?: THREE.Vector3): boolean {
-    if (!this.carry?.canStack(item)) return false;
-    this.approachThen(this.standFor(item, from), item.object.position, () => this.carry?.addToStack(item), running);
+    if (!this.stackHand(item)) return false;
+    this.approachThen(this.standFor(item, from), item.object.position, () => this.stackHand(item)?.addToStack(item), running);
     return true;
   }
 
-  /** Endroit où reposer l'objet tenu : devant soi (hauteur du sol, à corriger s'il y a un meuble). */
-  dropSpot(): THREE.Vector3 | null {
-    const item = this.carry?.held;
-    if (!item || this.carry!.busy) return null;
+  /** Endroit où reposer l'objet tenu (le dernier pris, ou `item`) : devant soi, à hauteur du sol. */
+  dropSpot(item: WorldItem | null = this.held): THREE.Vector3 | null {
+    if (!item || this.busy) return null;
     const fwd = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
-    return this.root.position.clone().addScaledVector(fwd, 0.36 + Math.max(item.size.x, item.size.z) / 2).setY(0);
+    // un peu du côté de la main qui le tient
+    const hand = this.handOf(item);
+    const side = hand && !hand.bothHands ? new THREE.Vector3(fwd.z, 0, -fwd.x).multiplyScalar(hand.side === 'right' ? 0.12 : -0.12) : new THREE.Vector3();
+    return this.root.position.clone().addScaledVector(fwd, 0.36 + Math.max(item.size.x, item.size.z) / 2).add(side).setY(0);
   }
 
-  /** Repose l'objet tenu en `spot` (voir dropSpot), tourné comme le perso ou de `yaw`. */
-  drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false): boolean {
-    return !!this.carry && !this.carry.busy && this.carry.drop(spot, yaw, onDone, upright);
+  /** Repose l'objet tenu (le dernier pris, ou `item`) en `spot`, tourné comme le perso ou de `yaw`. */
+  drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false, item: WorldItem | null = this.held): boolean {
+    const hand = item ? this.handOf(item) : null;
+    if (!hand || this.busy) return false;
+    return hand.drop(spot, yaw, () => {
+      this.order = this.order.filter((s) => s !== hand.side);
+      onDone?.();
+    }, upright);
   }
 
   get position(): THREE.Vector3 {
@@ -204,7 +280,7 @@ export class Character {
 
   update(dt: number, bounds: number): void {
     const dir = new THREE.Vector3();
-    if (this.carry?.busy) {
+    if (this.busy) {
       // pendant une saisie ou une dépose, le perso reste sur place
     } else if (this.move.lengthSq() > 0) dir.copy(this.move).normalize();
     else if (this.target) {
