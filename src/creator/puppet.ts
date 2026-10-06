@@ -10,6 +10,16 @@ import { retargetClips } from './retarget';
 import { PoseLayer } from './pose';
 import { loadAnimationSource } from './source';
 
+/** Retouche de pose par-dessus les clips (ex. porter un objet, voir game/items/carry.ts). */
+export interface PoseHook {
+  /** Après le mixeur, avant la mise à jour du VRM. */
+  apply(dt: number): void;
+  /** Après la mise à jour du VRM (os réels à jour). */
+  after(): void;
+  /** Rend aux os leur pose animée. */
+  restore(): void;
+}
+
 /** Nom d'expression VRM 1.0 → nom possible dans un modèle VRM 0.x (presets « unknown »). */
 const ALIASES: Record<string, string[]> = { surprised: ['surprised', 'Surprised'] };
 
@@ -27,6 +37,8 @@ export class Puppet {
   /** Dernière recette demandée (les reconstructions se suivent sans se chevaucher). */
   private wanted: Recipe;
   private building: Promise<void> | null = null;
+  /** Retouche de pose du jeu (le créateur n'en a pas). */
+  hook: PoseHook | null = null;
 
   private constructor(avatar: Avatar, recipe: Recipe) {
     this.avatar = avatar;
@@ -46,6 +58,11 @@ export class Puppet {
 
   get height(): number {
     return this.avatar.height;
+  }
+
+  /** Modèle VRM qui porte le squelette. */
+  get vrm() {
+    return this.avatar.base;
   }
 
   get headBone(): THREE.Object3D | null {
@@ -125,6 +142,7 @@ export class Puppet {
   update(dt: number): void {
     this.mixer.update(dt);
     this.pose.apply();
+    this.hook?.apply(dt);
     // fondu des expressions
     const k = Math.min(1, dt * 10);
     const names = new Set([...Object.keys(this.exprNow), ...Object.keys(this.exprTarget)]);
@@ -144,6 +162,8 @@ export class Puppet {
     if ((this.exprNow.happy ?? 0) > 0.5 || (this.exprNow.blinkLeft ?? 0) > 0.5) blink = 0;
     this.applyExpressions(blink);
     this.avatar.update(dt);
+    this.hook?.after();
+    this.hook?.restore();
     this.pose.restore();
   }
 

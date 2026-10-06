@@ -10,6 +10,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Puppet } from '../creator/puppet';
 import type { Recipe } from '../creator/recipe';
+import { Carry, type WorldItem } from './items/carry';
+import { Rig } from './items/ik';
 import { LAYER_CHARACTER } from './postfx';
 import { createToonMaterial } from './toon';
 
@@ -43,11 +45,17 @@ export class Character {
   private heading = 0;
   /** Perso du créateur (sinon : X Bot). */
   private puppet: Puppet | null = null;
+  /** Porter des objets (perso du créateur seulement). */
+  private carry: Carry | null = null;
+  /** Objet vers lequel on marche pour le prendre. */
+  private approach: WorldItem | null = null;
 
   /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
   async load(recipe?: Recipe | null): Promise<void> {
     if (recipe) {
       this.puppet = await Puppet.create(recipe);
+      this.carry = new Carry(new Rig(this.puppet.vrm));
+      this.puppet.hook = this.carry;
       this.root.add(this.puppet.root);
       this.play('idle', 0);
       return;
@@ -80,14 +88,54 @@ export class Character {
   /** Direction voulue au clavier (repère monde, plan XZ) ; annule la destination de clic. */
   setMoveInput(dir: THREE.Vector3, running: boolean): void {
     this.move.copy(dir);
-    this.running = running;
-    if (dir.lengthSq() > 0) this.target = null;
+    if (dir.lengthSq() > 0) {
+      this.running = running;
+      this.target = null;
+      this.approach = null;
+    }
   }
 
   /** Marche jusqu'à un point du sol (clic). */
   goTo(p: THREE.Vector3, running: boolean): void {
     this.target = p.clone().setY(0);
     this.running = running;
+    this.approach = null;
+  }
+
+  /** Objet tenu en main (ou null). */
+  get held(): WorldItem | null {
+    return this.carry?.held ?? null;
+  }
+
+  /** Peut-on porter des objets avec ce perso ? (pas X Bot) */
+  get canCarry(): boolean {
+    return !!this.carry;
+  }
+
+  /** Va jusqu'à l'objet et le prend en main. Faux si impossible (mains prises, non portable). */
+  pickUp(item: WorldItem, running = false): boolean {
+    if (!this.carry || this.carry.held || this.carry.busy || !item.def.portable) return false;
+    const to = item.object.position.clone().sub(this.root.position).setY(0);
+    // plus près pour un objet au sol (on se penche moins loin)
+    const stop = (item.object.position.y > 0.3 ? 0.36 : 0.22) + Math.max(item.size.x, item.size.z) / 2;
+    const dist = to.length();
+    this.target = dist > stop ? this.root.position.clone().addScaledVector(to.normalize(), dist - stop).setY(0) : null;
+    this.running = running;
+    this.approach = item;
+    return true;
+  }
+
+  /** Endroit où reposer l'objet tenu : devant soi (hauteur du sol, à corriger s'il y a un meuble). */
+  dropSpot(): THREE.Vector3 | null {
+    const item = this.carry?.held;
+    if (!item || this.carry!.busy) return null;
+    const fwd = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+    return this.root.position.clone().addScaledVector(fwd, 0.36 + Math.max(item.size.x, item.size.z) / 2).setY(0);
+  }
+
+  /** Repose l'objet tenu en `spot` (voir dropSpot). */
+  drop(spot: THREE.Vector3): boolean {
+    return !!this.carry && !this.carry.busy && this.carry.drop(spot, this.heading);
   }
 
   get position(): THREE.Vector3 {
@@ -96,7 +144,9 @@ export class Character {
 
   update(dt: number, bounds: number): void {
     const dir = new THREE.Vector3();
-    if (this.move.lengthSq() > 0) dir.copy(this.move).normalize();
+    if (this.carry?.busy) {
+      // pendant une saisie ou une dépose, le perso reste sur place
+    } else if (this.move.lengthSq() > 0) dir.copy(this.move).normalize();
     else if (this.target) {
       dir.subVectors(this.target, this.root.position).setY(0);
       if (dir.length() < 0.08) this.target = null;
@@ -115,6 +165,17 @@ export class Character {
       delta = Math.atan2(Math.sin(delta), Math.cos(delta));
       this.heading += delta * Math.min(1, dt * TURN_RATE);
       this.root.rotation.y = this.heading;
+    } else if (this.approach) {
+      // arrivé : se tourner vers l'objet, puis le prendre
+      const to = this.approach.object.position.clone().sub(this.root.position);
+      let delta = Math.atan2(to.x, to.z) - this.heading;
+      delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+      this.heading += delta * Math.min(1, dt * TURN_RATE * 0.6);
+      this.root.rotation.y = this.heading;
+      if (Math.abs(delta) < 0.06) {
+        this.carry?.pickUp(this.approach);
+        this.approach = null;
+      }
     }
     this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
     this.mixer?.update(dt);

@@ -3,12 +3,15 @@
  * de l'horizon, quart de tour par quart de tour), lumière de jour, post-traitement HD-2D.
  *
  * Commandes : clic sur le sol pour y aller (Maj = courir), ZQSD / WASD / flèches,
- * molette pour zoomer, rotateCamera(±1) pour tourner d'un quart de tour.
+ * molette pour zoomer, rotateCamera(±1) pour tourner d'un quart de tour. Clic sur un objet :
+ * aller le prendre ; E : reposer l'objet tenu (ou prendre le plus proche).
  */
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { createGround, GROUND_HALF } from './ground';
+import { WorldItem } from './items/carry';
+import { ITEM_BY_ID, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
 import { lightAllPasses, PostFx } from './postfx';
 
@@ -24,6 +27,16 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2.5;
 /** Hauteur du point suivi au-dessus des pieds du perso (m). */
 const FOCUS_HEIGHT = 0.9;
+
+/** Objets de test posés autour du point de départ : [id, x, y, z, rotation (rad)]. */
+const START_ITEMS: Array<[string, number, number, number, number]> = [
+  // table côté caméra : le perso lui fait face en prenant la tasse ou la lettre
+  ['table', 1.3, 0, 1.3, Math.PI / 4],
+  ['tasse', 1.07, TABLE_H, 1.28, 0.6],
+  ['lettre', 1.34, TABLE_H, 1.05, Math.PI / 3],
+  ['livre', -1.3, 0, 0.9, 0.4],
+  ['caisse', 0.6, 0, -1.9, 0.2],
+];
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -50,6 +63,12 @@ export class Game {
   private marker: THREE.Mesh;
 
   private recipe: Recipe | null;
+  private items: WorldItem[] = [];
+  private heldName: string | null = null;
+  /** Objet tenu qui change (nom ou null) : pour l'interface. */
+  onHeldChange: ((name: string | null) => void) | null = null;
+  /** Petit message à afficher (ex. objet non portable). */
+  onNotice: ((text: string) => void) | null = null;
 
   constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
@@ -88,6 +107,14 @@ export class Game {
     this.marker.position.y = 0.01;
     this.scene.add(this.marker);
 
+    for (const [id, x, y, z, rot] of START_ITEMS) {
+      const item = new WorldItem(ITEM_BY_ID.get(id)!);
+      item.object.position.set(x, y, z);
+      item.object.rotation.y = rot;
+      this.items.push(item);
+      this.scene.add(item.object);
+    }
+
     this.motes = createMotes();
     this.scene.add(this.motes.points);
 
@@ -107,6 +134,44 @@ export class Game {
   /** Quart de tour de caméra (+1 ou -1). */
   rotateCamera(dir: 1 | -1): void {
     this.quarter += dir;
+  }
+
+  /**
+   * Va prendre l'objet nommé le plus proche (« prend: tasse » de l'IA de RP). Faux si aucun
+   * objet de ce nom, s'il n'est pas portable ou si les mains sont prises.
+   */
+  pickUp(name: string): boolean {
+    const p = this.character.position;
+    const found = this.items
+      .filter((i) => i.name === name && i !== this.character.held)
+      .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    return found ? this.tryPickUp(found, false) : false;
+  }
+
+  /** Repose l'objet tenu devant le perso : sur le meuble qui s'y trouve (table), sinon au sol. */
+  drop(): boolean {
+    const spot = this.character.dropSpot();
+    const held = this.character.held;
+    if (!spot || !held) return false;
+    this.raycaster.set(new THREE.Vector3(spot.x, 3, spot.z), new THREE.Vector3(0, -1, 0));
+    const others = this.items.filter((i) => i !== held).map((i) => i.object);
+    const hit = this.raycaster.intersectObjects(others, true).find((h) => (h.face?.normal.y ?? 0) > 0.7);
+    if (hit) spot.y = hit.point.y;
+    return this.character.drop(spot);
+  }
+
+  /** Noms des objets de la scène (pour l'IA de RP). */
+  get itemNames(): string[] {
+    return this.items.map((i) => i.name);
+  }
+
+  private tryPickUp(item: WorldItem, running: boolean): boolean {
+    const held = this.character.held;
+    if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
+    else if (!this.character.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
+    else if (held) this.onNotice?.(`Les mains sont prises (${held.name}). E pour la poser.`);
+    else return this.character.pickUp(item, running);
+    return false;
   }
 
   setZoom(factor: number): void {
@@ -130,6 +195,7 @@ export class Game {
     on(window, 'keydown', (e) => {
       this.shift = e.shiftKey;
       this.keys.add(e.code);
+      if (e.code === 'KeyE' && !e.repeat) this.useKey();
     });
     on(window, 'keyup', (e) => {
       this.shift = e.shiftKey;
@@ -142,6 +208,11 @@ export class Game {
     }, { passive: false });
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
+      const item = this.itemAt(e.clientX, e.clientY);
+      if (item) {
+        this.tryPickUp(item, e.shiftKey);
+        return;
+      }
       const p = this.groundPoint(e.clientX, e.clientY);
       if (!p) return;
       this.character.goTo(p, e.shiftKey);
@@ -150,11 +221,41 @@ export class Game {
     });
   }
 
-  /** Point du sol sous un pixel de l'écran (ou null). */
-  private groundPoint(cx: number, cy: number): THREE.Vector3 | null {
+  /** E : reposer l'objet tenu, sinon prendre l'objet portable le plus proche (à 1,5 m). */
+  private useKey(): void {
+    if (this.character.held) {
+      this.drop();
+      return;
+    }
+    const p = this.character.position;
+    const near = this.items
+      .filter((i) => i.def.portable && i.object.position.distanceTo(p) < 1.5 + i.object.position.y)
+      .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    if (near) this.tryPickUp(near, false);
+  }
+
+  private aim(cx: number, cy: number): void {
     const r = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
+  }
+
+  /** Objet sous un pixel de l'écran (sauf celui qu'on tient). */
+  private itemAt(cx: number, cy: number): WorldItem | null {
+    this.aim(cx, cy);
+    const objects = this.items.filter((i) => i !== this.character.held).map((i) => i.object);
+    const hit = this.raycaster.intersectObjects(objects, true)[0];
+    if (!hit) return null;
+    for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
+      const item = this.items.find((i) => i.object === o);
+      if (item) return item;
+    }
+    return null;
+  }
+
+  /** Point du sol sous un pixel de l'écran (ou null). */
+  private groundPoint(cx: number, cy: number): THREE.Vector3 | null {
+    this.aim(cx, cy);
     const hit = this.raycaster.intersectObject(this.ground, false)[0];
     return hit ? hit.point : null;
   }
@@ -180,6 +281,11 @@ export class Game {
     this.last = now;
     this.character.setMoveInput(this.keyboardDir(), this.shift);
     this.character.update(dt, GROUND_HALF - 14);
+    const held = this.character.held?.name ?? null;
+    if (held !== this.heldName) {
+      this.heldName = held;
+      this.onHeldChange?.(held);
+    }
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);
     this.updateCamera(dt);

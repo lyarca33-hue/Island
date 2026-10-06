@@ -19,6 +19,8 @@ mène à la map, « ✎ Perso » y revient.
 - ZQSD, WASD ou flèches : marcher (Maj : courir)
 - Molette : zoom
 - Boutons en haut à droite : tourner la caméra d'un quart de tour
+- Clic sur un objet : le perso va le prendre en main ; E (ou le bouton « Poser ») : le reposer
+  devant lui (sur la table s'il y en a une)
 
 `npm run build` produit une version publiable dans `dist/`.
 
@@ -66,9 +68,34 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/creator/puppet.ts` | Perso animé (assemblage + animations + expressions + clignement), partagé créateur / jeu |
 | `src/creator/recipe.ts` | La recette d'un perso, bornes des curseurs, palettes |
 | `src/creator/Creator.tsx` | Écran du créateur |
+| `src/game/items/catalog.ts` | Fiches des objets (portable, type de prise, point saisi) |
+| `src/game/items/grips.ts` | Types de prise : pose du bras et des doigts, place de l'objet dans la main |
+| `src/game/items/ik.ts` | Bras / jambe à deux os qui amène la main (le pied) sur un point |
+| `src/game/items/carry.ts` | Prendre, tenir en marchant, reposer |
 
 ## Les animations
 
 « X Bot » de Mixamo (fourni dans les exemples de three.js) ne sert plus que de source
 d'animations : `idle`, `walk`, `run`, `agree` (oui), `headShake` (non), `sad_pose`,
 `sneak_pose`. Toute animation Mixamo ajoutée à ce fichier sera jouable par tous les persos.
+
+## Les objets
+
+Chaque objet a une petite fiche dans `src/game/items/catalog.ts`, pas d'animation à lui :
+
+```ts
+{ id: 'tasse', name: 'tasse', portable: true, grip: 'fist', gripPoint: [-0.042, 0.05, 0], build: () => ... }
+```
+
+- `portable` : peut-on le prendre en main.
+- `grip` : type de prise, parmi `pinch` (entre les doigts : clé, lettre), `fist` (en poing :
+  tasse, épée), `side` (le long du corps : livre, sac, seau), `twoHands` (à deux mains : caisse).
+  Sans `grip`, la prise est devinée d'après la taille de l'objet (c'est le cas de la lettre).
+- `gripPoint` : le point de l'objet que la main saisit (sinon son centre).
+
+La pose vient du type de prise : les bras sont placés par calcul vers la main voulue (bras à
+deux os), les doigts se referment, et l'objet suit l'os de la main. Pour ramasser, le perso se
+penche ou s'accroupit selon la hauteur de l'objet. Les jambes gardent l'animation de marche.
+
+Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()`,
+`game.itemNames`.
