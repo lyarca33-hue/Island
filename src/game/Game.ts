@@ -9,11 +9,14 @@
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
+import { applySky, GameClock } from './clock';
 import { createGround, GROUND_HALF } from './ground';
 import { LAY_FLAT, WorldItem } from './items/carry';
+import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
 import { Nav } from './nav';
+import { Needs } from './needs';
 import { lightAllPasses, PostFx } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -28,6 +31,10 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2.5;
 /** Hauteur du point suivi au-dessus des pieds du perso (m). */
 const FOCUS_HEIGHT = 0.9;
+
+/** Soif rendue par une tasse pleine bue en entier, et regain d'énergie si c'est du café. */
+const DRINK_THIRST = 35;
+const COFFEE_ENERGY = 12;
 
 /** Objets de test posés autour du point de départ : [id, x, y, z, rotation (rad)]. */
 const START_ITEMS: Array<[string, number, number, number, number]> = [
@@ -47,7 +54,23 @@ const START_BOOKS: Array<[string, number | [number, number, number, number]]> = 
   ['livre-ocre', SLOTS_PER_SHELF + 2],
   ['livre-violet', 2 * SLOTS_PER_SHELF],
   ['livre', [-1.3, 0, 0.9, 0.4]],
+  // de quoi demander au perso de « ranger tous les livres »
+  ['livre-vert', [0.2, 0, 2.1, 1.3]],
+  ['livre-ocre', [1.5, TABLE_H, 1.45, 2.2]],
 ];
+
+/** Un objet de la pièce tel que les ordres le voient (voir Game.describe). */
+export interface WorldObject {
+  ref: string;
+  nom: string;
+  portable: boolean;
+  /** Se porte à deux mains (caisse). */
+  deuxMains?: boolean;
+  /** Meuble de rangement, machine (à café) ou récipient (tasse). */
+  sorte?: 'rangement' | 'machine' | 'récipient';
+  ou: string;
+  distance: number;
+}
 
 /** Ce qu'on peut faire avec ce qu'on tient (boutons de l'interface). */
 export interface HandActions {
@@ -63,6 +86,13 @@ export class Game {
   private post: PostFx;
   private character = new Character();
   private sun: THREE.DirectionalLight;
+  private hemi: THREE.HemisphereLight;
+  /** Heure du jeu (4 fois plus rapide que le temps réel) : pilote la lumière et les besoins. */
+  readonly clock = new GameClock();
+  /** Fatigue, faim, soif, hygiène du perso. */
+  readonly needs = new Needs();
+  /** Niveau de la tasse tenue à l'image précédente : ce qui a été bu depuis. */
+  private lastSip: { item: WorldItem; level: number; contents: string | null } | null = null;
   private ground: THREE.Mesh;
   private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3) => void };
   private container: HTMLElement;
@@ -94,6 +124,9 @@ export class Game {
   onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
   /** Petit message à afficher (ex. objet non portable). */
   onNotice: ((text: string) => void) | null = null;
+  /** Bulle de parole au-dessus du perso, et quand elle disparaît (ms, horloge de la page). */
+  private bubble: HTMLDivElement;
+  private bubbleUntil = 0;
 
   constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
@@ -109,8 +142,8 @@ export class Game {
 
     this.scene.background = new THREE.Color(0x2b3a2a);
 
-    // lumière de jour : ciel bleuté + sol vert renvoyé, soleil chaud rasant (ombres longues)
-    const hemi = lightAllPasses(new THREE.HemisphereLight(new THREE.Color(0.75, 0.85, 1.0), new THREE.Color(0.25, 0.32, 0.18), 0.9));
+    // ciel + sol renvoyé, et soleil (ou lune) : couleurs et direction réglées par l'heure (applySky)
+    const hemi = this.hemi = lightAllPasses(new THREE.HemisphereLight(new THREE.Color(0.75, 0.85, 1.0), new THREE.Color(0.25, 0.32, 0.18), 0.9));
     this.sun = lightAllPasses(new THREE.DirectionalLight(new THREE.Color(1.0, 0.92, 0.78), 2.2));
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -173,6 +206,11 @@ export class Game {
 
     this.motes = createMotes();
     this.scene.add(this.motes.points);
+
+    this.bubble = document.createElement('div');
+    this.bubble.className = 'speech-bubble';
+    this.bubble.hidden = true;
+    container.appendChild(this.bubble);
 
     this.post = new PostFx(this.renderer, this.scene, this.camera);
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -257,6 +295,97 @@ export class Game {
   /** Noms des objets de la scène (pour l'IA de RP). */
   get itemNames(): string[] {
     return this.items.map((i) => i.name);
+  }
+
+  /** Le perso dit quelque chose : bulle au-dessus de sa tête, le temps de la lire. */
+  say(text: string): void {
+    this.bubble.textContent = text;
+    this.bubble.hidden = false;
+    this.bubbleUntil = performance.now() + 2500 + text.length * 70;
+    this.placeBubble();
+  }
+
+  /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
+  get idle(): boolean {
+    return this.character.idle && !this.brew;
+  }
+
+  /**
+   * Repère unique de chaque objet pour les ordres et l’IA : l'id de sa fiche, suivi d'un numéro s'il y en a
+   * plusieurs du même genre (« tasse », « tasse-2 »).
+   */
+  private ref(item: WorldItem): string {
+    const same = this.items.filter((i) => i.def.id === item.def.id);
+    return same.length > 1 ? `${item.def.id}-${same.indexOf(item) + 1}` : item.def.id;
+  }
+
+  private byRef(ref: string): WorldItem | undefined {
+    return this.items.find((i) => this.ref(i) === ref);
+  }
+
+  /** État de la pièce pour les ordres et l’IA : chaque objet, où il est, et ce qu'on tient. */
+  describe(): { perso: string; enMain: string[]; mains: string[][]; mainsLibres: number; lit: string | null; objets: WorldObject[] } {
+    const p = this.character.position;
+    const carried = this.character.carried;
+    const hands = this.character.hands;
+    const reading = this.character.reading;
+    const objets = this.items.map((item) => {
+      let ou = 'au sol';
+      const shelf = this.shelfOf(item);
+      if (carried.includes(item)) ou = 'en main';
+      else if (shelf) ou = `rangé dans ${this.ref(shelf.shelf)}`;
+      else if (item.object.position.y > 0.05) {
+        const under = this.items.find((o) => o !== item && !carried.includes(o) && o.object.position.y < item.object.position.y && this.isAbove(item, o));
+        ou = under ? `posé sur ${this.ref(under)}` : 'posé en hauteur';
+      }
+      if (item === this.brew?.cup) ou += ' (le café coule dedans)';
+      if (item.contents) ou += `, contient du ${item.contents}`;
+      const sorte: WorldObject['sorte'] = item.def.slots ? 'rangement' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : undefined;
+      if (item === reading?.held) ou += ', ouvert (le perso le lit)';
+      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, ou, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
+    });
+    return {
+      perso: this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)',
+      enMain: carried.map((i) => this.ref(i)),
+      mains: hands.loads.map((l) => l.map((i) => this.ref(i))),
+      mainsLibres: hands.free,
+      lit: reading?.held ? this.ref(reading.held) : null,
+      objets,
+    };
+  }
+
+  private isAbove(item: WorldItem, base: WorldItem): boolean {
+    const b = new THREE.Box3().setFromObject(base.object);
+    const p = item.object.position;
+    return p.x >= b.min.x && p.x <= b.max.x && p.z >= b.min.z && p.z <= b.max.z;
+  }
+
+  /**
+   * Comme un clic sur l'objet `ref` : le prendre, l'ajouter à la pile tenue, y ranger ce qu'on
+   * tient (bibliothèque) ou s'y faire un café (machine). Faux si rien ne se lance.
+   */
+  use(ref: string): boolean {
+    const item = this.byRef(ref);
+    if (!item) {
+      this.onNotice?.(`Aucun objet « ${ref} ».`);
+      return false;
+    }
+    if (this.character.carried.includes(item)) {
+      this.onNotice?.(`${ref} est déjà en main.`);
+      return false;
+    }
+    return this.tryPickUp(item, false);
+  }
+
+  /** Marche jusqu'à l'objet `ref` (s'arrête devant lui). */
+  walkTo(ref: string): boolean {
+    const item = this.byRef(ref);
+    if (!item) {
+      this.onNotice?.(`Aucun objet « ${ref} ».`);
+      return false;
+    }
+    this.character.approachThen(this.character.standFor(item), item.object.position, () => {});
+    return true;
   }
 
   /** Range dans la bibliothèque la plus proche les livres tenus. */
@@ -458,7 +587,10 @@ export class Game {
       t.addEventListener(type, fn as EventListener, opts);
       this.disposers.push(() => t.removeEventListener(type, fn as EventListener, opts));
     };
+    // pas de déplacement pendant qu'on écrit dans la zone de saisie
+    const typing = (e: Event) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
     on(window, 'keydown', (e) => {
+      if (typing(e)) return;
       this.shift = e.shiftKey;
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
@@ -592,6 +724,7 @@ export class Game {
     this.riders = this.riders.filter((r) => held.includes(r.base));
     this.prevHeld = held;
     this.tickBrew(dt);
+    this.tickNeeds(dt);
     const names = held.map((h) => {
       const n = h.contents ? `${h.name} de ${h.contents}` : h.name;
       const count = c.handOf(h)?.carried.length ?? 1;
@@ -614,9 +747,39 @@ export class Game {
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);
     this.updateCamera(dt);
+    this.placeBubble();
     this.motes.update(now / 1000, this.character.position);
     this.post.render();
   };
+
+  /** Le temps passe : les besoins baissent ; boire (café) remonte la soif et réveille un peu. */
+  private tickNeeds(dt: number): void {
+    const hours = this.clock.tick(dt);
+    this.needs.tick(hours, this.character.moveGait, this.clock.isNight);
+    // la tasse, dans l'une ou l'autre main
+    const held = this.character.heldItems.find((i) => i.def.fill);
+    if (held) {
+      const drunk = this.lastSip?.item === held ? this.lastSip.level - held.level : 0;
+      if (drunk > 0) {
+        this.needs.restore('soif', drunk * DRINK_THIRST);
+        if (this.lastSip?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
+      }
+      this.lastSip = { item: held, level: held.level, contents: held.contents };
+    } else this.lastSip = null;
+  }
+
+  /** Bulle de parole : suit la tête du perso à l'écran, puis disparaît. */
+  private placeBubble(): void {
+    if (this.bubble.hidden) return;
+    if (performance.now() > this.bubbleUntil) {
+      this.bubble.hidden = true;
+      return;
+    }
+    const head = this.character.position.clone().setY(1.75).project(this.camera);
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    this.bubble.style.left = `${((head.x + 1) / 2) * w}px`;
+    this.bubble.style.top = `${((1 - head.y) / 2) * h}px`;
+  }
 
   private updateCamera(dt: number): void {
     const targetYaw = BASE_YAW + this.quarter * (Math.PI / 2);
@@ -639,9 +802,8 @@ export class Game {
       this.focus.z + Math.sin(this.yaw) * Math.cos(ISO_ELEVATION) * CAM_DIST,
     );
     c.lookAt(this.focus);
-    // soleil et carte d'ombre suivent le perso
-    this.sun.position.set(this.focus.x - 8, 14, this.focus.z + 5);
-    this.sun.target.position.set(this.focus.x, 0, this.focus.z);
+    // lumière selon l'heure ; soleil et carte d'ombre suivent le perso
+    applySky(this.clock.hour, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus);
     // flou de profondeur : net autour du perso (distance caméra -> point suivi), plus large au dézoom
     this.post.setDof({ focus: CAM_DIST, range: 2.2 / this.zoom, falloff: 6 / this.zoom, strength: 1 });
   }
@@ -654,5 +816,6 @@ export class Game {
     this.post.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    this.bubble.remove();
   }
 }

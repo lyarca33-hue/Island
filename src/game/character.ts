@@ -151,6 +151,15 @@ export class Character {
     return this.carries ? [...this.carries.right.carried, ...this.carries.left.carried] : [];
   }
 
+  /** Objets portés par main (pile comprise), et nombre de mains libres (une pile ou une caisse prend les deux). */
+  get hands(): { loads: WorldItem[][]; free: number } {
+    const c = this.carries;
+    if (!c) return { loads: [], free: 0 };
+    const both = c.right.bothHands || c.left.bothHands;
+    const loads = SIDES_.map((s) => c[s].carried).filter((l) => l.length);
+    return { loads, free: both ? 0 : 2 - loads.length };
+  }
+
   /** La main qui a pris son objet en dernier. */
   private get lastHand(): Carry | null {
     const side = this.order[this.order.length - 1];
@@ -276,6 +285,16 @@ export class Character {
 
   get position(): THREE.Vector3 {
     return this.root.position;
+  }
+
+  /** Rien en cours : ni marche vers un point, ni approche d'un objet, ni geste des mains. */
+  /** Allure en cours : immobile, marche, course. */
+  get moveGait(): Gait {
+    return this.gait;
+  }
+
+  get idle(): boolean {
+    return !this.target && !this.approach && !this.busy && this.move.lengthSq() === 0;
   }
 
   update(dt: number, bounds: number): void {

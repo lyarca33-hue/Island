@@ -15,3 +15,4 @@ python3 tools/build_vrm_assets.py --src /tmp/vrm-samples/vroid --out public/vrm
 
 N'ajouter que des modèles dont la licence permet l'usage dans un jeu (CC0, ou licence VRoid
 Hub avec usage commercial, modification et redistribution autorisés).
+
