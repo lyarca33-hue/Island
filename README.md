@@ -72,3 +72,8 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 « X Bot » de Mixamo (fourni dans les exemples de three.js) ne sert plus que de source
 d'animations : `idle`, `walk`, `run`, `agree` (oui), `headShake` (non), `sad_pose`,
 `sneak_pose`. Toute animation Mixamo ajoutée à ce fichier sera jouable par tous les persos.
+
+Le repos raide d'X Bot est en cours de remplacement par une animation libre : dans le créateur,
+« Repos A » (X Bot), « B » (pixiv, VRMA), « C » et « D » (Quaternius, CC0) se comparent ; `idle`
+désigne celui retenu (voir `src/creator/puppet.ts`). Le reciblage lit aussi le squelette de Quaternius
+(`UAL_TO_VRM` dans `retarget.ts`).

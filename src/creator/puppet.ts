@@ -6,10 +6,28 @@ import * as THREE from 'three';
 import { Avatar } from './avatar';
 import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
-import { retargetClips } from './retarget';
-import { armNodeNames, armTracks } from './arms';
+import { retargetClips, UAL_TO_VRM } from './retarget';
+import { createVRMAnimationClip, type VRMAnimation } from '@pixiv/three-vrm-animation';
 import { PoseLayer } from './pose';
-import { loadAnimationSource } from './source';
+import { loadAnimationSource, loadIdleAnimation, loadUalAnimations } from './source';
+
+interface Sources {
+  mixamo: Awaited<ReturnType<typeof loadAnimationSource>>;
+  vrma: VRMAnimation | null;
+  ual: Awaited<ReturnType<typeof loadUalAnimations>>;
+}
+
+async function loadSources(): Promise<Sources> {
+  const [mixamo, vrma, ual] = await Promise.all([loadAnimationSource(), loadIdleAnimation(), loadUalAnimations()]);
+  return { mixamo, vrma, ual };
+}
+
+/** Quaternius se tient jambes écartées et bras un peu ouverts : on resserre (degrés, côté gauche). */
+const UAL_ADJUST: Record<string, [number, number, number]> = {
+  leftUpperLeg: [0, 0, -7],
+  leftFoot: [0, 0, 7],
+  leftUpperArm: [0, 0, -6],
+};
 
 /** Nom d'expression VRM 1.0 → nom possible dans un modèle VRM 0.x (presets « unknown »). */
 const ALIASES: Record<string, string[]> = { surprised: ['surprised', 'Surprised'] };
@@ -20,7 +38,9 @@ export class Puppet {
   private mixer: THREE.AnimationMixer;
   private pose: PoseLayer;
   private actions = new Map<string, THREE.AnimationAction>();
+  private mixamo = new Set<THREE.AnimationAction>();
   private current: THREE.AnimationAction | null = null;
+  private currentName = 'idle';
   private exprTarget: Record<string, number> = {};
   private exprNow: Record<string, number> = {};
   private blinkIn = 2;
@@ -38,9 +58,9 @@ export class Puppet {
   }
 
   static async create(recipe: Recipe): Promise<Puppet> {
-    const [avatar, source] = await Promise.all([Avatar.build(recipe), loadAnimationSource()]);
+    const [avatar, sources] = await Promise.all([Avatar.build(recipe), loadSources()]);
     const p = new Puppet(avatar, recipe);
-    p.loadClips(source);
+    p.loadClips(sources);
     p.play('idle', 0);
     return p;
   }
@@ -68,11 +88,11 @@ export class Puppet {
   }
 
   private async rebuild(): Promise<void> {
-    const source = await loadAnimationSource();
+    const sources = await loadSources();
     while (!this.avatar.sameParts(this.wanted)) {
       const r = this.wanted;
       const next = await Avatar.build(r);
-      const playing = this.current?.getClip().name ?? 'idle';
+      const playing = this.currentName;
       const time = this.current?.time ?? 0;
       this.mixer.stopAllAction();
       this.mixer.uncacheRoot(this.avatar.base.scene);
@@ -81,7 +101,7 @@ export class Puppet {
       this.root.add(next.root);
       this.mixer = new THREE.AnimationMixer(next.base.scene);
       this.pose = new PoseLayer(next.base);
-      this.loadClips(source);
+      this.loadClips(sources);
       this.current = null;
       this.play(playing, 0);
       if (this.current) (this.current as THREE.AnimationAction).time = time;
@@ -90,17 +110,28 @@ export class Puppet {
     this.avatar.applyLook(this.wanted);
   }
 
-  private loadClips(source: Parameters<typeof retargetClips>[0]): void {
+  private loadClips({ mixamo, vrma, ual }: Sources): void {
     this.actions.clear();
+    this.mixamo.clear();
     const vrm = this.avatar.base;
-    for (let clip of retargetClips(source, vrm)) {
-      if (clip.name === 'idle') {
-        // repos : les bras d'X Bot sont raides, on les remplace (voir arms.ts)
-        const arms = armNodeNames(vrm);
-        const kept = clip.tracks.filter((t) => !arms.has(t.name.slice(0, t.name.lastIndexOf('.'))));
-        clip = new THREE.AnimationClip('idle', clip.duration, [...kept, ...armTracks(vrm, clip.duration)]);
-      }
-      this.actions.set(clip.name, this.mixer.clipAction(clip));
+    const add = (name: string, clip: THREE.AnimationClip, fromMixamo = false) => {
+      clip.name = name;
+      const action = this.mixer.clipAction(clip);
+      this.actions.set(name, action);
+      if (fromMixamo) this.mixamo.add(action);
+    };
+    for (const clip of retargetClips(mixamo, vrm)) add(clip.name, clip, true);
+    // repos à l'essai (celui d'X Bot est raide) : pixiv (VRMA) et Quaternius
+    const xbot = this.actions.get('idle');
+    if (xbot) this.actions.set('idle_xbot', xbot);
+    if (vrma) add('idle_pixiv', createVRMAnimationClip(vrma, vrm));
+    if (ual) {
+      const clips = retargetClips({ ...ual, bones: UAL_TO_VRM, adjust: UAL_ADJUST }, vrm);
+      const pick = (n: string) => clips.find((c) => c.name === n);
+      const idle = pick('Idle_Loop');
+      const talk = pick('Idle_Talking_Loop');
+      if (idle) add('idle', idle);
+      if (talk) add('idle_talk', talk);
     }
   }
 
@@ -112,6 +143,7 @@ export class Puppet {
   play(name: string, fade: number): void {
     const next = this.actions.get(name);
     if (!next || next === this.current) return;
+    this.currentName = name;
     next.reset().setEffectiveWeight(1).play();
     if (this.current) this.current.crossFadeTo(next, fade, false);
     this.current = next;
@@ -134,8 +166,10 @@ export class Puppet {
 
   update(dt: number): void {
     this.mixer.update(dt);
-    const idle = this.actions.get('idle');
-    this.pose.apply(idle?.isRunning() ? 1 - idle.getEffectiveWeight() : 1);
+    // retouches de pose : seulement pour les clips d'X Bot
+    let w = 0;
+    for (const a of this.mixamo) if (a.isRunning()) w += a.getEffectiveWeight();
+    this.pose.apply(Math.min(1, w));
     // fondu des expressions
     const k = Math.min(1, dt * 10);
     const names = new Set([...Object.keys(this.exprNow), ...Object.keys(this.exprTarget)]);
