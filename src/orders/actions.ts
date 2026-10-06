@@ -28,9 +28,25 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'poser',
-    description: 'Poser ce qu’on tient devant soi (sur le meuble qui s’y trouve, sinon par terre).',
+    description: 'Poser devant soi (sur le meuble qui s’y trouve, sinon par terre) l’objet tenu `objet`, ou le dernier pris.',
     params: {},
-    run: (g) => g.drop(),
+    run: (g, a) => {
+      if (!a.objet) return g.drop();
+      const nom = g.describe().objets.find((o) => o.ref === a.objet)?.nom;
+      return nom ? g.drop(nom) : false;
+    },
+  },
+  {
+    name: 'lire',
+    description: 'Ouvrir le livre tenu et le lire (un seul livre en main, l’autre main libre).',
+    params: {},
+    run: (g) => g.read(),
+  },
+  {
+    name: 'arreter_lire',
+    description: 'Fermer le livre qu’on lit.',
+    params: {},
+    run: (g) => g.stopReading(),
   },
   {
     name: 'aller',

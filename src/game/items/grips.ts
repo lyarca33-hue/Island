@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 
-export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack';
+export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack' | 'read';
 
 export interface HandSpec {
   /** Où va la main, depuis l'épaule (longueurs de bras, repère du buste). */
@@ -38,6 +38,13 @@ export interface GripSpec {
   forward: [number, number, number];
   /** Centre de la prise par rapport à l'os de la main (m, même repère). */
   hold: [number, number, number];
+  /** À deux mains : écart entre les paumes (m) ; sinon, la largeur de l'objet. */
+  width?: number;
+  /**
+   * Tenu de la main gauche : où va la main (sinon le miroir de la main droite). Le livre contre
+   * la poitrine reste ainsi du côté gauche, sans croiser le bras devant l'autre main.
+   */
+  leftReach?: [number, number, number];
 }
 
 export const GRIPS: Record<GripType, GripSpec> = {
@@ -53,7 +60,7 @@ export const GRIPS: Record<GripType, GripSpec> = {
   // main, son côté +Z (l'anse) reste dans le poing
   fist: {
     label: 'en poing',
-    right: { reach: [0.05, -0.55, 0.52], pole: [-0.5, -0.3, -0.8], fingers: [0.1, -0.15, 1], palm: [1, 0, 0], curl: 70, thumb: 35 },
+    right: { reach: [-0.15, -0.6, 0.45], pole: [-0.5, -0.3, -0.8], fingers: [0.1, -0.15, 1], palm: [1, 0, 0], curl: 70, thumb: 35 },
     up: [0, 0, 1],
     forward: [1, 0, 0],
     hold: [-0.07, -0.03, 0.01],
@@ -73,6 +80,7 @@ export const GRIPS: Record<GripType, GripSpec> = {
     up: [-0.53, 0, 0.85],
     forward: [-0.85, 0, -0.53],
     hold: [-0.07, -0.03, 0],
+    leftReach: [0.14, -0.32, 0.26],
   },
   // à deux mains devant soi (caisse, panier) : les mains se placent sur les côtés de l'objet
   twoHands: {
@@ -93,7 +101,21 @@ export const GRIPS: Record<GripType, GripSpec> = {
     forward: [-1, 0, 0],
     hold: [-0.06, -0.03, 0],
   },
+  // livre ouvert, tenu à deux mains par le bas des pages, incliné vers le visage (lecture) ;
+  // l'objet est ici le livre ouvert : pages vers +Z, haut du texte vers +Y
+  read: {
+    label: 'ouvert, pour lire',
+    right: { reach: [0, -0.32, 0.62], pole: [-0.5, -0.8, -0.3], fingers: [0.35, 0.35, 1], palm: [0.55, 0.8, 0], curl: 20, thumb: 0 },
+    left: { reach: [0, -0.32, 0.62], pole: [0.5, -0.8, -0.3], fingers: [-0.35, 0.35, 1], palm: [-0.55, 0.8, 0], curl: 20, thumb: 0 },
+    up: [0, 0.82, 0.57],
+    forward: [0, 0.57, -0.82],
+    hold: [-0.06, -0.02, 0],
+    width: 0.3,
+  },
 };
+
+/** Les prises qui occupent les deux mains. */
+export const isTwoHanded = (g: GripType) => !!GRIPS[g].left;
 
 export const vec = (v: [number, number, number]) => new THREE.Vector3(...v);
 

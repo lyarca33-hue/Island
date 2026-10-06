@@ -144,6 +144,13 @@ coule, puis il reprend la tasse pleine (« tasse de café »). Fiches : `pour` p
 poser le récipient, ce qu'elle remplit, durée), `fill` pour la tasse (hauteur du liquide vide /
 pleine ; la tasse commence vide).
 
+Un objet par main : on peut tenir une tasse dans une main et un livre dans l'autre. Une caisse,
+une pile de livres ou un livre ouvert prennent les deux mains. E repose le dernier objet pris.
+
+Lire : livre en main (l'autre main libre), bouton « Lire » ou touche L. Le perso ouvre le livre
+devant lui à deux mains et penche la tête ; L de nouveau pour le refermer. Prendre ou poser
+quelque chose referme le livre d'abord.
+
 Boire : tasse de café en main, bouton « Boire » ou touche B. Le perso porte la tasse à la bouche,
 l'incline et boit une gorgée ; le niveau baisse (environ trois gorgées). Vide, elle se remplit
 de nouveau à la machine.
@@ -151,5 +158,6 @@ de nouveau à la machine.
 Les meubles (objets non portables) sont des rectangles au sol que le perso contourne
 (`src/game/nav.ts`) : il glisse le long au clavier, et un clic de l'autre côté passe par leurs coins.
 
-Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()`,
+Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()` (ou
+`game.drop('livre')` pour poser cet objet-là), `game.read()`, `game.stopReading()`, `game.heldNames`,
 `game.store()` (ranger les livres tenus), `game.makeCoffee()`, `game.drink()`, `game.itemNames`.

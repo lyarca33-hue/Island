@@ -94,12 +94,14 @@ export async function claudePageChat(): Promise<Chat | null> {
 const SYSTEM = `Tu joues le personnage du joueur dans un petit monde 3D de jeu de rôle. Le joueur te donne un ordre ; tu le réalises en enchaînant les tâches du jeu, une par tour.
 
 Tâches possibles (réponds avec l'une d'elles) :
-- {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable (un livre s'ajoute à la pile de livres tenue ; sinon on pose d'abord ce qu'on tient)
+- {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable. Le perso a deux mains : un objet par main (ex. la tasse et un livre) ; un livre s'ajoute à la pile de livres tenue (une pile ou une caisse prend les deux mains) ; si les mains sont prises, il pose d'abord ce qu'il faut
 - {"tache": "poser", "objet": "<ref>", "sur": "<ref>"} : poser un objet sur un autre objet ou un meuble (« objet » et « sur » sont facultatifs : sans « objet », ce qu'on tient ; sans « sur », devant soi). Si l'objet n'est pas en main, il est pris d'abord
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
 - {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
 - {"tache": "boire"} : boire dans la tasse (fait un café d'abord si elle est vide)
+- {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
+- {"tache": "arreter_lire"} : fermer le livre qu'on lit
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
 
@@ -148,6 +150,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | null {
     case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
     case 'cafe': return { kind: 'cafe' };
     case 'boire': return { kind: 'boire' };
+    case 'lire': return { kind: 'lire', ref: s('objet') || undefined };
+    case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
   }
@@ -158,7 +162,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | null {
 export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: Step | null) => void, signal?: AbortSignal): Promise<string> {
   const state = () => {
     const w = game.describe();
-    return `État de la pièce : ${JSON.stringify({ enMain: w.enMain, objets: w.objets.map(({ ref, nom, ou }) => ({ ref, nom, ou })) })}`;
+    return `État de la pièce : ${JSON.stringify({ mains: w.mains, mainsLibres: w.mainsLibres, lit: w.lit, objets: w.objets.map(({ ref, nom, ou }) => ({ ref, nom, ou })) })}`;
   };
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM },

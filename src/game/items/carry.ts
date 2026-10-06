@@ -10,7 +10,7 @@
 import type { VRMHumanBoneName } from '@pixiv/three-vrm';
 import * as THREE from 'three';
 import type { ItemDef } from './catalog';
-import { GRIPS, guessGrip, vec, type GripSpec, type GripType, type HandSpec } from './grips';
+import { GRIPS, guessGrip, isTwoHanded, vec, type GripSpec, type GripType, type HandSpec } from './grips';
 import { basisRotation, Rig, solveTwoBone } from './ik';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
@@ -31,15 +31,33 @@ export class WorldItem {
   /** Ce qu'il contient (« café »), ou null. */
   contents: string | null = null;
 
+  private closed: THREE.Object3D;
+  private opened: THREE.Object3D | null = null;
+
   constructor(readonly def: ItemDef) {
     const model = def.build();
+    this.closed = model;
     this.object.add(model);
     this.object.name = def.id;
     this.box = new THREE.Box3().setFromObject(model);
     this.box.getSize(this.size);
+    if (def.buildOpen) {
+      // livre ouvert : centré sur le livre fermé, caché (hors de la boîte de l'objet)
+      this.opened = def.buildOpen();
+      this.opened.position.copy(this.box.getCenter(new THREE.Vector3()));
+      this.opened.visible = false;
+      this.object.add(this.opened);
+    }
     this.grip = def.grip ?? guessGrip(this.size);
     this.gripPoint = def.gripPoint ? vec(def.gripPoint) : new THREE.Vector3(0, this.size.y / 2, 0);
     if (def.fill) this.setLevel(0);
+  }
+
+  /** Montre le livre ouvert (lecture) ou fermé. */
+  setOpen(open: boolean): void {
+    if (!this.opened) return;
+    this.opened.visible = open;
+    this.closed.visible = !open;
   }
 
   /** Pièce nommée du modèle (ex. `liquide`, `jet`). */
@@ -79,9 +97,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'open' | 'read' | 'close';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, open: 0.7, read: 0, close: 0.6 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s). */
 const STACK_BLEND = 0.4;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -118,7 +136,7 @@ const SNAP = 0.25;
 const ease = (t: number) => t * t * (3 - 2 * t);
 
 const SIDES = ['right', 'left'] as const;
-type Side = (typeof SIDES)[number];
+export type Side = (typeof SIDES)[number];
 const FINGERS = ['Index', 'Middle', 'Ring', 'Little'] as const;
 const JOINTS = ['Proximal', 'Intermediate', 'Distal'] as const;
 
@@ -132,6 +150,22 @@ const LEG_DIR = new THREE.Vector3(0, -1, 0);
 const LEG_HINGE = new THREE.Vector3(1, 0, 0);
 
 const mirror = (v: THREE.Vector3, side: Side) => (side === 'left' ? v.set(-v.x, v.y, v.z) : v);
+const flip = (v: [number, number, number], side: Side): [number, number, number] => (side === 'left' ? [-v[0], v[1], v[2]] : v);
+
+/** Prise à une main tenue de la main gauche : le miroir de la prise de la main droite. */
+function sided(spec: GripSpec, side: Side): GripSpec {
+  if (side === 'right' || spec.left) return spec;
+  const h = spec.right;
+  return {
+    ...spec,
+    right: { ...h, reach: spec.leftReach ?? flip(h.reach, side), pole: flip(h.pole, side), fingers: flip(h.fingers, side), palm: flip(h.palm, side) },
+    up: flip(spec.up, side),
+    forward: flip(spec.forward, side),
+  };
+}
+
+/** Pencher la tête vers le livre pendant la lecture (rad). */
+const READ_NOD = THREE.MathUtils.degToRad(16);
 
 export class Carry {
   private rig: Rig;
@@ -157,8 +191,13 @@ export class Carry {
   private chestRot = new THREE.Quaternion();
   /** Part du geste « boire » (0 : tasse tenue, 1 : à la bouche). */
   private sip = 0;
+  /** Orientation de chaque main calculée à cette image. */
+  private handRots: Partial<Record<Side, THREE.Quaternion>> = {};
+  /** Pose de l'objet pendant l'ouverture / la fermeture du livre (fondu entre les deux prises). */
+  private blendPose: { pos: THREE.Vector3; rot: THREE.Quaternion } | null = null;
 
-  constructor(rig: Rig) {
+  /** `side` : la main qui tient l'objet (une prise à deux mains prend aussi l'autre). */
+  constructor(rig: Rig, readonly side: Side = 'right') {
     this.rig = rig;
     const add = (n: VRMHumanBoneName, side?: Side) => {
       const node = rig.node(n);
@@ -166,7 +205,7 @@ export class Carry {
       this.touched.push(node);
       if (side) this.armNodes[side].add(node);
     };
-    for (const n of ['hips', 'spine', 'chest'] as const) add(n);
+    for (const n of ['hips', 'spine', 'chest', 'neck'] as const) add(n);
     for (const side of SIDES) {
       for (const n of ['UpperLeg', 'LowerLeg', 'Foot']) add(`${side}${n}` as VRMHumanBoneName);
       const arm = ['UpperArm', 'LowerArm', 'Hand', 'ThumbMetacarpal', 'ThumbProximal', 'ThumbDistal'];
@@ -192,12 +231,41 @@ export class Carry {
 
   /** Vrai pendant une saisie, un ajout à la pile ou une dépose : le perso ne bouge pas. */
   get busy(): boolean {
-    return this.phase !== 'idle' && this.phase !== 'hold';
+    return this.phase !== 'idle' && this.phase !== 'hold' && this.phase !== 'read';
+  }
+
+  /** En train de lire (livre ouvert, ou qui s'ouvre / se ferme). */
+  get reading(): boolean {
+    return this.phase === 'open' || this.phase === 'read' || this.phase === 'close';
+  }
+
+  /** L'objet tenu occupe-t-il les deux mains (caisse, pile, livre ouvert) ? */
+  get bothHands(): boolean {
+    return !!this.item && (this.reading || isTwoHanded(this.grip));
   }
 
   /** Prise utilisée : une pile se porte à plat, à deux mains. */
   private get grip(): GripType {
     return this.stack.length ? 'stack' : this.item!.grip;
+  }
+
+  /** Prise (main gauche : miroir). */
+  private spec(grip: GripType = this.grip): GripSpec {
+    return sided(GRIPS[grip], this.side);
+  }
+
+  /** Ouvre le livre tenu pour le lire (il faut l'autre main libre). */
+  read(): boolean {
+    if (!this.item?.def.buildOpen || this.phase !== 'hold' || this.stack.length) return false;
+    this.start('open');
+    return true;
+  }
+
+  /** Ferme le livre ; `onDone` une fois revenu à la prise normale. */
+  stopReading(onDone?: () => void): boolean {
+    if (this.phase !== 'read') return false;
+    this.start('close', onDone);
+    return true;
   }
 
   /** Peut-on ajouter `item` à ce qu'on tient (même sorte d'objet empilable, pile pas pleine) ? */
@@ -276,7 +344,7 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', open: 'read', close: 'hold' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
@@ -314,7 +382,10 @@ export class Carry {
       case 'reach': return { w: k, r: 1, c: k };
       case 'lift': return { w: 1, r: 1 - k, c: 1 - k };
       case 'hold':
-      case 'drink': return { w: 1, r: 0, c: 0 };
+      case 'drink':
+      case 'open':
+      case 'read':
+      case 'close': return { w: 1, r: 0, c: 0 };
       case 'lower': return { w: 1, r: k, c: k };
       case 'release': return { w: 1 - k, r: 1, c: 1 - k };
       // on se penche un peu pour attraper / poser un livre sans lâcher la pile
@@ -339,14 +410,35 @@ export class Carry {
     const root = this.rig.vrm.scene;
     root.updateMatrixWorld(true);
     const scale = root.getWorldScale(new THREE.Vector3()).y;
-    const spec = GRIPS[this.grip];
     if (c > 0) this.crouch(c, scale);
+    // lecture : la tête se penche vers le livre
+    const open = this.openAmount();
+    const neck = this.rig.node('neck');
+    if (open > 0 && neck) neck.quaternion.multiply(this.rig.local(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), READ_NOD * open)));
     // repère du buste (après la flexion)
     const chest = this.rig.node('upperChest') ?? this.rig.node('chest')!;
     this.rig.worldRot(chest, this.chestRot);
-    const hands: Side[] = spec.left ? ['right', 'left'] : ['right'];
-    const center = this.twoHandCenter(spec, r);
-    for (const side of hands) this.arm(side, side === 'left' ? spec.left! : spec.right, spec, r, scale, center);
+    this.blendPose = null;
+    let hands: Side[];
+    if (this.phase === 'open' || this.phase === 'close') {
+      // fondu entre la prise normale et la lecture : on calcule les deux poses des bras
+      const a = this.spec();
+      this.pose(a, r, scale);
+      const poseA = this.itemPose(a);
+      const armA = new Map<THREE.Object3D, THREE.Quaternion>();
+      for (const side of SIDES) for (const n of this.armNodes[side]) armA.set(n, n.quaternion.clone());
+      for (const sv of this.saved) if (armA.has(sv.node)) sv.node.quaternion.copy(sv.q);
+      const b = GRIPS.read;
+      this.pose(b, r, scale);
+      const poseB = this.itemPose(b);
+      for (const [n, q] of armA) n.quaternion.copy(q.slerp(n.quaternion, open));
+      this.blendPose = { pos: poseA.pos.lerp(poseB.pos, open), rot: poseA.rot.slerp(poseB.rot, open) };
+      this.item.setOpen(open > 0.5);
+      hands = [...SIDES];
+    } else {
+      const spec = this.phase === 'read' ? GRIPS.read : this.spec();
+      hands = this.pose(spec, r, scale);
+    }
     // fondu entre la pose animée et la pose calculée
     if (w < 1) {
       for (const s of this.saved) {
@@ -354,6 +446,41 @@ export class Carry {
       }
     }
     root.updateMatrixWorld(true);
+  }
+
+  /** Place les bras pour la prise `spec` ; renvoie les mains utilisées. */
+  private pose(spec: GripSpec, r: number, scale: number): Side[] {
+    const hands: Side[] = spec.left ? ['right', 'left'] : [this.side];
+    const center = this.twoHandCenter(spec, r);
+    for (const side of hands) this.arm(side, side === 'left' && spec.left ? spec.left : spec.right, spec, r, scale, center);
+    return hands;
+  }
+
+  /** Livre ouvert : 0 fermé, 1 ouvert (fondu pendant l'ouverture et la fermeture). */
+  private openAmount(): number {
+    const k = ease(Math.min(1, this.t / (DURATION[this.phase] || 1)));
+    if (this.phase === 'open') return k;
+    if (this.phase === 'close') return 1 - k;
+    return this.phase === 'read' ? 1 : 0;
+  }
+
+  /** Pose de l'objet d'après les cibles des mains de cette image (prise `spec`). */
+  private itemPose(spec: GripSpec): { pos: THREE.Vector3; rot: THREE.Quaternion } {
+    const pos = new THREE.Vector3(), rot = new THREE.Quaternion();
+    if (spec.left) {
+      pos.copy(this.palms.left!).add(this.palms.right!).multiplyScalar(0.5);
+      rot.copy(this.chestRot).multiply(gripRotation(spec));
+    } else {
+      pos.copy(this.palms[this.side]!);
+      rot.copy(this.handRots[this.side]!).multiply(gripRotation(spec));
+    }
+    pos.sub(this.pointFor(spec).applyQuaternion(rot));
+    return { pos, rot };
+  }
+
+  /** Point de l'objet placé au centre de la prise : le milieu du livre ouvert, sinon le point saisi. */
+  private pointFor(spec: GripSpec): THREE.Vector3 {
+    return spec === GRIPS.read ? this.item!.box.getCenter(new THREE.Vector3()) : this.gripPoint();
   }
 
   /** Tasse vers la bouche : monte, reste le temps de la gorgée, redescend. */
@@ -412,7 +539,7 @@ export class Carry {
     const fingers = vec(hand.fingers).normalize().applyQuaternion(this.chestRot);
     const palm = vec(hand.palm).normalize().applyQuaternion(this.chestRot);
     const handRot = basisRotation(rest.fingers, PALM_REST, fingers, palm);
-    const sipping = this.sip > 0 && side === 'right' && !spec.left;
+    const sipping = this.sip > 0 && side === this.side && !spec.left;
     if (sipping) {
       // tasse inclinée vers la bouche : rotation autour de l'axe gauche-droite du buste
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(this.chestRot);
@@ -424,7 +551,7 @@ export class Carry {
       // les mains sur les flancs de l'objet : son axe qui va de gauche à droite une fois en main
       const inHands = gripRotation(spec);
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(inHands.clone().invert());
-      const half = Math.abs(this.item!.size.clone().applyQuaternion(inHands).x) / 2 + 0.015;
+      const half = spec.width ? spec.width / 2 : Math.abs(this.item!.size.clone().applyQuaternion(inHands).x) / 2 + 0.015;
       let sideDir = new THREE.Vector3(side === 'left' ? 1 : -1, 0, 0).applyQuaternion(this.chestRot);
       if (r > 0.5) {
         // objet encore posé : ses flancs, s'ils sont à peu près verticaux
@@ -436,25 +563,26 @@ export class Carry {
       const shoulder = rig.worldPos(upper);
       const hold = shoulder.add(vec(hand.reach).multiplyScalar(this.armLength(side)).applyQuaternion(this.chestRot));
       palmTarget = hold.lerp(this.target, r);
-      if (sipping) palmTarget.lerp(this.mouthHold(scale), this.sip);
+      if (sipping) palmTarget.lerp(this.mouthHold(scale, side), this.sip);
     }
     const offset = mirror(vec(spec.hold), side).multiplyScalar(scale).applyQuaternion(handRot);
     const wrist = palmTarget.clone().sub(offset);
     const pole = vec(hand.pole).normalize();
     // gorgée : le coude descend sous la tasse
-    if (sipping) pole.lerp(vec(SIP_POLE).normalize(), this.sip).normalize();
+    if (sipping) pole.lerp(vec(flip(SIP_POLE, side)).normalize(), this.sip).normalize();
     pole.applyQuaternion(this.chestRot);
     solveTwoBone(rig, upper, lower, handNode, wrist, pole, rest.dir, rest.hinge);
     rig.setWorldRot(handNode, handRot);
     this.palms[side] = palmTarget;
+    this.handRots[side] = handRot;
     this.curl(side, hand);
   }
 
   /** Où tenir la main pour que le bord de la tasse touche les lèvres (monde). */
-  private mouthHold(scale: number): THREE.Vector3 {
+  private mouthHold(scale: number, side: Side): THREE.Vector3 {
     const rig = this.rig;
     const head = rig.worldPos(rig.node('head')!);
-    return head.add(new THREE.Vector3(...SIP_MOUTH).multiplyScalar(scale).applyQuaternion(this.chestRot));
+    return head.add(vec(flip(SIP_MOUTH, side)).multiplyScalar(scale).applyQuaternion(this.chestRot));
   }
 
   /** Orientation de l'objet au sol (pour poser les mains sur ses flancs). */
@@ -487,20 +615,26 @@ export class Carry {
   after(): void {
     const item = this.item;
     if (!item || this.phase === 'idle' || this.phase === 'reach') return;
-    const spec = GRIPS[this.grip];
+    const spec = this.phase === 'read' ? GRIPS.read : this.spec();
     const rig = this.rig;
     const pos = new THREE.Vector3(), rot = new THREE.Quaternion();
-    if (spec.left) {
-      pos.copy(this.palms.left!).add(this.palms.right!).multiplyScalar(0.5);
-      rot.copy(this.chestRot).multiply(gripRotation(spec));
+    if (this.blendPose) {
+      pos.copy(this.blendPose.pos);
+      rot.copy(this.blendPose.rot);
     } else {
-      const handRot = rig.worldRot(rig.node('rightHand')!);
-      const scale = rig.vrm.scene.getWorldScale(new THREE.Vector3()).y;
-      pos.copy(rig.worldPos(rig.raw('rightHand')!)).add(vec(spec.hold).multiplyScalar(scale).applyQuaternion(handRot));
-      rot.copy(handRot).multiply(gripRotation(spec));
+      if (spec.left) {
+        pos.copy(this.palms.left!).add(this.palms.right!).multiplyScalar(0.5);
+        rot.copy(this.chestRot).multiply(gripRotation(spec));
+      } else {
+        const hand = `${this.side}Hand` as const;
+        const handRot = rig.worldRot(rig.node(hand)!);
+        const scale = rig.vrm.scene.getWorldScale(new THREE.Vector3()).y;
+        pos.copy(rig.worldPos(rig.raw(hand)!)).add(mirror(vec(spec.hold), this.side).multiplyScalar(scale).applyQuaternion(handRot));
+        rot.copy(handRot).multiply(gripRotation(spec));
+      }
+      // le point saisi de l'objet va au centre de la prise
+      pos.sub(this.pointFor(spec).applyQuaternion(rot));
     }
-    // le point saisi de l'objet va au centre de la prise
-    pos.sub(this.gripPoint().applyQuaternion(rot));
     const o = item.object;
     if (this.phase === 'lift' && this.t < SNAP) {
       const k = ease(this.t / SNAP);

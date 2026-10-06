@@ -1,6 +1,6 @@
 /**
  * Ordres simples en français, compris sans IA : « prends la tasse », « range tous les livres »,
- * « va à la table puis pose la lettre », « fais-toi un café », « dis bonjour ». Rend null dès
+ * « va à la table puis pose la lettre », « fais-toi un café », « lis le livre rouge », « dis bonjour ». Rend null dès
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
@@ -26,6 +26,8 @@ const VERBS: Record<string, string[]> = {
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
   dire: ['dis', 'dit', 'dire', 'crie', 'crier'],
+  lire: ['lis', 'lit', 'lire', 'ouvre', 'ouvrir', 'feuillette', 'feuilleter', 'bouquine'],
+  arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
 };
 const VERB_OF = new Map(Object.entries(VERBS).flatMap(([k, vs]) => vs.map((v) => [v, k] as const)));
 
@@ -173,6 +175,16 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
     case 'boire':
       return [{ kind: 'boire' }];
+    case 'lire': {
+      // « lis le livre rouge », « lis un livre », « lis » (celui qu'on tient)
+      const books = found.filter((o) => o.nom === 'livre');
+      if (found.length && !books.length) return null;
+      const named = rest.some((x) => x === 'livre') && rest.some((x) => !STOP.has(x) && x !== 'livre');
+      return [{ kind: 'lire', ref: named ? books.find(isLoose)?.ref ?? books[0]?.ref : undefined }];
+    }
+    case 'arreter':
+      // « arrête de lire », « ferme le livre », « stop »
+      return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;
     case 'dire': {
       // le texte d'origine après le verbe (« dis bonjour à tous » → « bonjour à tous »)
       const m = original.match(/^.*?\b(?:dis|dit|dire|crie|crier)\b\s*(?:que\s+|qu['’]\s*|:\s*)?(.+)$/i);
