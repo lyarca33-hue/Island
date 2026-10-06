@@ -6,7 +6,8 @@
  * Format texte JSON plutôt que l'appel d'outils natif : marche avec n'importe quel modèle.
  */
 import type { Game } from '../game/Game';
-import { type Intent, runIntents, type Step } from './tasks';
+import type { Missing } from './missing';
+import { type Intent, intentLabel, runIntents, type Step } from './tasks';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -103,12 +104,13 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
+- {"tache": "manque", "action": "<verbe court, ex. danser>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
 
 Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
 Pour prendre plusieurs livres, enchaîne plusieurs « prendre » (6 livres au plus en pile).
 Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
-Si l'ordre est impossible dans ce monde (objet absent, action que le jeu ne sait pas faire), dis-le en personnage avec « dire », puis « fini ».
+Si l'ordre demande une action que les tâches ne permettent pas (danser, manger, s'asseoir…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour. Une seule tâche par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
 
@@ -141,7 +143,7 @@ export function parseJson(text: string): Record<string, unknown> | null {
 }
 
 /** Traduit la réponse du modèle en tâche du jeu (null : réponse mal formée). */
-function toIntent(o: Record<string, unknown>): Intent | 'fini' | null {
+function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null {
   const s = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '');
   switch (o.tache) {
     case 'prendre': return s('objet') ? { kind: 'prendre', ref: s('objet') } : null;
@@ -154,12 +156,16 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | null {
     case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
+    case 'manque': return s('action') || s('raison') ? 'manque' : null;
   }
   return null;
 }
 
+/** Ce que l'IA signale comme manquant, ou une tâche qui a échoué (pour le journal des manques). */
+export type OnMissing = (m: Omit<Missing, 'at' | 'ordre'>) => void;
+
 /** Réalise l'ordre avec le modèle ; rend un message pour le joueur. `onStep(null)` : il réfléchit. */
-export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: Step | null) => void, signal?: AbortSignal): Promise<string> {
+export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: Step | null) => void, signal?: AbortSignal, onMissing?: OnMissing): Promise<string> {
   const state = () => {
     const w = game.describe();
     return `État de la pièce : ${JSON.stringify({ mains: w.mains, mainsLibres: w.mainsLibres, lit: w.lit, objets: w.objets.map(({ ref, nom, ou }) => ({ ref, nom, ou })) })}`;
@@ -183,8 +189,15 @@ export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: S
     }
     misses = 0;
     if (intent === 'fini') return typeof json!.message === 'string' && json!.message ? json!.message : 'C’est fait.';
+    if (intent === 'manque') {
+      const str = (k: string) => (typeof json![k] === 'string' ? (json![k] as string) : '');
+      onMissing?.({ kind: 'action', quoi: str('action') || str('raison'), detail: str('raison') || str('action') });
+      messages.push({ role: 'user', content: 'Noté. Continue.' });
+      continue;
+    }
     const { ok, message } = await runIntents(game, [intent], onStep, signal);
     if (signal?.aborted) return 'Interrompu.';
+    if (!ok) onMissing?.({ kind: 'echec', quoi: intentLabel(intent), detail: message });
     messages.push({ role: 'user', content: `Résultat : ${ok ? 'ok' : `échec : ${message}`}\n\n${state()}` });
   }
   return 'J’ai arrêté : trop d’étapes.';

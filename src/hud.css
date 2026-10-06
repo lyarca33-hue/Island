@@ -58,6 +58,20 @@
 }
 .menu-form button:hover, .menu-action:hover { background: rgba(255, 255, 255, 0.18); }
 
+/* Menu → Manques */
+.menu-note { margin: 0; opacity: 0.75; line-height: 1.4; }
+.missing-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.missing-list li { display: flex; flex-direction: column; gap: 2px; }
+.missing-head { display: flex; justify-content: space-between; gap: 8px; }
+.missing-count { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.missing-list small { opacity: 0.65; line-height: 1.35; }
+.missing-actions { display: flex; gap: 6px; }
+.missing-actions button {
+  flex: 1; padding: 7px 8px; border-radius: 9px; border: 1px solid rgba(255, 240, 210, 0.35);
+  background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font: inherit; font-size: 13px; cursor: pointer;
+}
+.missing-actions button:hover { background: rgba(255, 255, 255, 0.18); }
+
 /* Zone de saisie : parole / action */
 .chat {
   position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(720px, calc(100% - 32px));
