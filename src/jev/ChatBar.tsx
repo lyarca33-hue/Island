@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
-import { type JevSettings, type JevStep, loadSettings, openRouterChat, runJev, saveSettings } from './jev';
+import { type JevSettings, type JevStep, loadSettings, openRouterDecide, runJev, saveSettings } from './jev';
 
 type Mode = 'parole' | 'action';
 
-const STEP_LABEL: Record<string, string> = { prendre: 'prend', ranger: 'range dans', poser: 'pose', aller: 'va vers', cafe: 'fait un café', boire: 'boit', dire: 'dit' };
+const STEP_LABEL: Record<string, string> = { prendre: 'prend', ranger: 'range dans', poser: 'pose', aller: 'va vers', cafe: 'fait un café', boire: 'boit' };
 
 function stepText(s: JevStep): string {
   if (s.kind === 'thinking') return 'Jev réfléchit…';
@@ -61,7 +61,7 @@ export function ChatBar({ game }: { game: Game | null }) {
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
-      const msg = await runJev(game, openRouterChat(settings), t, setStep, ctrl.signal);
+      const msg = await runJev(game, openRouterDecide(settings, crypto.randomUUID()), t, setStep, ctrl.signal);
       setResult(msg);
     } catch (e) {
       setResult(ctrl.signal.aborted ? 'Interrompu.' : `Jev : ${(e as Error).message}`);

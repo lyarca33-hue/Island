@@ -1,21 +1,17 @@
 /**
  * Jev : l'IA qui transforme une demande (« range tous les livres ») en suite d'actions du jeu.
  *
- * À chaque tour, Jev reçoit l'état de la pièce et le résultat de sa dernière action, et répond
- * par UNE action en JSON. Ce format texte marche avec n'importe quel modèle (pas besoin de
- * l'appel d'outils natif). Le modèle est appelé via OpenRouter ; `Chat` peut être remplacé
- * (autre fournisseur, modèle local, faux modèle pour les tests).
+ * Jev (typesafe/jev-1.13 sur OpenRouter) est un modèle de décision : il n'écrit pas de texte, il
+ * choisit une réponse parmi celles qu'on lui propose. À chaque étape, le jeu liste donc les
+ * actions possibles (« prendre livre-vert-2 », « ranger bibliotheque », « fini »...) et Jev
+ * choisit la suivante, en voyant la demande, l'état de la pièce et ce qu'il a déjà fait.
+ * `Decide` peut être remplacé (autre modèle, faux Jev pour les tests).
  */
-import type { Game } from '../game/Game';
-import { ACTIONS, perform } from './actions';
+import type { Game, WorldObject } from '../game/Game';
+import { perform } from './actions';
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-/** Envoie la conversation au modèle et rend sa réponse (texte). */
-export type Chat = (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>;
+/** Choisit une option (clé de `options`) d'après l'état ; `options` : clé → description. */
+export type Decide = (state: object, options: Record<string, string>, signal?: AbortSignal) => Promise<string>;
 
 export interface JevSettings {
   apiKey: string;
@@ -47,10 +43,13 @@ export function saveSettings(s: JevSettings): void {
   }
 }
 
-/** Appel à OpenRouter (API compatible OpenAI). */
-export function openRouterChat({ apiKey, model }: JevSettings): Chat {
-  return async (messages, signal) => {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+const QUESTION = 'Quelle est la prochaine action du personnage pour réaliser la demande du joueur ? '
+  + 'Tiens compte de ce qui est déjà fait et de ce qu’il a en main. Choisis « fini » quand la demande est réalisée ou impossible.';
+
+/** Appel à l'API Decisions d'OpenRouter : une question à choix, la réponse est une des clés. */
+export function openRouterDecide({ apiKey, model }: JevSettings, sessionId?: string): Decide {
+  return async (state, options, signal) => {
+    const res = await fetch('https://openrouter.ai/api/alpha/decisions', {
       method: 'POST',
       signal,
       headers: {
@@ -58,27 +57,47 @@ export function openRouterChat({ apiKey, model }: JevSettings): Chat {
         'Content-Type': 'application/json',
         'X-Title': 'Rp Island',
       },
-      body: JSON.stringify({ model, messages, temperature: 0.2 }),
+      body: JSON.stringify({
+        model,
+        state,
+        questions: { action: { type: 'choice', instructions: QUESTION, criteria: options } },
+        session_id: sessionId,
+      }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error(data?.error?.message ?? `OpenRouter : erreur ${res.status}`);
-    return data?.choices?.[0]?.message?.content ?? '';
+    const choice = data?.answers?.action?.choice;
+    if (typeof choice !== 'string') throw new Error('Jev n’a pas choisi d’action.');
+    return choice;
   };
 }
 
-const SYSTEM = `Tu es Jev. Tu contrôles le personnage du joueur dans un petit monde 3D, en enchaînant les actions du jeu pour réaliser sa demande.
+interface Option {
+  name: string;
+  args: Record<string, string>;
+  label: string;
+}
 
-Actions possibles :
-${ACTIONS.map((a) => `- ${a.name}${Object.keys(a.params).length ? ` (${Object.entries(a.params).map(([k, v]) => `${k} : ${v}`).join(', ')})` : ''} : ${a.description}`).join('\n')}
-
-Les objets sont désignés par leur « ref » (donnée dans l'état de la pièce). On ne tient qu'un objet à la fois, sauf les livres qui s'empilent.
-
-À chaque tour, réponds UNIQUEMENT par un objet JSON, sans texte autour :
-{"action": "<nom>", ...paramètres}
-Quand la demande est réalisée (ou impossible), réponds :
-{"action": "fini", "message": "<une phrase courte pour le joueur>"}
-
-Une seule action par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
+/** Actions possibles dans l'état actuel, avec leur clé (« prendre:livre ») et leur description. */
+export function options(world: { enMain: string[]; objets: WorldObject[] }): Map<string, Option> {
+  const out = new Map<string, Option>();
+  const add = (name: string, args: Record<string, string>, label: string) => out.set([name, ...Object.values(args)].join(':'), { name, args, label });
+  const held = world.objets.filter((o) => world.enMain.includes(o.ref));
+  const cup = held.find((o) => o.sorte === 'récipient');
+  for (const o of world.objets) {
+    if (o.portable && !world.enMain.includes(o.ref)) {
+      const stack = held.length && held[0].nom === o.nom ? ' et l’ajouter à la pile tenue' : '';
+      add('prendre', { objet: o.ref }, `Prendre ${o.nom} « ${o.ref} » (${o.ou})${stack}`);
+    }
+    if (!o.portable) add('aller', { objet: o.ref }, `Marcher jusqu’à ${o.nom} « ${o.ref} »`);
+    if (o.sorte === 'rangement' && held.length) add('ranger', { meuble: o.ref }, `Ranger dans ${o.nom} « ${o.ref} » ce qu’on tient (${world.enMain.join(', ')})`);
+  }
+  if (held.length) add('poser', {}, `Poser ce qu’on tient (${world.enMain.join(', ')}) devant soi`);
+  if (cup && world.objets.some((o) => o.sorte === 'machine')) add('cafe', {}, 'Se faire un café avec la tasse tenue, à la machine à café');
+  if (cup?.ou.includes('contient')) add('boire', {}, `Boire une gorgée (${cup.ou.split(', ').pop()})`);
+  add('fini', {}, 'La demande du joueur est réalisée (ou impossible) : s’arrêter');
+  return out;
+}
 
 /** Étape vue par l'interface : ce que Jev fait en ce moment. */
 export type JevStep = { kind: 'action'; name: string; args: Record<string, string> } | { kind: 'thinking' };
@@ -86,61 +105,37 @@ export type JevStep = { kind: 'action'; name: string; args: Record<string, strin
 /** Nombre d'actions au plus pour une demande (garde-fou). */
 const MAX_STEPS = 40;
 
-/** Premier objet JSON trouvé dans la réponse (le modèle ajoute parfois du texte ou des ```). */
-export function parseAction(text: string): Record<string, string> | null {
-  const start = text.indexOf('{');
-  if (start < 0) return null;
-  let depth = 0;
-  let inStr = false;
-  for (let i = start; i < text.length; i++) {
-    const c = text[i];
-    if (inStr) {
-      if (c === '\\') i++;
-      else if (c === '"') inStr = false;
-    } else if (c === '"') inStr = true;
-    else if (c === '{') depth++;
-    else if (c === '}' && --depth === 0) {
-      try {
-        const obj = JSON.parse(text.slice(start, i + 1));
-        if (!obj || typeof obj.action !== 'string') return null;
-        return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, String(v)]));
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
 /**
  * Réalise la demande : boucle « Jev choisit une action → le jeu l'exécute → Jev voit le
- * résultat ». Rend le message final de Jev.
+ * résultat ». Rend un message pour le joueur.
  */
-export async function runJev(game: Game, chat: Chat, request: string, onStep: (s: JevStep) => void, signal?: AbortSignal): Promise<string> {
-  const state = () => `État de la pièce :\n${JSON.stringify(game.describe())}`;
-  const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM },
-    { role: 'user', content: `Demande du joueur : ${request}\n\n${state()}` },
-  ];
-  let misses = 0;
+export async function runJev(game: Game, decide: Decide, request: string, onStep: (s: JevStep) => void, signal?: AbortSignal): Promise<string> {
+  const done: string[] = [];
+  let lastKey = '';
+  let repeats = 0;
   for (let step = 0; step < MAX_STEPS; step++) {
     onStep({ kind: 'thinking' });
-    const reply = await chat(messages, signal);
+    const world = game.describe();
+    const opts = options(world);
+    const state = {
+      demande: request,
+      enMain: world.enMain,
+      objets: world.objets.map(({ ref, nom, ou }) => ({ ref, nom, ou })),
+      dejaFait: done,
+    };
+    const key = await decide(state, Object.fromEntries([...opts].map(([k, o]) => [k, o.label])), signal);
     if (signal?.aborted) return 'Interrompu.';
-    messages.push({ role: 'assistant', content: reply });
-    const act = parseAction(reply);
-    if (!act) {
-      if (++misses > 2) throw new Error('Jev ne répond pas dans le bon format.');
-      messages.push({ role: 'user', content: 'Réponds uniquement par un objet JSON {"action": ...}.' });
-      continue;
-    }
-    misses = 0;
-    const { action, ...args } = act;
-    if (action === 'fini') return args.message || 'C’est fait.';
-    onStep({ kind: 'action', name: action, args });
-    const { report } = await perform(game, action, args, signal);
+    const opt = opts.get(key);
+    if (!opt) throw new Error(`Jev a choisi une action inconnue : ${key}`);
+    if (opt.name === 'fini') return done.length ? 'C’est fait.' : 'Jev n’a rien trouvé à faire.';
+    // garde-fou : Jev qui tourne en rond sur la même action
+    repeats = key === lastKey ? repeats + 1 : 0;
+    lastKey = key;
+    if (repeats >= 2) return `J’ai arrêté : Jev répète « ${key} ».`;
+    onStep({ kind: 'action', name: opt.name, args: opt.args });
+    const { report } = await perform(game, opt.name, opt.args, signal);
     if (signal?.aborted) return 'Interrompu.';
-    messages.push({ role: 'user', content: `Résultat de ${action} : ${report}\n\n${state()}` });
+    done.push(`${key} → ${report}`);
   }
   return 'J’ai arrêté : trop d’étapes.';
 }

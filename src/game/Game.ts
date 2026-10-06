@@ -52,6 +52,17 @@ const START_BOOKS: Array<[string, number | [number, number, number, number]]> = 
   ['livre-ocre', [1.5, TABLE_H, 1.45, 2.2]],
 ];
 
+/** Un objet de la pièce tel que Jev le voit (voir Game.describe). */
+export interface WorldObject {
+  ref: string;
+  nom: string;
+  portable: boolean;
+  /** Meuble de rangement, machine (à café) ou récipient (tasse). */
+  sorte?: 'rangement' | 'machine' | 'récipient';
+  ou: string;
+  distance: number;
+}
+
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -251,7 +262,7 @@ export class Game {
   }
 
   /** État de la pièce pour Jev : chaque objet, où il est, et ce qu'on tient. */
-  describe(): { perso: string; enMain: string[]; objets: Array<{ ref: string; nom: string; portable: boolean; ou: string; distance: number }> } {
+  describe(): { perso: string; enMain: string[]; objets: WorldObject[] } {
     const p = this.character.position;
     const carried = this.character.carried;
     const objets = this.items.map((item) => {
@@ -265,7 +276,8 @@ export class Game {
       }
       if (item === this.brew?.cup) ou += ' (le café coule dedans)';
       if (item.contents) ou += `, contient du ${item.contents}`;
-      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, ou, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
+      const sorte: WorldObject['sorte'] = item.def.slots ? 'rangement' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : undefined;
+      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, sorte, ou, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
     });
     return {
       perso: this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)',

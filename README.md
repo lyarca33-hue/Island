@@ -41,10 +41,12 @@ VITE_OPENROUTER_API_KEY=sk-or-...
 VITE_JEV_MODEL=typesafe/jev-1.13
 ```
 
-À chaque tour, Jev reçoit l'état de la pièce (chaque objet, où il est, ce qu'on tient) et répond
-par une action en JSON : `prendre`, `ranger`, `poser`, `aller`, `cafe`, `boire`, `dire` ou `fini`. Le jeu
-l'exécute, attend la fin du geste et lui renvoie le résultat. Les actions sont dans
-`src/jev/actions.ts`, la boucle dans `src/jev/jev.ts`.
+Jev est un modèle de décision (API Decisions d'OpenRouter) : il n'écrit pas de texte, il choisit
+parmi des options. À chaque étape, le jeu lui envoie la demande, l'état de la pièce (chaque objet,
+où il est, ce qu'on tient) et ce qui est déjà fait, avec la liste des actions possibles à ce
+moment-là (`prendre:livre-vert-2`, `ranger:bibliotheque`, `poser`, `aller:table`, `cafe`, `boire`,
+`fini`). Le jeu exécute l'action choisie, attend la fin du geste, puis recommence jusqu'à `fini`.
+Les actions sont dans `src/jev/actions.ts`, la liste des options et la boucle dans `src/jev/jev.ts`.
 
 `npm run build` produit une version publiable dans `dist/`.
 

@@ -24,13 +24,7 @@ export const ACTIONS: ActionDef[] = [
     name: 'ranger',
     description: 'Aller ranger dans un meuble de rangement (bibliothèque) tous les livres tenus, un par un.',
     params: { meuble: 'ref du meuble' },
-    run: (g, a) => {
-      if (!g.describe().enMain.length) {
-        g.onNotice?.('Il faut d’abord tenir des livres.');
-        return false;
-      }
-      return g.use(a.meuble);
-    },
+    run: (g, a) => g.use(a.meuble),
   },
   {
     name: 'poser',
@@ -55,15 +49,6 @@ export const ACTIONS: ActionDef[] = [
     description: 'Boire une gorgée de ce que contient la tasse tenue (il faut qu’elle soit pleine).',
     params: {},
     run: (g) => g.drink(),
-  },
-  {
-    name: 'dire',
-    description: 'Le perso dit une phrase (bulle au-dessus de sa tête).',
-    params: { texte: 'la phrase' },
-    run: (g, a) => {
-      g.say(a.texte ?? '');
-      return true;
-    },
   },
 ];
 

@@ -1,16 +1,16 @@
 // Teste le vrai Jev sans la 3D : petite pièce simulée (mêmes actions, même prompt que le jeu).
 // Mode d’emploi : tools/README.md.
-import { runJev, openRouterChat, type ChatMessage } from '../src/jev/jev';
+import { type Decide, openRouterDecide, runJev } from '../src/jev/jev';
 (globalThis as any).requestAnimationFrame = (f: () => void) => setTimeout(f, 0);
 
-type Obj = { ref: string; nom: string; portable: boolean; ou: string };
+type Obj = { ref: string; nom: string; portable: boolean; ou: string; sorte?: 'rangement' | 'machine' | 'récipient' };
 const objets: Obj[] = [
   { ref: 'table', nom: 'table', portable: false, ou: 'au sol' },
-  { ref: 'tasse', nom: 'tasse', portable: true, ou: 'posé sur table' },
+  { ref: 'tasse', nom: 'tasse', portable: true, ou: 'posé sur table', sorte: 'récipient' },
   { ref: 'lettre', nom: 'lettre', portable: true, ou: 'posé sur table' },
   { ref: 'caisse', nom: 'caisse', portable: true, ou: 'au sol' },
-  { ref: 'bibliotheque', nom: 'bibliothèque', portable: false, ou: 'au sol' },
-  { ref: 'machine-a-cafe', nom: 'machine à café', portable: false, ou: 'au sol' },
+  { ref: 'bibliotheque', nom: 'bibliothèque', portable: false, ou: 'au sol', sorte: 'rangement' },
+  { ref: 'machine-a-cafe', nom: 'machine à café', portable: false, ou: 'au sol', sorte: 'machine' },
   { ref: 'livre-rouge', nom: 'livre', portable: true, ou: 'rangé dans bibliotheque' },
   { ref: 'livre-vert-1', nom: 'livre', portable: true, ou: 'rangé dans bibliotheque' },
   { ref: 'livre-ocre-1', nom: 'livre', portable: true, ou: 'rangé dans bibliotheque' },
@@ -41,11 +41,20 @@ const game: any = {
   },
   drop() { if (!hand.length) return false; for (const h of hand) h.ou = 'au sol'; hand = []; return true; },
   walkTo: () => true, makeCoffee: () => false, drink: () => false,
-  say: (t: string) => console.log('  [dit]', t),
 };
-const settings = { apiKey: process.env.OPENROUTER_API_KEY!, model: process.env.MODEL || 'typesafe/jev-1.13' };
-const chat = openRouterChat(settings);
-const logged = async (m: ChatMessage[], s?: AbortSignal) => { const r = await chat(m, s); console.log('  Jev >', r.replace(/\s+/g, ' ').slice(0, 300)); return r; };
+const key = process.env.OPENROUTER_API_KEY;
+// sans clé : faux Jev qui range les livres (pour vérifier la boucle)
+const fake: Decide = async (st: any, opts) => {
+  const loose = Object.keys(opts).find((k) => k.startsWith('prendre:livre') && !opts[k].includes('rangé'));
+  if (loose && st.enMain.length < 6) return loose;
+  return Object.keys(opts).find((k) => k.startsWith('ranger:')) ?? 'fini';
+};
+const decide = key ? openRouterDecide({ apiKey: key, model: process.env.MODEL || 'typesafe/jev-1.13' }) : fake;
+const logged: Decide = async (st, opts, s) => {
+  const r = await decide(st, opts, s);
+  console.log(`  Jev > ${r}   (${Object.keys(opts).length} options)`);
+  return r;
+};
 const req = process.argv[2] || 'range tous les livres';
 console.log('Demande :', req);
 const t0 = Date.now();
