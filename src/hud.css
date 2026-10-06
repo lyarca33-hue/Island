@@ -1,0 +1,21 @@
+.app { position: fixed; inset: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fdf6e3; }
+.viewport { position: absolute; inset: 0; }
+.hud-title {
+  position: absolute; top: 16px; left: 16px; font-size: 20px; font-weight: 700; letter-spacing: 0.08em;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); pointer-events: none;
+}
+.hud-cam { position: absolute; top: 12px; right: 16px; display: flex; gap: 8px; }
+.hud-cam button {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255, 240, 210, 0.5);
+  background: rgba(20, 24, 40, 0.55); color: #fdf6e3; font-size: 20px; cursor: pointer;
+}
+.hud-cam button:hover { background: rgba(40, 46, 74, 0.75); }
+.hud-help {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px;
+  background: rgba(20, 24, 40, 0.55); font-size: 13px; white-space: nowrap; pointer-events: none; max-width: calc(100% - 32px);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.hud-loading {
+  position: absolute; inset: 0; display: grid; place-items: center; font-size: 18px;
+  background: rgba(20, 24, 40, 0.6); pointer-events: none;
+}
