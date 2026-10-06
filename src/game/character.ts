@@ -12,6 +12,7 @@ import { Puppet } from '../creator/puppet';
 import type { Recipe } from '../creator/recipe';
 import { Carry, type WorldItem } from './items/carry';
 import { Rig } from './items/ik';
+import type { Nav } from './nav';
 import { LAYER_CHARACTER } from './postfx';
 import { createToonMaterial } from './toon';
 
@@ -40,8 +41,11 @@ export class Character {
   /** Direction de déplacement voulue (plan XZ, normée ou nulle) et allure. */
   private move = new THREE.Vector3();
   private running = false;
-  /** Point visé par un clic (null : pas de destination). */
+  /** Point visé par un clic (null : pas de destination), puis les suivants pour contourner. */
   private target: THREE.Vector3 | null = null;
+  private path: THREE.Vector3[] = [];
+  /** Meubles à contourner. */
+  nav: Nav | null = null;
   private heading = 0;
   /** Perso du créateur (sinon : X Bot). */
   private puppet: Puppet | null = null;
@@ -49,8 +53,8 @@ export class Character {
   private carry: Carry | null = null;
   /** Appelé quand la main se tend vers un objet (il est encore posé). */
   onGrab: ((item: WorldItem) => void) | null = null;
-  /** Objet vers lequel on marche pour le prendre. */
-  private approach: WorldItem | null = null;
+  /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
+  private approach: { face: THREE.Vector3; then: () => void } | null = null;
 
   /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
   async load(recipe?: Recipe | null): Promise<void> {
@@ -93,20 +97,71 @@ export class Character {
     if (dir.lengthSq() > 0) {
       this.running = running;
       this.target = null;
+      this.path = [];
       this.approach = null;
     }
   }
 
   /** Marche jusqu'à un point du sol (clic). */
   goTo(p: THREE.Vector3, running: boolean): void {
-    this.target = p.clone().setY(0);
+    this.setRoute(p);
     this.running = running;
     this.approach = null;
+  }
+
+  /** Chemin vers `to` en contournant les meubles (null : on s'arrête). */
+  private setRoute(to: THREE.Vector3 | null): void {
+    this.path = to ? (this.nav?.route(this.root.position, to) ?? [to.clone().setY(0)]) : [];
+    this.target = this.path.shift() ?? null;
   }
 
   /** Objet tenu en main (ou null). */
   get held(): WorldItem | null {
     return this.carry?.held ?? null;
+  }
+
+  /** Objets portés : celui qu'on tient et ceux empilés dessus. */
+  get carried(): WorldItem[] {
+    return this.carry?.carried ?? [];
+  }
+
+  /** Accès à la prise (piles, rangement) ; null pour X Bot. */
+  get hands(): Carry | null {
+    return this.carry;
+  }
+
+  /**
+   * Marche jusqu'à `stand` (null : ne bouge pas), se tourne vers `face`, puis appelle `then`.
+   */
+  approachThen(stand: THREE.Vector3 | null, face: THREE.Vector3, then: () => void, running = false): void {
+    this.setRoute(stand);
+    this.running = running;
+    this.approach = { face: face.clone(), then };
+  }
+
+  /**
+   * Où se placer pour attraper `item` : devant lui, du côté `from` (direction depuis l'objet ;
+   * par défaut, celui d'où l'on vient).
+   */
+  standFor(item: WorldItem, from?: THREE.Vector3): THREE.Vector3 {
+    const at = item.object.position.clone().setY(0);
+    // plus près pour un objet au sol (on se penche moins loin)
+    const stop = (item.object.position.y > 0.3 ? 0.36 : 0.22) + Math.max(item.size.x, item.size.z) / 2;
+    const spot = (d: THREE.Vector3) => at.clone().addScaledVector(d.setY(0).normalize(), stop);
+    if (from) return spot(from.clone());
+    // du côté d'où l'on vient, sinon le côté libre (hors des meubles) le plus proche du perso
+    const mine = this.root.position.clone().sub(at);
+    if (mine.lengthSq() < 1e-6) mine.set(Math.sin(this.heading), 0, Math.cos(this.heading)).negate();
+    const best = spot(mine.clone());
+    if (!this.nav?.blocked(best)) return best;
+    let pick: THREE.Vector3 | null = null;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const p = spot(new THREE.Vector3(Math.sin(a), 0, Math.cos(a)));
+      if (this.nav.blocked(p)) continue;
+      if (!pick || p.distanceTo(this.root.position) < pick.distanceTo(this.root.position)) pick = p;
+    }
+    return pick ?? best;
   }
 
   /** Peut-on porter des objets avec ce perso ? (pas X Bot) */
@@ -115,15 +170,18 @@ export class Character {
   }
 
   /** Va jusqu'à l'objet et le prend en main. Faux si impossible (mains prises, non portable). */
-  pickUp(item: WorldItem, running = false): boolean {
+  pickUp(item: WorldItem, running = false, from?: THREE.Vector3): boolean {
     if (!this.carry || this.carry.held || this.carry.busy || !item.def.portable) return false;
-    const to = item.object.position.clone().sub(this.root.position).setY(0);
-    // plus près pour un objet au sol (on se penche moins loin)
-    const stop = (item.object.position.y > 0.3 ? 0.36 : 0.22) + Math.max(item.size.x, item.size.z) / 2;
-    const dist = to.length();
-    this.target = dist > stop ? this.root.position.clone().addScaledVector(to.normalize(), dist - stop).setY(0) : null;
-    this.running = running;
-    this.approach = item;
+    this.approachThen(this.standFor(item, from), item.object.position, () => {
+      if (this.carry?.pickUp(item)) this.onGrab?.(item);
+    }, running);
+    return true;
+  }
+
+  /** Va prendre `item` pour l'ajouter à la pile tenue (livres). */
+  collect(item: WorldItem, running = false, from?: THREE.Vector3): boolean {
+    if (!this.carry?.canStack(item)) return false;
+    this.approachThen(this.standFor(item, from), item.object.position, () => this.carry?.addToStack(item), running);
     return true;
   }
 
@@ -135,9 +193,9 @@ export class Character {
     return this.root.position.clone().addScaledVector(fwd, 0.36 + Math.max(item.size.x, item.size.z) / 2).setY(0);
   }
 
-  /** Repose l'objet tenu en `spot` (voir dropSpot). */
-  drop(spot: THREE.Vector3): boolean {
-    return !!this.carry && !this.carry.busy && this.carry.drop(spot, this.heading);
+  /** Repose l'objet tenu en `spot` (voir dropSpot), tourné comme le perso ou de `yaw`. */
+  drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false): boolean {
+    return !!this.carry && !this.carry.busy && this.carry.drop(spot, yaw, onDone, upright);
   }
 
   get position(): THREE.Vector3 {
@@ -151,7 +209,11 @@ export class Character {
     } else if (this.move.lengthSq() > 0) dir.copy(this.move).normalize();
     else if (this.target) {
       dir.subVectors(this.target, this.root.position).setY(0);
-      if (dir.length() < 0.08) this.target = null;
+      // point de passage atteint : le suivant (on coupe un peu les virages)
+      if (dir.length() < (this.path.length ? 0.15 : 0.08)) {
+        this.target = this.path.shift() ?? null;
+        if (this.target) dir.subVectors(this.target, this.root.position).setY(0);
+      }
       dir.normalize();
       if (!this.target) dir.set(0, 0, 0);
     }
@@ -160,6 +222,8 @@ export class Character {
     if (moving) {
       const step = this.target ? Math.min(speed * dt, this.root.position.distanceTo(this.target)) : speed * dt;
       this.root.position.addScaledVector(dir, step);
+      // au clavier, on glisse le long des meubles au lieu d'y entrer
+      this.nav?.pushOut(this.root.position);
       this.root.position.x = THREE.MathUtils.clamp(this.root.position.x, -bounds, bounds);
       this.root.position.z = THREE.MathUtils.clamp(this.root.position.z, -bounds, bounds);
       const want = Math.atan2(dir.x, dir.z);
@@ -168,15 +232,16 @@ export class Character {
       this.heading += delta * Math.min(1, dt * TURN_RATE);
       this.root.rotation.y = this.heading;
     } else if (this.approach) {
-      // arrivé : se tourner vers l'objet, puis le prendre
-      const to = this.approach.object.position.clone().sub(this.root.position);
+      // arrivé : se tourner vers l'objet (ou le meuble), puis agir
+      const to = this.approach.face.clone().sub(this.root.position);
       let delta = Math.atan2(to.x, to.z) - this.heading;
       delta = Math.atan2(Math.sin(delta), Math.cos(delta));
       this.heading += delta * Math.min(1, dt * TURN_RATE * 0.6);
       this.root.rotation.y = this.heading;
       if (Math.abs(delta) < 0.06) {
-        if (this.carry?.pickUp(this.approach)) this.onGrab?.(this.approach);
+        const then = this.approach.then;
         this.approach = null;
+        then();
       }
     }
     this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');

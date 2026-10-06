@@ -21,6 +21,10 @@ mène à la map, « ✎ Perso » y revient.
 - Boutons en haut à droite : tourner la caméra d'un quart de tour
 - Clic sur un objet : le perso va le prendre en main ; E (ou le bouton « Poser ») : le reposer
   devant lui (sur la table s'il y en a une)
+- Livres : en tenant un livre, clic sur d'autres livres pour faire une pile (jusqu'à 6), portée à
+  plat ; clic sur la bibliothèque pour les y ranger debout ; clic sur un livre rangé pour le prendre.
+  Hors de la bibliothèque, un livre se pose à plat.
+- Le perso contourne les meubles (table, bibliothèque) au lieu de les traverser
 
 `npm run build` produit une version publiable dans `dist/`.
 
@@ -71,7 +75,8 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/items/catalog.ts` | Fiches des objets (portable, type de prise, point saisi) |
 | `src/game/items/grips.ts` | Types de prise : pose du bras et des doigts, place de l'objet dans la main |
 | `src/game/items/ik.ts` | Bras / jambe à deux os qui amène la main (le pied) sur un point |
-| `src/game/items/carry.ts` | Prendre, tenir en marchant, reposer |
+| `src/game/items/carry.ts` | Prendre, tenir en marchant, reposer, piles d'objets |
+| `src/game/nav.ts` | Contourner les meubles |
 
 ## Les animations
 
@@ -89,7 +94,7 @@ Chaque objet a une petite fiche dans `src/game/items/catalog.ts`, pas d'animatio
 
 - `portable` : peut-on le prendre en main.
 - `grip` : type de prise, parmi `pinch` (entre les doigts : clé, lettre), `fist` (en poing :
-  tasse, épée), `side` (le long du corps : sac, seau), `chest` (contre la poitrine : livre), `twoHands` (à deux mains : caisse).
+  tasse, épée), `side` (le long du corps : sac, seau), `chest` (contre la poitrine : livre), `stack` (pile à plat, à deux mains), `twoHands` (à deux mains : caisse).
   Sans `grip`, la prise est devinée d'après la taille de l'objet (c'est le cas de la lettre).
 - `gripPoint` : le point de l'objet que la main saisit (sinon son centre).
 
@@ -98,5 +103,11 @@ deux os), les doigts se referment, et l'objet suit l'os de la main. Pour ramasse
 penche ou s'accroupit selon la hauteur de l'objet. Les jambes gardent l'animation de marche.
 Les objets posés sur celui qu'on soulève (une tasse sur la caisse) partent avec lui.
 
+Fiche d'un livre : `stack: 'livre'` (s'empile avec les autres livres), `layFlat: true` (se pose
+couché). Un meuble de rangement donne ses places (`slots`), où les objets se rangent debout.
+
+Les meubles (objets non portables) sont des rectangles au sol que le perso contourne
+(`src/game/nav.ts`) : il glisse le long au clavier, et un clic de l'autre côté passe par leurs coins.
+
 Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()`,
-`game.itemNames`.
+`game.store()` (ranger les livres tenus), `game.itemNames`.

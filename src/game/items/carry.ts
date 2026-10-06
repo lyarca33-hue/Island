@@ -13,24 +13,42 @@ import type { ItemDef } from './catalog';
 import { GRIPS, guessGrip, vec, type GripSpec, type GripType, type HandSpec } from './grips';
 import { basisRotation, Rig, solveTwoBone } from './ik';
 
+/** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
+function gripRotation(spec: GripSpec): THREE.Quaternion {
+  return basisRotation(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), vec(spec.up), vec(spec.forward));
+}
+
 /** Un objet posé dans le monde (ou tenu). */
 export class WorldItem {
   readonly object = new THREE.Group();
   readonly grip: GripType;
   readonly size = new THREE.Vector3();
+  /** Boîte de l'objet dans son propre repère (pour le poser à plat ou debout). */
+  readonly box: THREE.Box3;
   readonly gripPoint: THREE.Vector3;
 
   constructor(readonly def: ItemDef) {
     const model = def.build();
     this.object.add(model);
     this.object.name = def.id;
-    new THREE.Box3().setFromObject(model).getSize(this.size);
+    this.box = new THREE.Box3().setFromObject(model);
+    this.box.getSize(this.size);
     this.grip = def.grip ?? guessGrip(this.size);
     this.gripPoint = def.gripPoint ? vec(def.gripPoint) : new THREE.Vector3(0, this.size.y / 2, 0);
   }
 
   get name(): string {
     return this.def.name;
+  }
+
+  /** Hauteur dont il faut le lever pour qu'il repose sur le sol, tourné de `rot`. */
+  restLift(rot: THREE.Quaternion): number {
+    let min = Infinity;
+    const b = this.box, v = new THREE.Vector3();
+    for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+      min = Math.min(min, v.set(x, y, z).applyQuaternion(rot).y);
+    }
+    return -min;
   }
 
   /** Point saisi, en coordonnées du monde. */
@@ -40,9 +58,27 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6 };
+/** Temps pour qu'un objet ajouté à la pile y trouve sa place (s). */
+const STACK_BLEND = 0.4;
+/** Nombre maximal d'objets empilés sur celui qu'on tient. */
+const STACK_MAX = 5;
+/**
+ * Couché à plat : l'objet basculé sur son flanc +X, son axe -X (l'épaisseur d'un livre, côté où
+ * la main se pose) vers le haut. Une pile monte dans ce sens.
+ */
+export const LAY_FLAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
+
+/** Objet posé sur la pile tenue (livres) ; il vient de `from`, et en part vers `leaving`. */
+interface StackEntry {
+  item: WorldItem;
+  age: number;
+  fromPos: THREE.Vector3;
+  fromRot: THREE.Quaternion;
+  leaving: { pos: THREE.Vector3; rot: THREE.Quaternion } | null;
+}
 /** Temps de fondu de l'objet entre sa pose au sol et sa pose en main (s). */
 const SNAP = 0.25;
 
@@ -69,6 +105,8 @@ export class Carry {
   private phase: Phase = 'idle';
   private t = 0;
   private item: WorldItem | null = null;
+  /** Objets empilés sur celui qu'on tient (du bas vers le haut). */
+  private stack: StackEntry[] = [];
   /** Où va la main pendant la saisie ou la dépose (monde). */
   private target = new THREE.Vector3();
   /** Pose de l'objet au sol au moment de la saisie / de la dépose (fondu). */
@@ -107,9 +145,57 @@ export class Carry {
     return this.item;
   }
 
-  /** Vrai pendant une saisie ou une dépose : le perso ne bouge pas. */
+  /** Objets portés : celui qu'on tient et ceux empilés dessus. */
+  get carried(): WorldItem[] {
+    return this.item ? [this.item, ...this.stack.map((e) => e.item)] : [];
+  }
+
+  /** Nombre d'objets empilés sur celui qu'on tient. */
+  get stacked(): number {
+    return this.stack.length;
+  }
+
+  /** Vrai pendant une saisie, un ajout à la pile ou une dépose : le perso ne bouge pas. */
   get busy(): boolean {
-    return this.phase === 'reach' || this.phase === 'lift' || this.phase === 'lower' || this.phase === 'release';
+    return this.phase !== 'idle' && this.phase !== 'hold';
+  }
+
+  /** Prise utilisée : une pile se porte à plat, à deux mains. */
+  private get grip(): GripType {
+    return this.stack.length ? 'stack' : this.item!.grip;
+  }
+
+  /** Peut-on ajouter `item` à ce qu'on tient (même sorte d'objet empilable, pile pas pleine) ? */
+  canStack(item: WorldItem): boolean {
+    return !!this.item && this.phase === 'hold' && !!item.def.stack && item.def.stack === this.item.def.stack && this.stack.length < STACK_MAX;
+  }
+
+  /** Ajoute un objet à portée sur la pile tenue (il vient s'y poser). */
+  addToStack(item: WorldItem, onDone?: () => void): boolean {
+    if (!this.canStack(item)) return false;
+    this.stack.push(this.entry(item));
+    item.gripWorld(this.target);
+    this.start('add', onDone);
+    return true;
+  }
+
+  /** Objets déjà posés sur celui qu'on prend (pile de livres au sol) : ils viennent avec. */
+  adopt(items: WorldItem[]): void {
+    for (const it of items) if (this.stack.length < STACK_MAX) this.stack.push(this.entry(it));
+  }
+
+  private entry(item: WorldItem): StackEntry {
+    return { item, age: 0, fromPos: item.object.position.clone(), fromRot: item.object.quaternion.clone(), leaving: null };
+  }
+
+  /** Pose l'objet du haut de la pile en `pos` (base de l'objet), tourné de `rot`. */
+  storeTop(pos: THREE.Vector3, rot: THREE.Quaternion, onDone?: () => void): boolean {
+    const top = this.stack[this.stack.length - 1];
+    if (!top || this.phase !== 'hold') return false;
+    top.leaving = { pos: pos.clone(), rot: rot.clone() };
+    this.target.copy(top.item.gripPoint).applyQuaternion(rot).add(pos);
+    this.start('store', onDone);
+    return true;
   }
 
   /** Saisit un objet à portée (le perso doit déjà lui faire face). */
@@ -123,11 +209,16 @@ export class Carry {
     return true;
   }
 
-  /** Repose l'objet tenu à l'endroit `spot` (sol ou dessus d'un meuble), tourné de `yaw`. */
-  drop(spot: THREE.Vector3, yaw: number, onDone?: () => void): boolean {
+  /**
+   * Repose l'objet tenu à l'endroit `spot` (sol ou dessus d'un meuble), tourné de `yaw`. Une pile
+   * se repose à plat, telle quelle ; `upright` : debout (livre rangé).
+   */
+  drop(spot: THREE.Vector3, yaw: number, onDone?: () => void, upright = false): boolean {
     if (!this.item || this.phase !== 'hold') return false;
-    this.groundPos.copy(spot);
     this.groundRot.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    // à plat : une pile, ou un objet qui se pose couché (livre), sauf rangé debout (bibliothèque)
+    if (!upright && (this.stack.length || this.item.def.layFlat)) this.groundRot.multiply(LAY_FLAT);
+    this.groundPos.copy(spot).setY(spot.y + this.item.restLift(this.groundRot));
     this.target.copy(this.item.gripPoint).applyQuaternion(this.groundRot).add(this.groundPos);
     this.start('lower', onDone);
     return true;
@@ -143,18 +234,25 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
       this.heldPos.copy(this.item.object.position);
       this.heldRot.copy(this.item.object.quaternion);
     }
+    if (this.phase === 'store') {
+      const top = this.stack.pop()!;
+      top.item.object.position.copy(top.leaving!.pos);
+      top.item.object.quaternion.copy(top.leaving!.rot);
+    }
     this.phase = n;
     this.t = 0;
     if (n === 'idle' && this.item) {
       this.item.object.position.copy(this.groundPos);
       this.item.object.quaternion.copy(this.groundRot);
+      this.placeStack(this.groundPos, this.groundRot, true);
+      this.stack = [];
       this.item = null;
     }
     if (n === 'hold' || n === 'idle') {
@@ -176,6 +274,9 @@ export class Carry {
       case 'hold': return { w: 1, r: 0, c: 0 };
       case 'lower': return { w: 1, r: k, c: k };
       case 'release': return { w: 1 - k, r: 1, c: 1 - k };
+      // on se penche un peu pour attraper / poser un livre sans lâcher la pile
+      case 'add':
+      case 'store': return { w: 1, r: 0, c: 0.6 * Math.sin(Math.PI * Math.min(1, this.t / DURATION[this.phase])) };
       default: return { w: 0, r: 0, c: 0 };
     }
   }
@@ -183,12 +284,13 @@ export class Carry {
   apply(dt: number): void {
     this.advance(dt);
     if (this.phase === 'idle' || !this.item) return;
+    if (this.phase !== 'reach') for (const e of this.stack) e.age += dt;
     const { w, r, c } = this.weights();
     this.saved = this.touched.map((node) => ({ node, q: node.quaternion.clone(), p: node.position.clone() }));
     const root = this.rig.vrm.scene;
     root.updateMatrixWorld(true);
     const scale = root.getWorldScale(new THREE.Vector3()).y;
-    const spec = GRIPS[this.item.grip];
+    const spec = GRIPS[this.grip];
     if (c > 0) this.crouch(c, scale);
     // repère du buste (après la flexion)
     const chest = this.rig.node('upperChest') ?? this.rig.node('chest')!;
@@ -256,8 +358,16 @@ export class Carry {
     // où va le centre de la paume
     let palmTarget: THREE.Vector3;
     if (spec.left) {
-      const half = this.item!.size.x / 2 + 0.015;
-      const sideDir = new THREE.Vector3(side === 'left' ? 1 : -1, 0, 0).applyQuaternion(r > 0.5 ? this.itemRot() : this.chestRot);
+      // les mains sur les flancs de l'objet : son axe qui va de gauche à droite une fois en main
+      const inHands = gripRotation(spec);
+      const across = new THREE.Vector3(1, 0, 0).applyQuaternion(inHands.clone().invert());
+      const half = Math.abs(this.item!.size.clone().applyQuaternion(inHands).x) / 2 + 0.015;
+      let sideDir = new THREE.Vector3(side === 'left' ? 1 : -1, 0, 0).applyQuaternion(this.chestRot);
+      if (r > 0.5) {
+        // objet encore posé : ses flancs, s'ils sont à peu près verticaux
+        const onGround = across.clone().multiplyScalar(side === 'left' ? 1 : -1).applyQuaternion(this.itemRot());
+        if (Math.abs(onGround.y) < 0.5) sideDir = onGround.setY(0).normalize();
+      }
       palmTarget = center.clone().addScaledVector(sideDir, half);
     } else {
       const shoulder = rig.worldPos(upper);
@@ -303,20 +413,20 @@ export class Carry {
   after(): void {
     const item = this.item;
     if (!item || this.phase === 'idle' || this.phase === 'reach') return;
-    const spec = GRIPS[item.grip];
+    const spec = GRIPS[this.grip];
     const rig = this.rig;
     const pos = new THREE.Vector3(), rot = new THREE.Quaternion();
     if (spec.left) {
       pos.copy(this.palms.left!).add(this.palms.right!).multiplyScalar(0.5);
-      rot.copy(this.chestRot);
+      rot.copy(this.chestRot).multiply(gripRotation(spec));
     } else {
       const handRot = rig.worldRot(rig.node('rightHand')!);
       const scale = rig.vrm.scene.getWorldScale(new THREE.Vector3()).y;
       pos.copy(rig.worldPos(rig.raw('rightHand')!)).add(vec(spec.hold).multiplyScalar(scale).applyQuaternion(handRot));
-      rot.copy(handRot).multiply(basisRotation(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), vec(spec.up), vec(spec.forward)));
+      rot.copy(handRot).multiply(gripRotation(spec));
     }
     // le point saisi de l'objet va au centre de la prise
-    pos.sub(item.gripPoint.clone().applyQuaternion(rot));
+    pos.sub(this.gripPoint().applyQuaternion(rot));
     const o = item.object;
     if (this.phase === 'lift' && this.t < SNAP) {
       const k = ease(this.t / SNAP);
@@ -329,6 +439,38 @@ export class Carry {
     } else {
       o.position.copy(pos);
       o.quaternion.copy(rot);
+    }
+    this.placeStack(o.position, o.quaternion, false);
+  }
+
+  /** Point saisi de l'objet tenu ; une pile se porte par en dessous (face opposée, +X). */
+  private gripPoint(): THREE.Vector3 {
+    const p = this.item!.gripPoint.clone();
+    if (this.stack.length) p.x = this.item!.box.max.x;
+    return p;
+  }
+
+  /** Place la pile sur l'objet tenu (pose `pos`, `rot`) : chaque objet sur le précédent. */
+  private placeStack(pos: THREE.Vector3, rot: THREE.Quaternion, final: boolean): void {
+    // chaque objet sur le précédent, vers -X (le haut, objet couché)
+    let h = this.item!.box.min.x;
+    for (const e of this.stack) {
+      const o = e.item.object;
+      const local = new THREE.Vector3(h - e.item.box.max.x, 0, 0);
+      h -= e.item.size.x;
+      const at = local.applyQuaternion(rot).add(pos);
+      if (e.leaving && !final) {
+        const k = ease(Math.min(1, this.t / DURATION.store));
+        o.position.copy(at).lerp(e.leaving.pos, k);
+        o.quaternion.copy(rot).slerp(e.leaving.rot, k);
+      } else if (e.age < STACK_BLEND && !final) {
+        const k = ease(e.age / STACK_BLEND);
+        o.position.copy(e.fromPos).lerp(at, k);
+        o.quaternion.copy(e.fromRot).slerp(rot, k);
+      } else {
+        o.position.copy(at);
+        o.quaternion.copy(rot);
+      }
     }
   }
 

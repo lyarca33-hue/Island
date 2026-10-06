@@ -21,6 +21,15 @@ export interface ItemDef {
    * centre de l'objet. Pour une prise à deux mains : centre de la prise.
    */
   gripPoint?: [number, number, number];
+  /** Objets d'une même sorte qui s'empilent (les livres) : on peut en porter plusieurs. */
+  stack?: string;
+  /** Se pose couché (un livre à plat sur sa couverture), sauf rangé debout dans un meuble. */
+  layFlat?: boolean;
+  /**
+   * Meuble de rangement : places où poser un objet debout (repère du meuble, base de l'objet),
+   * l'objet tourné vers l'avant du meuble (+Z).
+   */
+  slots?: Array<[number, number, number]>;
   build(): THREE.Object3D;
 }
 
@@ -42,6 +51,34 @@ function group(...parts: THREE.Object3D[]): THREE.Group {
 
 /** Hauteur du plateau de la table (m). */
 export const TABLE_H = 0.74;
+/** Bibliothèque : trois rayons (dessus des planches) et sept places par rayon. */
+const SHELF_W = 1.0;
+const SHELF_D = 0.3;
+const SHELF_H = 1.42;
+const SHELVES = [0.06, 0.5, 0.94];
+const SHELF_SLOTS = SHELVES.flatMap((y) => Array.from({ length: 7 }, (_, i): [number, number, number] => [-0.36 + i * 0.12, y, 0]));
+
+/**
+ * Un livre (fiche commune, couleurs différentes). Debout, haut vers +Y, dos vers -Z ; la paume
+ * se pose à plat sur la couverture.
+ */
+function book(id: string, color: THREE.ColorRepresentation): ItemDef {
+  return {
+    id,
+    name: 'livre',
+    portable: true,
+    grip: 'chest',
+    gripPoint: [-0.0225, 0.13, 0],
+    stack: 'livre',
+    layFlat: true,
+    build: () => {
+      const cover = mesh(new THREE.BoxGeometry(0.045, 0.24, 0.17), color, 0, 0.12, 0);
+      const pages = mesh(new THREE.BoxGeometry(0.038, 0.226, 0.16), 0xf1e7cf, 0, 0.12, 0.007);
+      return group(cover, pages);
+    },
+  };
+}
+
 const CUP_R = 0.042;
 const CUP_H = 0.1;
 
@@ -73,20 +110,11 @@ export const ITEMS: ItemDef[] = [
       return group(paper, seal);
     },
   },
-  {
-    id: 'livre',
-    name: 'livre',
-    portable: true,
-    grip: 'chest',
-    // paume à plat sur la couverture
-    gripPoint: [-0.0225, 0.13, 0],
-    build: () => {
-      // posé debout (haut vers +Y), dos vers -Z
-      const cover = mesh(new THREE.BoxGeometry(0.045, 0.24, 0.17), 0x3e5d8a, 0, 0.12, 0);
-      const pages = mesh(new THREE.BoxGeometry(0.038, 0.226, 0.16), 0xf1e7cf, 0, 0.12, 0.007);
-      return group(cover, pages);
-    },
-  },
+  book('livre', 0x3e5d8a),
+  book('livre-rouge', 0x9a3b34),
+  book('livre-vert', 0x3f6e48),
+  book('livre-ocre', 0xb08a3a),
+  book('livre-violet', 0x5e4a86),
   {
     id: 'caisse',
     name: 'caisse',
@@ -106,6 +134,24 @@ export const ITEMS: ItemDef[] = [
           g.add(p);
         }
       }
+      return g;
+    },
+  },
+  {
+    id: 'bibliotheque',
+    name: 'bibliothèque',
+    portable: false,
+    slots: SHELF_SLOTS,
+    build: () => {
+      const wood = 0x7a5232, dark = 0x5b3b22;
+      const t = 0.03;
+      const g = group(
+        mesh(new THREE.BoxGeometry(t, SHELF_H, SHELF_D), wood, -SHELF_W / 2 + t / 2, SHELF_H / 2, 0),
+        mesh(new THREE.BoxGeometry(t, SHELF_H, SHELF_D), wood, SHELF_W / 2 - t / 2, SHELF_H / 2, 0),
+        mesh(new THREE.BoxGeometry(SHELF_W, SHELF_H, 0.015), dark, 0, SHELF_H / 2, -SHELF_D / 2 + 0.0075),
+        mesh(new THREE.BoxGeometry(SHELF_W, t, SHELF_D), wood, 0, SHELF_H - t / 2, 0),
+      );
+      for (const y of SHELVES) g.add(mesh(new THREE.BoxGeometry(SHELF_W - 2 * t, t, SHELF_D - 0.015), wood, 0, y - t / 2, 0.0075));
       return g;
     },
   },

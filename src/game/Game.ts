@@ -10,9 +10,10 @@ import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { createGround, GROUND_HALF } from './ground';
-import { WorldItem } from './items/carry';
+import { LAY_FLAT, WorldItem } from './items/carry';
 import { ITEM_BY_ID, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
+import { Nav } from './nav';
 import { lightAllPasses, PostFx } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -34,8 +35,17 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['table', 1.3, 0, 1.3, Math.PI / 4],
   ['tasse', 1.07, TABLE_H, 1.28, 0.6],
   ['lettre', 1.34, TABLE_H, 1.05, Math.PI / 3],
-  ['livre', -1.3, 0, 0.9, 0.4],
   ['caisse', 0.6, 0, -1.9, 0.2],
+  ['bibliotheque', -1.7, 0, -1.2, Math.PI / 4],
+];
+
+/** Livres de départ : rangés dans la bibliothèque (place) ou posés à plat ([x, y, z, rotation]). */
+const START_BOOKS: Array<[string, number | [number, number, number, number]]> = [
+  ['livre-rouge', 1],
+  ['livre-vert', 2],
+  ['livre-ocre', 9],
+  ['livre-violet', 10],
+  ['livre', [-1.3, 0, 0.9, 0.4]],
 ];
 
 export class Game {
@@ -65,6 +75,7 @@ export class Game {
   private recipe: Recipe | null;
   private items: WorldItem[] = [];
   private heldItem: WorldItem | null = null;
+  private heldLabel: string | null = null;
   /** Objets posés sur l'objet tenu (ex. tasse sur la caisse) : ils le suivent. */
   private riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> = [];
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
@@ -109,14 +120,42 @@ export class Game {
     this.marker.position.y = 0.01;
     this.scene.add(this.marker);
 
-    // au moment de la prise, l'objet est encore posé : on note ce qui est dessus
-    this.character.onGrab = (item) => (this.riders = this.ridersOf(item));
-    for (const [id, x, y, z, rot] of START_ITEMS) {
+    // au moment de la prise, l'objet est encore posé : on note ce qui est dessus ; les livres
+    // posés sur un livre forment la pile qu'on emporte
+    this.character.onGrab = (item) => {
+      const riders = this.ridersOf(item);
+      const same = item.def.stack ? riders.filter((r) => r.item.def.stack === item.def.stack) : [];
+      same.sort((a, b) => a.item.object.position.y - b.item.object.position.y);
+      this.character.hands?.adopt(same.map((r) => r.item));
+      const kept = new Set(this.character.carried);
+      this.riders = riders.filter((r) => !kept.has(r.item));
+    };
+    const add = (id: string) => {
       const item = new WorldItem(ITEM_BY_ID.get(id)!);
-      item.object.position.set(x, y, z);
-      item.object.rotation.y = rot;
       this.items.push(item);
       this.scene.add(item.object);
+      return item;
+    };
+    for (const [id, x, y, z, rot] of START_ITEMS) {
+      const item = add(id);
+      item.object.position.set(x, y, z);
+      item.object.rotation.y = rot;
+    }
+    // les meubles (objets non portables) se contournent
+    const nav = new Nav();
+    for (const it of this.items) if (!it.def.portable) nav.add(it.box, it.object.position, it.object.rotation.y);
+    this.character.nav = nav;
+    const shelf = this.items.find((i) => i.def.slots)!;
+    for (const [id, at] of START_BOOKS) {
+      const book = add(id);
+      if (typeof at === 'number') {
+        const slot = this.slot(shelf, at);
+        book.object.position.copy(slot.pos);
+        book.object.quaternion.copy(slot.rot);
+      } else {
+        book.object.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), at[3]).multiply(LAY_FLAT);
+        book.object.position.set(at[0], at[1] + book.restLift(book.object.quaternion), at[2]);
+      }
     }
 
     this.motes = createMotes();
@@ -147,7 +186,7 @@ export class Game {
   pickUp(name: string): boolean {
     const p = this.character.position;
     const found = this.items
-      .filter((i) => i.name === name && i !== this.character.held)
+      .filter((i) => i.name === name && !this.character.carried.includes(i))
       .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
     return found ? this.tryPickUp(found, false) : false;
   }
@@ -158,7 +197,8 @@ export class Game {
     const held = this.character.held;
     if (!spot || !held) return false;
     this.raycaster.set(new THREE.Vector3(spot.x, 3, spot.z), new THREE.Vector3(0, -1, 0));
-    const others = this.items.filter((i) => i !== held).map((i) => i.object);
+    const carried = this.character.carried;
+    const others = this.items.filter((i) => !carried.includes(i)).map((i) => i.object);
     const hit = this.raycaster.intersectObjects(others, true).find((h) => (h.face?.normal.y ?? 0) > 0.7);
     if (hit) spot.y = hit.point.y;
     return this.character.drop(spot);
@@ -169,13 +209,96 @@ export class Game {
     return this.items.map((i) => i.name);
   }
 
+  /** Range dans la bibliothèque la plus proche les livres tenus. */
+  store(): boolean {
+    const p = this.character.position;
+    const shelf = this.items
+      .filter((i) => i.def.slots)
+      .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    return shelf ? this.storeIn(shelf, false) : false;
+  }
+
+  /** Clic sur un objet : le prendre, l'ajouter à la pile tenue, ou y ranger ce qu'on tient. */
   private tryPickUp(item: WorldItem, running: boolean): boolean {
     const held = this.character.held;
-    if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
-    else if (!this.character.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
+    const hands = this.character.hands;
+    // un livre rangé se prend par l'avant du meuble
+    const from = this.shelfOf(item)?.forward;
+    if (!this.character.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
+    else if (item.def.slots && held) return this.storeIn(item, running);
+    else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
+    else if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
+    else if (held && hands?.canStack(item)) return this.character.collect(item, running, from);
+    else if (held && item.def.stack && item.def.stack === held.def.stack) this.onNotice?.('La pile est complète.');
     else if (held) this.onNotice?.(`Les mains sont prises (${held.name}). E pour la poser.`);
-    else return this.character.pickUp(item, running);
+    else return this.character.pickUp(item, running, from);
     return false;
+  }
+
+  /** Place n° `i` d'un meuble de rangement : base de l'objet et orientation (debout, face à l'avant). */
+  private slot(shelf: WorldItem, i: number): { pos: THREE.Vector3; rot: THREE.Quaternion } {
+    shelf.object.updateMatrixWorld(true);
+    const pos = new THREE.Vector3(...shelf.def.slots![i]).applyMatrix4(shelf.object.matrixWorld);
+    // dos du livre (-Z) vers l'avant du meuble
+    const rot = shelf.object.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+    return { pos, rot };
+  }
+
+  /** Places libres d'un meuble, la plus proche des mains du perso d'abord. */
+  private freeSlots(shelf: WorldItem): number[] {
+    const p = this.character.position.clone().setY(1);
+    const carried = this.character.carried;
+    return shelf.def.slots!
+      .map((_, i) => i)
+      .filter((i) => {
+        const at = this.slot(shelf, i).pos;
+        return !this.items.some((it) => !carried.includes(it) && it.object.position.distanceTo(at) < 0.05);
+      })
+      .sort((a, b) => this.slot(shelf, a).pos.distanceTo(p) - this.slot(shelf, b).pos.distanceTo(p));
+  }
+
+  /** Meuble où l'objet est rangé (et l'avant du meuble), ou null. */
+  private shelfOf(item: WorldItem): { shelf: WorldItem; forward: THREE.Vector3 } | null {
+    for (const shelf of this.items) {
+      if (!shelf.def.slots) continue;
+      for (let i = 0; i < shelf.def.slots.length; i++) {
+        if (this.slot(shelf, i).pos.distanceTo(item.object.position) < 0.05) {
+          return { shelf, forward: new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion) };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Va devant le meuble et y range, un par un, les objets tenus. */
+  private storeIn(shelf: WorldItem, running: boolean): boolean {
+    const held = this.character.held;
+    if (!held || !this.character.hands) return false;
+    if (held.def.stack !== 'livre') {
+      this.onNotice?.(`On ne range que des livres ici (${held.name} en main).`);
+      return false;
+    }
+    if (!this.freeSlots(shelf).length) {
+      this.onNotice?.('La bibliothèque est pleine.');
+      return false;
+    }
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion);
+    const stand = shelf.object.position.clone().addScaledVector(fwd, 0.55);
+    this.character.approachThen(stand, shelf.object.position, () => this.storeNext(shelf), running);
+    return true;
+  }
+
+  private storeNext(shelf: WorldItem): void {
+    const hands = this.character.hands;
+    if (!hands?.held) return;
+    const free = this.freeSlots(shelf);
+    if (!free.length) {
+      this.onNotice?.('La bibliothèque est pleine.');
+      return;
+    }
+    const { pos, rot } = this.slot(shelf, free[0]);
+    if (hands.stacked) hands.storeTop(pos, rot, () => this.storeNext(shelf));
+    else this.character.drop(pos, new THREE.Euler().setFromQuaternion(rot, 'YXZ').y, undefined, true);
   }
 
   setZoom(factor: number): void {
@@ -239,8 +362,9 @@ export class Game {
       const box = new THREE.Box3().setFromObject(under.object);
       for (const it of this.items) {
         if (it === base || out.some((r) => r.item === it)) continue;
-        const p = it.object.position;
-        if (Math.abs(p.y - box.max.y) > 0.03 || p.x < box.min.x || p.x > box.max.x || p.z < box.min.z || p.z > box.max.z) continue;
+        const b = new THREE.Box3().setFromObject(it.object);
+        const c = b.getCenter(new THREE.Vector3());
+        if (Math.abs(b.min.y - box.max.y) > 0.03 || c.x < box.min.x || c.x > box.max.x || c.z < box.min.z || c.z > box.max.z) continue;
         it.object.updateMatrixWorld(true);
         out.push({ item: it, rel: inv.clone().multiply(it.object.matrixWorld) });
         stack.push(it);
@@ -271,7 +395,8 @@ export class Game {
   /** Objet sous un pixel de l'écran (sauf celui qu'on tient). */
   private itemAt(cx: number, cy: number): WorldItem | null {
     this.aim(cx, cy);
-    const objects = this.items.filter((i) => i !== this.character.held).map((i) => i.object);
+    const carried = this.character.carried;
+    const objects = this.items.filter((i) => !carried.includes(i)).map((i) => i.object);
     const hit = this.raycaster.intersectObjects(objects, true)[0];
     if (!hit) return null;
     for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
@@ -323,7 +448,12 @@ export class Game {
     if (held !== this.heldItem) {
       this.heldItem = held;
       if (!held) this.riders = [];
-      this.onHeldChange?.(held?.name ?? null);
+    }
+    const count = this.character.carried.length;
+    const label = held ? (count > 1 ? `${held.name} ×${count}` : held.name) : null;
+    if (label !== this.heldLabel) {
+      this.heldLabel = label;
+      this.onHeldChange?.(label);
     }
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);

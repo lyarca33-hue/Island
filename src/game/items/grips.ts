@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 
-export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands';
+export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack';
 
 export interface HandSpec {
   /** Où va la main, depuis l'épaule (longueurs de bras, repère du buste). */
@@ -27,7 +27,7 @@ export interface HandSpec {
 export interface GripSpec {
   label: string;
   right: HandSpec;
-  /** Prise à deux mains seulement. */
+  /** Prise à deux mains seulement (l'objet est alors placé dans le repère du buste). */
   left?: HandSpec;
   /**
    * Orientation de l'objet dans la main : axes de la main (repère de la main droite au repos :
@@ -81,6 +81,16 @@ export const GRIPS: Record<GripType, GripSpec> = {
     left: { reach: [0, -0.4, 0.55], pole: [0.6, -0.6, -0.4], fingers: [-0.2, 0, 1], palm: [-1, 0, 0], curl: 20, thumb: 10 },
     up: [0, 1, 0],
     forward: [0, 0, 1],
+    hold: [-0.06, -0.03, 0],
+  },
+  // pile d'objets à plat (livres), portée à deux mains par en dessous ; l'objet tenu est le
+  // premier de la pile, couché : son axe -X (épaisseur) vers le haut, comme posé (LAY_FLAT)
+  stack: {
+    label: 'en pile, à plat',
+    right: { reach: [0, -0.52, 0.42], pole: [-0.6, -0.7, -0.3], fingers: [0.25, 0, 1], palm: [1, 0.45, 0], curl: 25, thumb: 10 },
+    left: { reach: [0, -0.52, 0.42], pole: [0.6, -0.7, -0.3], fingers: [-0.25, 0, 1], palm: [-1, 0.45, 0], curl: 25, thumb: 10 },
+    up: [0, 0, 1],
+    forward: [-1, 0, 0],
     hold: [-0.06, -0.03, 0],
   },
 };
