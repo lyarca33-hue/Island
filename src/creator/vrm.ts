@@ -4,6 +4,7 @@
  * matériaux), qu'on peut découper et recombiner sans toucher aux autres.
  */
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { modelUrl } from './catalog';
 
@@ -31,6 +32,12 @@ export function prefetchModel(id: string): void {
 export async function loadVrm(id: string): Promise<VRM> {
   const data = await fetchModel(id);
   const loader = new GLTFLoader();
+  loader.register((parser) => {
+    // images du fichier lues par <img> plutôt que par fetch() : certaines pages (aperçu
+    // claude.ai) interdisent fetch() sur les adresses blob:, et les textures manquaient
+    parser.textureLoader = new THREE.TextureLoader(parser.options.manager);
+    return { name: 'rp_island_image_element' };
+  });
   loader.register((parser) => new VRMLoaderPlugin(parser));
   const gltf = await loader.parseAsync(data.slice(0), '');
   const vrm = gltf.userData.vrm as VRM;

@@ -36,8 +36,8 @@ MODELS = {
     'hair_m': ('beta/HairSample_Male.vrm', 'Hugo', 'm'),
 }
 
-MAX_SIZE = 1024
-MAX_NORMAL = 512
+MAX_SIZE = 2048
+MAX_NORMAL = 1024
 THUMB = 256
 
 
