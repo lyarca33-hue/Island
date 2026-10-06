@@ -1,17 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { MODELS, MODEL_BY_ID, thumbUrl, type Gender } from './catalog';
 import { CreatorScene, type Framing } from './CreatorScene';
 import { EXPRESSIONS } from './expressions';
 import {
-  ageYears, CLOTHES, defaultRecipe, EYE_COLORS, EYEBROW_LABELS, HAIR_COLORS, HAIR_LABELS, MIN_AGE,
-  randomRecipe, SHAPE_SLIDERS, sliderMin, SKIN_TONES, type Macro, type Recipe, type Tab,
+  BODY_RANGE, DEFAULT_BODY, defaultRecipe, EYE_COLORS, HAIR_COLORS, randomRecipe, sanitizeRecipe, SKIN_TONES,
+  type Body, type Recipe,
 } from './recipe';
+import { prefetchModel } from './vrm';
 import './creator.css';
 
 const STORAGE_KEY = 'rp-island.recipe';
 
-type PanelTab = 'corps' | Tab | 'apparence' | 'tenue';
+type PanelTab = 'style' | 'visage' | 'coiffure' | 'corps' | 'couleurs';
 const TABS: Array<[PanelTab, string]> = [
-  ['corps', 'Corps'], ['tete', 'Tête'], ['visage', 'Visage'], ['silhouette', 'Silhouette'], ['apparence', 'Apparence'], ['tenue', 'Tenue'],
+  ['style', 'Tenue'], ['visage', 'Visage'], ['coiffure', 'Coiffure'], ['corps', 'Corps'], ['couleurs', 'Couleurs'],
 ];
 
 const GESTURES: Array<[string, string]> = [
@@ -21,7 +23,7 @@ const GESTURES: Array<[string, string]> = [
 export function loadSavedRecipe(): Recipe | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Recipe) : null;
+    return raw ? sanitizeRecipe(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
@@ -39,14 +41,15 @@ function save(r: Recipe): void {
 export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (r: Recipe) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<CreatorScene | null>(null);
-  const [recipe, setRecipe] = useState<Recipe>(() => initial ?? loadSavedRecipe() ?? defaultRecipe(0.15));
-  const [tab, setTab] = useState<PanelTab>('corps');
+  const [recipe, setRecipe] = useState<Recipe>(() => initial ?? loadSavedRecipe() ?? defaultRecipe('f'));
+  const [tab, setTab] = useState<PanelTab>('style');
   const [framing, setFraming] = useState<Framing>('corps');
   const [expression, setExpression] = useState('neutre');
   const [gesture, setGesture] = useState('idle');
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [height, setHeight] = useState(170);
+  const [height, setHeight] = useState(160);
 
   useEffect(() => {
     if (!host.current) return;
@@ -67,50 +70,45 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // chaque changement de recette : modèle mis à jour (à l'image suivante) + sauvegarde
-  const pending = useRef(0);
+  // chaque changement de recette : perso mis à jour (rechargé si une pièce change) + sauvegarde
   useEffect(() => {
     if (loading) return;
-    cancelAnimationFrame(pending.current);
-    pending.current = requestAnimationFrame(() => {
-      const s = sceneRef.current;
-      if (!s) return;
-      s.setRecipe(recipe);
-      setHeight(s.height * 100);
+    const s = sceneRef.current;
+    if (!s) return;
+    let live = true;
+    const t = window.setTimeout(() => live && setBusy(true), 120);
+    s.setRecipe(recipe).then(() => live && setHeight(s.height * 100)).catch((e) => {
+      console.error(e);
+      setError('Cette pièce n’a pas pu se charger.');
+    }).finally(() => {
+      clearTimeout(t);
+      if (live) setBusy(false);
     });
     save(recipe);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
   }, [recipe, loading]);
 
   useEffect(() => sceneRef.current?.setFraming(framing), [framing]);
   useEffect(() => sceneRef.current?.setExpression(expression), [expression, loading]);
   useEffect(() => sceneRef.current?.play(gesture), [gesture, loading]);
 
-  const setMacro = (k: keyof Macro, v: number) => setRecipe((r) => ({ ...r, macro: { ...r.macro, [k]: v } }));
-  const setEthnic = (k: 'african' | 'asian' | 'caucasian', v: number) =>
-    setRecipe((r) => {
-      // les trois origines font toujours 100 % : les deux autres se partagent le reste
-      const others = (['african', 'asian', 'caucasian'] as const).filter((x) => x !== k);
-      const rest = others.reduce((s, x) => s + r.macro[x], 0);
-      const m = { ...r.macro, [k]: v };
-      for (const x of others) m[x] = rest > 1e-6 ? (r.macro[x] / rest) * (1 - v) : (1 - v) / 2;
-      return { ...r, macro: m };
-    });
-  const setShape = (id: string, v: number) => setRecipe((r) => ({ ...r, shape: { ...r.shape, [id]: v } }));
-  const wear = (slot: string, id: string | null) =>
-    setRecipe((r) => {
-      const keep = r.clothes.filter((c) => CLOTHES[c]?.slot !== slot && !(slot === 'tenue' && ['haut', 'bas'].includes(CLOTHES[c]?.slot)) && !(['haut', 'bas'].includes(slot) && CLOTHES[c]?.slot === 'tenue'));
-      return { ...r, clothes: id ? [...keep, id] : keep };
-    });
+  // les autres modèles se téléchargent en avance : changer de pièce est ensuite quasi immédiat
+  useEffect(() => {
+    if (loading) return;
+    for (const m of MODELS) prefetchModel(m.id);
+  }, [loading]);
 
-  const sections = useMemo(() => {
-    const m = new Map<string, typeof SHAPE_SLIDERS[number][]>();
-    for (const s of SHAPE_SLIDERS) {
-      if (s.tab !== tab) continue;
-      if (!m.has(s.section)) m.set(s.section, []);
-      m.get(s.section)!.push(s);
-    }
-    return [...m];
-  }, [tab]);
+  const set = (patch: Partial<Recipe>) => setRecipe((r) => ({ ...r, ...patch }));
+  const setBody = (k: keyof Body, v: number) => setRecipe((r) => ({ ...r, body: { ...r.body, [k]: v } }));
+  const setGender = (g: Gender) =>
+    setRecipe((r) => {
+      if (r.gender === g) return r;
+      const d = defaultRecipe(g);
+      return { ...r, gender: g, outfit: d.outfit, face: d.face, hair: d.hair };
+    });
 
   const exportRecipe = () => {
     const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
@@ -122,18 +120,24 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
   };
   const importRecipe = (f: File) =>
     f.text().then((t) => {
-      const r = JSON.parse(t) as Recipe;
-      if (r?.macro && r?.shape) setRecipe({ ...defaultRecipe(), ...r });
+      const r = sanitizeRecipe(JSON.parse(t));
+      if (r) setRecipe(r);
+      else setError('Fichier de perso illisible.');
     }).catch(() => setError('Fichier de perso illisible.'));
 
-  const m = recipe.macro;
+  const same = MODELS.filter((m) => m.gender === recipe.gender);
+  const chooseTab = (k: PanelTab) => {
+    setTab(k);
+    setFraming(k === 'visage' || k === 'coiffure' ? 'visage' : 'corps');
+  };
+
   return (
     <div className="creator">
       <div ref={host} className="creator-view" />
       <div className="creator-top">
         <input className="creator-name" value={recipe.name} maxLength={24} aria-label="Nom du personnage"
-          onChange={(e) => setRecipe((r) => ({ ...r, name: e.target.value }))} />
-        <span className="creator-stat">{Math.round(ageYears(m.age))} ans · {Math.round(height)} cm</span>
+          onChange={(e) => set({ name: e.target.value })} />
+        <span className="creator-stat">{Math.round(height)} cm{busy ? ' · chargement…' : ''}</span>
       </div>
       <div className="creator-tools">
         <div className="seg">
@@ -155,118 +159,112 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
       <aside className="creator-panel">
         <nav className="tabs">
           {TABS.map(([k, label]) => (
-            <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); if (k === 'tete' || k === 'visage') setFraming('visage'); else if (k !== 'apparence') setFraming('corps'); }}>{label}</button>
+            <button key={k} className={tab === k ? 'on' : ''} onClick={() => chooseTab(k)}>{label}</button>
           ))}
         </nav>
         <div className="panel-body">
+          {tab === 'style' && (
+            <>
+              <h3>Corps</h3>
+              <div className="seg">
+                <button className={recipe.gender === 'f' ? 'on' : ''} onClick={() => setGender('f')}>Féminin</button>
+                <button className={recipe.gender === 'm' ? 'on' : ''} onClick={() => setGender('m')}>Masculin</button>
+              </div>
+              <h3>Tenue</h3>
+              <div className="picks list">
+                {same.map((m) => (
+                  <button key={m.id} className={recipe.outfit === m.id ? 'on' : ''} onClick={() => set({ outfit: m.id })}>
+                    <span>{m.outfit}</span>
+                    <small>de {m.label}</small>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {tab === 'visage' && (
+            <>
+              <h3>Visage</h3>
+              <div className="picks">
+                {same.map((m) => (
+                  <Pick key={m.id} id={m.id} label={m.label} on={recipe.face === m.id} onClick={() => set({ face: m.id })} />
+                ))}
+              </div>
+              <p className="hint">Les yeux, la bouche et les expressions viennent avec le visage.</p>
+            </>
+          )}
+          {tab === 'coiffure' && (
+            <>
+              <h3>Coiffure</h3>
+              <div className="picks">
+                {[...same, ...MODELS.filter((m) => m.gender !== recipe.gender)].map((m) => (
+                  <Pick key={m.id} id={m.id} label={m.hair} on={recipe.hair === m.id} onClick={() => set({ hair: m.id })} />
+                ))}
+              </div>
+              <h3>Couleur des cheveux</h3>
+              <Swatches colors={HAIR_COLORS} value={recipe.hairColor} onChange={(c) => set({ hairColor: c })} />
+            </>
+          )}
           {tab === 'corps' && (
             <>
-              <h3>Général</h3>
-              <Slider label="Femme ↔ Homme" value={m.gender} min={0} max={1} onChange={(v) => setMacro('gender', v)} reset={0.5} />
-              <Slider label={`Âge (${Math.round(ageYears(m.age))} ans)`} value={m.age} min={MIN_AGE} max={1} onChange={(v) => setMacro('age', v)} reset={0.5} />
-              <Slider label="Muscles" value={m.muscle} min={0} max={1} onChange={(v) => setMacro('muscle', v)} reset={0.5} />
-              <Slider label="Poids" value={m.weight} min={0} max={1} onChange={(v) => setMacro('weight', v)} reset={0.5} />
-              <Slider label="Taille" value={m.height} min={0} max={1} onChange={(v) => setMacro('height', v)} reset={0.5} />
-              <Slider label="Proportions (banales ↔ idéales)" value={m.proportions} min={0} max={1} onChange={(v) => setMacro('proportions', v)} reset={0.5} />
-              <h3>Origine (traits)</h3>
-              <Slider label="Africaine" value={m.african} min={0} max={1} onChange={(v) => setEthnic('african', v)} reset={1 / 3} />
-              <Slider label="Asiatique" value={m.asian} min={0} max={1} onChange={(v) => setEthnic('asian', v)} reset={1 / 3} />
-              <Slider label="Européenne" value={m.caucasian} min={0} max={1} onChange={(v) => setEthnic('caucasian', v)} reset={1 / 3} />
-              <h3>Poitrine</h3>
-              <Slider label="Volume" value={m.breastSize} min={0} max={1} onChange={(v) => setMacro('breastSize', v)} reset={0.5} />
-              <Slider label="Fermeté" value={m.breastFirmness} min={0} max={1} onChange={(v) => setMacro('breastFirmness', v)} reset={0.5} />
+              <h3>Proportions</h3>
+              {(Object.keys(BODY_RANGE) as Array<keyof Body>).map((k) => (
+                <Slider key={k} label={BODY_RANGE[k][2]} value={recipe.body[k]} min={BODY_RANGE[k][0]} max={BODY_RANGE[k][1]}
+                  reset={DEFAULT_BODY[k]} onChange={(v) => setBody(k, v)} />
+              ))}
+              <p className="hint">Double-clic sur un curseur : valeur d’origine.</p>
             </>
           )}
-          {sections.map(([title, sliders]) => (
-            <div key={title}>
-              <h3>{title}</h3>
-              {sliders.map((s) => (
-                <Slider key={s.id} label={s.label} value={recipe.shape[s.id] ?? 0} min={sliderMin(s)} max={1} reset={0} onChange={(v) => setShape(s.id, v)} />
-              ))}
-            </div>
-          ))}
-          {tab === 'apparence' && (
+          {tab === 'couleurs' && (
             <>
               <h3>Peau</h3>
-              <Swatches colors={SKIN_TONES} value={recipe.skinColor} onChange={(c) => setRecipe((r) => ({ ...r, skinColor: c }))} />
+              <Swatches colors={SKIN_TONES.slice(1)} value={recipe.skinTone} onChange={(c) => set({ skinTone: c })} />
               <h3>Yeux</h3>
-              <div className="chips wrap">
-                {EYE_COLORS.map(([k, label]) => (
-                  <button key={k} className={recipe.eyeColor === k ? 'on' : ''} onClick={() => setRecipe((r) => ({ ...r, eyeColor: k }))}>{label}</button>
-                ))}
-              </div>
+              <Swatches colors={EYE_COLORS} value={recipe.eyeColor} onChange={(c) => set({ eyeColor: c })} />
               <h3>Cheveux</h3>
-              <div className="chips wrap">
-                <button className={!recipe.hair ? 'on' : ''} onClick={() => setRecipe((r) => ({ ...r, hair: null }))}>Chauve</button>
-                {Object.entries(HAIR_LABELS).map(([k, label]) => (
-                  <button key={k} className={recipe.hair === k ? 'on' : ''} onClick={() => setRecipe((r) => ({ ...r, hair: k }))}>{label}</button>
-                ))}
-              </div>
-              <Swatches colors={HAIR_COLORS} value={recipe.hairColor} onChange={(c) => setRecipe((r) => ({ ...r, hairColor: c }))} />
-              <h3>Sourcils</h3>
-              <div className="chips wrap">
-                {Object.entries(EYEBROW_LABELS).map(([k, label]) => (
-                  <button key={k} className={recipe.eyebrows === k ? 'on' : ''} onClick={() => setRecipe((r) => ({ ...r, eyebrows: k }))}>{label}</button>
-                ))}
-              </div>
-            </>
-          )}
-          {tab === 'tenue' && (
-            <>
-              {(['tenue', 'haut', 'bas', 'chaussures', 'chapeau'] as const).map((slot) => {
-                const items = Object.entries(CLOTHES).filter(([, c]) => c.slot === slot);
-                const worn = recipe.clothes.find((c) => CLOTHES[c]?.slot === slot) ?? null;
-                return (
-                  <div key={slot}>
-                    <h3>{slot[0].toUpperCase() + slot.slice(1)}</h3>
-                    <div className="chips wrap">
-                      <button className={!worn ? 'on' : ''} onClick={() => wear(slot, null)}>Aucun</button>
-                      {items.map(([id, c]) => (
-                        <button key={id} className={worn === id ? 'on' : ''} onClick={() => wear(slot, id)}>{c.label}</button>
-                      ))}
-                    </div>
-                    {worn && (
-                      <label className="tint">
-                        Teinte
-                        <input type="color" value={recipe.clothesTint[worn] ?? '#ffffff'}
-                          onChange={(e) => setRecipe((r) => ({ ...r, clothesTint: { ...r.clothesTint, [worn]: e.target.value } }))} />
-                      </label>
-                    )}
-                  </div>
-                );
-              })}
+              <Swatches colors={HAIR_COLORS} value={recipe.hairColor} onChange={(c) => set({ hairColor: c })} />
             </>
           )}
         </div>
         <footer className="panel-actions">
           <button onClick={() => setRecipe(randomRecipe())}>🎲 Au hasard</button>
-          <button onClick={() => setRecipe(defaultRecipe(m.gender))}>Réinitialiser</button>
+          <button onClick={() => setRecipe(defaultRecipe(recipe.gender))}>Réinitialiser</button>
           <button onClick={exportRecipe}>Exporter</button>
           <label className="file-btn">Importer<input type="file" accept="application/json" onChange={(e) => e.target.files?.[0] && importRecipe(e.target.files[0])} /></label>
           <button className="primary" onClick={() => onDone(recipe)}>Jouer →</button>
         </footer>
       </aside>
-      {(loading || error) && <div className="hud-loading">{error ?? 'Chargement du créateur…'}</div>}
+      {(loading || error) && <div className="hud-loading" onClick={() => setError(null)}>{error ?? 'Chargement du créateur…'}</div>}
     </div>
+  );
+}
+
+function Pick({ id, label, on, onClick }: { id: string; label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button className={on ? 'on' : ''} onClick={onClick} title={MODEL_BY_ID.get(id)?.label}>
+      <img src={thumbUrl(id)} alt="" loading="lazy" />
+      <span>{label}</span>
+    </button>
   );
 }
 
 function Slider({ label, value, min, max, onChange, reset }: { label: string; value: number; min: number; max: number; reset: number; onChange: (v: number) => void }) {
   return (
-    <label className="slider" onDoubleClick={() => onChange(reset)} title="Double-clic : remettre à zéro">
+    <label className="slider" onDoubleClick={() => onChange(reset)} title="Double-clic : valeur d’origine">
       <span>{label}</span>
-      <input type="range" min={min} max={max} step={0.01} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <input type="range" min={min} max={max} step={0.005} value={value} onChange={(e) => onChange(Number(e.target.value))} />
     </label>
   );
 }
 
-function Swatches({ colors, value, onChange }: { colors: string[]; value: string; onChange: (c: string) => void }) {
+/** Pastilles de couleur ; « Origine » = couleurs du modèle. */
+function Swatches({ colors, value, onChange }: { colors: string[]; value: string | null; onChange: (c: string | null) => void }) {
   return (
     <div className="swatches">
+      <button className={`origin${value === null ? ' on' : ''}`} onClick={() => onChange(null)}>Origine</button>
       {colors.map((c) => (
         <button key={c} className={value === c ? 'on' : ''} style={{ background: c }} aria-label={c} onClick={() => onChange(c)} />
       ))}
-      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Autre couleur" />
+      <input type="color" value={value ?? '#ffffff'} onChange={(e) => onChange(e.target.value)} aria-label="Autre couleur" />
     </div>
   );
 }

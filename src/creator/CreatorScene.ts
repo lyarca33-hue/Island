@@ -21,13 +21,14 @@ export class CreatorScene {
   private raf = 0;
   private last = performance.now();
   private puppet: Puppet | null = null;
+  private creating: Promise<void> | null = null;
+  private disposed = false;
   private turntable = new THREE.Group();
   private yaw = 0.35;
   private yawVel = 0;
   private framing: Framing = 'corps';
   private zoom = 1;
   private view = { y: 0.95, h: 2.3 };
-  private retargetTimer = 0;
   private disposers: Array<() => void> = [];
 
   constructor(container: HTMLElement) {
@@ -73,15 +74,14 @@ export class CreatorScene {
 
   /** Crée le perso (premier appel) ou applique la nouvelle recette. */
   async setRecipe(r: Recipe): Promise<void> {
-    if (!this.puppet) {
-      this.puppet = await Puppet.create(r);
-      this.turntable.add(this.puppet.root);
-      return;
-    }
-    this.puppet.apply(r);
-    // reciblage des animations (taille du bassin...) un peu après le dernier changement
-    clearTimeout(this.retargetTimer);
-    this.retargetTimer = window.setTimeout(() => this.puppet?.retarget(), 250);
+    // un seul perso, même si une nouvelle recette arrive pendant le premier chargement
+    this.creating ??= Puppet.create(r).then((p) => {
+      if (this.disposed) return p.dispose();
+      this.puppet = p;
+      this.turntable.add(p.root);
+    });
+    await this.creating;
+    await this.puppet?.apply(r);
   }
 
   setFraming(f: Framing): void {
@@ -98,7 +98,7 @@ export class CreatorScene {
   }
 
   get height(): number {
-    return this.puppet?.human.height ?? 1.7;
+    return this.puppet?.height ?? 1.6;
   }
 
   private bindInput(): void {
@@ -150,9 +150,9 @@ export class CreatorScene {
     const H = this.height;
     let target = { y: H * 0.53, h: H * 1.3 };
     if (this.framing === 'visage' && this.puppet) {
-      const head = this.puppet.root.getObjectByName('mixamorigHead');
+      const head = this.puppet.headBone;
       const p = head ? head.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(0, H * 0.93, 0);
-      target = { y: p.y + 0.07, h: 0.42 };
+      target = { y: p.y + 0.08, h: 0.48 };
     }
     const k = Math.min(1, dt * 6);
     this.view.y += (target.y - this.view.y) * k;
@@ -172,8 +172,8 @@ export class CreatorScene {
   };
 
   dispose(): void {
+    this.disposed = true;
     cancelAnimationFrame(this.raf);
-    clearTimeout(this.retargetTimer);
     this.resizeObs.disconnect();
     for (const d of this.disposers) d();
     this.puppet?.dispose();

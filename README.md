@@ -24,28 +24,28 @@ mène à la map, « ✎ Perso » y revient.
 
 ## Le créateur de personnage
 
-Basé sur [MakeHuman](http://www.makehumancommunity.org/), le créateur d'humains libre de
-référence (données en CC0, utilisables librement dans le jeu) :
+Style anime, basé sur les **modèles officiels de VRoid Studio** (pixiv) au format VRM, lus par
+la bibliothèque [three-vrm](https://github.com/pixiv/three-vrm) : shader toon MToon (cel shading
+avec contours), expressions du visage, cheveux et vêtements qui bougent (ressorts).
 
-- **Corps** : sexe, âge (10 à 90 ans), muscles, poids, taille, proportions, origine (traits
-  africains / asiatiques / européens mélangeables), poitrine.
-- **Tête, visage, silhouette** : une centaine de curseurs (forme du crâne, oreilles, yeux, nez,
-  bouche, menton, joues, torse, hanches, bras, jambes...). Double-clic sur un curseur : remise à zéro.
-- **Apparence** : teinte de peau (n'importe quelle couleur), couleur des yeux, 10 coiffures
-  teintables, 12 sourcils.
-- **Tenue** : 12 tenues, 6 paires de chaussures, chapeaux, teinte au choix.
+12 persos de base (9 féminins, 3 masculins). Chacun fournit trois pièces que l'on mélange :
+
+- **Tenue** : le corps et ses vêtements (gilet et short, uniformes, robes, sweat...).
+- **Visage** : yeux, bouche, expressions (du même genre que la tenue).
+- **Coiffure** : n'importe laquelle des 12, avec ses mèches à ressorts.
+- **Couleurs** : peau, yeux, cheveux (ou couleurs d'origine).
+- **Corps** : taille, tête, jambes, carrure. Double-clic sur un curseur : valeur d'origine.
 - **Expressions** (neutre, sourire, rire, triste, colère, surprise, peur, dégoût, clin d'œil) et
-  clignement automatique des yeux : ce sont des morphs, gratuits à jouer.
+  clignement automatique des yeux.
 - Bouton « Au hasard », export / import du perso en JSON.
 
-Un perso est une **recette** (`src/creator/recipe.ts`) : quelques nombres et choix, sauvegardés
-dans le navigateur. Le corps est reconstruit à partir de la recette au chargement : c'est aussi ce
-qu'une IA pourra écrire pour créer des PNJ.
+Un perso est une **recette** (`src/creator/recipe.ts`) : quelques choix et nombres, sauvegardés
+dans le navigateur. C'est aussi ce qu'une IA pourra écrire pour créer des PNJ.
 
-Tous les persos ont le **squelette Mixamo** : les animations d'X Bot (repos, marche, course, oui,
-non...) sont reciblées automatiquement sur chaque corps, quelle que soit sa taille.
+Les animations d'X Bot (repos, marche, course, oui, non...) sont reciblées sur le squelette
+humanoïde VRM de chaque perso.
 
-Les données (`public/creator/`, 11 Mo) sont produites par `tools/build_creator_assets.py`
+Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/build_vrm_assets.py`
 (voir `tools/README.md`).
 
 ## Organisation
@@ -59,11 +59,12 @@ Les données (`public/creator/`, 11 Mo) sont produites par `tools/build_creator_
 | `src/game/ground.ts` | Sol d'herbe (texture peinte par programme) |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : créateur puis map |
-| `src/creator/assets.ts` | Chargement des données MakeHuman converties |
-| `src/creator/human.ts` | Corps paramétrable : formes, os qui suivent les formes, cheveux et vêtements ajustés, expressions |
-| `src/creator/retarget.ts` | Reciblage des animations Mixamo sur chaque corps |
-| `src/creator/puppet.ts` | Perso animé (corps + animations + expressions + clignement), partagé créateur / jeu |
-| `src/creator/recipe.ts` | La recette d'un perso, les curseurs et leurs libellés |
+| `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
+| `src/creator/vrm.ts` | Chargement des fichiers VRM (three-vrm) |
+| `src/creator/avatar.ts` | Assemblage tenue + visage + coiffure de modèles différents, proportions, couleurs |
+| `src/creator/retarget.ts` | Reciblage des animations Mixamo sur le squelette VRM |
+| `src/creator/puppet.ts` | Perso animé (assemblage + animations + expressions + clignement), partagé créateur / jeu |
+| `src/creator/recipe.ts` | La recette d'un perso, bornes des curseurs, palettes |
 | `src/creator/Creator.tsx` | Écran du créateur |
 
 ## Les animations

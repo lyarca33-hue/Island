@@ -57,3 +57,17 @@
   .slider { grid-template-columns: 1fr 45%; }
   .creator-name { width: 130px; font-size: 16px; }
 }
+
+.picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.picks button {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px; border-radius: 10px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.04); border: 2px solid transparent; color: #e8e0cf; font-size: 12px; text-align: center;
+}
+.picks button img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 7px; display: block; }
+.picks button.on { border-color: #e9c27a; background: rgba(233, 194, 122, 0.14); color: #f3d79e; }
+.picks.list { grid-template-columns: 1fr 1fr; }
+.picks.list button { padding: 9px 10px; text-align: left; font-size: 13px; }
+.picks.list small { opacity: 0.6; font-size: 11px; }
+.swatches .origin { width: auto; height: 26px; border-radius: 13px; padding: 0 10px; background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font-size: 12px; }
+.hint { font-size: 12px; opacity: 0.6; margin: 6px 0 0; }
+.hud-loading { cursor: default; }
