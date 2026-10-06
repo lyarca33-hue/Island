@@ -16,7 +16,7 @@ import { loadVrm } from './vrm';
 type Part = 'face' | 'hair' | 'body';
 
 /** Atténuation des couleurs MToon sous l'éclairage du jeu (soleil + ciel ≈ 3, VRoid ≈ 1). */
-const LIGHT_COMP = 0.55;
+const LIGHT_COMP = 0.62;
 
 function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -87,6 +87,25 @@ interface Tintable extends THREE.Material {
   shadeColorFactor?: THREE.Color;
   map: THREE.Texture | null;
   shadeMultiplyTexture?: THREE.Texture | null;
+}
+
+/**
+ * Rendu mat, en aplats : VRoid ajoute des reflets brillants (matcap), un liseré lumineux et
+ * des dégradés doux. On les retire pour un cel shading net, comme les décors.
+ */
+function matte(mat: THREE.Material): void {
+  const m = mat as THREE.Material & {
+    isMToonMaterial?: boolean;
+    matcapFactor: THREE.Color;
+    parametricRimColorFactor: THREE.Color;
+    rimLightingMixFactor: number;
+    shadingToonyFactor: number;
+  };
+  if (!m.isMToonMaterial) return;
+  m.matcapFactor.setRGB(0, 0, 0);
+  m.parametricRimColorFactor.setRGB(0, 0, 0);
+  m.rimLightingMixFactor = 0;
+  m.shadingToonyFactor = Math.max(m.shadingToonyFactor, 0.95);
 }
 
 const grayCache = new WeakMap<THREE.Texture, THREE.Texture>();
@@ -185,6 +204,7 @@ export class Avatar {
       m.receiveShadow = true;
       m.frustumCulled = false; // animé hors de sa boîte de repos
       m.layers.enable(LAYER_CHARACTER);
+      for (const mat of materialsOf(m)) matte(mat);
     });
     this.root.add(base.scene);
     this.measureRest();

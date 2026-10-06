@@ -7,6 +7,7 @@ import { Avatar } from './avatar';
 import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
 import { retargetClips } from './retarget';
+import { PoseLayer } from './pose';
 import { loadAnimationSource } from './source';
 
 /** Nom d'expression VRM 1.0 → nom possible dans un modèle VRM 0.x (presets « unknown »). */
@@ -16,6 +17,7 @@ export class Puppet {
   readonly root = new THREE.Group();
   private avatar: Avatar;
   private mixer: THREE.AnimationMixer;
+  private pose: PoseLayer;
   private actions = new Map<string, THREE.AnimationAction>();
   private current: THREE.AnimationAction | null = null;
   private exprTarget: Record<string, number> = {};
@@ -30,6 +32,7 @@ export class Puppet {
     this.avatar = avatar;
     this.wanted = recipe;
     this.mixer = new THREE.AnimationMixer(avatar.base.scene);
+    this.pose = new PoseLayer(avatar.base);
     this.root.add(avatar.root);
   }
 
@@ -76,6 +79,7 @@ export class Puppet {
       this.avatar = next;
       this.root.add(next.root);
       this.mixer = new THREE.AnimationMixer(next.base.scene);
+      this.pose = new PoseLayer(next.base);
       this.loadClips(source);
       this.current = null;
       this.play(playing, 0);
@@ -120,6 +124,7 @@ export class Puppet {
 
   update(dt: number): void {
     this.mixer.update(dt);
+    this.pose.apply();
     // fondu des expressions
     const k = Math.min(1, dt * 10);
     const names = new Set([...Object.keys(this.exprNow), ...Object.keys(this.exprTarget)]);
@@ -139,6 +144,7 @@ export class Puppet {
     if ((this.exprNow.happy ?? 0) > 0.5 || (this.exprNow.blinkLeft ?? 0) > 0.5) blink = 0;
     this.applyExpressions(blink);
     this.avatar.update(dt);
+    this.pose.restore();
   }
 
   dispose(): void {
