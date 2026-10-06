@@ -128,7 +128,7 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
     if (!verb) return null;
     const rest = w.slice(1);
     const intent = parseClause(verb, rest, original, world);
-    if (!intent) return null;
+    if (!intent?.length) return null;
     out.push(...intent);
   }
   return out;
@@ -139,23 +139,22 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
   const held = world.objets.filter((o) => world.enMain.includes(o.ref));
   switch (verb) {
     case 'prendre': {
-      // ceux qui traînent avant ceux qui sont rangés
+      // ceux qui traînent avant ceux qui sont rangés, puis les plus proches
       const portable = found.filter((o) => o.portable && !world.enMain.includes(o.ref)).sort((a, b) => +!isLoose(a) - +!isLoose(b));
       if (!portable.length) return null;
-      // plusieurs livres : la pile ; sinon le plus proche
-      if (all && portable[0].nom === 'livre') return portable.filter(isLoose).slice(0, 6).map((o) => ({ kind: 'prendre', ref: o.ref }));
-      return [{ kind: 'prendre', ref: portable[0].ref }];
+      // « prends 2 livres », « prends les livres » : une pile (6 au plus) ; sinon un seul objet
+      const n = portable[0].nom === 'livre' ? Math.min(6, count(rest) ?? (all ? 6 : 1)) : 1;
+      return portable.filter((o) => o.nom === portable[0].nom).slice(0, n).map((o) => ({ kind: 'prendre', ref: o.ref }));
     }
     case 'poser': {
-      // « pose la tasse sur la table » : y aller d'abord
+      // « pose la tasse sur la caisse » : prendre la tasse si besoin, aller à la caisse, poser
       const where = rest.findIndex((x) => x === 'sur' || x === 'dans' || x === 'pres');
-      const target = where >= 0 ? findObjects(rest.slice(where + 1), world.objets).found.find((o) => !o.portable) : undefined;
-      if (where >= 0 && !target) return null;
       const what = (where >= 0 ? findObjects(rest.slice(0, where), world.objets).found : found).filter((o) => o.portable);
-      // poser un objet qu'on ne tient pas : on va d'abord le prendre
-      const pick = what.length && !held.some((h) => what.some((o) => o.ref === h.ref)) ? [{ kind: 'prendre' as const, ref: what[0].ref }] : [];
-      if (target?.sorte === 'rangement' && (what[0]?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: what.map((o) => o.ref) }];
-      return [...pick, ...(target ? [{ kind: 'aller' as const, ref: target.ref }] : []), { kind: 'poser' }];
+      const item = what.find((o) => world.enMain.includes(o.ref)) ?? what[0];
+      const target = where >= 0 ? findObjects(rest.slice(where + 1), world.objets).found.find((o) => o.ref !== item?.ref) : undefined;
+      if (where >= 0 && !target) return null;
+      if (target?.sorte === 'rangement' && (item?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: item ? [item.ref] : [], onlyHeld: !item }];
+      return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
     case 'ranger': {
       // « range-le » : ce qu'on tient
@@ -181,6 +180,17 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (!said) return null;
       return [{ kind: 'dire', texte: said.charAt(0).toUpperCase() + said.slice(1) }];
     }
+  }
+  return null;
+}
+
+const NUMBERS: Record<string, number> = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, quelques: 3 };
+
+/** Nombre demandé (« 2 livres », « trois livres »), ou null. */
+function count(words: string[]): number | null {
+  for (const w of words) {
+    if (/^\d+$/.test(w)) return Math.max(1, +w);
+    if (w in NUMBERS) return NUMBERS[w];
   }
   return null;
 }

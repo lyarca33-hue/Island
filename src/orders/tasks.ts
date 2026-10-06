@@ -8,7 +8,8 @@ import { perform } from './actions';
 
 export type Intent =
   | { kind: 'prendre'; ref: string }
-  | { kind: 'poser' }
+  /** Poser ce qu'on tient, ou l'objet `ref` (pris d'abord si besoin), sur l'objet `sur` ou devant soi. */
+  | { kind: 'poser'; ref?: string; sur?: string }
   | { kind: 'aller'; ref: string }
   /** Ranger des livres (tous ceux qui traînent si `refs` est vide) dans le meuble de rangement. */
   | { kind: 'ranger'; refs: string[]; onlyHeld?: boolean }
@@ -35,6 +36,7 @@ export async function runIntents(game: Game, intents: Intent[], onStep: (s: Step
     if (signal?.aborted) throw new Failed('Interrompu.');
     if (!ok) throw new Failed(report.replace(/^échec( : )?/, '') || 'Impossible.');
   };
+  if (!intents.length) return { ok: false, message: 'Rien à faire.' };
   try {
     for (const intent of intents) await runOne(game, intent, act);
     return { ok: true, message: 'C’est fait.' };
@@ -67,8 +69,15 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await freeHands(game, act, (o) => target?.nom === 'livre' && o.nom === 'livre');
       return act('prendre', { objet: intent.ref });
     }
-    case 'poser':
+    case 'poser': {
+      if (intent.ref && !held(game).some((o) => o.ref === intent.ref)) {
+        await freeHands(game, act);
+        await act('prendre', { objet: intent.ref });
+      }
+      if (!held(game).length) throw new Failed('Rien en main à poser.');
+      if (intent.sur) await act('aller', { objet: intent.sur });
       return act('poser');
+    }
     case 'aller':
       return act('aller', { objet: intent.ref });
     case 'dire':

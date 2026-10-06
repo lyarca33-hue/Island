@@ -271,7 +271,7 @@ export class Game {
       if (carried.includes(item)) ou = 'en main';
       else if (shelf) ou = `rangé dans ${this.ref(shelf.shelf)}`;
       else if (item.object.position.y > 0.05) {
-        const under = this.items.find((o) => o !== item && !o.def.portable && this.isAbove(item, o));
+        const under = this.items.find((o) => o !== item && !carried.includes(o) && o.object.position.y < item.object.position.y && this.isAbove(item, o));
         ou = under ? `posé sur ${this.ref(under)}` : 'posé en hauteur';
       }
       if (item === this.brew?.cup) ou += ' (le café coule dedans)';

@@ -95,7 +95,7 @@ const SYSTEM = `Tu joues le personnage du joueur dans un petit monde 3D de jeu d
 
 Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable (un livre s'ajoute à la pile de livres tenue ; sinon on pose d'abord ce qu'on tient)
-- {"tache": "poser"} : poser ce qu'on tient devant soi (sur le meuble devant, sinon par terre)
+- {"tache": "poser", "objet": "<ref>", "sur": "<ref>"} : poser un objet sur un autre objet ou un meuble (« objet » et « sur » sont facultatifs : sans « objet », ce qu'on tient ; sans « sur », devant soi). Si l'objet n'est pas en main, il est pris d'abord
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
 - {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
@@ -103,6 +103,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
 
+Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
+Pour prendre plusieurs livres, enchaîne plusieurs « prendre » (6 livres au plus en pile).
 Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
 Si l'ordre est impossible dans ce monde (objet absent, action que le jeu ne sait pas faire), dis-le en personnage avec « dire », puis « fini ».
 
@@ -141,7 +143,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | null {
   const s = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '');
   switch (o.tache) {
     case 'prendre': return s('objet') ? { kind: 'prendre', ref: s('objet') } : null;
-    case 'poser': return { kind: 'poser' };
+    case 'poser': return { kind: 'poser', ref: s('objet') || undefined, sur: s('sur') || undefined };
     case 'aller': return s('objet') ? { kind: 'aller', ref: s('objet') } : null;
     case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
     case 'cafe': return { kind: 'cafe' };
