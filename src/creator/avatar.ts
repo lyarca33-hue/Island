@@ -16,6 +16,9 @@ import { loadVrm } from './vrm';
 type Part = 'face' | 'hair' | 'body';
 
 /** Atténuation des couleurs MToon sous l'éclairage du jeu (soleil + ciel ≈ 3, VRoid ≈ 1). */
+/** Coiffure posée sur un autre crâne : légèrement agrandie pour couvrir la peau. */
+const HAIR_INFLATE = 1.03;
+
 const LIGHT_COMP = 0.62;
 
 function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
@@ -74,6 +77,53 @@ function graft(parts: THREE.SkinnedMesh[], src: VRM, base: VRM, own: (name: stri
     if (anchor) anchor.add(top);
   }
   return roots;
+}
+
+/** Boîte du crâne (peau du visage) dans le repère de l'os de la tête, pose de liaison. */
+function skullBox(vrm: VRM): THREE.Box3 | null {
+  const box = new THREE.Box3();
+  const v = new THREE.Vector3();
+  for (const m of meshes(vrm, 'face')) {
+    if (!materialsOf(m).some((mat) => /_SKIN/.test(mat.name))) continue;
+    const hi = m.skeleton.bones.findIndex((b) => b.name === 'J_Bip_C_Head');
+    if (hi < 0) continue;
+    // position de la tête au moment de la liaison = inverse de sa matrice inverse
+    const headBind = new THREE.Vector3().setFromMatrixPosition(m.skeleton.boneInverses[hi].clone().invert());
+    const pos = m.geometry.getAttribute('position');
+    const index = m.geometry.getIndex();
+    const n = index ? index.count : pos.count;
+    for (let i = 0; i < n; i++) {
+      v.fromBufferAttribute(pos, index ? index.getX(i) : i).sub(headBind);
+      box.expandByPoint(v);
+    }
+  }
+  return box.isEmpty() ? null : box;
+}
+
+/**
+ * Cale une coiffure faite pour le crâne `from` sur le crâne `to` : un os intermédiaire sous la
+ * tête la décale et l'étire selon chaque axe, un peu plus large pour ne pas laisser la peau
+ * passer à travers les cheveux.
+ */
+function fitHair(base: VRM, hair: THREE.SkinnedMesh[], from: THREE.Box3, to: THREE.Box3): void {
+  const head = base.humanoid.getRawBoneNode('head');
+  if (!head) return;
+  const sf = from.getSize(new THREE.Vector3());
+  const st = to.getSize(new THREE.Vector3());
+  const k = new THREE.Vector3(st.x / sf.x, st.y / sf.y, st.z / sf.z);
+  for (const a of ['x', 'y', 'z'] as const) k[a] = THREE.MathUtils.clamp(k[a], 0.8, 1.25) * HAIR_INFLATE;
+  const fit = new THREE.Bone();
+  fit.name = 'HairFit';
+  fit.scale.copy(k);
+  // le centre du crâne d'origine arrive sur le centre du nouveau
+  fit.position.copy(to.getCenter(new THREE.Vector3())).sub(from.getCenter(new THREE.Vector3()).multiply(k));
+  head.add(fit);
+  for (const m of hair) {
+    const bones = m.skeleton.bones.map((b) => (b === head ? (fit as THREE.Bone) : b));
+    m.bind(new THREE.Skeleton(bones, m.skeleton.boneInverses), m.bindMatrix);
+  }
+  // les mèches (et leurs ressorts) suivent le même calage
+  for (const c of [...head.children]) if (c.name.startsWith('HairJoint')) fit.add(c);
 }
 
 function isInside(o: THREE.Object3D, roots: Set<THREE.Object3D>): boolean {
@@ -166,6 +216,9 @@ export class Avatar {
     const base = vrms.get(r.outfit)!;
     this.base = base;
     this.head = base.humanoid.getRawBoneNode('head');
+    // crânes mesurés avant tout déplacement : celui du visage porté, celui de la coiffure
+    const skullTo = r.hair !== r.face ? skullBox(vrms.get(r.face)!) : null;
+    const skullFrom = r.hair !== r.face ? skullBox(vrms.get(r.hair)!) : null;
 
     // visage d'un autre modèle : ses yeux gardent leurs propres os (place des yeux propre au visage)
     if (r.face !== r.outfit) {
@@ -195,6 +248,8 @@ export class Avatar {
         this.hairSprings = hs;
       }
     }
+    // coiffure et visage de modèles différents : la coiffure se cale sur le crâne du visage
+    if (skullFrom && skullTo) fitHair(base, meshes(base, 'hair'), skullFrom, skullTo);
     for (const v of vrms.values()) if (v !== base) this.others.push(v);
 
     base.scene.traverse((o) => {
