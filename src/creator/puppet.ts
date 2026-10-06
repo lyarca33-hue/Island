@@ -7,6 +7,7 @@ import { Avatar } from './avatar';
 import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
 import { retargetClips } from './retarget';
+import { armNodeNames, armTracks } from './arms';
 import { PoseLayer } from './pose';
 import { loadAnimationSource } from './source';
 
@@ -91,7 +92,16 @@ export class Puppet {
 
   private loadClips(source: Parameters<typeof retargetClips>[0]): void {
     this.actions.clear();
-    for (const clip of retargetClips(source, this.avatar.base)) this.actions.set(clip.name, this.mixer.clipAction(clip));
+    const vrm = this.avatar.base;
+    for (let clip of retargetClips(source, vrm)) {
+      if (clip.name === 'idle') {
+        // repos : les bras d'X Bot sont raides, on les remplace (voir arms.ts)
+        const arms = armNodeNames(vrm);
+        const kept = clip.tracks.filter((t) => !arms.has(t.name.slice(0, t.name.lastIndexOf('.'))));
+        clip = new THREE.AnimationClip('idle', clip.duration, [...kept, ...armTracks(vrm, clip.duration)]);
+      }
+      this.actions.set(clip.name, this.mixer.clipAction(clip));
+    }
   }
 
   get clips(): string[] {
@@ -124,7 +134,8 @@ export class Puppet {
 
   update(dt: number): void {
     this.mixer.update(dt);
-    this.pose.apply();
+    const idle = this.actions.get('idle');
+    this.pose.apply(idle?.isRunning() ? 1 - idle.getEffectiveWeight() : 1);
     // fondu des expressions
     const k = Math.min(1, dt * 10);
     const names = new Set([...Object.keys(this.exprNow), ...Object.keys(this.exprTarget)]);

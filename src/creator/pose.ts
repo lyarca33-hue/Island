@@ -41,7 +41,8 @@ const SINGLE: Array<[VRMHumanBoneName, [number, number, number], number]> = [
 ];
 
 export class PoseLayer {
-  private items: Array<{ node: THREE.Object3D; q: THREE.Quaternion; inv: THREE.Quaternion }> = [];
+  private items: Array<{ node: THREE.Object3D; q: THREE.Quaternion; now: THREE.Quaternion; arm: boolean }> = [];
+  private static readonly ID = new THREE.Quaternion();
 
   constructor(vrm: VRM, strength = 1) {
     const v0 = vrm.meta.metaVersion === '0';
@@ -54,7 +55,7 @@ export class PoseLayer {
         // miroir gauche -> droite (plan YZ), puis demi-tour des VRM 0.x (comme le reciblage)
         if (side === 'right') q.set(q.x, -q.y, -q.z, q.w);
         if (v0) q.set(-q.x, q.y, -q.z, q.w);
-        this.items.push({ node, q, inv: q.clone().invert() });
+        this.items.push({ node, q, now: new THREE.Quaternion(), arm: !bone.includes('Leg') && bone !== 'Foot' });
       }
     }
     this.addSingle(vrm, strength, v0);
@@ -66,17 +67,20 @@ export class PoseLayer {
       if (!node) continue;
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...axis), THREE.MathUtils.degToRad(deg * strength));
       if (v0) q.set(-q.x, q.y, -q.z, q.w);
-      this.items.push({ node, q, inv: q.clone().invert() });
+      this.items.push({ node, q, now: new THREE.Quaternion(), arm: false });
     }
   }
 
-  /** À appeler après le mixeur, avant la mise à jour du VRM. */
-  apply(): void {
-    for (const { node, q } of this.items) node.quaternion.multiply(q);
+  /**
+   * À appeler après le mixeur, avant la mise à jour du VRM. `arms` : part des retouches des bras
+   * (0 au repos, dont les bras ont déjà leur propre position, voir arms.ts).
+   */
+  apply(arms = 1): void {
+    for (const { node, q, now, arm } of this.items) node.quaternion.multiply(arm ? now.slerpQuaternions(PoseLayer.ID, q, arms) : now.copy(q));
   }
 
   /** Après la mise à jour du VRM : retire les retouches (un os sans piste ne doit pas tourner en boucle). */
   restore(): void {
-    for (const { node, inv } of this.items) node.quaternion.multiply(inv);
+    for (const { node, now } of this.items) node.quaternion.multiply(now.invert());
   }
 }
