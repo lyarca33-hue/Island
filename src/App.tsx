@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
 import type { Recipe } from './creator/recipe';
 import { Game } from './game/Game';
+import { ChatBar } from './jev/ChatBar';
 
 /** On commence par le créateur de personnage, puis « Jouer » ouvre la map avec ce perso. */
 export function App() {
@@ -18,6 +19,7 @@ export function App() {
 function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
+  const [ready, setReady] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
@@ -28,6 +30,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
     if (!host.current) return;
     const g = new Game(host.current, recipe);
     game.current = g;
+    setReady(g);
     (window as unknown as { game: Game }).game = g; // console : game.rotateCamera(1), game.pickUp('tasse')...
     g.onHeldChange = (name, canDrink) => {
       setHeld(name);
@@ -47,6 +50,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
       clearTimeout(timer);
       g.dispose();
       game.current = null;
+      setReady(null);
     };
   }, [recipe]);
 
@@ -72,9 +76,10 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
-      <footer className="hud-help">
-        Clic : aller ici · Clic sur un objet : le prendre · E : poser · B : boire · ZQSD : marcher · Maj : courir
-      </footer>
+      <div className="hud-help">
+        Clic : aller ici · Clic sur un objet : le prendre · E : poser · B : boire · ZQSD : marcher · Maj : courir · Entrée : écrire
+      </div>
+      <ChatBar game={ready} />
       {(loading || error) && <div className="hud-loading">{error ?? 'Chargement…'}</div>}
     </div>
   );

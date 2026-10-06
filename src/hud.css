@@ -11,8 +11,8 @@
 }
 .hud-cam button:hover { background: rgba(40, 46, 74, 0.75); }
 .hud-help {
-  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px;
-  background: rgba(20, 24, 40, 0.55); font-size: 13px; white-space: nowrap; pointer-events: none; max-width: calc(100% - 32px);
+  position: absolute; top: 48px; left: 16px; padding: 4px 12px; border-radius: 999px;
+  background: rgba(20, 24, 40, 0.45); font-size: 12px; white-space: nowrap; pointer-events: none; max-width: calc(100% - 32px);
   overflow: hidden; text-overflow: ellipsis;
 }
 .hud-loading {
@@ -20,7 +20,7 @@
   background: rgba(20, 24, 40, 0.6); pointer-events: none;
 }
 .hud-held {
-  position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px;
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px;
 }
 .hud-held button {
   padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255, 240, 210, 0.5); background: rgba(20, 24, 40, 0.7);
@@ -31,3 +31,59 @@
   position: absolute; top: 64px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 8px;
   background: rgba(60, 24, 24, 0.75); font-size: 14px; pointer-events: none; max-width: calc(100% - 32px); text-align: center;
 }
+
+/* Zone de saisie : parole / action (Jev) */
+.chat {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(720px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: 6px;
+}
+.chat-bar {
+  display: flex; gap: 6px; align-items: center; padding: 6px; border-radius: 14px;
+  background: rgba(20, 24, 40, 0.72); border: 1px solid rgba(255, 240, 210, 0.35);
+}
+.chat-bar.chat-action { border-color: rgba(255, 196, 110, 0.7); }
+.chat-bar input {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; border: none; outline: none;
+  background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font: inherit; font-size: 15px;
+}
+.chat-bar input::placeholder { color: rgba(253, 246, 227, 0.5); }
+.chat-bar button, .chat-status button, .chat-settings button {
+  padding: 8px 12px; border-radius: 9px; border: 1px solid rgba(255, 240, 210, 0.35);
+  background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.chat-bar button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+.chat-bar button:disabled { opacity: 0.45; cursor: default; }
+.chat-mode { min-width: 98px; }
+.chat-action .chat-mode { background: rgba(255, 170, 70, 0.25); border-color: rgba(255, 196, 110, 0.7); }
+.chat-gear { padding: 8px 10px; }
+.chat-status {
+  align-self: center; display: flex; gap: 10px; align-items: center; padding: 5px 6px 5px 14px; border-radius: 999px;
+  background: rgba(20, 24, 40, 0.72); font-size: 14px; max-width: 100%;
+}
+.chat-status button { padding: 3px 10px; border-radius: 999px; font-size: 13px; }
+.chat-settings {
+  align-self: flex-end; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px;
+  background: rgba(20, 24, 40, 0.9); font-size: 13px; width: min(320px, 100%);
+}
+.chat-settings label { display: flex; flex-direction: column; gap: 4px; }
+.chat-settings input {
+  padding: 7px 9px; border-radius: 8px; border: 1px solid rgba(255, 240, 210, 0.3);
+  background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font: inherit;
+}
+.chat-settings small { opacity: 0.6; }
+@media (max-width: 520px) {
+  .chat-send { display: none; }
+  .chat-mode { min-width: 0; }
+}
+
+/* Bulle de parole au-dessus du perso (placée par Game) */
+.speech-bubble {
+  position: absolute; transform: translate(-50%, calc(-100% - 12px)); max-width: 260px; padding: 8px 12px;
+  border-radius: 14px; background: #fdf6e3; color: #2a2620; font: 15px/1.35 system-ui, sans-serif;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35); pointer-events: none; text-align: center;
+}
+.speech-bubble::after {
+  content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -7px;
+  border: 7px solid transparent; border-bottom: 0; border-top-color: #fdf6e3;
+}
+.speech-bubble[hidden] { display: none; }

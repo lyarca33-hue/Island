@@ -202,6 +202,11 @@ export class Character {
     return this.root.position;
   }
 
+  /** Rien en cours : ni marche vers un point, ni approche d'un objet, ni geste des mains. */
+  get idle(): boolean {
+    return !this.target && !this.approach && !this.carry?.busy && this.move.lengthSq() === 0;
+  }
+
   update(dt: number, bounds: number): void {
     const dir = new THREE.Vector3();
     if (this.carry?.busy) {

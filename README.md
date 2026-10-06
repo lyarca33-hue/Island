@@ -25,6 +25,26 @@ mène à la map, « ✎ Perso » y revient.
   plat ; clic sur la bibliothèque pour les y ranger debout ; clic sur un livre rangé pour le prendre.
   Hors de la bibliothèque, un livre se pose à plat.
 - Le perso contourne les meubles (table, bibliothèque) au lieu de les traverser
+- Zone de saisie en bas (Entrée pour y écrire, Tab pour changer de mode) :
+  - **💬 Parole** : le perso dit la phrase, dans une bulle au-dessus de sa tête ;
+  - **✋ Action** : la demande (« range tous les livres ») part à **Jev**, une IA qui enchaîne
+    les actions du jeu pour la réaliser. Le bouton « Arrêter » l'interrompt.
+
+### Jev (actions par IA)
+
+Jev est le modèle `typesafe/jev-1.13`, appelé via [OpenRouter](https://openrouter.ai). Il faut une
+clé OpenRouter : bouton ⚙ à droite de la zone de saisie (gardée dans le navigateur), ou un
+fichier `.env.local` :
+
+```
+VITE_OPENROUTER_API_KEY=sk-or-...
+VITE_JEV_MODEL=typesafe/jev-1.13
+```
+
+À chaque tour, Jev reçoit l'état de la pièce (chaque objet, où il est, ce qu'on tient) et répond
+par une action en JSON : `prendre`, `ranger`, `poser`, `aller`, `cafe`, `boire`, `dire` ou `fini`. Le jeu
+l'exécute, attend la fin du geste et lui renvoie le résultat. Les actions sont dans
+`src/jev/actions.ts`, la boucle dans `src/jev/jev.ts`.
 
 `npm run build` produit une version publiable dans `dist/`.
 
@@ -77,6 +97,9 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/items/ik.ts` | Bras / jambe à deux os qui amène la main (le pied) sur un point |
 | `src/game/items/carry.ts` | Prendre, tenir en marchant, reposer, piles d'objets |
 | `src/game/nav.ts` | Contourner les meubles |
+| `src/jev/ChatBar.tsx` | Zone de saisie parole / action, réglages de Jev |
+| `src/jev/jev.ts` | Jev : demande → suite d'actions, via OpenRouter |
+| `src/jev/actions.ts` | Actions du jeu que Jev peut enchaîner, attente de la fin du geste |
 
 ## Les animations
 
