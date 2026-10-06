@@ -755,7 +755,12 @@ export class Game {
   /** Le temps passe : les besoins baissent ; boire (café) remonte la soif et réveille un peu. */
   private tickNeeds(dt: number): void {
     const hours = this.clock.tick(dt);
+    const before = this.needs.health;
     this.needs.tick(hours, this.character.moveGait, this.clock.isNight);
+    // prévenir le joueur quand la santé passe sous un seuil
+    const after = this.needs.health;
+    if (before > 0 && after <= 0) this.onNotice?.('Santé à zéro : le perso est à bout de forces.');
+    else if (before >= 25 && after < 25) this.onNotice?.('Santé faible : un besoin est à zéro depuis trop longtemps.');
     // la tasse, dans l'une ou l'autre main
     const held = this.character.heldItems.find((i) => i.def.fill);
     if (held) {

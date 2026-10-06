@@ -30,8 +30,22 @@ export const NEEDS: NeedDef[] = [
 /** La nuit (heure du coucher passée), la fatigue se fait sentir plus vite. */
 const NIGHT_FATIGUE = 1.4;
 
+/**
+ * Santé perdue par heure de jeu quand un besoin est à zéro : la soif fait le plus de mal, puis
+ * la faim, puis l'épuisement ; une hygiène à zéro use très lentement (petits bobos, infections).
+ */
+const HARM_AT_ZERO: Record<NeedKey, number> = { soif: 12, faim: 6, fatigue: 4, hygiene: 1 };
+/** Santé regagnée par heure quand tous les besoins sont au-dessus de HEAL_ABOVE. */
+const HEAL_PER_HOUR = 3;
+const HEAL_ABOVE = 30;
+
 export class Needs {
   values: Record<NeedKey, number> = { fatigue: 85, faim: 70, soif: 65, hygiene: 90 };
+  /**
+   * Santé, de 100 à 0. Elle baisse quand un besoin reste à zéro (ou sur un coup : hurt), et
+   * remonte doucement tant que tous les besoins vont bien.
+   */
+  health = 100;
 
   /** Fait passer `hours` heures de jeu ; `gait` : ce que fait le perso pendant ce temps. */
   tick(hours: number, gait: 'idle' | 'walk' | 'run', night: boolean): void {
@@ -41,6 +55,20 @@ export class Needs {
       if (n.key === 'fatigue' && night) rate *= NIGHT_FATIGUE;
       this.values[n.key] = Math.max(0, this.values[n.key] - rate * hours);
     }
+    let harm = 0;
+    for (const n of NEEDS) if (this.values[n.key] <= 0) harm += HARM_AT_ZERO[n.key];
+    if (harm > 0) this.hurt(harm * hours);
+    else if (NEEDS.every((n) => this.values[n.key] >= HEAL_ABOVE)) this.heal(HEAL_PER_HOUR * hours);
+  }
+
+  /** Fait perdre de la santé (chute, objet cassé qui blesse…). */
+  hurt(amount: number): void {
+    this.health = Math.min(100, Math.max(0, this.health - amount));
+  }
+
+  /** Rend de la santé (soin, repas…). */
+  heal(amount: number): void {
+    this.hurt(-amount);
   }
 
   /** Remonte une jauge (ex. restore('soif', 30) en buvant). */

@@ -12,6 +12,9 @@
 .need-fill.ok { background: #8fd16a; }
 .need-fill.mid { background: #f0c25a; }
 .need-fill.low { background: #e8664f; }
+.need-fill.health { background: #e04a5f; }
+.need-health { padding-bottom: 5px; margin-bottom: 1px; border-bottom: 1px solid rgba(255, 240, 210, 0.15); }
+.need-health .need-bar { height: 8px; }
 @media (max-width: 520px) {
   .hud-needs { width: 128px; font-size: 11px; }
 }
