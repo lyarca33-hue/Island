@@ -6,6 +6,7 @@
  * molette pour zoomer, rotateCamera(±1) pour tourner d'un quart de tour.
  */
 import * as THREE from 'three';
+import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { createGround, GROUND_HALF } from './ground';
 import { createMotes } from './motes';
@@ -48,8 +49,11 @@ export class Game {
   /** Repère de destination du clic (anneau au sol). */
   private marker: THREE.Mesh;
 
-  constructor(container: HTMLElement) {
+  private recipe: Recipe | null;
+
+  constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
+    this.recipe = recipe;
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
@@ -97,7 +101,7 @@ export class Game {
   /** Charge le perso puis lance la boucle de rendu. */
   async start(): Promise<void> {
     this.raf = requestAnimationFrame(this.frame);
-    await this.character.load();
+    await this.character.load(this.recipe);
   }
 
   /** Quart de tour de caméra (+1 ou -1). */
@@ -213,6 +217,7 @@ export class Game {
 
   dispose(): void {
     cancelAnimationFrame(this.raf);
+    this.character.dispose();
     this.resizeObs.disconnect();
     for (const d of this.disposers) d();
     this.post.dispose();

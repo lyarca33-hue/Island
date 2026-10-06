@@ -8,6 +8,8 @@
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { Puppet } from '../creator/puppet';
+import type { Recipe } from '../creator/recipe';
 import { LAYER_CHARACTER } from './postfx';
 import { createToonMaterial } from './toon';
 
@@ -39,8 +41,17 @@ export class Character {
   /** Point visé par un clic (null : pas de destination). */
   private target: THREE.Vector3 | null = null;
   private heading = 0;
+  /** Perso du créateur (sinon : X Bot). */
+  private puppet: Puppet | null = null;
 
-  async load(): Promise<void> {
+  /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
+  async load(recipe?: Recipe | null): Promise<void> {
+    if (recipe) {
+      this.puppet = await Puppet.create(recipe);
+      this.root.add(this.puppet.root);
+      this.play('idle', 0);
+      return;
+    }
     const gltf = await new GLTFLoader().loadAsync(CHARACTER_URL);
     const model = gltf.scene;
     model.traverse((o) => {
@@ -63,7 +74,7 @@ export class Character {
 
   /** Noms des clips disponibles (gestes futurs de l'IA de RP : agree, headShake...). */
   get clips(): string[] {
-    return [...this.actions.keys()];
+    return this.puppet ? this.puppet.clips : [...this.actions.keys()];
   }
 
   /** Direction voulue au clavier (repère monde, plan XZ) ; annule la destination de clic. */
@@ -107,6 +118,16 @@ export class Character {
     }
     this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
     this.mixer?.update(dt);
+    this.puppet?.update(dt);
+  }
+
+  /** Expression du visage (perso du créateur seulement) : neutre, sourire, triste... */
+  setExpression(key: string): void {
+    this.puppet?.setExpression(key);
+  }
+
+  dispose(): void {
+    this.puppet?.dispose();
   }
 
   private setGait(g: Gait): void {
@@ -117,6 +138,7 @@ export class Character {
 
   /** Joue un clip en fondu enchaîné depuis le clip courant. */
   play(name: string, fade: number): void {
+    if (this.puppet) return this.puppet.play(name, fade);
     const next = this.actions.get(name);
     if (!next || next === this.current) return;
     next.reset().setEffectiveWeight(1).play();
