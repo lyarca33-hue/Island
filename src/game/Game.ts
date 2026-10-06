@@ -64,7 +64,9 @@ export class Game {
 
   private recipe: Recipe | null;
   private items: WorldItem[] = [];
-  private heldName: string | null = null;
+  private heldItem: WorldItem | null = null;
+  /** Objets posés sur l'objet tenu (ex. tasse sur la caisse) : ils le suivent. */
+  private riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> = [];
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null) => void) | null = null;
   /** Petit message à afficher (ex. objet non portable). */
@@ -107,6 +109,8 @@ export class Game {
     this.marker.position.y = 0.01;
     this.scene.add(this.marker);
 
+    // au moment de la prise, l'objet est encore posé : on note ce qui est dessus
+    this.character.onGrab = (item) => (this.riders = this.ridersOf(item));
     for (const [id, x, y, z, rot] of START_ITEMS) {
       const item = new WorldItem(ITEM_BY_ID.get(id)!);
       item.object.position.set(x, y, z);
@@ -221,6 +225,30 @@ export class Game {
     });
   }
 
+  /**
+   * Objets posés sur `base` (et ceux posés sur eux), avec leur place par rapport à `base`.
+   * « Posé dessus » : la base de l'objet touche le dessus de `base`, et il est au-dessus de lui.
+   */
+  private ridersOf(base: WorldItem): Array<{ item: WorldItem; rel: THREE.Matrix4 }> {
+    const out: Array<{ item: WorldItem; rel: THREE.Matrix4 }> = [];
+    base.object.updateMatrixWorld(true);
+    const inv = base.object.matrixWorld.clone().invert();
+    const stack = [base];
+    while (stack.length) {
+      const under = stack.pop()!;
+      const box = new THREE.Box3().setFromObject(under.object);
+      for (const it of this.items) {
+        if (it === base || out.some((r) => r.item === it)) continue;
+        const p = it.object.position;
+        if (Math.abs(p.y - box.max.y) > 0.03 || p.x < box.min.x || p.x > box.max.x || p.z < box.min.z || p.z > box.max.z) continue;
+        it.object.updateMatrixWorld(true);
+        out.push({ item: it, rel: inv.clone().multiply(it.object.matrixWorld) });
+        stack.push(it);
+      }
+    }
+    return out;
+  }
+
   /** E : reposer l'objet tenu, sinon prendre l'objet portable le plus proche (à 1,5 m). */
   private useKey(): void {
     if (this.character.held) {
@@ -281,10 +309,21 @@ export class Game {
     this.last = now;
     this.character.setMoveInput(this.keyboardDir(), this.shift);
     this.character.update(dt, GROUND_HALF - 14);
-    const held = this.character.held?.name ?? null;
-    if (held !== this.heldName) {
-      this.heldName = held;
-      this.onHeldChange?.(held);
+    const held = this.character.held;
+    // les objets posés dessus suivent l'objet tenu, jusqu'à sa dernière position une fois reposé
+    const carried = held ?? this.heldItem;
+    if (carried && this.riders.length) {
+      carried.object.updateMatrixWorld(true);
+      for (const r of this.riders) {
+        const o = r.item.object;
+        o.matrix.multiplyMatrices(carried.object.matrixWorld, r.rel);
+        o.matrix.decompose(o.position, o.quaternion, o.scale);
+      }
+    }
+    if (held !== this.heldItem) {
+      this.heldItem = held;
+      if (!held) this.riders = [];
+      this.onHeldChange?.(held?.name ?? null);
     }
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);

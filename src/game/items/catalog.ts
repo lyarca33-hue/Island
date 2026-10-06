@@ -51,8 +51,8 @@ export const ITEMS: ItemDef[] = [
     name: 'tasse',
     portable: true,
     grip: 'fist',
-    // paume contre le flanc de la tasse, anse vers l'avant
-    gripPoint: [-CUP_R, CUP_H * 0.5, 0],
+    // tenue par l'anse
+    gripPoint: [0, CUP_H * 0.55, CUP_R + 0.02],
     build: () => {
       const body = mesh(new THREE.CylinderGeometry(CUP_R, CUP_R * 0.85, CUP_H, 20), 0xe9e2d0, 0, CUP_H / 2, 0);
       const coffee = mesh(new THREE.CircleGeometry(CUP_R * 0.85, 20).rotateX(-Math.PI / 2), 0x4a2c1a, 0, CUP_H - 0.01, 0);
@@ -77,9 +77,9 @@ export const ITEMS: ItemDef[] = [
     id: 'livre',
     name: 'livre',
     portable: true,
-    grip: 'side',
-    // tenu par le haut, à mi-largeur
-    gripPoint: [0, 0.2, 0],
+    grip: 'chest',
+    // paume à plat sur la couverture
+    gripPoint: [-0.0225, 0.13, 0],
     build: () => {
       // posé debout (haut vers +Y), dos vers -Z
       const cover = mesh(new THREE.BoxGeometry(0.045, 0.24, 0.17), 0x3e5d8a, 0, 0.12, 0);

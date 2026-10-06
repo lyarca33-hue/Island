@@ -84,18 +84,19 @@ d'animations : `idle`, `walk`, `run`, `agree` (oui), `headShake` (non), `sad_pos
 Chaque objet a une petite fiche dans `src/game/items/catalog.ts`, pas d'animation à lui :
 
 ```ts
-{ id: 'tasse', name: 'tasse', portable: true, grip: 'fist', gripPoint: [-0.042, 0.05, 0], build: () => ... }
+{ id: 'tasse', name: 'tasse', portable: true, grip: 'fist', gripPoint: [0, 0.055, 0.062], build: () => ... }
 ```
 
 - `portable` : peut-on le prendre en main.
 - `grip` : type de prise, parmi `pinch` (entre les doigts : clé, lettre), `fist` (en poing :
-  tasse, épée), `side` (le long du corps : livre, sac, seau), `twoHands` (à deux mains : caisse).
+  tasse, épée), `side` (le long du corps : sac, seau), `chest` (contre la poitrine : livre), `twoHands` (à deux mains : caisse).
   Sans `grip`, la prise est devinée d'après la taille de l'objet (c'est le cas de la lettre).
 - `gripPoint` : le point de l'objet que la main saisit (sinon son centre).
 
 La pose vient du type de prise : les bras sont placés par calcul vers la main voulue (bras à
 deux os), les doigts se referment, et l'objet suit l'os de la main. Pour ramasser, le perso se
 penche ou s'accroupit selon la hauteur de l'objet. Les jambes gardent l'animation de marche.
+Les objets posés sur celui qu'on soulève (une tasse sur la caisse) partent avec lui.
 
 Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()`,
 `game.itemNames`.

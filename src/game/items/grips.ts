@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 
-export type GripType = 'pinch' | 'fist' | 'side' | 'twoHands';
+export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands';
 
 export interface HandSpec {
   /** Où va la main, depuis l'épaule (longueurs de bras, repère du buste). */
@@ -49,12 +49,13 @@ export const GRIPS: Record<GripType, GripSpec> = {
     forward: [0, -1, 0],
     hold: [-0.1, -0.015, 0.035],
   },
-  // en poing (tasse, bouteille, épée)
+  // en poing (tasse par l'anse, bouteille, épée) : l'avant de l'objet part vers le dos de la
+  // main, son côté +Z (l'anse) reste dans le poing
   fist: {
     label: 'en poing',
     right: { reach: [0.05, -0.55, 0.52], pole: [-0.5, -0.3, -0.8], fingers: [0.1, -0.15, 1], palm: [1, 0, 0], curl: 70, thumb: 35 },
     up: [0, 0, 1],
-    forward: [-1, 0, 0],
+    forward: [1, 0, 0],
     hold: [-0.07, -0.03, 0.01],
   },
   // le long du corps, bras tendu (livre, sac, seau)
@@ -64,6 +65,14 @@ export const GRIPS: Record<GripType, GripSpec> = {
     up: [1, 0, 0],
     forward: [0, 0, 1],
     hold: [-0.07, -0.025, 0.01],
+  },
+  // serré contre la poitrine, la paume à plat dessus (livre, cahier, dossier)
+  chest: {
+    label: 'contre la poitrine',
+    right: { reach: [0.32, -0.42, 0.34], pole: [-0.6, -0.8, -0.2], fingers: [0.85, 0.5, 0], palm: [0, 0, -1], curl: 15, thumb: 10 },
+    up: [-0.53, 0, 0.85],
+    forward: [-0.85, 0, -0.53],
+    hold: [-0.07, -0.03, 0],
   },
   // à deux mains devant soi (caisse, panier) : les mains se placent sur les côtés de l'objet
   twoHands: {

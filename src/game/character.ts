@@ -47,6 +47,8 @@ export class Character {
   private puppet: Puppet | null = null;
   /** Porter des objets (perso du créateur seulement). */
   private carry: Carry | null = null;
+  /** Appelé quand la main se tend vers un objet (il est encore posé). */
+  onGrab: ((item: WorldItem) => void) | null = null;
   /** Objet vers lequel on marche pour le prendre. */
   private approach: WorldItem | null = null;
 
@@ -173,7 +175,7 @@ export class Character {
       this.heading += delta * Math.min(1, dt * TURN_RATE * 0.6);
       this.root.rotation.y = this.heading;
       if (Math.abs(delta) < 0.06) {
-        this.carry?.pickUp(this.approach);
+        if (this.carry?.pickUp(this.approach)) this.onGrab?.(this.approach);
         this.approach = null;
       }
     }

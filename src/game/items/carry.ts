@@ -152,7 +152,11 @@ export class Carry {
     }
     this.phase = n;
     this.t = 0;
-    if (n === 'idle') this.item = null;
+    if (n === 'idle' && this.item) {
+      this.item.object.position.copy(this.groundPos);
+      this.item.object.quaternion.copy(this.groundRot);
+      this.item = null;
+    }
     if (n === 'hold' || n === 'idle') {
       const cb = this.onDone;
       this.onDone = null;
