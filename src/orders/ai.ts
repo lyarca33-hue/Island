@@ -66,6 +66,31 @@ export function openRouterChat({ apiKey, model }: AiSettings): Chat {
   };
 }
 
+/** Le strict nécessaire du `sample` des pages claude.ai (demander à Claude depuis la page). */
+type Sample = (input: Array<{ role: 'user' | 'assistant'; content: string }>, options?: { signal?: AbortSignal; modelTier?: 'quick' | 'default' | 'complex'; cache?: boolean }) => Promise<{ text: string }>;
+
+/**
+ * Dans l'aperçu publié sur claude.ai, la page ne peut pas joindre OpenRouter ; elle peut en
+ * revanche demander à Claude (compte de la personne qui joue, avec son accord au premier ordre).
+ * Rend ce modèle, ou null hors de claude.ai.
+ */
+export async function claudePageChat(): Promise<Chat | null> {
+  const host = (window as unknown as { claude?: { use(name: string): Promise<unknown> } }).claude;
+  const sample = (await host?.use('sample').catch(() => null)) as Sample | null;
+  if (!sample) return null;
+  return async (messages, signal) => {
+    // pas de rôle « system » : les consignes passent en premier message
+    const turns = messages.map((m) => ({ role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const), content: m.content }));
+    try {
+      return (await sample(turns, { signal, modelTier: 'quick', cache: false })).text;
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'not_granted') throw new Error('Claude n’a pas été autorisé pour cette page.');
+      throw new Error((e as { message?: string }).message ?? 'Claude ne répond pas.');
+    }
+  };
+}
+
 const SYSTEM = `Tu joues le personnage du joueur dans un petit monde 3D de jeu de rôle. Le joueur te donne un ordre ; tu le réalises en enchaînant les tâches du jeu, une par tour.
 
 Tâches possibles (réponds avec l'une d'elles) :

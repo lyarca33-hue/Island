@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
-import { type AiSettings, loadSettings, openRouterChat, runAi, saveSettings } from './ai';
+import { type AiSettings, type Chat, claudePageChat, loadSettings, openRouterChat, runAi, saveSettings } from './ai';
 import { parseOrder } from './parser';
 import { runIntents, type Step } from './tasks';
 
@@ -27,6 +27,8 @@ export function ChatBar({ game }: { game: Game | null }) {
   const [result, setResult] = useState<string | null>(null);
   const [settings, setSettings] = useState<AiSettings>(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
+  /** Dans l'aperçu claude.ai : Claude pour les ordres libres (OpenRouter y est injoignable). */
+  const [claudeChat, setClaudeChat] = useState<Chat | null>(null);
   const abort = useRef<AbortController | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
@@ -43,6 +45,14 @@ export function ChatBar({ game }: { game: Game | null }) {
 
   useEffect(() => () => abort.current?.abort(), []);
 
+  useEffect(() => {
+    let live = true;
+    claudePageChat().then((c) => live && c && setClaudeChat(() => c));
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const toggle = () => setMode((m) => (m === 'parole' ? 'action' : 'parole'));
 
   const send = async () => {
@@ -55,7 +65,7 @@ export function ChatBar({ game }: { game: Game | null }) {
     }
     if (busy) return;
     const intents = parseOrder(t, game.describe());
-    if (!intents && !settings.apiKey) {
+    if (!intents && !claudeChat && !settings.apiKey) {
       setShowSettings(true);
       setResult('Ordre non compris. Ajoute une clé OpenRouter pour les ordres libres.');
       return;
@@ -68,7 +78,7 @@ export function ChatBar({ game }: { game: Game | null }) {
     try {
       const msg = intents
         ? (await runIntents(game, intents, setStep, ctrl.signal)).message
-        : await runAi(game, openRouterChat(settings), t, setStep, ctrl.signal);
+        : await runAi(game, claudeChat ?? openRouterChat(settings), t, setStep, ctrl.signal);
       setResult(msg);
     } catch (e) {
       setResult(ctrl.signal.aborted ? 'Interrompu.' : `IA : ${(e as Error).message}`);
@@ -110,6 +120,7 @@ export function ChatBar({ game }: { game: Game | null }) {
             <input value={settings.model} onChange={(e) => setSettings({ ...settings, model: e.target.value.trim() })} />
           </label>
           <small>Gardée dans ce navigateur seulement.</small>
+          {claudeChat && <small>Sur claude.ai, OpenRouter est injoignable : les ordres libres passent par Claude.</small>}
           <button type="submit">Enregistrer</button>
         </form>
       )}

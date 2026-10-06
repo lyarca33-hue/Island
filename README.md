@@ -49,8 +49,8 @@ VITE_OPENROUTER_MODEL=qwen/qwen3.7-flash
 
 Les tâches (`src/orders/tasks.ts`) traduisent un ordre en actions de base selon l'état de la
 pièce : ranger les livres = les prendre par piles de 6, les ranger, recommencer tant qu'il en
-traîne. L'aperçu publié sur claude.ai ne peut pas appeler OpenRouter : pour les ordres libres,
-lancer le jeu en local.
+traîne. L'aperçu publié sur claude.ai ne peut pas joindre OpenRouter : les ordres libres y passent par
+Claude (compte de la personne qui joue, qui l'autorise au premier ordre).
 
 `npm run build` produit une version publiable dans `dist/`.
 
