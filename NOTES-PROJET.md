@@ -66,8 +66,6 @@ Points techniques utiles :
 - Ajouter une action pour l'IA : `src/orders/actions.ts` + une tâche dans `tasks.ts` + un verbe dans
   `parser.ts` + une ligne dans le prompt système de `ai.ts`.
 - Ajouter un objet : une fiche dans `src/game/items/catalog.ts` (pas d'animation par objet).
-  **Avant d'ajouter un objet : lire `docs/ajouter-un-objet.md`, et y ajouter chaque correction de
-  l'utilisateur dans la section « Leçons ».**
 - Le jeu s'expose dans la console sous `game` (`game.pickUp('tasse')`, `game.needs.set('faim', 10)`,
   etc. ; liste complète dans le README). C'est aussi l'API que l'IA de RP utilisera.
 
