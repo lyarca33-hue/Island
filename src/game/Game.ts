@@ -52,8 +52,8 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['tasse', 1.07, TABLE_H, 1.28, 0.6],
   ['lettre', 1.34, TABLE_H, 1.05, Math.PI / 3],
   ['caisse', 0.6, 0, -1.9, 0.2],
-  // au bout de la table, tournée vers elle
-  ['chaise', 1.83, 0, 0.77, -Math.PI / 4],
+  // près de la bibliothèque, tournée vers la pièce : le coin lecture
+  ['chaise', -0.71, 0, -1.48, Math.PI / 4],
   ['bibliotheque', -1.7, 0, -1.2, Math.PI / 4],
   ['machine-a-cafe', 2.1, 0, -0.8, -Math.PI / 4],
   // l'évier à côté de la machine à café, dos alignés : un coin cuisine
@@ -79,6 +79,8 @@ const theLiquid = (w: string) => (elides(w) ? `l’${w}` : `le ${w}`);
 const ofLiquid = (w: string) => (elides(w) ? `d’${w}` : `de ${w}`);
 const someLiquid = (w: string) => (elides(w) ? `de l’${w}` : `du ${w}`);
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+/** Usure d'un siège chaque fois qu'on s'y assoit. */
+const WEAR_SIT = 0.5;
 
 /** Livres de départ : rangés dans la bibliothèque (place) ou posés à plat ([x, y, z, rotation]). */
 const START_BOOKS: Array<[string, number | [number, number, number, number]]> = [
@@ -99,8 +101,8 @@ export interface WorldObject {
   portable: boolean;
   /** Se porte à deux mains (caisse). */
   deuxMains?: boolean;
-  /** Meuble de rangement, machine (à café), évier (eau, se laver) ou récipient (tasse). */
-  sorte?: 'rangement' | 'machine' | 'évier' | 'récipient';
+  /** Meuble de rangement, machine (à café), évier (eau, se laver), récipient (tasse) ou siège (chaise). */
+  sorte?: 'rangement' | 'machine' | 'évier' | 'récipient' | 'siège';
   ou: string;
   /** Grade d'usure et durabilité restante (« usé (52 %) »). */
   etat: string;
@@ -135,6 +137,8 @@ export interface HandActions {
   moving: boolean;
   read: boolean;
   reading: boolean;
+  /** Assis : on peut se lever. */
+  seated: boolean;
 }
 
 export class Game {
@@ -321,6 +325,8 @@ export class Game {
     const held = name ? this.character.heldItems.find((i) => i.name === name) : this.character.held;
     if (!held) return false;
     if (this.closeBookThen(() => this.drop(name))) return true;
+    // assis : on se lève d'abord pour poser
+    if (this.character.seated) return this.character.standUp(() => this.drop(name));
     const spot = this.character.dropSpot(held);
     if (!spot) return false;
     this.raycaster.set(new THREE.Vector3(spot.x, 3, spot.z), new THREE.Vector3(0, -1, 0));
@@ -374,6 +380,7 @@ export class Game {
     this.bubble.hidden = false;
     this.bubbleUntil = performance.now() + 2500 + text.length * 70;
     this.placeBubble();
+    this.character.talk((2500 + text.length * 70) / 1000);
   }
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
@@ -746,13 +753,15 @@ export class Game {
       }
       if (item === this.brew?.cup) ou += ` (${theLiquid(this.brew.machine.def.pour!.liquid)} coule dedans)`;
       if (item.contents) ou += `, contient ${someLiquid(item.contents)}`;
-      const sorte: WorldObject['sorte'] = item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : undefined;
+      const sorte: WorldObject['sorte'] = item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : item.def.seat ? 'siège' : undefined;
+      if (item === this.sitting) ou += ', le perso est assis dessus';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
       return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
     });
+    const perso = this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)';
     return {
-      perso: this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)',
+      perso: this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
       mains: hands.loads.map((l) => l.map((i) => this.ref(i))),
       mainsLibres: hands.free,
@@ -793,6 +802,53 @@ export class Game {
     }
     this.character.approachThen(this.character.standFor(item), item.object.position, () => {});
     return true;
+  }
+
+  /** Siège où le perso est assis (ou s'assoit). */
+  private sitting: WorldItem | null = null;
+
+  /**
+   * S'asseoir sur le siège `ref` (sinon le plus proche) : le perso y va, se tourne dos au
+   * dossier et s'assoit. Les objets tenus d'une main restent en main.
+   */
+  sit(ref?: string, running = false): boolean {
+    const c = this.character;
+    const p = c.position;
+    const seat = ref
+      ? this.byRef(ref)
+      : this.items.filter((i) => i.def.seat && !c.carried.includes(i)).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!seat) return fail(ref ? `Aucun objet « ${ref} ».` : 'Aucun siège où s’asseoir.');
+    const name = `${FEMININE.has(seat.name) ? 'la' : 'le'} ${seat.name}`;
+    if (!seat.def.seat) return fail(`On ne s’assoit pas sur ${name}.`);
+    if (!c.canSit) return fail('Crée un perso pour pouvoir t’asseoir.');
+    if (seat === this.sitting) return true;
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (c.carried.includes(seat)) return fail(`Pose d’abord ${name}.`);
+    if (c.hands.loads.some((l) => l.length > 1 || isTwoHanded(l[0].grip))) return fail('Pose d’abord ce que tu portes à deux mains.');
+    if (c.reading) return fail('Ferme d’abord le livre.');
+    // debout, au sol, et rien dessus
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(seat.object.quaternion);
+    if (seat.object.position.y > 0.05 || up.y < 0.95) return fail(`${name[0].toUpperCase()}${name.slice(1)} n’est pas debout par terre.`);
+    const on = this.itemsOn(seat);
+    if (on.length) return fail(`Il y a ${on.map((i) => `${FEMININE.has(i.name) ? 'une' : 'un'} ${i.name}`).join(' et ')} sur ${name}.`);
+    if (c.seated) return c.standUp(() => this.sit(this.ref(seat), running));
+    const o = seat.object;
+    o.updateMatrixWorld(true);
+    const center = seat.box.getCenter(new THREE.Vector3()).setY(0).applyMatrix4(o.matrixWorld).setY(0);
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(o.quaternion);
+    const r = c.sitOn(center, forward, seat.def.seat, seat.size.z, () => this.wearItem(seat, WEAR_SIT), running);
+    if (r === 'place') return fail(`Pas assez de place devant ${name} pour s’asseoir.`);
+    if (r === 'ok') this.sitting = seat;
+    return r === 'ok';
+  }
+
+  /** Se lever (faux si le perso n'est pas assis). */
+  standUp(): boolean {
+    return this.character.standUp();
   }
 
   /** Range dans la bibliothèque la plus proche les livres tenus. */
@@ -1103,6 +1159,10 @@ export class Game {
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
       if (e.code === 'KeyB' && !e.repeat) this.drink();
       if (e.code === 'KeyT' && !e.repeat) this.throwItem();
+      if (e.code === 'KeyC' && !e.repeat) {
+        if (this.character.seated) this.standUp();
+        else this.sit();
+      }
       if (e.code === 'KeyL' && !e.repeat) {
         if (this.character.reading) this.stopReading();
         else this.read();
@@ -1275,6 +1335,7 @@ export class Game {
       const count = c.handOf(h)?.carried.length ?? 1;
       return count > 1 ? `${n} ×${count}` : `${n}, ${grade(h)}`;
     });
+    if (this.sitting && !c.seated && c.idle) this.sitting = null;
     const label = this.moving ? `${this.moving.item.name}, ${grade(this.moving.item)}` : names.length ? names.join(' et ') : null;
     const bookHand = book ? c.handOf(book) : null;
     const last = c.held;
@@ -1284,6 +1345,7 @@ export class Game {
       moving: !!this.moving,
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
       reading: !!c.reading,
+      seated: !!this.sitting,
     };
     const key = JSON.stringify(can);
     if (label !== this.heldLabel || key !== this.actionsKey) {
@@ -1303,7 +1365,7 @@ export class Game {
   private tickNeeds(dt: number): void {
     const hours = this.clock.tick(dt);
     const before = this.needs.health;
-    this.needs.tick(hours, this.character.moveGait, this.clock.isNight);
+    this.needs.tick(hours, this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
     // prévenir le joueur quand la santé passe sous un seuil
     const after = this.needs.health;
     if (before > 0 && after <= 0) this.onNotice?.('Santé à zéro : le perso est à bout de forces.');

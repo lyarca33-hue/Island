@@ -1,7 +1,7 @@
 /**
  * Ordres simples en français, compris sans IA : « prends la tasse », « range tous les livres »,
  * « va à la table puis pose la lettre », « fais-toi un café », « lis le livre rouge », « dis bonjour »,
- * « assieds-toi » (pas encore de geste : noté comme manque). Rend null dès
+ * « assieds-toi sur la chaise », « lève-toi ». Rend null dès
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
@@ -31,6 +31,7 @@ const VERBS: Record<string, string[]> = {
   remplir: ['remplis', 'remplir', 'remplit', 'rempli'],
   laver: ['lave', 'laver', 'lavez', 'rince', 'rincer', 'debarbouille', 'debarbouiller'],
   asseoir: ['assieds', 'assied', 'assois', 'assoit', 'asseoir', 'assoir', 'assoie', 'rassieds', 'rassois'],
+  lever: ['leve', 'lever', 'releve', 'relever', 'debout'],
   arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
 };
 const VERB_OF = new Map(Object.entries(VERBS).flatMap(([k, vs]) => vs.map((v) => [v, k] as const)));
@@ -206,11 +207,13 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'lire', ref: named ? books.find(isLoose)?.ref ?? books[0]?.ref : undefined }];
     }
     case 'asseoir': {
-      // pas encore de geste pour s'asseoir : le perso va à la chaise, puis c'est noté comme manque
-      const seat = found.find((o) => o.nom === 'chaise') ?? world.objets.filter((o) => o.nom === 'chaise').sort((a, b) => a.distance - b.distance)[0];
-      const manque: Intent = { kind: 'manque', action: "s'asseoir", raison: 'Le jeu n’a pas encore de geste pour s’asseoir (il faut une animation).' };
-      return seat && !world.enMain.includes(seat.ref) ? [{ kind: 'aller', ref: seat.ref }, manque] : [manque];
+      // « assieds-toi », « assieds-toi sur la chaise » (sinon le siège le plus proche)
+      const seat = found.find((o) => o.sorte === 'siège');
+      if (found.length && !seat) return null;
+      return [{ kind: 'asseoir', ref: seat?.ref }];
     }
+    case 'lever':
+      return [{ kind: 'lever' }];
     case 'arreter':
       // « arrête de lire », « ferme le livre », « stop »
       return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;

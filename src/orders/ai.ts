@@ -105,6 +105,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
+- {"tache": "asseoir", "objet": "<ref>"} : s'asseoir sur un siège (sorte « siège », ex. la chaise ; « objet » facultatif : le plus proche). Assis, le perso peut boire, lire, parler ; il se lève tout seul pour marcher ou prendre un objet
+- {"tache": "lever"} : se lever quand on est assis
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
 - {"tache": "manque", "action": "<verbe court, ex. danser>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
@@ -112,7 +114,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
 Pour prendre plusieurs livres, enchaîne plusieurs « prendre » (6 livres au plus en pile).
 Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
-Si l'ordre demande une action que les tâches ne permettent pas (danser, manger, s'asseoir…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
+Si l'ordre demande une action que les tâches ne permettent pas (danser, manger, dormir…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour. Une seule tâche par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
 
@@ -158,6 +160,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'lire': return { kind: 'lire', ref: s('objet') || undefined };
     case 'arreter_lire': return { kind: 'arreter_lire' };
+    case 'asseoir': return { kind: 'asseoir', ref: s('objet') || undefined };
+    case 'lever': return { kind: 'lever' };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
     case 'manque': return s('action') || s('raison') ? 'manque' : null;

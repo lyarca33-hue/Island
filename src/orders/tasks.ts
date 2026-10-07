@@ -24,12 +24,12 @@ export type Intent =
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
   | { kind: 'dire'; texte: string }
-  /** Action que le jeu ne sait pas encore faire (s'asseoir) : échoue, et va au journal des manques. */
-  | { kind: 'manque'; action: string; raison: string };
+  /** S'asseoir sur le siège `ref` (sinon le plus proche). */
+  | { kind: 'asseoir'; ref?: string }
+  | { kind: 'lever' };
 
 /** La tâche en quelques mots (« prendre tasse »), pour le journal des manques. */
 export function intentLabel(i: Intent): string {
-  if (i.kind === 'manque') return i.action;
   const what = 'ref' in i ? i.ref : 'refs' in i ? (i.refs.length ? i.refs.join(', ') : 'livres') : '';
   const sur = i.kind === 'poser' && i.sur ? ` sur ${i.sur}` : '';
   if (i.kind === 'laver') return i.visage ? 'se laver' : 'se laver les mains';
@@ -200,8 +200,18 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await take(game, act, book.ref);
       return act('lire');
     }
-    case 'manque':
-      throw new Failed(intent.raison);
+    case 'asseoir': {
+      const seat = intent.ref ?? world(game).objets.filter((o) => o.sorte === 'siège' && !world(game).enMain.includes(o.ref)).sort((a, b) => a.distance - b.distance)[0]?.ref;
+      if (!seat) throw new Failed('Il n’y a pas de siège.');
+      // ce qu'on porte à deux mains (caisse, pile, la chaise elle-même) se pose d'abord
+      const w = world(game);
+      const big = w.mains.find((l) => l.length > 1 || w.objets.find((o) => o.ref === l[0])?.deuxMains);
+      if (big) await dropLoad(act, big);
+      return act('asseoir', { siege: seat });
+    }
+    case 'lever':
+      if (!world(game).perso.includes('assis')) return;
+      return act('lever');
     case 'arreter_lire':
       if (!world(game).lit) return;
       return act('arreter_lire');
