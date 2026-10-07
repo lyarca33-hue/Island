@@ -1311,14 +1311,12 @@ export class Game {
     const def = item.def.lamp!;
     const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 2));
     light.position.y = def.y;
-    light.castShadow = true;
+    light.castShadow = false;
     light.shadow.mapSize.set(256, 256);
     light.shadow.camera.near = 0.05;
     light.shadow.camera.far = def.range;
     light.shadow.bias = -0.003;
-    // carte d'ombre calculée une fois au départ, puis seulement lampe allumée
     light.shadow.autoUpdate = false;
-    light.shadow.needsUpdate = true;
     item.object.add(light);
     const part = (name: string) => {
       const m = item.object.getObjectByName(name);
@@ -1332,7 +1330,10 @@ export class Game {
     if (!lamp) return;
     lamp.on = on;
     lamp.light.intensity = on ? item.def.lamp!.intensity : 0;
+    // ombres seulement allumée : une ombre de plus prend une texture à tous les matériaux
+    lamp.light.castShadow = on;
     lamp.light.shadow.autoUpdate = on;
+    lamp.light.shadow.needsUpdate = on;
     // ampoule allumée au-dessus de 1 : le bloom la fait briller ; abat-jour éclairé par-dessous
     lamp.bulb?.color.setRGB(on ? 2.6 : 0.23, on ? 2.1 : 0.2, on ? 1.3 : 0.17);
     lamp.shade?.color.set(on ? 0xfff3d6 : 0xe9dcc0);
