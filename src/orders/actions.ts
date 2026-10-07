@@ -22,7 +22,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ranger',
-    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, aliments (entiers ou coupés) dans le frigo (le perso ouvre la porte).',
+    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, aliments (entiers ou coupés) dans le frigo ; la tasse au placard ou au lave-vaisselle ; la lettre dans le tiroir ; pomme, sandwich au four ou au micro-ondes (le perso ouvre la porte ou le tiroir).',
     params: { meuble: 'ref du meuble' },
     // `objet` (facultatif) : ne ranger que lui
     run: (g, a) => g.store(a.meuble, a.objet),
@@ -100,34 +100,50 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ouvrir',
-    description: 'Aller ouvrir la porte d’un meuble (frigo).',
+    description: 'Aller ouvrir la porte d’un meuble (frigo, placard, four, micro-ondes, lave-vaisselle), un tiroir, ou le couvercle de la poubelle.',
     params: { objet: 'ref du meuble' },
     run: (g, a) => g.openDoor(a.objet),
   },
   {
     name: 'fermer',
-    description: 'Fermer la porte d’un meuble (frigo).',
+    description: 'Fermer la porte d’un meuble, un tiroir ou le couvercle de la poubelle.',
     params: { objet: 'ref du meuble' },
     run: (g, a) => g.closeDoor(a.objet),
   },
   {
+    name: 'jeter',
+    description: 'Jeter à la poubelle l’objet tenu `objet` (ou le dernier pris) : il disparaît.',
+    params: {},
+    run: (g, a) => {
+      if (!a.objet) return g.throwAway();
+      const nom = g.describe().objets.find((o) => o.ref === a.objet)?.nom;
+      return nom ? g.throwAway(nom) : false;
+    },
+  },
+  {
+    name: 'vider_poubelle',
+    description: 'Vider la poubelle (sortir le sac).',
+    params: { objet: 'ref de la poubelle' },
+    run: (g, a) => g.emptyBin(a.objet),
+  },
+  {
     name: 'eau',
-    description: 'Remplir d’eau la tasse tenue à l’évier (ce qu’elle contenait est vidé dans l’évier) ; le perso la reprend pleine.',
+    description: 'Remplir d’eau la tasse tenue à l’évier (ce qu’elle contenait est vidé dans l’évier) ; le perso la reprend pleine. Une tasse sale est seulement rincée.',
     params: {},
     run: (g) => g.fillWater(),
   },
   {
     name: 'allumer',
-    description: 'Allumer un appareil : la gazinière (les feux où une poêle ou une casserole est posée) ou la machine à café.',
+    description: 'Allumer un appareil : la gazinière (les feux où une poêle ou une casserole est posée), la machine à café, ou mettre en marche le four, le micro-ondes, le lave-vaisselle (ils cuisent ou lavent ce qui est dedans ; l’action finit quand ils sonnent).',
     params: { objet: 'ref de l’appareil' },
     // `ustensile` (facultatif) : seulement le feu sous lui
-    run: (g, a) => g.switchOn(a.objet, false, a.ustensile),
+    run: (g, a) => (g.isAppliance(a.objet) ? g.startAppliance(a.objet) : g.switchOn(a.objet, false, a.ustensile)),
   },
   {
     name: 'eteindre',
-    description: 'Éteindre un appareil (tous les feux de la gazinière, la machine à café).',
+    description: 'Éteindre un appareil (tous les feux de la gazinière, la machine à café, le four…).',
     params: { objet: 'ref de l’appareil' },
-    run: (g, a) => g.switchOff(a.objet, false, a.ustensile),
+    run: (g, a) => (g.isAppliance(a.objet) ? g.stopAppliance(a.objet) : g.switchOff(a.objet, false, a.ustensile)),
   },
   {
     name: 'mettre_sur_feu',

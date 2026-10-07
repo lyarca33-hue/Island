@@ -13,8 +13,12 @@ export type Intent =
   | { kind: 'aller'; ref: string }
   /** Ranger des livres (tous ceux qui traînent si `refs` est vide) dans le meuble de rangement. */
   | { kind: 'ranger'; refs: string[]; onlyHeld?: boolean }
-  /** Mettre l'objet `ref` (ou ce qu'on tient) dans le frigo `dans`. */
+  /** Mettre l'objet `ref` (ou ce qu'on tient) dans le meuble `dans` (frigo, placard, four…). */
   | { kind: 'mettre'; ref?: string; dans: string }
+  /** Jeter à la poubelle l'objet `ref` (pris d'abord si besoin), sinon ce qu'on tient. */
+  | { kind: 'jeter'; ref?: string }
+  /** Vider la poubelle `ref`. */
+  | { kind: 'vider'; ref: string }
   | { kind: 'cafe' }
   /**
    * Boire dans le récipient `ref` (bouteille d'eau), sinon dans ce qu'on tient, sinon dans la
@@ -106,6 +110,8 @@ const held = (game: Game) => {
   return w.objets.filter((o) => w.enMain.includes(o.ref));
 };
 const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rangé');
+/** La tasse est sale : on la lave d'abord à l'évier (sinon pas de café). */
+const isDirty = (game: Game, ref: string) => !!world(game).objets.find((o) => o.ref === ref)?.ou.includes(', sale');
 /** L'aliment servi dans l'assiette `plate` (« posé sur assiette »), ou undefined. */
 const servedOn = (w: ReturnType<typeof world>, plate: string) => w.objets.find((o) => o.sorte === 'nourriture' && o.ou.split(',')[0] === `posé sur ${plate}`);
 /** L'aliment `ref`, sinon celui qu'on tient, sinon un qui traîne (hors assiette), sinon le plus proche (frigo). */
@@ -207,6 +213,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const cup = world(game).objets.find((o) => o.nom === 'tasse');
       if (!cup) throw new Failed('Il n’y a pas de tasse.');
       await take(game, act, cup.ref);
+      if (isDirty(game, cup.ref)) await act('vaisselle');
       return act('cafe');
     }
     case 'boire': {
@@ -223,7 +230,10 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
         if (!ou.includes('contient')) throw new Failed(`${cup.nom} est vide.`);
       }
       // tasse vide : on la remplit d'abord (café par défaut) ; « bois de l'eau » avec du café dedans : on la remplit d'eau
-      else if (intent.liquide === 'eau' && !ou.includes('contient de l’eau')) await act('eau');
+      else if (isDirty(game, cup.ref)) {
+        await act('vaisselle');
+        await act(intent.liquide === 'eau' ? 'eau' : 'cafe');
+      } else if (intent.liquide === 'eau' && !ou.includes('contient de l’eau')) await act('eau');
       else if (!ou.includes('contient')) await act(intent.liquide === 'eau' ? 'eau' : 'cafe');
       return act('boire');
     }
@@ -297,6 +307,14 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       if (!ref) throw new Failed('Il n’y a pas de gazinière.');
       return act(intent.kind, { objet: ref });
     }
+    case 'jeter': {
+      if (intent.ref) await take(game, act, intent.ref);
+      const load = intent.ref ? world(game).mains.find((l) => l.includes(intent.ref!)) : undefined;
+      if (!held(game).length) throw new Failed('Rien en main à jeter.');
+      return act('jeter', load ? { objet: load[0] } : {});
+    }
+    case 'vider':
+      return act('vider_poubelle', { objet: intent.ref });
     case 'ouvrir':
       return act('ouvrir', { objet: intent.ref });
     case 'fermer':
@@ -305,6 +323,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const cup = world(game).objets.find((o) => o.nom === 'tasse');
       if (!cup) throw new Failed('Il n’y a pas de tasse.');
       await take(game, act, cup.ref);
+      // sale : lavée d'abord, puis remplie
+      if (isDirty(game, cup.ref)) await act('vaisselle');
       return act('eau');
     }
     case 'laver':

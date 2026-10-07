@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
+import { KITCHEN_ITEMS } from './kitchen';
 
 export interface ItemDef {
   id: string;
@@ -111,6 +112,28 @@ export interface ItemDef {
   holds?: string[];
   /** Mot du message quand il casse (« écrasé » pour une pomme) ; défaut : « brisé ». */
   breakWord?: string;
+  /** Garde au frais (frigo) : on y range ce qui se mange et se boit. */
+  cold?: boolean;
+  /**
+   * Axe de la charnière de la porte : 'y' (défaut : frigo, placard, micro-ondes) ou 'x' (posée
+   * en bas, elle s'abaisse vers l'avant : four, lave-vaisselle ; en haut, angle négatif : couvercle).
+   */
+  doorAxis?: 'x' | 'y';
+  /**
+   * Tiroir : la pièce `porte` glisse vers l'avant (+Z) de cette distance (m) au lieu de tourner ;
+   * ce qui est rangé dedans (`slots`, tiroir fermé) sort avec lui.
+   */
+  drawer?: number;
+  /**
+   * Appareil qui chauffe ce qu'on y range (four, micro-ondes), porte fermée : durée d'un
+   * programme (s). `burns` : une deuxième cuisson brûle (four) ; sinon, on réchauffe seulement.
+   * La pièce `lumiere` s'allume pendant qu'il tourne.
+   */
+  heats?: { seconds: number; burns: boolean };
+  /** Lave-vaisselle : durée d'un lavage (s) ; ce qui est rangé dedans ressort propre. */
+  washes?: { seconds: number };
+  /** Poubelle : nombre d'objets jetés avant qu'il faille la vider. La pièce `dechets` monte avec. */
+  bin?: number;
   /**
    * Appareil qui chauffe (gazinière, machine à café) : il s'allume et s'éteint. `spots` : les feux
    * où poser un ustensile (repère de l'appareil, base de l'ustensile) ; la pièce `${lit}-${i}`
@@ -524,6 +547,7 @@ export const ITEMS: ItemDef[] = [
     fragility: 8,
     durability: 350,
     door: THREE.MathUtils.degToRad(105),
+    cold: true,
     holds: ["bouteille d'eau", 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'concombre', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', 'steak', 'pomme de terre'],
     slots: FRIDGE_SLOTS,
     build: () => {
@@ -1048,6 +1072,8 @@ export const ITEMS: ItemDef[] = [
       return g;
     },
   },
+  // la cuisine : rangements et appareils (kitchen.ts)
+  ...KITCHEN_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

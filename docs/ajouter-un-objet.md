@@ -90,6 +90,14 @@ Fichier : `src/game/items/catalog.ts`. Repère de l'objet : posé au sol, base �
 | `heat` | Appareil qui chauffe (gazinière, machine à café) : `spots` (feux où poser un ustensile), `lit` (pièces `${lit}-N` montrées allumées), `warmup` (s pour chauffer), `autoOff` (veille). Un clic sur la pièce `bouton-N` allume ou éteint le feu N. | non |
 | `cookware` | Ustensile qui va sur le feu : `holds` (noms des ingrédients qu'il reçoit), `places` (où les poser dedans). Avec `fill`, il se remplit d'eau à l'évier (casserole). | non |
 | `cook` | Ingrédient qui cuit : `seconds` pour être cuit, `burn` de plus pour brûler, couleurs cru / cuit / brûlé des pièces nommées `cuit` (`cooking.ts`). | non |
+| `door` | Porte qui s'ouvre (pièce `porte`) : angle (rad) autour de sa charnière. | non |
+| `doorAxis` | `'x'` : charnière en bas, la porte s'abaisse (four) ; angle négatif : couvercle qui se relève. | `'y'` |
+| `drawer` | Tiroir : la pièce `porte` glisse vers l'avant de cette distance (m), avec ce qui est rangé dedans. | non |
+| `holds` | Noms des objets qu'on peut ranger dans le meuble. | les livres |
+| `cold` | Frigo (sorte `frigo` pour les ordres). | non |
+| `heats` | Four, micro-ondes : cuit ce qu'on y range (`seconds`, `burns`) ; pièce `lumiere` allumée en marche. | non |
+| `washes` | Lave-vaisselle : la vaisselle rangée dedans ressort propre. | non |
+| `bin` | Poubelle : nombre d'objets jetés avant qu'il faille la vider ; pièce `dechets`. | non |
 | `food` | Aliment : `hunger` (faim rendue pour l'objet entier), `bites` (bouchées), `color` (la bouchée sur la fourchette). | non |
 | `dish` | Vaisselle : se salit à l'usage (pièce `sale`, cachée quand propre), se lave à l'évier. | non |
 | `plate` | Assiette : hauteur du fond où l'on sert un aliment. | non |
