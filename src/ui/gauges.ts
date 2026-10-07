@@ -10,14 +10,22 @@ export type Trend = 'up' | 'fast' | null;
 export interface GaugeState {
   value: number;
   trend: Trend;
-  /** Points gagnés (> 0) ou perdus (< 0) par heure de jeu ces dernières secondes ; null : temps arrêté. */
+  /** Points gagnés (> 0) ou perdus (< 0) par heure de jeu ces dernières secondes ; null : pas encore mesuré. */
   rate: number | null;
+  /** Le temps du jeu est arrêté. */
+  paused: boolean;
 }
 
 /** Fenêtre d'observation, en millisecondes réelles. */
 const WINDOW = 3000;
 /** Gain d'un coup entre deux relevés (une gorgée, une bouchée) : la jauge remonte. */
 const STEP_UP = 0.02;
+/**
+ * Rythme continu le plus rapide d'une jauge (sommeil, course de nuit…), en points par heure de
+ * jeu : au-delà, un écart entre deux relevés est un saut (gorgée, réglage), pas un rythme de fond.
+ * Compte quand le temps file (×60, sommeil) : chaque relevé couvre alors plusieurs minutes.
+ */
+const CONTINUOUS = 40;
 /** Une remontée reste signalée un moment après la dernière gorgée. */
 const UP_HOLD = 1500;
 /** Chute d'un coup entre deux relevés (jauge réglée à la main, coup) : pas un rythme de fond. */
@@ -28,8 +36,8 @@ const SLOW_UP = 0.3;
 const FAST = 1.5;
 /** La santé ne baisse que quand ça va mal : toute baisse se voit. */
 const HEALTH_FAST = 0.5;
-/** Un saut d'heure (curseur du menu) plus grand que ça n'est pas du temps vécu. */
-const MAX_STEP_HOURS = 0.5;
+/** Un saut d'heure (curseur du menu) : plus de temps de jeu que la vitesse n'en donne, à cette marge près. */
+const JUMP_MARGIN = 0.02;
 
 const BASE: Record<NeedKey, number> = Object.fromEntries(NEEDS.map((n) => [n.key, n.perHour])) as Record<NeedKey, number>;
 
@@ -52,17 +60,19 @@ export class GaugeWatch {
 
   read(game: Game, now = performance.now()): Record<GaugeKey, GaugeState> {
     const v = { ...game.needs.values, health: game.needs.health } as Record<GaugeKey, number>;
-    const minutes = game.clock.minutes;
+    const { minutes, speed } = game.clock;
     const last = this.last;
     this.last = { t: now, minutes, v };
     if (last) {
       const dh = (minutes - last.minutes) / 60;
-      if (dh < 0 || dh > MAX_STEP_HOURS) this.steps = [];
+      // heures de jeu que la vitesse du temps donne pour ce temps réel (vitesse en minutes de jeu par minute réelle)
+      const expected = ((now - last.t) / 60000) * (speed / 60);
+      if (dh < 0 || dh > 3 * expected + JUMP_MARGIN) this.steps = [];
       else {
         const dv = {} as Record<GaugeKey, number>;
         for (const k of Object.keys(v) as GaugeKey[]) {
           dv[k] = v[k] - last.v[k];
-          if (dv[k] > STEP_UP) this.upUntil[k] = now + UP_HOLD;
+          if (dv[k] > STEP_UP + CONTINUOUS * dh) this.upUntil[k] = now + UP_HOLD;
         }
         if (dv.health < -STEP_UP) this.downUntil = now + UP_HOLD;
         this.steps.push({ t: now, dh, dv });
@@ -77,7 +87,8 @@ export class GaugeWatch {
       let dv = 0;
       let dh = 0;
       for (const s of this.steps) {
-        if (s.dv[k] > STEP_UP || s.dv[k] < -STEP_DOWN) continue;
+        const jump = STEP_UP + CONTINUOUS * s.dh;
+        if (s.dv[k] > jump || s.dv[k] < -(STEP_DOWN + CONTINUOUS * s.dh)) continue;
         dv += s.dv[k];
         dh += s.dh;
       }
@@ -86,7 +97,7 @@ export class GaugeWatch {
       let fast = false;
       if (!up && rate !== null) fast = k === 'health' ? rate < -HEALTH_FAST : rate < -FAST * BASE[k];
       if (k === 'health' && this.downUntil > now) fast = true;
-      out[k] = { value: v[k], trend: up ? 'up' : fast ? 'fast' : null, rate };
+      out[k] = { value: v[k], trend: up ? 'up' : fast ? 'fast' : null, rate, paused: speed === 0 };
     }
     return out;
   }
@@ -116,15 +127,18 @@ export function clockAt(minutes: number, hours: number): string {
  * correspondante, « Au maximum dans 40 min » quand elle remonte. `minutes` : l'horloge du jeu.
  */
 export function forecast(g: GaugeState, minutes: number): { text: string; when: string } {
-  if (g.rate === null) return { text: 'Temps en pause', when: '' };
-  if (g.trend === 'up' && g.rate > SLOW_UP) {
+  if (g.paused) return { text: 'Temps en pause', when: '' };
+  // arrondi une fois aux 5 minutes, pour que la durée et l'heure annoncées collent
+  const round = (h: number) => Math.round(h * 12) / 12;
+  if (g.trend === 'up' && g.rate !== null && g.rate > SLOW_UP) {
     if (g.value >= 99.5) return { text: 'Au maximum', when: '' };
-    const h = (100 - g.value) / g.rate;
+    const h = round((100 - g.value) / g.rate);
     return { text: `Au maximum dans ${duration(h)}`, when: clockAt(minutes, h) };
   }
   if (g.trend === 'up') return { text: 'Remonte', when: '' };
   if (g.value <= 0.5) return { text: 'À zéro', when: '' };
+  if (g.rate === null) return { text: 'Calcul…', when: '' };
   if (g.rate > -0.05) return { text: 'Stable', when: '' };
-  const h = g.value / -g.rate;
+  const h = round(g.value / -g.rate);
   return { text: `À zéro dans ${duration(h)}`, when: clockAt(minutes, h) };
 }

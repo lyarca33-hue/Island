@@ -145,7 +145,11 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
         <button
           type="button"
           className="chat-mode"
-          onPointerDown={(e) => open && e.preventDefault()}
+          onPointerDown={(e) => {
+            // le focus reste (ou va) dans la saisie : les lettres tapées ne partent pas au jeu
+            e.preventDefault();
+            input.current?.focus();
+          }}
           onClick={toggle}
           title={`${mode === 'parole' ? 'Parole : le perso dit la phrase' : 'Action : un ordre au perso'} (Tab pour changer)`}
         >
@@ -165,10 +169,11 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
           }}
           placeholder={mode === 'parole' ? 'Dire quelque chose…' : open ? 'Donner un ordre (ex. « range tous les livres »)' : 'Donner un ordre…'}
           aria-label={mode === 'parole' ? 'Dire quelque chose' : 'Donner un ordre au perso'}
-          disabled={mode === 'action' && busy}
+          readOnly={mode === 'action' && busy}
+          aria-disabled={mode === 'action' && busy}
         />
         <kbd className="key key-ghost chat-hint">Entrée</kbd>
-        <button type="submit" className="chat-send" disabled={!text.trim() || (mode === 'action' && busy)} aria-label="Envoyer" title="Envoyer (Entrée)">
+        <button type="submit" className="chat-send" onPointerDown={(e) => e.preventDefault()} disabled={!text.trim() || (mode === 'action' && busy)} aria-label="Envoyer" title="Envoyer (Entrée)">
           <Icon name="send" size={16} />
         </button>
       </form>

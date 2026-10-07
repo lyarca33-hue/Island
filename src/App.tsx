@@ -70,15 +70,17 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       shown.current = true;
       return;
     }
-    if (hidden) flash('Interface masquée : H pour la retrouver.');
+    if (hidden) flash(matchMedia('(pointer: coarse)').matches ? 'Interface masquée : l’œil en haut à gauche la ramène.' : 'Interface masquée : H pour la retrouver.');
   }, [hidden, flash]);
 
   // H (hors saisie) : masquer / afficher l'interface
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyH' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      toggleHud();
+      if (e.code === 'KeyH') toggleHud();
+      // Échap (menu) et Entrée (écrire) ramènent l'interface masquée
+      else if (e.code === 'Escape' || e.code === 'Enter') setHidden(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -120,7 +122,10 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       <div className="hud">
         <Menu
           open={menuOpen}
-          onToggle={setMenuOpen}
+          onToggle={(o) => {
+            setMenuOpen(o);
+            if (o) setReport(null);
+          }}
           tools={
             <>
               <span className="hud-sep" />
@@ -136,7 +141,10 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
               </button>
               <button
                 className={`hud-icon${report !== null ? ' on' : ''}`}
-                onClick={() => setReport((r) => (r === null ? '' : null))}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setReport((r) => (r === null ? '' : null));
+                }}
                 aria-expanded={report !== null}
                 aria-label="Signaler"
                 title="Signaler : écrire un retour et l’envoyer"
@@ -187,6 +195,11 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
           </div>
         )}
       </div>
+      {hidden && (
+        <button className="hud-icon hud-show" onClick={toggleHud} aria-label="Afficher l’interface" title="Afficher l’interface (H)">
+          <Icon name="eye" />
+        </button>
+      )}
       <div className="hud-bottom">
         {notice && (
           <div className="hud-notice" key={notice}>

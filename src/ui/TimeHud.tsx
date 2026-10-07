@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TIME_SPEED } from '../game/clock';
 import type { Game } from '../game/Game';
 import { NEEDS } from '../game/needs';
@@ -65,6 +65,8 @@ function Gauge({ label, icon, state, level, open, onOpen, minutes, tip }: {
   const pct = Math.round(state.value);
   const f = forecast(state, minutes);
   const trend = state.trend === 'up' ? 'Remonte' : state.trend === 'fast' ? 'Baisse vite' : null;
+  /** Doigt ou stylet : un appui ouvre ou ferme le détail (Safari ne donne pas le focus au toucher). */
+  const touch = useRef<string | null>(null);
   return (
     <div className={`gauge ${level}`}>
       <button
@@ -73,7 +75,12 @@ function Gauge({ label, icon, state, level, open, onOpen, minutes, tip }: {
         aria-expanded={open}
         onPointerEnter={(e) => e.pointerType === 'mouse' && onOpen(true)}
         onPointerLeave={(e) => e.pointerType === 'mouse' && onOpen(false)}
-        onFocus={() => onOpen(true)}
+        onPointerDown={(e) => (touch.current = e.pointerType === 'mouse' ? null : e.pointerType)}
+        onClick={() => {
+          if (touch.current) onOpen(!open);
+          touch.current = null;
+        }}
+        onFocus={() => !touch.current && onOpen(true)}
         onBlur={() => onOpen(false)}
       >
         <svg className="gauge-track" viewBox="0 0 36 36" aria-hidden>

@@ -1,5 +1,8 @@
 /* En haut à droite : jauges rondes des besoins, puis l'horloge */
-.hud-status { position: absolute; top: var(--hud-gap); right: var(--hud-gap); display: flex; align-items: center; gap: 10px; }
+.hud-status { position: absolute; top: var(--hud-gap); right: var(--hud-gap); display: flex; align-items: center; gap: 10px; pointer-events: none; }
+.hud-status > *, .hud-gauges > * { pointer-events: auto; }
+/* un détail ouvert passe devant les petites étiquettes « 15 % » des voisines */
+.hud-gauges:has(.gauge-tip) .gauge-low { visibility: hidden; }
 .hud-gauges { display: flex; align-items: center; gap: 6px; }
 
 .gauge { position: relative; --c: var(--hud-ok); }
@@ -78,10 +81,15 @@
 .hud-day::before { content: ''; width: 3px; height: 3px; border-radius: 50%; background: var(--hud-ink-3); }
 
 @media (max-width: 560px) {
-  /* téléphone : l'horloge en face du menu, les jauges dessous */
-  .hud-status { flex-direction: column-reverse; align-items: flex-end; gap: 8px; }
-  .hud-gauges .gauge:nth-last-child(-n + 2) .gauge-tip { left: auto; right: -4px; transform: none; animation-name: hud-rise; }
-  .hud-gauges .gauge:nth-last-child(-n + 2) .gauge-tip::before { left: auto; right: calc(var(--hud-ring) / 2 + 4px - 5px); margin-left: 0; }
+  /* téléphone : jauges et horloge sur une ligne, sous la barre du menu */
+  .hud-status { top: calc(var(--hud-gap) + var(--hud-bar) + 8px); gap: 8px; }
+  .hud-day { display: none; }
+  /* le détail se cale sur le bord droit de l'écran, sous les jauges, pour ne jamais en sortir */
+  .hud-gauges .gauge-tip {
+    position: fixed; left: auto; right: var(--hud-gap); top: calc(var(--hud-gap) + var(--hud-bar) + var(--hud-ring) + 26px);
+    transform: none; animation-name: hud-rise;
+  }
+  .hud-gauges .gauge-tip::before { display: none; }
 }
 
 /* Réglage de l'heure (menu) */

@@ -30,11 +30,18 @@
 .viewport { position: absolute; inset: 0; }
 .app button { font-family: inherit; }
 .app svg { flex: none; }
+.menu-panel, .feedback, .inv-panel, .chat-bar, .held, .chat-status { box-sizing: border-box; }
 
 /* Tout ce qu'on peut masquer (touche H) ; les gestes ouverts exprès restent */
 .hud { position: absolute; inset: 0; pointer-events: none; transition: opacity 0.2s, visibility 0.2s; }
 .hud > * { pointer-events: auto; }
 .app.hud-off .hud, .app.hud-off .hud-bottom-main { opacity: 0; visibility: hidden; }
+/* interface masquée : un seul petit bouton pour la ramener (indispensable au toucher) */
+.hud-show {
+  position: absolute; top: var(--hud-gap); left: var(--hud-gap); z-index: 10; opacity: 0.55;
+  background: var(--hud-glass-soft); box-shadow: var(--hud-shadow);
+}
+.hud-show:hover, .hud-show:focus-visible { opacity: 1; background: var(--hud-glass); }
 
 @keyframes hud-pop { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } }
 @keyframes hud-rise { from { opacity: 0; transform: translateY(6px); } }
@@ -48,7 +55,7 @@
 .key-ghost { background: rgba(255, 241, 217, 0.12); color: var(--hud-ink-2); box-shadow: inset 0 0 0 1px rgba(255, 241, 217, 0.18); }
 
 /* En haut à gauche : menu, caméra, masquer, signaler */
-.menu { position: absolute; top: var(--hud-gap); left: var(--hud-gap); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: calc(100% - 2 * var(--hud-gap) - 70px); }
+.menu { position: absolute; z-index: 10; top: var(--hud-gap); left: var(--hud-gap); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: calc(100% - 2 * var(--hud-gap) - 70px); }
 .hud-bar {
   height: var(--hud-bar); display: flex; align-items: center; gap: 1px; padding: 0 3px; border-radius: 999px;
   background: var(--hud-glass); border: 1px solid var(--hud-line); box-shadow: var(--hud-shadow), var(--hud-hi);
@@ -145,7 +152,7 @@
 
 /* Infobulle d'un objet (nom, usure, état) */
 .hud-wear {
-  position: absolute; transform: translate(14px, 14px); padding: 7px 10px 8px; border-radius: 10px; pointer-events: none; white-space: nowrap; font-size: 13px;
+  position: absolute; z-index: 12; transform: translate(14px, 14px); padding: 7px 10px 8px; border-radius: 10px; pointer-events: none; white-space: nowrap; font-size: 13px;
   background: var(--hud-glass-strong); border: 1px solid var(--hud-line-strong); box-shadow: var(--hud-shadow), var(--hud-hi);
 }
 .hud-wear b { font-weight: 600; }
@@ -156,7 +163,7 @@
 
 /* glisser-déposer : l'objet traîné et la cible sous la souris */
 .hud-drag {
-  position: absolute; transform: translate(12px, 12px); pointer-events: none; padding: 5px 10px; border-radius: 10px; font-size: 13px; white-space: nowrap;
+  position: absolute; z-index: 12; transform: translate(12px, 12px); pointer-events: none; padding: 5px 10px; border-radius: 10px; font-size: 13px; white-space: nowrap;
   background: var(--hud-glass-strong); border: 1px solid var(--hud-line-strong); box-shadow: var(--hud-shadow);
 }
 .hud-drag span { color: #ffd98a; }
@@ -168,6 +175,7 @@
 }
 .hud-bottom-main { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; transition: opacity 0.2s, visibility 0.2s; }
 .hud-bottom > *, .hud-bottom-main > * { pointer-events: auto; }
+.hud-bottom > .hud-bottom-main { pointer-events: none; }
 .hud-notice {
   display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 14px 6px 10px; border-radius: 999px; font-size: 13.5px; pointer-events: none;
   background: var(--hud-glass-strong); border: 1px solid rgba(245, 190, 91, 0.4); box-shadow: var(--hud-shadow), var(--hud-hi);
@@ -201,11 +209,11 @@
 .chat { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .chat > * { pointer-events: auto; }
 .chat-status {
-  height: 32px; display: flex; align-items: center; gap: 9px; max-width: 100%; padding: 0 4px 0 13px; border-radius: 999px; font-size: 13px;
+  min-height: 32px; display: flex; align-items: center; gap: 9px; max-width: min(600px, 100%); padding: 4px 4px 4px 13px; border-radius: 16px; font-size: 13px; line-height: 1.35;
   background: var(--hud-glass-strong); border: 1px solid var(--hud-line); box-shadow: var(--hud-shadow), var(--hud-hi);
   animation: hud-rise 0.2s ease-out both;
 }
-.chat-status > span:not(.chat-spin) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-status.busy > span:not(.chat-spin) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-status.busy { padding-left: 10px; }
 .chat-spin { width: 13px; height: 13px; flex: none; border-radius: 50%; border: 2px solid rgba(245, 190, 91, 0.25); border-top-color: var(--hud-honey); animation: chat-spin 0.9s linear infinite; }
 @keyframes chat-spin { to { transform: rotate(360deg); } }
@@ -313,7 +321,7 @@
 @media (pointer: coarse) {
   :root { --hud-bar: 44px; --hud-ring: 40px; }
   .hud-icon { width: 38px; height: 38px; }
-  .chat-hint, .chat-mode .key, .act-keys { display: none !important; }
+  .chat-hint, .chat-mode .key, .act-keys, .act-info { display: none !important; }
   .act { padding: 0 12px; height: 36px; }
 }
 @media (pointer: coarse) and (max-width: 400px) {

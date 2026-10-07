@@ -19,7 +19,10 @@ ouvre le créateur, et « Jouer » ramène sur la map.
 - Clic sur le sol : le perso y marche (Maj + clic : il court)
 - ZQSD, WASD ou flèches : marcher (Maj : courir)
 - Molette : zoom
-- Boutons en haut à droite : tourner la caméra d'un quart de tour
+- Boutons en haut à gauche, à côté du menu : tourner la caméra d'un quart de tour
+- H (ou l'œil barré en haut à gauche) : masquer l'interface pour profiter de la scène
+- Jauges rondes en haut à droite (santé, fatigue, faim, soif, hygiène) : la flèche dit si elle
+  remonte ou baisse vite ; au survol, la valeur et quand elle tombera à zéro au rythme actuel
 - Clic sur un objet : le perso va le prendre en main ; E (ou le bouton « Poser ») : le reposer
   devant lui (sur la table s'il y en a une)
 - Livres : en tenant un livre, clic sur d'autres livres pour faire une pile (jusqu'à 6), portée à
