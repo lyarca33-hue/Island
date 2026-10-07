@@ -68,6 +68,10 @@ export type Intent =
   /** Essuyer au torchon ces pièces de vaisselle mouillées (toutes si `refs` est vide) ; s'essuyer les mains. */
   | { kind: 'essuyer_vaisselle'; refs: string[] }
   | { kind: 'essuyer_mains' }
+  /** Commander ce qui manque (le sac arrive à la porte) ; ranger le sac de courses ; lire la liste. */
+  | { kind: 'courses' }
+  | { kind: 'ranger_courses' }
+  | { kind: 'liste_courses' }
   /** Mettre le couvert devant la chaise ; débarrasser la table. */
   | { kind: 'mettre_table' }
   | { kind: 'debarrasser' }
@@ -83,6 +87,12 @@ export type Intent =
   | { kind: 'glacons'; dans?: string }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
   | { kind: 'laver'; visage: boolean }
+  /** Salle de bain : prendre une douche, se sécher (serviette), aller aux toilettes, tirer la chasse, se regarder dans le miroir. */
+  | { kind: 'douche' }
+  | { kind: 'secher' }
+  | { kind: 'toilettes' }
+  | { kind: 'chasse' }
+  | { kind: 'miroir' }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
@@ -389,6 +399,13 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       if (!food) throw new Failed('Il n’y a rien à faire cuire.');
       if (food.cuisson !== 'cru') return;
       let plan = game.cookPlan(food.ref);
+      // pas d'ustensile pour lui (frites, pizza surgelées) : au four, qu'on lance
+      const oven = !plan && w.objets.find((o) => o.nom === 'four');
+      if (oven) {
+        await runOne(game, { kind: 'mettre', ref: food.ref, dans: oven.ref }, act);
+        await act('allumer', { objet: oven.ref });
+        return;
+      }
       if (!plan) throw new Failed(`Pas d’ustensile pour faire cuire : ${food.nom}.`);
       if (!plan.gaziniere) throw new Failed('Il n’y a pas de gazinière.');
       // la casserole : de l'eau d'abord, à l'évier
@@ -507,6 +524,16 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await take(game, act, towel.ref);
       return act('essuyer_mains');
     }
+    case 'courses':
+      return act('commander_courses');
+    case 'liste_courses':
+      return act('lire_liste');
+    case 'ranger_courses': {
+      const bag = world(game).objets.find((o) => o.nom === 'sac de courses');
+      if (!bag) throw new Failed('Il n’y a pas de sac de courses (commande d’abord les courses).');
+      await freeHands(game, act, (ref) => ref === bag.ref);
+      return act('ranger_courses', { objet: bag.ref });
+    }
     case 'chaise':
       await freeHands(game, act);
       return act(intent.sous ? 'ranger_chaise' : 'tirer_chaise', { objet: intent.ref });
@@ -554,6 +581,24 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       // les mains doivent être libres
       await freeHands(game, act);
       return act(intent.visage ? 'se_laver' : 'laver_mains');
+    case 'douche':
+      // les mains doivent être libres
+      await freeHands(game, act);
+      return act('douche');
+    case 'secher': {
+      const towel = world(game).objets.find((o) => o.nom === 'serviette');
+      if (!towel) throw new Failed('Il n’y a pas de serviette.');
+      await take(game, act, towel.ref);
+      await act('secher');
+      // la serviette retourne sur le porte-serviettes
+      return act('ranger_place').then(() => {}, () => {});
+    }
+    case 'toilettes':
+      return act('toilettes');
+    case 'chasse':
+      return act('chasse');
+    case 'miroir':
+      return act('miroir');
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;

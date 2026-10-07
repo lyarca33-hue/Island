@@ -1,13 +1,14 @@
 /**
- * Besoins du perso : fatigue, faim, soif, hygiène. Chaque jauge va de 100 (tout va bien) à 0
+ * Besoins du perso : fatigue, faim, soif, hygiène, vessie. Chaque jauge va de 100 (tout va bien) à 0
  * et baisse avec le temps du jeu (GameClock), plus vite quand le perso marche ou court.
  *
  * Rythmes choisis pour une journée « normale » : on tient environ 16 h éveillé, on a faim
  * toutes les 5-6 h (vide en 14 h sans manger), soif plus souvent (vide en 10 h), et on se lave
- * une fois par jour. Les actions du jeu remontent les jauges avec restore() (boire un café…).
+ * une fois par jour. La vessie se remplit en 8 h environ, plus vite quand on boit : il faut
+ * passer aux toilettes. Les actions du jeu remontent les jauges avec restore() (boire un café…).
  */
 
-export type NeedKey = 'fatigue' | 'faim' | 'soif' | 'hygiene';
+export type NeedKey = 'fatigue' | 'faim' | 'soif' | 'hygiene' | 'vessie';
 
 export interface NeedDef {
   key: NeedKey;
@@ -25,7 +26,11 @@ export const NEEDS: NeedDef[] = [
   { key: 'faim', label: 'Faim', icon: '🍞', perHour: 100 / 14, walk: 1.1, run: 1.4 },
   { key: 'soif', label: 'Soif', icon: '💧', perHour: 100 / 10, walk: 1.2, run: 1.8 },
   { key: 'hygiene', label: 'Hygiène', icon: '🧼', perHour: 100 / 24, walk: 1.1, run: 1.6 },
+  { key: 'vessie', label: 'Vessie', icon: '🚽', perHour: 100 / 8, walk: 1, run: 1.2 },
 ];
+
+/** Ce qui est bu remplit la vessie : part de la soif rendue qui s'y retrouve. */
+const DRINK_TO_BLADDER = 0.4;
 
 /** Assis, on se fatigue deux fois moins vite. */
 const SIT_FATIGUE = 0.5;
@@ -41,13 +46,13 @@ const NIGHT_FATIGUE = 1.4;
  * Santé perdue par heure de jeu quand un besoin est à zéro : la soif fait le plus de mal, puis
  * la faim, puis l'épuisement ; une hygiène à zéro use très lentement (petits bobos, infections).
  */
-const HARM_AT_ZERO: Record<NeedKey, number> = { soif: 12, faim: 6, fatigue: 4, hygiene: 1 };
+const HARM_AT_ZERO: Record<NeedKey, number> = { soif: 12, faim: 6, fatigue: 4, hygiene: 1, vessie: 0 };
 /** Santé regagnée par heure quand tous les besoins sont au-dessus de HEAL_ABOVE. */
 const HEAL_PER_HOUR = 3;
 const HEAL_ABOVE = 30;
 
 export class Needs {
-  values: Record<NeedKey, number> = { fatigue: 85, faim: 70, soif: 65, hygiene: 90 };
+  values: Record<NeedKey, number> = { fatigue: 85, faim: 70, soif: 65, hygiene: 90, vessie: 75 };
   /**
    * Santé, de 100 à 0. Elle baisse quand un besoin reste à zéro (ou sur un coup : hurt), et
    * remonte doucement tant que tous les besoins vont bien.
@@ -86,6 +91,7 @@ export class Needs {
   /** Remonte une jauge (ex. restore('soif', 30) en buvant). */
   restore(key: NeedKey, amount: number): void {
     this.values[key] = Math.min(100, Math.max(0, this.values[key] + amount));
+    if (key === 'soif' && amount > 0) this.values.vessie = Math.max(0, this.values.vessie - amount * DRINK_TO_BLADDER);
   }
 
   /** Règle une jauge directement (tests, console : game.needs.set('faim', 10)). */

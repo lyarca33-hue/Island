@@ -274,6 +274,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.dryDish(a.objet),
   },
   {
+    name: 'lire_liste',
+    description: 'Lire la liste de courses : ce qui manque à la maison (le stock voulu de chaque aliment, moins ce qu’il y a).',
+    params: {},
+    run: (g) => g.readList(),
+  },
+  {
+    name: 'commander_courses',
+    description: 'Commander ce qui manque sur la liste de courses : un sac de courses est livré devant la porte d’entrée une demi-heure de jeu plus tard.',
+    params: {},
+    run: (g) => g.orderGroceries(),
+  },
+  {
+    name: 'ranger_courses',
+    description: 'Ranger le sac de courses `objet` (sinon le plus proche) : le perso le porte au frigo, au congélateur et au garde-manger, chaque aliment à sa place ; le sac vide disparaît.',
+    params: { objet: 'ref du sac de courses' },
+    run: (g, a) => g.unpackGroceries(a.objet),
+  },
+  {
     name: 'essuyer_mains',
     description: 'S’essuyer les mains au torchon tenu, après les avoir lavées.',
     params: {},
@@ -332,6 +350,36 @@ export const ACTIONS: ActionDef[] = [
     description: 'Faire sa toilette à l’évier : de l’eau sur les mains et le visage (les mains doivent être libres).',
     params: {},
     run: (g) => g.wash(),
+  },
+  {
+    name: 'douche',
+    description: 'Prendre une douche (les mains doivent être libres) : l’hygiène remonte à fond. On en sort mouillé : se sécher ensuite avec la serviette.',
+    params: {},
+    run: (g) => g.takeShower(),
+  },
+  {
+    name: 'secher',
+    description: 'Se sécher avec la serviette (prise sur le porte-serviettes si on ne la tient pas). Mouillé et pas séché, le perso laisse des gouttes par terre.',
+    params: {},
+    run: (g) => g.dryOff(),
+  },
+  {
+    name: 'toilettes',
+    description: 'Aller aux toilettes : le perso s’assoit, la vessie se vide, puis il tire la chasse. Penser à se laver les mains ensuite.',
+    params: {},
+    run: (g) => g.useToilet(),
+  },
+  {
+    name: 'chasse',
+    description: 'Tirer la chasse d’eau des toilettes.',
+    params: {},
+    run: (g) => g.flush(),
+  },
+  {
+    name: 'miroir',
+    description: 'Se regarder dans le miroir du lavabo : le perso dit de quoi il a l’air.',
+    params: {},
+    run: (g) => g.lookInMirror(),
   },
   {
     name: 'asseoir',

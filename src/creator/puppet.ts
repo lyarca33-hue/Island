@@ -8,7 +8,7 @@ import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
 import { retargetClips, UAL_TO_VRM, type AnimationSource } from './retarget';
 import { PoseLayer } from './pose';
-import { loadAnimationSource, loadSitAnimations } from './source';
+import { loadAnimationSource, loadPoseAnimations, loadSitAnimations } from './source';
 
 /** Retouche de pose par-dessus les clips (ex. porter un objet, voir game/items/carry.ts). */
 export interface PoseHook {
@@ -21,7 +21,7 @@ export interface PoseHook {
 }
 
 /** Nom d'expression VRM 1.0 → nom possible dans un modèle VRM 0.x (presets « unknown »). */
-const ALIASES: Record<string, string[]> = { surprised: ['surprised', 'Surprised'] };
+const ALIASES: Record<string, string[]> = { surprised: ['surprised', 'Surprised'], extra: ['extra', 'Extra'] };
 
 export class Puppet {
   readonly root = new THREE.Group();
@@ -37,6 +37,9 @@ export class Puppet {
   /** Dernière recette demandée (les reconstructions se suivent sans se chevaucher). */
   private wanted: Recipe;
   private building: Promise<void> | null = null;
+  /** Appelé quand des clips arrivent après coup (poses du créateur). */
+  onClips: (() => void) | null = null;
+
   /** Retouche de pose du jeu (le créateur n'en a pas). */
   hook: PoseHook | null = null;
 
@@ -51,9 +54,18 @@ export class Puppet {
   static async create(recipe: Recipe): Promise<Puppet> {
     const [avatar, source, sit] = await Promise.all([Avatar.build(recipe), loadAnimationSource(), loadSitAnimations()]);
     const p = new Puppet(avatar, recipe);
-    p.sit = sit && { ...sit, bones: UAL_TO_VRM };
+    p.extra = sit ? [{ ...sit, bones: UAL_TO_VRM }] : [];
     p.loadClips(source);
     p.play('idle', 0);
+    // poses du créateur (1,7 Mo) : ajoutées à leur arrivée, sans retarder l'entrée dans le jeu
+    void loadPoseAnimations().then((poses) => {
+      for (const s of poses) {
+        const src = { ...s, bones: UAL_TO_VRM };
+        p.extra.push(src);
+        for (const clip of retargetClips(src, p.avatar.base)) p.actions.set(clip.name, p.mixer.clipAction(clip));
+      }
+      p.onClips?.();
+    });
     return p;
   }
 
@@ -110,11 +122,11 @@ export class Puppet {
   private loadClips(source: AnimationSource): void {
     this.actions.clear();
     for (const clip of retargetClips(source, this.avatar.base)) this.actions.set(clip.name, this.mixer.clipAction(clip));
-    if (this.sit) for (const clip of retargetClips(this.sit, this.avatar.base)) this.actions.set(clip.name, this.mixer.clipAction(clip));
+    for (const src of this.extra) for (const clip of retargetClips(src, this.avatar.base)) this.actions.set(clip.name, this.mixer.clipAction(clip));
   }
 
-  /** Clips pour s'asseoir (Quaternius), s'ils ont pu être chargés. */
-  private sit: AnimationSource | null = null;
+  /** Clips Quaternius (s'asseoir, poses du créateur), ceux qui ont pu être chargés. */
+  private extra: AnimationSource[] = [];
 
   /**
    * Déplacement du bassin entre le début et la fin d'un clip (repère du perso, m) et hauteur du
@@ -155,17 +167,25 @@ export class Puppet {
 
   /** Expression du visage (clé de EXPRESSIONS), atteinte en fondu. */
   setExpression(key: string): void {
-    this.exprTarget = { ...(EXPRESSIONS[key]?.weights ?? {}) };
+    const e = EXPRESSIONS[key];
+    this.exprTarget = { ...(e?.weights ?? {}) };
+    for (const [k, v] of Object.entries(e?.morphs ?? {})) this.exprTarget[`m:${k}`] = v;
   }
 
   private applyExpressions(blink = 0): void {
     const em = this.avatar.expressions;
     if (!em) return;
     const names = new Set([...Object.keys(this.exprNow), 'blink']);
+    const morphs: Record<string, number> = {};
     for (const n of names) {
+      if (n.startsWith('m:')) {
+        morphs[n.slice(2)] = this.exprNow[n];
+        continue;
+      }
       const v = n === 'blink' ? Math.max(this.exprNow.blink ?? 0, blink) : this.exprNow[n];
       for (const alias of ALIASES[n] ?? [n]) if (em.getExpression(alias)) em.setValue(alias, v);
     }
+    this.avatar.setMorphs(morphs);
   }
 
   update(dt: number): void {
@@ -188,7 +208,8 @@ export class Puppet {
         this.blinkIn = 2 + Math.random() * 4;
       }
     }
-    if ((this.exprNow.happy ?? 0) > 0.5 || (this.exprNow.blinkLeft ?? 0) > 0.5) blink = 0;
+    const n = this.exprNow;
+    if ((n.happy ?? 0) > 0.5 || (n.blinkLeft ?? 0) > 0.5 || (n.extra ?? 0) > 0.5 || (n['m:EYE_Close'] ?? 0) > 0.5) blink = 0;
     this.applyExpressions(blink);
     this.avatar.update(dt);
     this.hook?.after();

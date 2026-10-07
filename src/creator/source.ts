@@ -29,3 +29,22 @@ export function loadSitAnimations(): Promise<{ scene: THREE.Object3D; clips: THR
     .catch(() => null);
   return sit;
 }
+
+/**
+ * Poses du créateur (danser, bavarder, bras croisés...) : autres clips de la même bibliothèque
+ * Quaternius (CC0), en deux fichiers (un par volume de la bibliothèque). Fichiers manquants ignorés.
+ */
+const POSE_URLS = ['ual_poses1.glb', 'ual_poses2.glb'].map((f) => `${import.meta.env.BASE_URL}anim/${f}`);
+let poses: Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> | null = null;
+
+export function loadPoseAnimations(): Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> {
+  poses ??= Promise.all(
+    POSE_URLS.map((url) =>
+      new GLTFLoader()
+        .loadAsync(url)
+        .then((g) => [{ scene: g.scene, clips: g.animations }])
+        .catch(() => []),
+    ),
+  ).then((all) => all.flat());
+  return poses;
+}

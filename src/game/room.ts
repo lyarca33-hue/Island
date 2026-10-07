@@ -314,6 +314,7 @@ export class Room {
   private lampK = 0;
   /** Allumé ou éteint à l'interrupteur (null : l'horloge décide), et ce que l'horloge voulait alors. */
   private manual: { on: boolean; auto: boolean } | null = null;
+  /** Heure solaire (voir GameClock.solarHour). */
   private hour = 0;
   /** L'interrupteur (plaque et bascule), et sa bascule qui montre s'il est allumé. */
   readonly lightSwitch = new THREE.Group();
@@ -629,7 +630,7 @@ export class Room {
     this.group.add(this.roof);
   }
 
-  /** Lampes et vitres selon l'heure `hour` (0 à 24). */
+  /** Lampes et vitres selon l'heure solaire `hour` (0 à 24). */
   private applyLight(dt: number, hour: number): void {
     const auto = lampLevel(hour);
     // l'horloge reprend la main quand elle change d'avis (lever ou coucher du soleil)
@@ -772,9 +773,9 @@ export class Room {
    * À chaque image : murs abaissés quand le perso est dans une pièce (`active`, celle-ci ou une
    * autre) : ceux tournés vers la caméra, et tous ceux qui se trouvent entre la caméra et la pièce
    * du perso ; relevés quand il sort, sauf un mur qui le cacherait. Portes qui s'ouvrent devant le
-   * perso, décor animé, lampes et vitres selon l'heure.
+   * perso, décor animé (selon l'heure `hour`), lampes et vitres selon l'heure solaire `solar`.
    */
-  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3, active: Rect | null, shadowRoom: boolean): void {
+  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, solar: number, toCamera: THREE.Vector3, active: Rect | null, shadowRoom: boolean): void {
     const indoors = active !== null;
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
     // bord de la pièce du perso le plus proche de la caméra (mesuré le long de la vue)
@@ -822,8 +823,8 @@ export class Room {
       l.ghost.rotation.y = l.door.rotation.y;
     }
     for (const t of this.tickers) t(dt, hour);
-    this.hour = hour;
-    this.applyLight(dt, hour);
+    this.hour = solar;
+    this.applyLight(dt, solar);
   }
 
   /** Point du sol au pied du mur visé par le rayon (côté pièce) et sa distance, s'il touche un mur avant `maxDist`. */
@@ -985,7 +986,7 @@ function kitchenDecor(room: Room, anchor: Anchors): void {
  * l'évier et à côté de la table, suspension au-dessus de la table, interrupteur à côté de la porte.
  *
  * Le long du fond : lave-vaisselle à côté de l'évier (sous la fenêtre), plan de travail pour
- * couper entre l'évier et la gazinière, tiroir à couverts, puis le frigo au bout. Le long du mur
+ * couper entre l'évier et la gazinière, tiroir à couverts, le frigo, puis le garde-manger au bout. Le long du mur
  * ouest : le coin café, le placard à vaisselle (micro-ondes dessus), le four, la poubelle. Les deux
  * rangées partent du meuble d'angle.
  */
@@ -1012,7 +1013,7 @@ export const KITCHEN: RoomSpec = {
   },
   lightSwitch: { wall: 'ouest', u: DOOR.z1 + 0.2 },
   runs: [
-    { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur'] },
+    { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur', 0.04, 'garde-manger'] },
     { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
   ],
   onTop: [

@@ -23,6 +23,7 @@ export class CreatorScene {
   private puppet: Puppet | null = null;
   private creating: Promise<void> | null = null;
   private disposed = false;
+  private wantedClip: string | null = null;
   private turntable = new THREE.Group();
   private yaw = 0.35;
   private yawVel = 0;
@@ -79,6 +80,10 @@ export class CreatorScene {
       if (this.disposed) return p.dispose();
       this.puppet = p;
       this.turntable.add(p.root);
+      // une pose choisie avant l'arrivée de son fichier se lance dès qu'il est là
+      p.onClips = () => {
+        if (this.wantedClip) p.play(this.wantedClip, 0.3);
+      };
     });
     await this.creating;
     await this.puppet?.apply(r);
@@ -94,6 +99,7 @@ export class CreatorScene {
   }
 
   play(clip: string): void {
+    this.wantedClip = clip;
     this.puppet?.play(clip, 0.3);
   }
 

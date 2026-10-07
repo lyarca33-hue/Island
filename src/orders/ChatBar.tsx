@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
+import { Icon } from '../ui/icons';
 import { type Chat, claudePageChat, loadSettings, openRouterChat, runAi } from './ai';
 import { failureCause, situation } from './diagnose';
 import { logMissing } from './missing';
@@ -8,7 +9,7 @@ import { intentLabel, runIntents, type Step } from './tasks';
 
 type Mode = 'parole' | 'action';
 
-const STEP_LABEL: Record<string, string> = { prendre: 'Prend', ranger: 'Range dans', poser: 'Pose', aller: 'Va vers', cafe: 'Fait un café', boire: 'Boit', manger: 'Mange', couper: 'Coupe', dire: 'Dit', lire: 'Lit', arreter_lire: 'Ferme le livre', allumer: 'Allume', eteindre: 'Éteint', mettre_sur_feu: 'Met sur le feu', mettre_dans: 'Met dans', attendre_cuisson: 'Attend la cuisson de', essuyer_vaisselle: 'Essuie', essuyer_mains: 'S’essuie les mains' };
+const STEP_LABEL: Record<string, string> = { prendre: 'Prend', ranger: 'Range dans', poser: 'Pose', aller: 'Va vers', cafe: 'Fait un café', boire: 'Boit', manger: 'Mange', couper: 'Coupe', dire: 'Dit', lire: 'Lit', arreter_lire: 'Ferme le livre', allumer: 'Allume', eteindre: 'Éteint', mettre_sur_feu: 'Met sur le feu', mettre_dans: 'Met dans', attendre_cuisson: 'Attend la cuisson de', essuyer_vaisselle: 'Essuie', essuyer_mains: 'S’essuie les mains', commander_courses: 'Commande les courses', ranger_courses: 'Range les courses', lire_liste: 'Lit la liste de courses' };
 
 function stepText(s: Step | null): string {
   if (!s) return 'Réfléchit…';
@@ -17,7 +18,8 @@ function stepText(s: Step | null): string {
 }
 
 /**
- * Zone de saisie en bas de l'écran. Parole : le perso dit la phrase dans le monde. Action : un
+ * Zone de saisie en bas de l'écran : au repos une petite pilule, qui s'ouvre en barre complète
+ * quand on écrit (Entrée ou clic). Parole : le perso dit la phrase dans le monde. Action : un
  * ordre au perso ; les ordres simples sont compris directement (parser.ts), les autres passent par
  * un modèle de chat (ai.ts, clé OpenRouter dans le menu : `onNeedSettings` l'ouvre).
  */
@@ -27,6 +29,8 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<Step | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  /** La saisie a le focus : la barre est ouverte (elle le reste tant qu'un brouillon est écrit). */
+  const [focused, setFocused] = useState(false);
   /** Dans l'aperçu claude.ai : Claude pour les ordres libres (OpenRouter y est injoignable). */
   const [claudeChat, setClaudeChat] = useState<Chat | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -109,27 +113,49 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
     }
   };
 
+  const open = focused || text.length > 0;
   return (
     <div className="chat">
       {(busy || result) && (
-        <div className="chat-status">
+        <div className={`chat-status${busy ? ' busy' : ''}`}>
+          {busy && <span className="chat-spin" aria-hidden />}
           <span>{busy ? stepText(step) : result}</span>
           {busy ? (
-            <button onClick={() => abort.current?.abort()}>Arrêter</button>
+            <button onClick={() => abort.current?.abort()}>
+              <Icon name="stop" size={11} /> Arrêter
+            </button>
           ) : (
-            <button onClick={() => setResult(null)} aria-label="Fermer">×</button>
+            <button onClick={() => setResult(null)} aria-label="Fermer">
+              <Icon name="close" size={12} />
+            </button>
           )}
         </div>
       )}
       <form
-        className={`chat-bar chat-${mode}`}
+        className={`chat-bar chat-${mode}${open ? ' open' : ''}`}
+        onFocus={() => setFocused(true)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           send();
         }}
       >
-        <button type="button" className="chat-mode" onClick={toggle} title="Changer de mode (Tab)">
-          {mode === 'parole' ? '💬 Parole' : '✋ Action'}
+        <button
+          type="button"
+          className="chat-mode"
+          onPointerDown={(e) => {
+            // le focus reste (ou va) dans la saisie : les lettres tapées ne partent pas au jeu
+            e.preventDefault();
+            input.current?.focus();
+          }}
+          onClick={toggle}
+          title={`${mode === 'parole' ? 'Parole : le perso dit la phrase' : 'Action : un ordre au perso'} (Tab pour changer)`}
+        >
+          <Icon name={mode === 'parole' ? 'speech' : 'bolt'} size={15} />
+          <span className="chat-mode-label">{mode === 'parole' ? 'Parole' : 'Action'}</span>
+          <kbd className="key key-ghost">Tab</kbd>
         </button>
         <input
           ref={input}
@@ -141,11 +167,14 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
               toggle();
             } else if (e.key === 'Escape') input.current?.blur();
           }}
-          placeholder={mode === 'parole' ? 'Dire quelque chose…' : 'Donner un ordre (ex. range tous les livres)'}
-          disabled={mode === 'action' && busy}
+          placeholder={mode === 'parole' ? 'Dire quelque chose…' : open ? 'Donner un ordre (ex. « range tous les livres »)' : 'Donner un ordre…'}
+          aria-label={mode === 'parole' ? 'Dire quelque chose' : 'Donner un ordre au perso'}
+          readOnly={mode === 'action' && busy}
+          aria-disabled={mode === 'action' && busy}
         />
-        <button type="submit" className="chat-send" disabled={!text.trim() || (mode === 'action' && busy)}>
-          Envoyer
+        <kbd className="key key-ghost chat-hint">Entrée</kbd>
+        <button type="submit" className="chat-send" onPointerDown={(e) => e.preventDefault()} disabled={!text.trim() || (mode === 'action' && busy)} aria-label="Envoyer" title="Envoyer (Entrée)">
+          <Icon name="send" size={16} />
         </button>
       </form>
     </div>

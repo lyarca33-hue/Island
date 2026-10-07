@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
 import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
@@ -9,8 +9,10 @@ import { ChatBar } from './orders/ChatBar';
 import { ContextMenu } from './ui/ContextMenu';
 import { DisplayControls, FpsCounter, useFpsShown } from './ui/DisplaySettings';
 import { FeedbackPanel } from './ui/FeedbackPanel';
+import { HeldBar } from './ui/HeldBar';
+import { Icon } from './ui/icons';
 import { InventoryPanel } from './ui/InventoryPanel';
-import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
+import { Menu, MenuSection, Shortcuts } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
 
@@ -28,7 +30,11 @@ export function App() {
   return <World recipe={recipe} onEdit={() => setMode('creator')} />;
 }
 
-/** Scène 3D plein écran + interface minimale (menu, rotation de caméra, saisie). */
+/**
+ * Scène 3D plein écran + interface discrète : en haut à gauche le menu et les petits boutons
+ * (caméra, masquer, signaler), en haut à droite les jauges et l'horloge, en bas ce qu'on tient
+ * et la saisie. H masque le tout pour profiter de la scène.
+ */
 function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
@@ -52,6 +58,36 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   /** Partie du menu dépliée. */
   const [section, setSection] = useState<string | null>('raccourcis');
   const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
+  /** Interface masquée (touche H) : il ne reste que la scène, les messages et les menus ouverts exprès. */
+  const [hidden, setHidden] = useState(false);
+  const noticeTimer = useRef(0);
+  const flash = useCallback((text: string) => {
+    setNotice(text);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2500);
+  }, []);
+  const toggleHud = useCallback(() => setHidden((h) => !h), []);
+  const shown = useRef(false);
+  useEffect(() => {
+    if (!shown.current) {
+      shown.current = true;
+      return;
+    }
+    if (hidden) flash(matchMedia('(pointer: coarse)').matches ? 'Interface masquée : l’œil en haut à gauche la ramène.' : 'Interface masquée : H pour la retrouver.');
+  }, [hidden, flash]);
+
+  // H (hors saisie) : masquer / afficher l'interface
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === 'KeyH') toggleHud();
+      // Échap (menu) et Entrée (écrire) ramènent l'interface masquée
+      else if (e.code === 'Escape' || e.code === 'Enter') setHidden(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleHud]);
 
   useEffect(() => {
     if (!host.current) return;
@@ -73,149 +109,115 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       setCtx(m);
       if (m) g.onHover?.(null);
     };
-    let timer = 0;
-    g.onNotice = (text) => {
-      setNotice(text);
-      clearTimeout(timer);
-      timer = window.setTimeout(() => setNotice(null), 2500);
-    };
+    g.onNotice = flash;
     g.start().then(() => setLoading(false)).catch((e) => {
       console.error(e);
       setError('Le personnage n’a pas pu être chargé.');
     });
     return () => {
-      clearTimeout(timer);
+      clearTimeout(noticeTimer.current);
       g.dispose();
       game.current = null;
       setReady(null);
     };
-  }, [recipe]);
+  }, [recipe, flash]);
 
   return (
-    <div className="app">
+    <div className={`app${hidden ? ' hud-off' : ''}`}>
       <div ref={host} className="viewport" />
-      <Menu open={menuOpen} onToggle={setMenuOpen}>
-        <MenuSection title="Raccourcis" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
-          <dl className="menu-keys">
-            {SHORTCUTS.map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-          </dl>
-        </MenuSection>
-        <MenuSection title="Heure" open={section === 'heure'} onToggle={fold('heure')}>
-          <TimeControls game={ready} />
-        </MenuSection>
-        <MenuSection title="Affichage" open={section === 'affichage'} onToggle={fold('affichage')}>
-          <DisplayControls game={ready} fps={fpsShown} onFps={setFpsShown} />
-        </MenuSection>
-        <MenuSection title={`Manques${missing ? ` (${missing})` : ''}`} open={section === 'manques'} onToggle={fold('manques')}>
-          <MissingPanel
-            onReport={(text) => {
-              setMenuOpen(false);
-              setReport(text);
+      <div className="hud">
+        <Menu
+          open={menuOpen}
+          onToggle={(o) => {
+            setMenuOpen(o);
+            if (o) setReport(null);
+          }}
+          tools={
+            <>
+              <span className="hud-sep" />
+              <button className="hud-icon" onClick={() => game.current?.rotateCamera(-1)} aria-label="Tourner la caméra à gauche" title="Tourner la caméra à gauche">
+                <Icon name="rotateLeft" />
+              </button>
+              <button className="hud-icon" onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite" title="Tourner la caméra à droite">
+                <Icon name="rotateRight" />
+              </button>
+              <span className="hud-sep" />
+              <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
+                <Icon name="eyeOff" />
+              </button>
+              <button
+                className={`hud-icon${report !== null ? ' on' : ''}`}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setReport((r) => (r === null ? '' : null));
+                }}
+                aria-expanded={report !== null}
+                aria-label="Signaler"
+                title="Signaler : écrire un retour et l’envoyer"
+              >
+                <Icon name="flag" />
+              </button>
+            </>
+          }
+        >
+          <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
+            <Shortcuts />
+          </MenuSection>
+          <MenuSection title="Heure" icon="clock" open={section === 'heure'} onToggle={fold('heure')}>
+            <TimeControls game={ready} />
+          </MenuSection>
+          <MenuSection title="Affichage" icon="eye" open={section === 'affichage'} onToggle={fold('affichage')}>
+            <DisplayControls game={ready} fps={fpsShown} onFps={setFpsShown} />
+          </MenuSection>
+          <MenuSection title="Manques" icon="list" badge={missing} open={section === 'manques'} onToggle={fold('manques')}>
+            <MissingPanel
+              onReport={(text) => {
+                setMenuOpen(false);
+                setReport(text);
+              }}
+            />
+          </MenuSection>
+          <MenuSection title="IA des ordres" icon="sparkles" open={section === 'ia'} onToggle={fold('ia')}>
+            <AiSettingsForm />
+          </MenuSection>
+          <MenuSection title="Personnage" icon="user" open={section === 'perso'} onToggle={fold('perso')}>
+            <button className="menu-action" onClick={onEdit}>Modifier le personnage</button>
+          </MenuSection>
+        </Menu>
+        <NeedsHud
+          game={ready}
+          onClock={() => {
+            setSection('heure');
+            setMenuOpen(true);
+          }}
+        />
+        {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
+        <HoverTip game={ready} hidden={!!ctx || !!drag} />
+        {fpsShown && <FpsCounter game={ready} />}
+      </div>
+      {hidden && (
+        <button className="hud-icon hud-show" onClick={toggleHud} aria-label="Afficher l’interface" title="Afficher l’interface (H)">
+          <Icon name="eye" />
+        </button>
+      )}
+      <div className="hud-bottom">
+        {notice && (
+          <div className="hud-notice" key={notice}>
+            <Icon name="alert" size={15} />
+            {notice}
+          </div>
+        )}
+        <div className="hud-bottom-main">
+          <HeldBar game={ready} held={held} can={can} />
+          <ChatBar
+            game={ready}
+            onNeedSettings={() => {
+              setSection('ia');
+              setMenuOpen(true);
             }}
           />
-        </MenuSection>
-        <MenuSection title="IA des ordres" open={section === 'ia'} onToggle={fold('ia')}>
-          <AiSettingsForm />
-        </MenuSection>
-        <MenuSection title="Personnage" open={section === 'perso'} onToggle={fold('perso')}>
-          <button className="menu-action" onClick={onEdit}>✎ Modifier le personnage</button>
-        </MenuSection>
-      </Menu>
-      <div className="hud-cam">
-        <button className="hud-report" onClick={() => setReport((r) => (r === null ? '' : null))} aria-expanded={report !== null} title="Écrire un retour et l’envoyer">✉ Signaler</button>
-        <button onClick={() => game.current?.rotateCamera(-1)} aria-label="Tourner la caméra à gauche">⟲</button>
-        <button onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite">⟳</button>
+        </div>
       </div>
-      <NeedsHud game={ready} />
-      {fpsShown && <FpsCounter game={ready} />}
-      {held && (
-        <div className="hud-held">
-          <button onClick={() => game.current?.drop()}>
-            {can.moving ? (
-              <>
-                Déplace : {held} (Z Q S D) · Pivoter (R / F) · <b>Lâcher (E)</b>
-              </>
-            ) : (
-              <>
-                En main : {held} · <b>Poser (E)</b>
-              </>
-            )}
-          </button>
-          {can.drink && !can.reading && (
-            <button onClick={() => game.current?.drink()}>
-              <b>Boire (B)</b>
-            </button>
-          )}
-          {can.eat && !can.reading && (
-            <button onClick={() => game.current?.eat()}>
-              <b>Manger (M)</b>
-            </button>
-          )}
-          {can.serve && !can.reading && (
-            <button onClick={() => game.current?.serve()}>
-              <b>Servir dans l’assiette (P)</b>
-            </button>
-          )}
-          {can.dishes && !can.reading && (
-            <button onClick={() => game.current?.washDishes()}>
-              <b>Faire la vaisselle (V)</b>
-            </button>
-          )}
-          {can.cut && !can.reading && (
-            <button onClick={() => game.current?.cut()}>
-              <b>Couper (K)</b>
-            </button>
-          )}
-          {can.prepare && !can.reading && (
-            <button onClick={() => game.current?.prepare()}>
-              <b>Préparer le plat (G)</b>
-            </button>
-          )}
-          {can.throw && !can.reading && (
-            <button onClick={() => game.current?.throwItem()}>
-              <b>Lancer (T)</b>
-            </button>
-          )}
-          {can.seated && (
-            <button onClick={() => game.current?.standUp()}>
-              <b>Se lever (C)</b>
-            </button>
-          )}
-          {(can.read || can.reading) && (
-            <button onClick={() => (can.reading ? game.current?.stopReading() : game.current?.read())}>
-              <b>{can.reading ? 'Fermer le livre (L)' : 'Lire (L)'}</b>
-            </button>
-          )}
-        </div>
-      )}
-      {!held && can.prepare && !can.seated && (
-        <div className="hud-held">
-          <button onClick={() => game.current?.prepare()}>
-            Ingrédients prêts · <b>Préparer le plat (G)</b>
-          </button>
-        </div>
-      )}
-      {!held && can.sleeping && (
-        <div className="hud-held">
-          <button onClick={() => game.current?.wakeUp()}>
-            Endormi · <b>Se réveiller (C)</b>
-          </button>
-        </div>
-      )}
-      {!held && can.seated && (
-        <div className="hud-held">
-          <button onClick={() => game.current?.standUp()}>
-            Assis · <b>Se lever (C)</b>
-          </button>
-        </div>
-      )}
-      {notice && <div className="hud-notice">{notice}</div>}
-      {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
       {drag && (
@@ -224,14 +226,6 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
           {drag.over && <span> → {drag.over}</span>}
         </div>
       )}
-      <HoverTip game={ready} hidden={!!ctx || !!drag} />
-      <ChatBar
-        game={ready}
-        onNeedSettings={() => {
-          setSection('ia');
-          setMenuOpen(true);
-        }}
-      />
       {(loading || error) && <div className="hud-loading">{error ?? 'Chargement…'}</div>}
     </div>
   );
@@ -256,11 +250,11 @@ function HoverTip({ game, hidden }: { game: Game | null; hidden: boolean }) {
   return (
     <div className="hud-wear" style={{ left: hover.x, top: hover.y }}>
       <div>
-        {hover.name} · <b>{hover.grade}</b>
+        <b>{hover.name}</b> <span className="hud-wear-grade">{hover.grade}</span>
       </div>
       {hover.state && <div className="hud-wear-state">{hover.state}</div>}
       <div className="hud-wear-bar">
-        <span style={{ width: `${Math.round(hover.condition * 100)}%`, background: `hsl(${Math.round(hover.condition * 110)}, 65%, 50%)` }} />
+        <span style={{ width: `${Math.round(hover.condition * 100)}%`, background: `hsl(${Math.round(hover.condition * 110)}, 62%, 58%)` }} />
       </div>
     </div>
   );

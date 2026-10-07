@@ -3,6 +3,7 @@
  * (pièces des modèles VRoid, couleurs, proportions). Petite, lisible, sauvegardable : c'est
  * aussi ce qu'une IA pourra générer pour créer des PNJ.
  */
+import { ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from './accessories';
 import { MODELS, MODEL_BY_ID, type Gender } from './catalog';
 
 export interface Body {
@@ -31,7 +32,33 @@ export interface Recipe {
   eyeColor: string | null;
   skinTone: string | null;
   body: Body;
+  /** Couleurs des vêtements (null = d'origine). Absent des anciennes recettes. */
+  clothes?: Clothes;
+  /** Accessoire porté par emplacement (chapeau, lunettes...). Absent des anciennes recettes. */
+  accessories?: Partial<Record<AccSlot, WornAccessory>>;
 }
+
+export interface Clothes {
+  top: string | null;
+  bottom: string | null;
+  shoes: string | null;
+}
+
+export interface WornAccessory {
+  id: string;
+  color: string;
+}
+
+export const NO_CLOTHES: Clothes = { top: null, bottom: null, shoes: null };
+
+/** Teintes des vêtements : la texture passe en niveaux de gris puis prend la couleur. */
+export const CLOTH_COLORS = ['#f4efe6', '#2a2a33', '#5a6478', '#c2413a', '#e58bb0', '#e9c27a', '#d98b3a', '#3c9c78', '#3e78c9', '#26386b', '#6c4ab8', '#8a5638'];
+
+/** Prénoms pour le bouton « au hasard » du nom. */
+export const NAMES: Record<Gender, string[]> = {
+  f: ['Aiko', 'Lina', 'Maëlle', 'Inès', 'Yuki', 'Rose', 'Nora', 'Chloé', 'Mila', 'Sakura', 'Jade', 'Lou', 'Hana', 'Zoé', 'Margaux', 'Léa', 'Emi', 'Capucine'],
+  m: ['Caleb', 'Hugo', 'Kenji', 'Louis', 'Tom', 'Ryo', 'Nathan', 'Sacha', 'Haruto', 'Gabin', 'Léo', 'Malo', 'Ren', 'Arthur', 'Noé', 'Yanis', 'Kaito', 'Basile'],
+};
 
 export const DEFAULT_BODY: Body = { height: 1, head: 1, legs: 1, build: 1 };
 
@@ -45,8 +72,12 @@ export const BODY_RANGE: Record<keyof Body, [number, number, string]> = {
 
 /** Teintes de peau : multipliées à la texture d'origine (blanc = inchangé). */
 export const SKIN_TONES = ['#ffffff', '#fbe3d2', '#f0c8a8', '#dba27c', '#b97c55', '#8a5638', '#5e3a26'];
-export const HAIR_COLORS = ['#1d1a22', '#3b2a22', '#6b4429', '#a8743f', '#e3c27a', '#f1ece2', '#9aa3b5', '#c2413a', '#e58bb0', '#6c4ab8', '#3e78c9', '#3c9c78'];
-export const EYE_COLORS = ['#6b4126', '#3f8fd6', '#3ba06a', '#9a6dd6', '#d8a234', '#cf3d3d', '#7b8796'];
+export const HAIR_COLORS = [
+  '#1d1a22', '#3b2a22', '#6b4429', '#a8743f', '#e3c27a', '#f1ece2', '#9aa3b5', '#c2413a', '#e58bb0', '#6c4ab8', '#3e78c9', '#3c9c78',
+  // pastels et couleurs vives
+  '#f6b8c8', '#c8b4f0', '#a8d8f0', '#b8e6c4', '#f0dca0', '#ff7a45', '#2b8fa3', '#8b1e3f',
+];
+export const EYE_COLORS = ['#6b4126', '#3f8fd6', '#3ba06a', '#9a6dd6', '#d8a234', '#cf3d3d', '#7b8796', '#e070a8', '#40c4c4', '#1f2a5a', '#f0f0f0'];
 
 export function defaultRecipe(gender: Gender = 'f'): Recipe {
   const id = gender === 'f' ? 'sample_a' : 'sample_c';
@@ -61,6 +92,8 @@ export function defaultRecipe(gender: Gender = 'f'): Recipe {
     eyeColor: null,
     skinTone: null,
     body: { ...DEFAULT_BODY },
+    clothes: { ...NO_CLOTHES },
+    accessories: {},
   };
 }
 
@@ -73,9 +106,16 @@ export function randomRecipe(): Recipe {
   const face = pick(same);
   // coiffure : plutôt du même genre, parfois de l'autre
   const hair = Math.random() < 0.8 ? pick(same) : pick(MODELS);
+  const accessories: Partial<Record<AccSlot, WornAccessory>> = {};
+  for (const [slot] of SLOTS) {
+    if (Math.random() < 0.7) continue;
+    const a = pick(ACCESSORIES.filter((x) => x.slot === slot));
+    accessories[slot] = { id: a.id, color: Math.random() < 0.6 ? a.color : pick(CLOTH_COLORS) };
+  }
+  const cloth = () => (Math.random() < 0.6 ? null : pick(CLOTH_COLORS));
   return {
     version: 2,
-    name: face.label,
+    name: pick(NAMES[gender]),
     gender,
     outfit: pick(same).id,
     face: face.id,
@@ -89,6 +129,8 @@ export function randomRecipe(): Recipe {
       legs: around(...(BODY_RANGE.legs.slice(0, 2) as [number, number])),
       build: around(...(BODY_RANGE.build.slice(0, 2) as [number, number])),
     },
+    clothes: { top: cloth(), bottom: cloth(), shoes: cloth() },
+    accessories,
   };
 }
 
@@ -110,5 +152,13 @@ export function sanitizeRecipe(raw: unknown): Recipe | null {
     eyeColor: color(r.eyeColor),
     skinTone: color(r.skinTone),
     body: { ...DEFAULT_BODY, ...(r.body ?? {}) },
+    clothes: { top: color(r.clothes?.top), bottom: color(r.clothes?.bottom), shoes: color(r.clothes?.shoes) },
+    accessories: Object.fromEntries(
+      SLOTS.flatMap(([slot]) => {
+        const w = r.accessories?.[slot];
+        const a = w && ACCESSORY_BY_ID.get(w.id);
+        return a && a.slot === slot ? [[slot, { id: a.id, color: color(w.color) ?? a.color }]] : [];
+      }),
+    ),
   };
 }

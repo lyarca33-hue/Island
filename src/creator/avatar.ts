@@ -11,6 +11,7 @@ import type { VRM, VRMExpressionManager, VRMSpringBoneManager } from '@pixiv/thr
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYER_CHARACTER } from '../game/postfx';
+import { ACCESSORY_BY_ID, SLOTS, type AccSlot, type HeadFit, type NeckFit } from './accessories';
 import type { Body, Recipe } from './recipe';
 import { loadVrm } from './vrm';
 
@@ -324,6 +325,15 @@ export class Avatar {
   private body: Body = { height: 1, head: 1, legs: 1, build: 1 };
   private tinted = new Map<Tintable, { color: THREE.Color; shade: THREE.Color | null; map: THREE.Texture | null; shadeMap: THREE.Texture | null }>();
   private others: VRM[] = [];
+  /** Accessoires : repères posés sur la tête et le cou, mesures, objets portés par emplacement. */
+  private headAnchor = new THREE.Group();
+  private neckAnchor = new THREE.Group();
+  private headFit: HeadFit | null = null;
+  private neckFit: NeckFit = { radius: 0.05, base: 0 };
+  private worn = new Map<AccSlot, { key: string; obj: THREE.Object3D }>();
+  /** Formes du visage pilotées directement (Fcl_…), et ce qui leur a été ajouté à la dernière image. */
+  private morphs: Record<string, number> = {};
+  private morphAdded: Array<[number[], number, number]> = [];
 
   private constructor(vrms: Map<string, VRM>, r: Recipe) {
     this.ids = { outfit: r.outfit, face: r.face, hair: r.hair };
@@ -380,6 +390,7 @@ export class Avatar {
     });
     this.root.add(base.scene);
     this.measureRest();
+    this.measureFits();
     mergeSkinned(base.scene);
     cullAsOne(base.scene);
     base.springBoneManager?.setInitState();
@@ -415,6 +426,143 @@ export class Avatar {
     this.restTop = face.isEmpty() ? this.restHeadY + 0.2 : face.max.y;
   }
 
+  /**
+   * Mesure la tête et le cou au repos (pour caler les accessoires) et pose sur leurs os des
+   * repères alignés sur le monde : +Y en haut, +Z vers l'avant.
+   */
+  private measureFits(): void {
+    const h = this.base.humanoid;
+    const head = h.getRawBoneNode('head');
+    const neck = h.getRawBoneNode('neck');
+    this.base.scene.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    const pinOn = (bone: THREE.Object3D, anchor: THREE.Group) => {
+      anchor.quaternion.copy(bone.getWorldQuaternion(new THREE.Quaternion()).invert());
+      bone.add(anchor);
+      return bone.getWorldPosition(new THREE.Vector3());
+    };
+    // sommets d'un maillage en pose de repos (os appliqués), repère monde
+    const eachVertex = (m: THREE.SkinnedMesh, fn: (p: THREE.Vector3) => void) => {
+      m.skeleton.update();
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        m.getVertexPosition(i, v);
+        m.applyBoneTransform(i, v);
+        fn(v.applyMatrix4(m.matrixWorld));
+      }
+    };
+    if (head) {
+      const o = pinOn(head, this.headAnchor);
+      const skull = new THREE.Box3();
+      for (const m of meshes(this.base, 'face')) {
+        if (!materialsOf(m).some((mat) => /_SKIN/.test(mat.name))) continue;
+        eachVertex(m, (p) => skull.expandByPoint(p.sub(o)));
+      }
+      if (skull.isEmpty()) skull.setFromCenterAndSize(new THREE.Vector3(0, 0.1, 0), new THREE.Vector3(0.18, 0.22, 0.2));
+      const eyeBone = h.getRawBoneNode('leftEye');
+      const eye = eyeBone
+        ? eyeBone.getWorldPosition(new THREE.Vector3()).sub(o)
+        : new THREE.Vector3(0.03, skull.min.y + (skull.max.y - skull.min.y) * 0.45, skull.max.z - 0.03);
+      eye.x = Math.abs(eye.x);
+      // avant des yeux : la peau du visage devant l'œil
+      eye.z = Math.max(eye.z, skull.max.z - 0.02);
+      const mid = (eye.y + skull.max.y) / 2;
+      const c = skull.getCenter(new THREE.Vector3());
+      const ys: number[] = [], rs: number[] = [], zs: number[] = [];
+      for (const m of meshes(this.base, 'hair')) {
+        eachVertex(m, (p) => {
+          p.sub(o);
+          // les mèches qui tombent (couettes, queues) ne comptent pas
+          const d = Math.hypot(p.x - c.x, p.z - c.z);
+          if (p.y < mid || d > 0.25) return;
+          ys.push(p.y);
+          rs.push(d);
+          zs.push(p.z);
+        });
+      }
+      // centiles plutôt que maximums : une mèche rebelle (épi) ne soulève pas le chapeau
+      const pct = (a: number[], q: number, min: number) => {
+        if (!a.length) return min;
+        a.sort((x, y) => x - y);
+        return Math.max(min, a[Math.min(a.length - 1, Math.floor(a.length * q))]);
+      };
+      const hairTop = pct(ys, 0.97, skull.max.y);
+      const hairRadius = pct(rs, 0.9, 0);
+      const hairFront = pct(zs, 0.95, skull.max.z);
+      this.headFit = { skull, hairTop, hairRadius, hairFront, eye };
+    }
+    if (neck) {
+      const o = pinOn(neck, this.neckAnchor);
+      let radius = 0, n = 0, sum = 0;
+      for (const m of meshes(this.base, 'body')) {
+        if (!materialsOf(m).some((mat) => /Body_.*_SKIN/.test(mat.name))) continue;
+        eachVertex(m, (p) => {
+          p.sub(o);
+          if (p.y < 0.01 || p.y > 0.05) return;
+          const d = Math.hypot(p.x, p.z);
+          if (d > 0.09) return;
+          radius = Math.max(radius, d);
+          sum += d;
+          n++;
+        });
+      }
+      this.neckFit = { radius: n ? Math.min(radius, (sum / n) * 1.25) : 0.05, base: 0 };
+    }
+  }
+
+  private applyAccessories(r: Recipe): void {
+    for (const [slot] of SLOTS) {
+      const w = r.accessories?.[slot];
+      const acc = w && ACCESSORY_BY_ID.get(w.id);
+      const key = acc ? `${acc.id}:${w.color}` : '';
+      const cur = this.worn.get(slot);
+      if ((cur?.key ?? '') === key) continue;
+      if (cur) {
+        cur.obj.removeFromParent();
+        freeObject(cur.obj);
+        this.worn.delete(slot);
+      }
+      if (!acc || !this.headFit) continue;
+      const obj = acc.build(this.headFit, this.neckFit, new THREE.Color(w.color).multiplyScalar(0.85));
+      obj.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        m.layers.enable(LAYER_CHARACTER);
+      });
+      (slot === 'cou' ? this.neckAnchor : this.headAnchor).add(obj);
+      this.worn.set(slot, { key, obj });
+    }
+  }
+
+  /** Formes du visage VRoid pilotées directement : clé = fin du nom (« EYE_Close », « HA_Fung1 »...). */
+  setMorphs(w: Record<string, number>): void {
+    this.morphs = w;
+  }
+
+  private applyMorphs(): void {
+    for (const [inf, i, add] of this.morphAdded) inf[i] -= add;
+    this.morphAdded = [];
+    const keys = Object.keys(this.morphs);
+    if (!keys.length) return;
+    for (const m of meshes(this.base, 'face')) {
+      const dict = m.morphTargetDictionary;
+      const inf = m.morphTargetInfluences;
+      if (!dict || !inf) continue;
+      for (const k of keys) {
+        const w = this.morphs[k];
+        if (w <= 0.001) continue;
+        const name = Object.keys(dict).find((n) => n.endsWith(`_Fcl_${k}`));
+        if (name === undefined) continue;
+        const i = dict[name];
+        const add = Math.max(0, Math.min(1, w) - inf[i]);
+        inf[i] += add;
+        this.morphAdded.push([inf, i, add]);
+      }
+    }
+  }
+
   /** Taille approximative (m), du sol au sommet du crâne. */
   get height(): number {
     const b = this.body;
@@ -430,6 +578,7 @@ export class Avatar {
   applyLook(r: Recipe): void {
     this.applyBody(r.body);
     this.applyColors(r);
+    this.applyAccessories(r);
   }
 
   private applyBody(b: Body): void {
@@ -493,6 +642,9 @@ export class Avatar {
         if (/_SKIN/.test(n)) tint(mat, r.skinTone, false);
         else if (/_HAIR/.test(n)) tint(mat, r.hairColor, true);
         else if (/EyeIris/.test(n)) tint(mat, r.eyeColor, true);
+        else if (/^.*Tops_.*_CLOTH/.test(n)) tint(mat, r.clothes?.top ?? null, true);
+        else if (/Bottoms_.*_CLOTH/.test(n)) tint(mat, r.clothes?.bottom ?? null, true);
+        else if (/Shoes_.*_CLOTH/.test(n)) tint(mat, r.clothes?.shoes ?? null, true);
         else tint(mat, null, false);
       }
     });
@@ -500,8 +652,13 @@ export class Avatar {
 
   /** À appeler à chaque image, après le mixeur d'animation. */
   update(dt: number): void {
+    // les gestionnaires d'expressions ajoutent et retirent leurs propres poids : on retire les
+    // nôtres avant eux, on les remet après
+    for (const [inf, i, add] of this.morphAdded) inf[i] -= add;
+    this.morphAdded = [];
     this.base.update(dt);
     this.faceVrm?.expressionManager?.update();
+    this.applyMorphs();
     if (this.hairSprings) {
       this.head?.updateWorldMatrix(true, false);
       this.hairSprings.update(dt);
@@ -520,4 +677,13 @@ export class Avatar {
     this.base.scene.traverse(free);
     for (const v of this.others) v.scene.traverse(free);
   }
+}
+
+function freeObject(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.geometry.dispose();
+    for (const mat of materialsOf(m)) mat.dispose();
+  });
 }

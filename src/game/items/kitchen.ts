@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
+import { FROZEN_FOOD, MORE_FRUITS, OVEN_EXTRA } from './pantry';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -38,7 +39,7 @@ function glow(w: number, h: number, d: number, color: THREE.ColorRepresentation,
 }
 
 /** Fruits qui se mixent (les prochains fruits s'ajoutent ici). */
-export const FRUITS = ['pomme', 'quartiers de pomme'];
+export const FRUITS = ['pomme', 'quartiers de pomme', ...MORE_FRUITS];
 /** Mixeur : hauteur du socle, du bol ; où se pose la tasse, à côté (x, m). */
 const MIXER_BASE = 0.1;
 const MIXER_JAR = 0.2;
@@ -80,7 +81,7 @@ const RACK_SLOTS: Array<[[number, number, number], string[]]> = [
   ...[-0.02, 0.02].map((dx): [[number, number, number], string[]] => [[RACK_BASKET[0] + dx, RACK_FLOOR, RACK_BASKET[1]], ['fourchette', 'couteau de table', 'cuillère']]),
 ];
 /** Ce qui se met au four et au micro-ondes. */
-export const OVEN_FOOD = ['lasagne', 'steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte'];
+export const OVEN_FOOD = ['lasagne', 'steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte', ...OVEN_EXTRA];
 
 /** Caisson de meuble bas (côtés, fond, socle) et son plan de travail, ouvert à l'avant. */
 function carcass(w: number, d: number, color: THREE.ColorRepresentation = WOOD): THREE.Group {
@@ -137,7 +138,7 @@ const FZ_Y = 0.07;
 const FZ_OUT = 0.34;
 const FRIDGE_WHITE = 0xe9e6de;
 /** Ce qui va au congélateur (la lasagne : un plat surgelé). */
-export const FROZEN_THINGS = ['bac à glaçons', 'lasagne', 'steak', 'pain'];
+export const FROZEN_THINGS = ['bac à glaçons', 'lasagne', 'steak', 'pain', ...FROZEN_FOOD];
 
 /** Poubelle à pédale : côté, hauteur (m). */
 const BIN_S = 0.3;
@@ -220,7 +221,8 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     // un grand tiroir, sous le frigo (posé dessus, voir ON_TOP)
     drawer: FZ_OUT,
     holds: FROZEN_THINGS,
-    slots: [-0.13, 0.13].flatMap((x) => [-0.12, 0.1].map((z): [number, number, number] => [x, FZ_Y + 0.006, z])),
+    // deux rangées de deux, puis une au milieu
+    slots: [...[-0.13, 0.13].flatMap((x) => [-0.12, 0.1].map((z): [number, number, number] => [x, FZ_Y + 0.006, z])), [0, FZ_Y + 0.006, -0.12], [0, FZ_Y + 0.006, 0.1]],
     build: () => {
       const t = 0.03;
       const g = group(
