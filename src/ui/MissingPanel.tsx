@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { autoComment, clearMissing, groupKey, groupMissing, KIND_LABEL, type MissingGroup, missingList, missingNotes, missingReport, noteKnownMissing, onMissingChange, setMissingNote } from '../orders/missing';
+import { autoComment, clearMissing, groupKey, groupMissing, KIND_LABEL, type MissingGroup, missingList, missingNotes, missingReport, noteKnownMissing, onMissingChange, removeMissing, setMissingNote } from '../orders/missing';
 
 noteKnownMissing();
 
@@ -19,6 +19,8 @@ export function MissingPanel() {
   const [editing, setEditing] = useState<{ key: string; text: string } | null>(null);
   /** « Vider » demande un second clic (les fenêtres confirm() sont bloquées dans l'aperçu). */
   const [sure, setSure] = useState(false);
+  /** Groupe dont la suppression attend le second clic. */
+  const [deleting, setDeleting] = useState<string | null>(null);
   useEffect(
     () =>
       onMissingChange(() => {
@@ -67,7 +69,7 @@ export function MissingPanel() {
     <div className="missing">
       <ul className="missing-list">
         {groups.map((g) => (
-          <MissingItem key={groupKey(g)} group={g} editing={editing?.key === groupKey(g) ? editing.text : null} onEdit={(text) => setEditing({ key: groupKey(g), text })} onCancel={() => setEditing(null)} onSave={(text) => save(groupKey(g), text)} />
+          <MissingItem key={groupKey(g)} group={g} editing={editing?.key === groupKey(g) ? editing.text : null} onEdit={(text) => setEditing({ key: groupKey(g), text })} onCancel={() => setEditing(null)} onSave={(text) => save(groupKey(g), text)} deleting={deleting === groupKey(g)} onDelete={() => (deleting === groupKey(g) ? (removeMissing(groupKey(g)), setDeleting(null)) : setDeleting(groupKey(g)))} onDeleteCancel={() => setDeleting(null)} />
         ))}
       </ul>
       <div className="missing-actions">
@@ -82,10 +84,11 @@ export function MissingPanel() {
 }
 
 /**
- * Un manque : son commentaire (automatique, ou celui du joueur) et le crayon pour le modifier.
- * `editing` : le texte en cours de modification, null hors modification.
+ * Un manque : son commentaire (automatique, ou celui du joueur), le crayon pour le modifier et la
+ * corbeille pour retirer la ligne. `editing` : le texte en cours de modification, null hors
+ * modification ; `deleting` : la corbeille attend le second clic.
  */
-function MissingItem({ group: g, editing, onEdit, onCancel, onSave }: { group: MissingGroup; editing: string | null; onEdit: (text: string) => void; onCancel: () => void; onSave: (text: string) => void }) {
+function MissingItem({ group: g, editing, onEdit, onCancel, onSave, deleting, onDelete, onDeleteCancel }: { group: MissingGroup; editing: string | null; onEdit: (text: string) => void; onCancel: () => void; onSave: (text: string) => void; deleting: boolean; onDelete: () => void; onDeleteCancel: () => void }) {
   const auto = autoComment(g);
   return (
     <li title={g.ordres.map((o) => `« ${o} »`).join('\n')}>
@@ -98,6 +101,9 @@ function MissingItem({ group: g, editing, onEdit, onCancel, onSave }: { group: M
               ✎
             </button>
           )}
+          <button className={`missing-edit${deleting ? ' missing-sure' : ''}`} onClick={onDelete} onBlur={onDeleteCancel} aria-label="Supprimer cette ligne" title="Supprimer cette ligne et son commentaire">
+            {deleting ? 'Supprimer ?' : '🗑'}
+          </button>
         </span>
       </div>
       {editing === null ? (
@@ -122,7 +128,7 @@ function MissingItem({ group: g, editing, onEdit, onCancel, onSave }: { group: M
           <small>Diagnostic auto : {auto}</small>
           <div className="missing-actions">
             <button onClick={() => onSave(editing === auto ? '' : editing)}>Enregistrer</button>
-            {g.note && <button onClick={() => onSave('')}>Texte auto</button>}
+            {g.note && <button onClick={() => onSave('')}>Effacer mon commentaire</button>}
             <button onClick={onCancel}>Annuler</button>
           </div>
         </div>

@@ -81,6 +81,7 @@
 }
 .missing-edit:hover { opacity: 1; border-color: rgba(255, 240, 210, 0.35); }
 .missing-mine { opacity: 0.8; }
+.missing-sure { opacity: 1; border-color: rgba(255, 140, 120, 0.6); color: #ffb4a6; }
 .missing-editor { display: flex; flex-direction: column; gap: 4px; }
 .missing-editor textarea {
   padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255, 240, 210, 0.3); resize: vertical;
