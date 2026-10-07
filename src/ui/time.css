@@ -5,6 +5,7 @@
 }
 .hud-clock { font-size: 13px; margin-bottom: 2px; white-space: nowrap; }
 .hud-clock b { font-variant-numeric: tabular-nums; }
+.hud-date { font-size: 11px; opacity: 0.85; margin: -3px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .need { display: flex; flex-direction: column; gap: 2px; }
 .need-label { opacity: 0.9; }
 .need-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
@@ -23,4 +24,5 @@
 .time-controls input[type='range'] { width: 100%; padding: 0; border: none; background: none; accent-color: #f0c25a; }
 .time-speeds { display: flex; gap: 6px; }
 .time-speeds button { flex: 1; }
+.time-controls .time-speeds button { padding-left: 2px; padding-right: 2px; font-size: 11px; white-space: nowrap; }
 .time-speeds button.active { background: rgba(255, 196, 110, 0.3); border-color: rgba(255, 196, 110, 0.7); }
