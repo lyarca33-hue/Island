@@ -18,10 +18,13 @@ export type Intent =
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
-  | { kind: 'dire'; texte: string };
+  | { kind: 'dire'; texte: string }
+  /** Action que le jeu ne sait pas encore faire (s'asseoir) : échoue, et va au journal des manques. */
+  | { kind: 'manque'; action: string; raison: string };
 
 /** La tâche en quelques mots (« prendre tasse »), pour le journal des manques. */
 export function intentLabel(i: Intent): string {
+  if (i.kind === 'manque') return i.action;
   const what = 'ref' in i ? i.ref : 'refs' in i ? (i.refs.length ? i.refs.join(', ') : 'livres') : '';
   const sur = i.kind === 'poser' && i.sur ? ` sur ${i.sur}` : '';
   return `${i.kind.replace('_', ' ')}${what ? ` ${what}` : ''}${sur}`;
@@ -179,6 +182,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await take(game, act, book.ref);
       return act('lire');
     }
+    case 'manque':
+      throw new Failed(intent.raison);
     case 'arreter_lire':
       if (!world(game).lit) return;
       return act('arreter_lire');
