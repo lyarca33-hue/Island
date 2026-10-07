@@ -56,7 +56,21 @@ export interface ItemDef {
    * Machine qui remplit un récipient (machine à café) : où poser le récipient (repère de la
    * machine, base de l'objet, l'avant vers +Z). La pièce `jet` est l'écoulement, cachée au repos.
    */
-  pour?: { at: [number, number, number]; fills: string; liquid: string; seconds: number };
+  pour?: {
+    at: [number, number, number];
+    fills: string;
+    liquid: string;
+    seconds: number;
+    /** Couleur du liquide dans le récipient (et de la flaque s'il se renverse). */
+    color: THREE.ColorRepresentation;
+    /** On peut y vider un récipient qui contient autre chose (évier) ; sinon il faut le boire d'abord. */
+    drain?: boolean;
+  };
+  /**
+   * Point d'eau où se laver (évier) : où vont les mains sous le robinet (repère du meuble). La
+   * pièce `jet` (l'eau qui coule) sert aussi pendant qu'on se lave.
+   */
+  wash?: { hands: [number, number, number] };
   build(): THREE.Object3D;
 }
 
@@ -128,6 +142,15 @@ function book(id: string, color: THREE.ColorRepresentation): ItemDef {
 /** Hauteur du plan de travail sous la machine à café (m). */
 const COUNTER_H = 0.9;
 const CUP_R = 0.042;
+/** Évier : largeur et profondeur du meuble, cuve (ouverture, profondeur, centre en z), bout du robinet. */
+const SINK_W = 0.8;
+const SINK_D = 0.5;
+const BASIN_W = 0.48;
+const BASIN_D = 0.32;
+const BASIN_H = 0.18;
+const BASIN_Z = 0.065;
+const TAP_Z = 0.03;
+const TAP_Y = COUNTER_H + 0.25;
 const CUP_H = 0.1;
 
 export const ITEMS: ItemDef[] = [
@@ -223,7 +246,7 @@ export const ITEMS: ItemDef[] = [
     movable: true,
     durability: 250,
     // la tasse se pose sur la grille, sous le bec, l'anse vers l'avant
-    pour: { at: [0, COUNTER_H + 0.016, 0.1], fills: 'tasse', liquid: 'café', seconds: 2.6 },
+    pour: { at: [0, COUNTER_H + 0.016, 0.1], fills: 'tasse', liquid: 'café', seconds: 2.6, color: 0x4a2c1a },
     build: () => {
       const H = COUNTER_H;
       const body = 0x2e3135, metal = 0xb9bfc6;
@@ -245,6 +268,57 @@ export const ITEMS: ItemDef[] = [
       jet.name = 'jet';
       jet.visible = false;
       jet.position.set(0, H + 0.25, 0.1);
+      g.add(jet);
+      return g;
+    },
+  },
+  {
+    id: 'evier',
+    name: 'évier',
+    portable: false,
+    // raccordé à l'eau : il ne se déplace pas
+    movable: false,
+    // inox et meuble en bois : solide (il ne se lance pas, la fragilité ne joue pas encore)
+    fragility: 7,
+    durability: 300,
+    // la tasse se pose au fond de la cuve, sous le robinet, l'anse vers l'avant
+    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: 'tasse', liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
+    wash: { hands: [0, COUNTER_H + 0.08, TAP_Z + 0.05] },
+    build: () => {
+      const H = COUNTER_H, top = 0.04;
+      const wood = 0x8a6440, counter = 0xd9d3c5, steel = 0xb9bfc6, inside = 0x98a1aa;
+      const z0 = BASIN_Z - BASIN_D / 2, z1 = BASIN_Z + BASIN_D / 2, x1 = BASIN_W / 2;
+      const cw = SINK_W + 0.02, cd = SINK_D + 0.02;
+      const g = group(
+        // meuble bas, deux portes
+        mesh(new THREE.BoxGeometry(SINK_W, H - top, SINK_D), wood, 0, (H - top) / 2, 0),
+        mesh(new THREE.BoxGeometry(0.006, H - top - 0.1, 0.01), 0x5d4129, 0, (H - top) / 2, SINK_D / 2),
+        mesh(new THREE.BoxGeometry(0.012, 0.09, 0.012), 0xc9c2b0, -0.04, H - 0.2, SINK_D / 2 + 0.008),
+        mesh(new THREE.BoxGeometry(0.012, 0.09, 0.012), 0xc9c2b0, 0.04, H - 0.2, SINK_D / 2 + 0.008),
+        // plan de travail percé pour la cuve
+        mesh(new THREE.BoxGeometry(cw, top, z0 + cd / 2), counter, 0, H - top / 2, (z0 - cd / 2) / 2),
+        mesh(new THREE.BoxGeometry(cw, top, cd / 2 - z1), counter, 0, H - top / 2, (z1 + cd / 2) / 2),
+        mesh(new THREE.BoxGeometry(cw / 2 - x1, top, BASIN_D), counter, -(x1 + cw / 2) / 2, H - top / 2, BASIN_Z),
+        mesh(new THREE.BoxGeometry(cw / 2 - x1, top, BASIN_D), counter, (x1 + cw / 2) / 2, H - top / 2, BASIN_Z),
+        // cuve en inox : fond, bonde, quatre parois
+        mesh(new THREE.BoxGeometry(BASIN_W, 0.01, BASIN_D), inside, 0, H - BASIN_H - 0.005, BASIN_Z),
+        mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.004, 16), 0x55595e, 0.12, H - BASIN_H + 0.002, BASIN_Z + 0.04),
+        mesh(new THREE.BoxGeometry(0.01, BASIN_H, BASIN_D), inside, -x1, H - BASIN_H / 2, BASIN_Z),
+        mesh(new THREE.BoxGeometry(0.01, BASIN_H, BASIN_D), inside, x1, H - BASIN_H / 2, BASIN_Z),
+        mesh(new THREE.BoxGeometry(BASIN_W, BASIN_H, 0.01), inside, 0, H - BASIN_H / 2, z0),
+        mesh(new THREE.BoxGeometry(BASIN_W, BASIN_H, 0.01), inside, 0, H - BASIN_H / 2, z1),
+        // robinet col de cygne : pied, colonne, bec, manette
+        mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.03, 16), steel, 0, H + 0.015, -0.2),
+        mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.3, 12), steel, 0, H + 0.15, -0.2),
+        mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.24, 12).rotateX(Math.PI / 2), steel, 0, H + 0.29, (-0.2 + TAP_Z) / 2),
+        mesh(new THREE.CylinderGeometry(0.012, 0.01, 0.04, 12), steel, 0, TAP_Y + 0.02, TAP_Z),
+        mesh(new THREE.BoxGeometry(0.016, 0.016, 0.08).rotateX(-0.5), steel, 0, H + 0.33, -0.225),
+      );
+      // l'eau qui coule du robinet
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1, 8), toon(0x9fd3ef));
+      jet.name = 'jet';
+      jet.visible = false;
+      jet.position.set(0, TAP_Y, TAP_Z);
       g.add(jet);
       return g;
     },

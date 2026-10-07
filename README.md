@@ -42,7 +42,7 @@ mène à la map, « ✎ Perso » y revient.
 
 Les ordres simples sont compris directement par le jeu, sans IA (`src/orders/parser.ts`) :
 prendre, poser (« pose la lettre sur la table »), ranger (les livres), aller (« va à la table »),
-café, boire, dire (« dis bonjour »), enchaînés avec « puis », « ensuite » ou « et ».
+café, boire (« bois de l'eau »), remplir la tasse d'eau, se laver (« lave-toi les mains », « fais ta toilette »), dire (« dis bonjour »), enchaînés avec « puis », « ensuite » ou « et ».
 
 Les autres (« mets un peu d'ordre ») passent par un modèle de chat via
 [OpenRouter](https://openrouter.ai), par défaut celui de Lumen (`qwen/qwen3.7-flash`). Il choisit
@@ -179,7 +179,7 @@ Z Q S D le poussent ou le tirent (ce qui est posé ou rangé dedans suit), il bu
 meubles. E le lâche.
 
 Durabilité : chaque objet a une jauge (fiche `durability`, en points : tasse 40, lettre 30,
-livre 100, caisse 150, machine 250, table 300, bibliothèque 400). Elle baisse à l'usage (prendre
+livre 100, caisse 150, machine 250, évier 300, table 300, bibliothèque 400). Elle baisse à l'usage (prendre
 l'objet, boire, lire, faire un café, pousser un meuble) et sur les chocs. Grades : neuf, bon état,
 usé, abîmé, très abîmé ; plus elle baisse, plus l'objet paraît usé (couleurs ternies, taches,
 rayures, bords sombres : `src/game/items/durability.ts`). Un objet usé casse plus facilement
@@ -190,6 +190,19 @@ la table, la caisse et deux livres sont déjà usés.
 Boire : tasse de café en main, bouton « Boire » ou touche B. Le perso porte la tasse à la bouche,
 l'incline et boit une gorgée ; le niveau baisse (environ trois gorgées). Vide, elle se remplit
 de nouveau à la machine.
+
+Évier (coin cuisine, à côté de la machine à café ; fixe, il ne se déplace pas) :
+- tasse en main, clic sur l'évier : le perso pose la tasse au fond de la cuve sous le robinet,
+  l'eau coule, il la reprend pleine (« tasse d'eau »). Ce qu'elle contenait (café) est vidé dans
+  l'évier. Boire de l'eau fait baisser la soif comme le café, sans réveiller.
+- mains vides, clic sur l'évier : il se lave les mains (eau qui coule, mains frottées, hygiène +12).
+- toilette (ordre « lave-toi » ou « fais ta toilette ») : trois fois de l'eau des mains au visage,
+  hygiène +40.
+- Ordres : « remplis la tasse d'eau », « bois de l'eau », « lave-toi les mains », « va au lavabo ».
+  Console : `game.fillWater()`, `game.washHands()`, `game.wash()`.
+- Fiche : `pour` (comme la machine, liquide `eau`, `drain` : on peut y vider la tasse) et `wash`
+  (où vont les mains). Ce qui manque encore (ouvrir le robinet, boire au robinet, vaisselle,
+  douche) est noté dans Menu → Manques.
 
 Les meubles (objets non portables) sont des rectangles au sol que le perso contourne
 (`src/game/nav.ts`) : il glisse le long au clavier, et un clic de l'autre côté passe par leurs coins.

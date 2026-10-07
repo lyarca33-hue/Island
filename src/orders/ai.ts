@@ -100,7 +100,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
 - {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
-- {"tache": "boire"} : boire dans la tasse (fait un café d'abord si elle est vide)
+- {"tache": "boire", "liquide": "eau"} : boire dans la tasse (« liquide » facultatif, "eau" ou "café" : si la tasse est vide, elle est d'abord remplie, de café par défaut). Boire fait baisser la soif
+- {"tache": "eau"} : remplir la tasse d'eau à l'évier (prend la tasse si besoin)
+- {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
@@ -151,7 +153,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'aller': return s('objet') ? { kind: 'aller', ref: s('objet') } : null;
     case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
     case 'cafe': return { kind: 'cafe' };
-    case 'boire': return { kind: 'boire' };
+    case 'boire': return { kind: 'boire', liquide: s('liquide') === 'eau' ? 'eau' : s('liquide') === 'café' || s('liquide') === 'cafe' ? 'café' : undefined };
+    case 'eau': return { kind: 'eau' };
+    case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'lire': return { kind: 'lire', ref: s('objet') || undefined };
     case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;

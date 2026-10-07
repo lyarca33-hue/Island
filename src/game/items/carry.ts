@@ -91,6 +91,13 @@ export class WorldItem {
     return this.object.getObjectByName(name);
   }
 
+  /** Couleur du liquide qu'il contient (café, eau). */
+  setLiquidColor(color: THREE.ColorRepresentation): void {
+    const liquid = this.part('liquide') as THREE.Mesh | undefined;
+    const m = liquid?.material as THREE.MeshToonMaterial | undefined;
+    m?.color.set(color);
+  }
+
   /** Remplit le récipient (0 à 1) : le liquide monte (et s'élargit, la tasse s'évase). */
   setLevel(level: number): void {
     const liquid = this.part('liquide');
@@ -155,6 +162,20 @@ const SIP_MOUTH: [number, number, number] = [-0.05, -0.02, 0.13];
 /** Vers où pointe le coude pendant la gorgée (repère du buste). */
 const SIP_POLE: [number, number, number] = [-0.35, -0.9, 0.25];
 const SIP_TILT = THREE.MathUtils.degToRad(55);
+
+/**
+ * Se laver sous le robinet : les mains se frottent (amplitude en m, vitesse en rad/s) ; pour la
+ * toilette, elles montent au visage à chaque tour (durées en s : sous l'eau, montée, au visage,
+ * descente).
+ */
+const RUB = 0.025;
+const RUB_SPEED = 9;
+const SPLASH = { basin: 1.1, up: 0.45, face: 0.7, down: 0.45 };
+/** Durée d'un tour de toilette (s) : se laver dure un nombre entier de tours. */
+export const SPLASH_CYCLE = SPLASH.basin + SPLASH.up + SPLASH.face + SPLASH.down;
+/** Mains devant le visage (depuis l'os de la tête, m, repère du buste, main droite). */
+const FACE_HOLD: [number, number, number] = [-0.045, -0.03, 0.1];
+const FACE_HAND = { fingers: [0.2, 1, 0.1] as [number, number, number], palm: [0.15, 0, -1] as [number, number, number] };
 
 /** Temps de fondu de l'objet entre sa pose au sol et sa pose en main (s). */
 const SNAP = 0.25;
@@ -240,6 +261,11 @@ export class Carry {
   private onThrow: ((item: WorldItem, vel: THREE.Vector3) => void) | null = null;
   /** Mains à plat contre un meuble (pousser) : points d'appui, en monde, recalculés à chaque image. */
   private braceAt: (() => Record<Side, THREE.Vector3>) | null = null;
+  /** Prise des mains en appui : contre un meuble (pousser) ou sous le robinet (se laver). */
+  private braceGrip: 'push' | 'wash' = 'push';
+  /** Se laver : la toilette (mains au visage) ou les mains seulement, et le temps sous l'eau (s). */
+  private washFace = false;
+  private washT = 0;
   /** Main imposée par un geste (lancer) : position depuis l'épaule et coude. */
   private swing: { reach: THREE.Vector3; pole: THREE.Vector3 } | null = null;
 
@@ -290,9 +316,14 @@ export class Carry {
    * Pose les deux mains à plat sur un meuble, aux points `at()` (monde) ; `onDone` une fois en
    * appui. Les mains doivent être vides.
    */
-  brace(at: () => Record<Side, THREE.Vector3>, onDone?: () => void): boolean {
+  brace(at: () => Record<Side, THREE.Vector3>, onDone?: () => void, grip: 'push' | 'wash' = 'push', face = false): boolean {
     if (this.item || this.phase !== 'idle') return false;
     this.braceAt = at;
+    this.braceGrip = grip;
+    this.washFace = face;
+    this.washT = 0;
+    // le buste se penche vers l'évier (voir weights)
+    this.target.copy(at().right);
     this.start('brace', onDone);
     return true;
   }
@@ -488,9 +519,10 @@ export class Carry {
       case 'read':
       case 'close': return { w: 1, r: 0, c: 0 };
       // le bras revient à la pose animée après le lancer
-      case 'brace': return { w: k, r: 0, c: 0 };
-      case 'push': return { w: 1, r: 0, c: 0 };
-      case 'unbrace':
+      // au-dessus de l'évier, le buste se penche un peu
+      case 'brace': return { w: k, r: 0, c: this.braceGrip === 'wash' ? k : 0 };
+      case 'push': return { w: 1, r: 0, c: this.braceGrip === 'wash' ? 1 - 0.6 * this.splashAmount() : 0 };
+      case 'unbrace': return { w: 1 - k, r: 0, c: this.braceGrip === 'wash' ? 1 - k : 0 };
       // l'objet s'est brisé en main : le bras retombe
       case 'let': return { w: 1 - k, r: 0, c: 0 };
       case 'throw': return { w: 1 - ease(THREE.MathUtils.clamp((this.t - THROW_SWING) / (DURATION.throw - THROW_SWING), 0, 1)), r: 0, c: 0 };
@@ -507,6 +539,7 @@ export class Carry {
     this.advance(dt);
     if (this.phase === 'idle' || (!this.item && this.phase !== 'throw' && this.phase !== 'let' && !this.bracing)) return;
     if (this.phase !== 'reach') for (const e of this.stack) e.age += dt;
+    if (this.bracing) this.washT += dt;
     const { w, r, c } = this.weights();
     this.sip = this.phase === 'drink' ? this.sipAmount() : 0;
     this.swing = this.phase === 'throw' ? this.throwSwing() : null;
@@ -545,7 +578,7 @@ export class Carry {
       this.item!.setOpen(open > 0.5);
       hands = [...SIDES];
     } else {
-      const spec = this.bracing ? GRIPS.push : this.phase === 'read' ? GRIPS.read : this.spec();
+      const spec = this.bracing ? GRIPS[this.braceGrip] : this.phase === 'read' ? GRIPS.read : this.spec();
       hands = this.pose(spec, r, scale);
     }
     // fondu entre la pose animée et la pose calculée
@@ -620,6 +653,18 @@ export class Carry {
     return spec === GRIPS.read ? this.item!.box.getCenter(new THREE.Vector3()) : this.gripPoint();
   }
 
+  /** Toilette : 0 mains sous l'eau, 1 mains au visage (en boucle, seulement une fois en appui). */
+  private splashAmount(): number {
+    if (!this.washFace || this.phase !== 'push') return 0;
+    const S = SPLASH, T = S.basin + S.up + S.face + S.down;
+    // le temps compté depuis la fin de la pose des mains
+    const t = Math.max(0, this.washT - DURATION.brace) % T;
+    if (t < S.basin) return 0;
+    if (t < S.basin + S.up) return ease((t - S.basin) / S.up);
+    if (t < S.basin + S.up + S.face) return 1;
+    return ease(1 - (t - S.basin - S.up - S.face) / S.down);
+  }
+
   /** Tasse vers la bouche : monte, reste le temps de la gorgée, redescend. */
   private sipAmount(): number {
     const t = this.t, T = DURATION.drink;
@@ -686,6 +731,21 @@ export class Carry {
     let palmTarget: THREE.Vector3;
     if (this.braceAt && spec === GRIPS.push) {
       palmTarget = this.braceAt()[side];
+    } else if (this.braceAt && spec === GRIPS.wash) {
+      // les mains se frottent l'une contre l'autre sous l'eau
+      const across = new THREE.Vector3(1, 0, 0).applyQuaternion(this.chestRot);
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chestRot);
+      const s = Math.sin(this.washT * RUB_SPEED) * (side === 'right' ? 1 : -1);
+      palmTarget = this.braceAt()[side].addScaledVector(fwd, RUB * s).addScaledVector(across, RUB * 0.3 * s);
+      // toilette : de l'eau dans les mains, puis au visage
+      const k = this.splashAmount();
+      if (k > 0) {
+        const rig = this.rig;
+        const faceAt = rig.worldPos(rig.node('head')!).add(vec(flip(FACE_HOLD, side)).multiplyScalar(scale).applyQuaternion(this.chestRot));
+        palmTarget.lerp(faceAt, k);
+        const faceRot = basisRotation(rest.fingers, PALM_REST, vec(flip(FACE_HAND.fingers, side)).normalize().applyQuaternion(this.chestRot), vec(flip(FACE_HAND.palm, side)).normalize().applyQuaternion(this.chestRot));
+        handRot.slerp(faceRot, k);
+      }
     } else if (spec.left) {
       // les mains sur les flancs de l'objet : son axe qui va de gauche à droite une fois en main
       const inHands = gripRotation(spec);

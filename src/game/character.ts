@@ -67,6 +67,8 @@ export class Character {
   private pushing: { move(step: THREE.Vector3): boolean } | null = null;
   /** Agripper toujours voulu (faux si lâché avant d'avoir posé les mains). */
   private pushWanted = false;
+  /** Mains sous le robinet (en train de se laver) : le perso reste sur place. */
+  washing = false;
   /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
   private approach: { face: THREE.Vector3; then: () => void } | null = null;
 
@@ -316,6 +318,29 @@ export class Character {
     return true;
   }
 
+  /**
+   * Va se placer en `stand` face à l'évier, met les mains sous le robinet aux points `at()` ;
+   * `face` : fait aussi sa toilette (de l'eau au visage). `onReady` une fois les mains sous l'eau.
+   * Le perso ne bouge plus jusqu'à stopWash().
+   */
+  startWash(stand: THREE.Vector3, face: THREE.Vector3, at: () => Record<Side, THREE.Vector3>, toilette: boolean, onReady: () => void, running = false): boolean {
+    const c = this.carries;
+    if (!c || c.right.held || c.left.held || this.busy || this.bracing) return false;
+    this.approachThen(stand, face, () => {
+      if (c.right.brace(at, onReady, 'wash', toilette)) this.washing = true;
+    }, running);
+    return true;
+  }
+
+  /** Retire les mains de sous le robinet ; `onDone` une fois les bras revenus. */
+  stopWash(onDone?: () => void): boolean {
+    if (!this.carries || !this.washing) return false;
+    return this.carries.right.unbrace(() => {
+      this.washing = false;
+      onDone?.();
+    });
+  }
+
   /** Lâche le meuble (ou renonce à l'agripper) ; `onDone` une fois les bras revenus. */
   stopPush(onDone?: () => void): boolean {
     if (!this.carries) return false;
@@ -360,7 +385,7 @@ export class Character {
   }
 
   get idle(): boolean {
-    return !this.target && !this.approach && !this.busy && this.move.lengthSq() === 0;
+    return !this.target && !this.approach && !this.busy && !this.washing && this.move.lengthSq() === 0;
   }
 
   update(dt: number, bounds: number): void {
@@ -382,8 +407,8 @@ export class Character {
       return;
     }
     const dir = new THREE.Vector3();
-    if (this.busy) {
-      // pendant une saisie ou une dépose, le perso reste sur place
+    if (this.busy || this.washing) {
+      // pendant une saisie, une dépose ou quand il se lave, le perso reste sur place
     } else if (this.move.lengthSq() > 0) dir.copy(this.move).normalize();
     else if (this.target) {
       dir.subVectors(this.target, this.root.position).setY(0);
