@@ -91,6 +91,12 @@ export interface ItemDef {
   holds?: string[];
   /** Mot du message quand il casse (« écrasé » pour une pomme) ; défaut : « brisé ». */
   breakWord?: string;
+  /** Aliment qui se coupe sur la planche : l'id de l'objet qu'il devient (ses morceaux). */
+  cut?: string;
+  /** Planche à découper : on y pose l'aliment pour le couper. */
+  board?: boolean;
+  /** Couteau : sert à couper sur la planche. */
+  knife?: boolean;
   build(): THREE.Object3D;
 }
 
@@ -183,6 +189,14 @@ const FRIDGE_DOOR_T = 0.05;
 const FRIDGE_SHELVES = [FRIDGE_T + 0.03, 0.55, 0.98];
 const FRIDGE_SLOTS = FRIDGE_SHELVES.flatMap((y) => [-0.19, -0.065, 0.065, 0.19].map((x): [number, number, number] => [x, y, 0.13]));
 
+/** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier. */
+const WORKTOP_W = 0.9;
+const WORKTOP_D = 0.5;
+/** Planche à découper : longueur, épaisseur, largeur (m). */
+const BOARD_W = 0.36;
+const BOARD_T = 0.02;
+const BOARD_D = 0.24;
+
 const BOTTLE_R = 0.033;
 const BOTTLE_H = 0.24;
 const APPLE_R = 0.04;
@@ -192,6 +206,39 @@ const SEAT_W = 0.42;
 const SEAT_D = 0.4;
 const CHAIR_H = 0.9;
 const LEG = 0.036;
+
+/**
+ * Morceaux d'un aliment coupé sur la planche (quartiers, tranches, rondelles) : se mangent comme
+ * l'aliment entier, pris entre les doigts.
+ */
+function pieces(id: string, name: string, food: { hunger: number; bites: number }, build: () => THREE.Object3D): ItemDef {
+  return {
+    id,
+    name,
+    portable: true,
+    grip: 'pinch',
+    gripPoint: [0, 0.01, 0.04],
+    mouth: [0, 0.015, -0.04],
+    food,
+    fragility: 10,
+    durability: 15,
+    breakWord: 'écrasé',
+    build,
+  };
+}
+
+/** `n` rondelles couchées en petit tas : peau `skin` sur le bord, chair `flesh` dessus. */
+function disks(n: number, r: number, h: number, skin: THREE.ColorRepresentation, flesh: THREE.ColorRepresentation): THREE.Group {
+  const g = new THREE.Group();
+  for (let i = 0; i < n; i++) {
+    // en spirale serrée, un peu les unes sur les autres
+    const a = i * 2.4, d = Math.sqrt(i / n) * r * 2.2;
+    const x = Math.cos(a) * d, z = Math.sin(a) * d, y = (i % 3) * h * 0.6;
+    g.add(mesh(new THREE.CylinderGeometry(r, r, h, 16), skin, x, y + h / 2, z));
+    g.add(mesh(new THREE.CylinderGeometry(r * 0.85, r * 0.85, h + 0.001, 16), flesh, x, y + h / 2, z));
+  }
+  return g;
+}
 
 export const ITEMS: ItemDef[] = [
   {
@@ -399,7 +446,7 @@ export const ITEMS: ItemDef[] = [
     fragility: 8,
     durability: 350,
     door: THREE.MathUtils.degToRad(105),
-    holds: ["bouteille d'eau", 'pomme', 'sandwich'],
+    holds: ["bouteille d'eau", 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'concombre', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre'],
     slots: FRIDGE_SLOTS,
     build: () => {
       const W = FRIDGE_W, D = FRIDGE_D, H = FRIDGE_H, t = FRIDGE_T;
@@ -481,6 +528,7 @@ export const ITEMS: ItemDef[] = [
     // on croque le côté opposé à la paume
     mouth: [0, APPLE_R * 1.2, -APPLE_R],
     food: { hunger: 12, bites: 4 },
+    cut: 'quartiers-pomme',
     // un fruit ne se brise pas : il s'écrase s'il tombe fort
     fragility: 6,
     durability: 20,
@@ -516,6 +564,181 @@ export const ITEMS: ItemDef[] = [
       );
     },
   },
+  {
+    id: 'plan-de-travail',
+    name: 'plan de travail',
+    portable: false,
+    movable: true,
+    // bois et stratifié : solide
+    fragility: 7,
+    durability: 300,
+    build: () => {
+      const H = COUNTER_H, top = 0.04;
+      const wood = 0x8a6440, counter = 0xd9d3c5, line = 0x5d4129, knob = 0xc9c2b0;
+      return group(
+        // meuble bas : un tiroir en haut, deux portes dessous
+        mesh(new THREE.BoxGeometry(WORKTOP_W, H - top, WORKTOP_D), wood, 0, (H - top) / 2, 0),
+        mesh(new THREE.BoxGeometry(WORKTOP_W + 0.02, top, WORKTOP_D + 0.02), counter, 0, H - top / 2, 0),
+        mesh(new THREE.BoxGeometry(WORKTOP_W - 0.08, 0.006, 0.01), line, 0, H - 0.17, WORKTOP_D / 2),
+        mesh(new THREE.BoxGeometry(0.006, H - top - 0.24, 0.01), line, 0, (H - top - 0.15) / 2, WORKTOP_D / 2),
+        mesh(new THREE.BoxGeometry(0.12, 0.014, 0.014), knob, 0, H - 0.1, WORKTOP_D / 2 + 0.008),
+        mesh(new THREE.BoxGeometry(0.012, 0.09, 0.012), knob, -0.04, H - 0.3, WORKTOP_D / 2 + 0.008),
+        mesh(new THREE.BoxGeometry(0.012, 0.09, 0.012), knob, 0.04, H - 0.3, WORKTOP_D / 2 + 0.008),
+      );
+    },
+  },
+  {
+    id: 'planche',
+    name: 'planche à découper',
+    portable: true,
+    // tenue par la poignée, le long du corps
+    grip: 'side',
+    gripPoint: [-BOARD_W / 2 - 0.02, BOARD_T / 2, 0],
+    board: true,
+    // du bois : ne casse pas, s'use à force de coups de couteau
+    fragility: 10,
+    durability: 150,
+    build: () => {
+      const wood = 0xc89b62;
+      return group(
+        mesh(new THREE.BoxGeometry(BOARD_W, BOARD_T, BOARD_D), wood, 0, BOARD_T / 2, 0),
+        // rigole à jus, et la poignée percée
+        mesh(new THREE.BoxGeometry(BOARD_W - 0.04, 0.002, 0.006), 0xa97c48, 0, BOARD_T + 0.001, BOARD_D / 2 - 0.02),
+        mesh(new THREE.BoxGeometry(BOARD_W - 0.04, 0.002, 0.006), 0xa97c48, 0, BOARD_T + 0.001, -BOARD_D / 2 + 0.02),
+        mesh(new THREE.BoxGeometry(0.05, BOARD_T, 0.08), wood, -BOARD_W / 2 - 0.025, BOARD_T / 2, 0),
+        mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.002, 12), 0x6b4a2b, -BOARD_W / 2 - 0.03, BOARD_T + 0.001, 0),
+      );
+    },
+  },
+  {
+    id: 'couteau',
+    name: 'couteau',
+    portable: true,
+    // en poing par le manche, la lame dépasse côté pouce
+    grip: 'fist',
+    gripPoint: [0, 0.055, 0],
+    knife: true,
+    // posé à plat sur le côté de la lame
+    layFlat: true,
+    fragility: 9,
+    durability: 200,
+    build: () => {
+      // le long de +Y : le manche en bas, la lame au-dessus, le tranchant vers -Z
+      const steel = 0xc8ced4;
+      return group(
+        mesh(new THREE.BoxGeometry(0.016, 0.11, 0.024), 0x3a2a20, 0, 0.055, 0),
+        mesh(new THREE.BoxGeometry(0.018, 0.012, 0.03), 0x9ea4aa, 0, 0.116, -0.003),
+        mesh(new THREE.BoxGeometry(0.003, 0.13, 0.036), steel, 0, 0.187, -0.008),
+        // la pointe : le dos de la lame descend vers le tranchant
+        mesh(new THREE.BoxGeometry(0.003, 0.03, 0.022), steel, 0, 0.267, -0.015),
+      );
+    },
+  },
+  {
+    id: 'pain',
+    name: 'pain',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.04, 0.05],
+    mouth: [0, 0.05, -0.09],
+    food: { hunger: 25, bites: 5 },
+    cut: 'tranches-pain',
+    fragility: 10,
+    durability: 20,
+    build: () => {
+      // un bâtard doré, entaillé sur le dessus, couché le long de Z
+      const loaf = mesh(new THREE.SphereGeometry(0.05, 16, 10).scale(1, 0.8, 2), 0xd39a52, 0, 0.04, 0);
+      const g = group(loaf);
+      for (const z of [-0.05, 0, 0.05]) {
+        const cutMark = mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), 0xf0d29a, 0, 0.078, z);
+        cutMark.rotation.y = 0.5;
+        g.add(cutMark);
+      }
+      return g;
+    },
+  },
+  {
+    id: 'carotte',
+    name: 'carotte',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.015, 0.05],
+    mouth: [0, 0.015, -0.09],
+    food: { hunger: 6, bites: 3 },
+    cut: 'rondelles-carotte',
+    fragility: 10,
+    durability: 20,
+    build: () => {
+      // couchée le long de Z : la pointe vers -Z, les fanes vers +Z
+      const body = mesh(new THREE.ConeGeometry(0.016, 0.17, 12).rotateX(-Math.PI / 2), 0xe8792a, 0, 0.016, -0.01);
+      const tops = mesh(new THREE.ConeGeometry(0.012, 0.05, 6).rotateX(Math.PI / 2), 0x4f8a3a, 0, 0.016, 0.1);
+      return group(body, tops);
+    },
+  },
+  {
+    id: 'tomate',
+    name: 'tomate',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.03, 0.033],
+    mouth: [0, 0.035, -0.033],
+    food: { hunger: 6, bites: 3 },
+    cut: 'tranches-tomate',
+    // un fruit tendre : il s'écrase
+    fragility: 5,
+    durability: 15,
+    breakWord: 'écrasé',
+    build: () => {
+      const fruit = mesh(new THREE.SphereGeometry(0.035, 16, 12).scale(1, 0.85, 1), 0xd8352a, 0, 0.03, 0);
+      const stem = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.004, 6), 0x4f8a3a, 0, 0.06, 0);
+      return group(fruit, stem);
+    },
+  },
+  {
+    id: 'concombre',
+    name: 'concombre',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.022, 0.05],
+    mouth: [0, 0.022, -0.09],
+    food: { hunger: 5, bites: 3 },
+    cut: 'rondelles-concombre',
+    fragility: 10,
+    durability: 20,
+    build: () => {
+      // couché le long de Z
+      const body = mesh(new THREE.CapsuleGeometry(0.022, 0.16, 6, 12).rotateX(Math.PI / 2), 0x3f7a35, 0, 0.022, 0);
+      return group(body);
+    },
+  },
+  pieces('quartiers-pomme', 'quartiers de pomme', { hunger: 12, bites: 4 }, () => {
+    // quatre quartiers couchés, chair vers le haut, en éventail
+    const g = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const q = new THREE.Group();
+      q.add(mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.07, 3).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2), 0xf3e2b5, 0, 0.012, 0));
+      q.add(mesh(new THREE.BoxGeometry(0.07, 0.006, 0.008), 0xc0392b, 0, 0.003, -0.012));
+      q.position.set(-0.03 + i * 0.02, 0, (i % 2) * 0.02 - 0.01);
+      q.rotation.y = -0.3 + i * 0.2;
+      g.add(q);
+    }
+    return g;
+  }),
+  pieces('tranches-pain', 'tranches de pain', { hunger: 25, bites: 5 }, () => {
+    // les tranches couchées les unes sur les autres, décalées
+    const g = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const s = new THREE.Group();
+      s.add(mesh(new THREE.BoxGeometry(0.075, 0.01, 0.065), 0xb98a4a, 0, 0.005, 0));
+      s.add(mesh(new THREE.BoxGeometry(0.065, 0.011, 0.055), 0xf2dca8, 0, 0.0055, 0));
+      s.position.set(-0.04 + i * 0.02, i * 0.009, 0);
+      g.add(s);
+    }
+    return g;
+  }),
+  pieces('rondelles-carotte', 'rondelles de carotte', { hunger: 6, bites: 3 }, () => disks(9, 0.015, 0.006, 0xe8792a, 0xf2a35a)),
+  pieces('tranches-tomate', 'tranches de tomate', { hunger: 6, bites: 3 }, () => disks(4, 0.032, 0.008, 0xd8352a, 0xf07a5f)),
+  pieces('rondelles-concombre', 'rondelles de concombre', { hunger: 5, bites: 3 }, () => disks(7, 0.021, 0.006, 0x3f7a35, 0xd9ecb0)),
   {
     id: 'table',
     name: 'table',
