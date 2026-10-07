@@ -1132,10 +1132,18 @@ export class Game {
     return this.items.find((b) => b.def.board && !carried.includes(b) && b.object.position.y > item.object.position.y && this.isAbove(b, item)) ?? null;
   }
 
-  /** Dessus de la planche, au milieu (monde). */
-  private boardTop(board: WorldItem): THREE.Vector3 {
+  /** Dessus de la planche (monde) : au milieu, ou décalé de `dx`, `dz` dans le repère de la planche. */
+  private boardTop(board: WorldItem, dx = 0, dz = 0): THREE.Vector3 {
     board.object.updateMatrixWorld(true);
-    return board.box.getCenter(new THREE.Vector3()).setY(board.box.max.y).applyMatrix4(board.object.matrixWorld);
+    const c = board.box.getCenter(new THREE.Vector3());
+    return new THREE.Vector3(c.x + dx, board.box.max.y, c.z + dz).applyMatrix4(board.object.matrixWorld);
+  }
+
+  /** Une place libre sur la planche (pas sur les morceaux déjà coupés), le milieu d'abord. */
+  private boardSpot(board: WorldItem, skip: WorldItem): THREE.Vector3 {
+    const spots = [[0, 0], [-0.1, 0], [0.1, 0], [-0.1, 0.05], [0.1, -0.05]].map(([x, z]) => this.boardTop(board, x, z));
+    const taken = (v: THREE.Vector3) => this.items.some((i) => i !== skip && i !== board && i.def.food && p0(i.object.position).distanceTo(p0(v)) < 0.07);
+    return spots.find((v) => !taken(v)) ?? spots[0];
   }
 
   /**
@@ -1213,7 +1221,7 @@ export class Game {
     };
     // 1. devant la planche, l'aliment posé dessus
     c.approachThen(stand, face, () => {
-      if (!c.drop(this.boardTop(board), undefined, takeKnife, false, food)) this.onNotice?.(`Impossible de poser ${food.name} sur la planche.`);
+      if (!c.drop(this.boardSpot(board, food), undefined, takeKnife, false, food)) this.onNotice?.(`Impossible de poser ${food.name} sur la planche.`);
     }, running);
     return true;
   }
