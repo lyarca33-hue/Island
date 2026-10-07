@@ -9,7 +9,7 @@ import { intentLabel, runIntents, type Step } from './tasks';
 
 type Mode = 'parole' | 'action';
 
-const STEP_LABEL: Record<string, string> = { prendre: 'Prend', ranger: 'Range dans', poser: 'Pose', aller: 'Va vers', cafe: 'Fait un café', boire: 'Boit', manger: 'Mange', couper: 'Coupe', dire: 'Dit', lire: 'Lit', arreter_lire: 'Ferme le livre', allumer: 'Allume', eteindre: 'Éteint', mettre_sur_feu: 'Met sur le feu', mettre_dans: 'Met dans', attendre_cuisson: 'Attend la cuisson de', essuyer_vaisselle: 'Essuie', essuyer_mains: 'S’essuie les mains', commander_courses: 'Commande les courses', ranger_courses: 'Range les courses', lire_liste: 'Lit la liste de courses' };
+const STEP_LABEL: Record<string, string> = { prendre: 'Prend', ranger: 'Range dans', poser: 'Pose', aller: 'Va vers', cafe: 'Fait un café', boire: 'Boit', manger: 'Mange', couper: 'Coupe', dire: 'Dit', lire: 'Lit', arreter_lire: 'Ferme le livre', allumer: 'Allume', eteindre: 'Éteint', mettre_sur_feu: 'Met sur le feu', mettre_dans: 'Met dans', attendre_cuisson: 'Attend la cuisson de', essuyer_vaisselle: 'Essuie', essuyer_mains: 'S’essuie les mains', commander_courses: 'Commande les courses', ranger_courses: 'Range les courses', lire_liste: 'Lit la liste de courses', casser_oeuf: 'Casse un œuf dans', ajouter_saladier: 'Verse dans', fouetter: 'Fouette', verser_pate: 'Verse la pâte dans', remuer: 'Remue', faire_sauter: 'Fait sauter', servir_poele: 'Sert dans', assaisonner: 'Assaisonne', tartiner: 'Tartine', raper: 'Râpe du fromage sur', gouter: 'Goûte' };
 
 function stepText(s: Step | null): string {
   if (!s) return 'Réfléchit…';

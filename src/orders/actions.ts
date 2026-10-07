@@ -406,6 +406,73 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.standUp(),
   },
   {
+    name: 'casser_oeuf',
+    description: 'Casser l’œuf tenu dans `dans` : le saladier (pour une omelette ou une pâte à crêpes) ou la poêle (un œuf au plat, qui cuit sur le feu). Sans `dans` : le saladier tenu ou proche, sinon la poêle.',
+    params: {},
+    // `dans` (facultatif) : ref du saladier ou de la poêle
+    run: (g, a) => g.crackEgg(a.dans),
+  },
+  {
+    name: 'ajouter_saladier',
+    description: 'Verser dans le saladier l’ingrédient sec tenu : farine, sucre ou levure (le lait se verse avec « verser »).',
+    params: {},
+    run: (g, a) => g.addToBowl(a.saladier),
+  },
+  {
+    name: 'fouetter',
+    description: 'Mélanger le saladier (tenu ou posé) au fouet ou à la cuillère en bois tenus : œufs seuls → œufs battus (omelette) ; œuf, lait et farine → pâte à crêpes.',
+    params: {},
+    run: (g, a) => g.mixBowl(a.saladier),
+  },
+  {
+    name: 'verser_pate',
+    description: 'Verser la préparation du saladier tenu (œufs battus, pâte à crêpes) dans la poêle `poele` (sinon celle sur le feu) : une omelette, ou une crêpe à la fois.',
+    params: {},
+    run: (g, a) => g.pourBatter(a.poele),
+  },
+  {
+    name: 'remuer',
+    description: 'Remuer à la spatule ou à la cuillère en bois tenues ce qui cuit dans l’ustensile `objet` (sinon celui sur le feu) : sans ça, au bout d’un moment, ça attache et brûle plus vite.',
+    params: {},
+    run: (g, a) => g.stirPan(a.objet),
+  },
+  {
+    name: 'faire_sauter',
+    description: 'Faire sauter ce qui cuit dans la poêle `objet` (sinon celle sur le feu) : une main libre la prend, l’aliment (crêpe, omelette) se retourne en l’air (il peut tomber à côté), la poêle revient sur le feu.',
+    params: {},
+    run: (g, a) => g.tossPan(a.objet),
+  },
+  {
+    name: 'servir_poele',
+    description: 'Servir à la spatule (ou à la louche) tenue ce qui est cuit dans la poêle ou la casserole `objet` (sinon la plus proche) dans l’assiette posée `assiette` (sinon la plus proche, propre et vide).',
+    params: {},
+    run: (g, a) => g.serveFromPan(a.assiette, a.objet),
+  },
+  {
+    name: 'assaisonner',
+    description: 'Assaisonner avec le pot d’épices tenu (sel, poivre, paprika, herbes de Provence, huile d’olive) ce qu’il y a dans ou sur `objet` : la poêle, l’assiette, la planche (sinon l’aliment tenu, la poêle sur le feu, l’assiette servie).',
+    params: {},
+    run: (g, a) => g.season(a.objet),
+  },
+  {
+    name: 'tartiner',
+    description: 'Tartiner `objet` (tranches de pain, pain grillé, crêpe cuite ; sinon le plus proche) avec le pot tenu (confiture, miel, pâte à tartiner, beurre) et un couteau dans l’autre main.',
+    params: {},
+    run: (g, a) => g.spread(a.objet),
+  },
+  {
+    name: 'raper',
+    description: 'Râper le fromage tenu, à la râpe tenue dans l’autre main, sur `objet` : le plat de l’assiette, la poêle, ou la planche (un tas de fromage râpé).',
+    params: {},
+    run: (g, a) => g.grate(a.objet),
+  },
+  {
+    name: 'gouter',
+    description: 'Goûter à la cuillère tenue ce qu’il y a dans `objet` (poêle, assiette, saladier ; sinon la poêle sur le feu) : le perso dit si c’est cuit, brûlé, fade ou bon.',
+    params: {},
+    run: (g, a) => g.taste(a.objet),
+  },
+  {
     name: 'dire',
     description: 'Le perso dit une phrase (bulle au-dessus de sa tête).',
     params: { texte: 'la phrase' },
