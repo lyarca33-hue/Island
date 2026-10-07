@@ -189,6 +189,8 @@ interface Wall {
   full: THREE.Group;
   low: THREE.Group;
   cut: boolean;
+  /** Boîtes des morceaux du mur haut : pour savoir s'il cache le perso dehors. */
+  boxes: THREE.Box3[];
 }
 
 /** Repères pour accrocher le décor au-dessus des meubles : position des meubles placés. */
@@ -537,7 +539,10 @@ export class Room {
     }
     low.visible = false;
     this.group.add(full, low);
-    this.walls.push({ name, n: new THREE.Vector2(nx, nz), at: alongX ? new THREE.Vector2(0, inner) : new THREE.Vector2(inner, 0), full, low, cut: false });
+    full.updateMatrixWorld(true);
+    const boxes: THREE.Box3[] = [];
+    full.traverse((o) => { if (o instanceof THREE.Mesh) boxes.push(new THREE.Box3().setFromObject(o)); });
+    this.walls.push({ name, n: new THREE.Vector2(nx, nz), at: alongX ? new THREE.Vector2(0, inner) : new THREE.Vector2(inner, 0), full, low, cut: false, boxes });
     full.traverse((o) => { if (o instanceof THREE.Mesh) this.solid.push(o); });
   }
 
@@ -570,16 +575,19 @@ export class Room {
   }
 
   /**
-   * À chaque image : murs abaissés côté caméra (et entre la caméra et le perso s'il est dehors),
+   * À chaque image : murs abaissés côté caméra quand le perso est dedans (relevés quand il sort,
+   * sauf un mur qui le cacherait),
    * porte qui s'ouvre devant le perso, aiguilles de l'horloge, lampes et vitres selon l'heure.
    */
-  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number): void {
+  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3): void {
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
+    const p2 = new THREE.Vector2(player.x, player.z);
+    const inside = !this.walls.some((w) => p2.clone().sub(w.at).dot(w.n) < 0);
+    // dehors : rayons du perso (jambes, buste, tête) vers la caméra
+    const rays = inside ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
     for (const w of this.walls) {
-      const facing = w.n.dot(view);
-      // le perso de l'autre côté du mur (dehors), et le mur entre lui et la caméra
-      const outside = new THREE.Vector2(player.x, player.z).sub(w.at).dot(w.n) < 0;
-      const cut = facing < -0.1 || (outside && facing > 0.1);
+      // dedans : les murs côté caméra s'abaissent ; dehors, ils restent pleins, sauf celui qui cache le perso
+      const cut = inside ? w.n.dot(view) < -0.1 : rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
       if (cut !== w.cut) {
         w.cut = cut;
         w.full.visible = !cut;
