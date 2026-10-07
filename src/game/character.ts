@@ -77,6 +77,8 @@ export class Character {
    * possible (et déplace le meuble).
    */
   private pushing: { move(step: THREE.Vector3): boolean; turn(angle: number): THREE.Vector3 | null } | null = null;
+  /** Poussée demandée (pas au clavier) : ce qui reste à parcourir, et la suite une fois arrivé. */
+  private pushLeft: { v: THREE.Vector3; onDone?: () => void } | null = null;
   /** Sens dans lequel on fait pivoter le meuble au clavier (-1 horaire, 1 antihoraire, 0 rien). */
   private turnInput = 0;
   /** Angle qu'il reste à faire pivoter au meuble (demande par le jeu ou l'IA), en radians. */
@@ -360,6 +362,7 @@ export class Character {
     move: (step: THREE.Vector3) => boolean,
     turn: (angle: number) => THREE.Vector3 | null,
     running = false,
+    onReady?: () => void,
   ): boolean {
     const c = this.carries;
     if (!c || c.right.held || c.left.held || this.busy || this.bracing) return false;
@@ -368,8 +371,9 @@ export class Character {
       if (!this.pushWanted) return;
       c.right.brace(at, () => {
         // lâché pendant que les mains se posaient : on relâche tout de suite
-        if (this.pushWanted) this.pushing = { move, turn };
-        else c.right.unbrace();
+        if (!this.pushWanted) return void c.right.unbrace();
+        this.pushing = { move, turn };
+        onReady?.();
       });
     }, running);
     return true;
@@ -398,10 +402,18 @@ export class Character {
     });
   }
 
+  /** Pousse (ou tire) le meuble agrippé de `by` (monde), sans les touches ; `onDone` une fois arrivé. */
+  pushBy(by: THREE.Vector3, onDone?: () => void): boolean {
+    if (!this.pushing) return false;
+    this.pushLeft = { v: by.clone().setY(0), onDone };
+    return true;
+  }
+
   /** Lâche le meuble (ou renonce à l'agripper) ; `onDone` une fois les bras revenus. */
   stopPush(onDone?: () => void): boolean {
     if (!this.carries) return false;
     this.pushWanted = false;
+    this.pushLeft = null;
     if (!this.pushing) {
       this.approach = null;
       this.target = null;
@@ -443,7 +455,7 @@ export class Character {
   }
 
   get idle(): boolean {
-    return !this.target && !this.approach && !this.busy && !this.washing && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
+    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
   }
 
   update(dt: number, bounds: number): void {
@@ -451,7 +463,23 @@ export class Character {
       // les touches poussent (ou tirent) le meuble ; le perso garde son orientation
       const step = this.move.clone().setY(0);
       let moved = false;
-      if (step.lengthSq() > 0 && !this.busy) {
+      // une poussée demandée : au pas, jusqu'au bout (bloquée : on s'arrête là)
+      const scripted = this.pushLeft;
+      if (scripted && step.lengthSq() === 0 && !this.busy) {
+        const d = Math.min(PUSH_SPEED * 0.6 * dt, scripted.v.length());
+        const s = scripted.v.clone().setLength(d);
+        const next = this.root.position.clone().add(s);
+        const ok = d > 1e-5 && Math.abs(next.x) < bounds && Math.abs(next.z) < bounds && this.pushing.move(s);
+        if (ok) {
+          this.root.position.copy(next);
+          scripted.v.sub(s);
+          moved = true;
+        }
+        if (!ok || scripted.v.length() < 1e-4) {
+          this.pushLeft = null;
+          scripted.onDone?.();
+        }
+      } else if (step.lengthSq() > 0 && !this.busy) {
         step.normalize().multiplyScalar(PUSH_SPEED * dt);
         const next = this.root.position.clone().add(step);
         if (Math.abs(next.x) < bounds && Math.abs(next.z) < bounds && this.pushing.move(step)) {

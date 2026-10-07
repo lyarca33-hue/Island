@@ -144,6 +144,8 @@ export interface ItemDef {
   heats?: { seconds: number; burns: boolean };
   /** Lave-vaisselle : durée d'un lavage (s) ; ce qui est rangé dedans ressort propre. */
   washes?: { seconds: number };
+  /** Éponge : essuie la table (le geste va et vient comme un couteau). */
+  wipes?: boolean;
   /** Poubelle : nombre d'objets jetés avant qu'il faille la vider. La pièce `dechets` monte avec. */
   bin?: number;
   /**
