@@ -38,24 +38,17 @@ export function MenuSection({ title, open, onToggle, children }: { title: string
   );
 }
 
-/** Raccourcis clavier et souris du jeu. */
+/** Raccourcis clavier du jeu (ce qu'un clic fait n'est pas listé). */
 export const SHORTCUTS: Array<[string, string]> = [
-  ['Clic', 'Aller ici'],
-  ['Clic sur un objet', 'Le prendre / l’utiliser'],
-  ['Z Q S D ou flèches', 'Marcher'],
+  ['ZQSD / ↑↓←→', 'Marcher'],
   ['Maj', 'Courir'],
-  ['E', 'Poser'],
+  ['E', 'Poser / lâcher'],
   ['B', 'Boire'],
   ['M', 'Manger'],
-  ['L', 'Lire / fermer le livre'],
-  ['T', 'Lancer l’objet tenu'],
-  ['C', 'S’asseoir sur la chaise la plus proche / se lever'],
-  ['Clic sur un meuble (mains vides)', 'L’agripper : Z Q S D le déplacent, E le lâche'],
-  ['Clic sur la porte du frigo', 'L’ouvrir / la fermer (sur le côté : le pousser)'],
-  ['Clic sur le frigo (objet en main)', 'Y ranger la bouteille, la pomme ou le sandwich'],
-  ['Clic sur l’évier', 'Tasse en main : la remplir d’eau ; mains vides : se laver les mains'],
-  ['Souris sur un objet', 'Son état (neuf, usé…) et sa durabilité'],
+  ['L', 'Lire'],
+  ['T', 'Lancer'],
+  ['C', 'S’asseoir / se lever'],
   ['Entrée', 'Écrire'],
-  ['Tab (en écrivant)', 'Parole ↔ Action'],
+  ['Tab', 'Parole ↔ Action'],
   ['Échap', 'Menu'],
 ];
