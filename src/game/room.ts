@@ -161,7 +161,7 @@ export interface RoomSpec {
   /** Meubles rangés contre les murs. */
   runs: Run[];
   /** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
-  onTop?: Array<[string, string]>;
+  onTop?: Array<[string, string, number?, number?, number?]>;
   /** Objets posés au départ, hors des rangées : [id, x, y, z, rotation (rad)]. */
   items?: Array<[string, number, number, number, number]>;
   /** Décor fixe (accroché aux murs, tapis…). */
@@ -975,6 +975,15 @@ export const KITCHEN: RoomSpec = {
     { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur'] },
     { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
   ],
-  onTop: [['micro-ondes', 'placard'], ['bouilloire', 'tiroir'], ['grille-pain', 'lave-vaisselle'], ['mixeur', 'four'], ['frigo', 'congelateur']],
+  onTop: [
+    ['micro-ondes', 'placard'],
+    ['bouilloire', 'tiroir'],
+    // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
+    ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
+    ['egouttoir', 'lave-vaisselle', 0.145, 0],
+    ['torchon', 'lave-vaisselle', -0.15, 0.17, 0.1],
+    ['mixeur', 'four'],
+    ['frigo', 'congelateur'],
+  ],
   decor: kitchenDecor,
 };

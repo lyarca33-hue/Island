@@ -60,10 +60,25 @@ const STEEL = 0xb9bfc6;
 const INOX = 0xd2d6da;
 const BLACK = 0x2e3135;
 
-/** Vaisselle qui se range au placard et passe au lave-vaisselle (les verres, bols… viendront s'y ajouter). */
-export const DISHES = ['tasse', 'assiette', 'fourchette', 'couteau de table'];
-/** Petits objets qui vont dans le tiroir : les couverts, la lettre. */
-export const DRAWER_THINGS = ['fourchette', 'couteau de table', 'lettre'];
+/** Vaisselle qui passe au lave-vaisselle et sèche à l'égouttoir (les couverts se rangent au tiroir, le reste au placard). */
+export const DISHES = ['tasse', 'verre', 'bol', 'assiette', 'carafe', 'fourchette', 'couteau de table', 'cuillère'];
+/** Petits objets qui vont dans le tiroir : les couverts, le torchon, la lettre. */
+export const DRAWER_THINGS = ['fourchette', 'couteau de table', 'cuillère', 'torchon', 'lettre'];
+/** Égouttoir : largeur, profondeur, dessus de la grille, hauteur du rebord (m) ; panier à couverts (centre x, z). */
+const RACK_W = 0.3;
+const RACK_D = 0.44;
+const RACK_FLOOR = 0.022;
+const RACK_H = 0.09;
+const RACK_BASKET: [number, number] = [0.09, 0.18];
+/** Ce qui va à chaque place de l'égouttoir : verres et bols au fond, l'assiette au milieu, les couverts au panier. */
+const RACK_CUPS = ['verre', 'tasse', 'bol', 'carafe'];
+const RACK_SLOTS: Array<[[number, number, number], string[]]> = [
+  [[-0.072, RACK_FLOOR, -0.16], RACK_CUPS],
+  [[0.072, RACK_FLOOR, -0.16], RACK_CUPS],
+  [[0, RACK_FLOOR, 0.03], ['assiette', 'bol']],
+  [[-0.08, RACK_FLOOR, 0.175], ['verre', 'tasse']],
+  ...[-0.02, 0.02].map((dx): [[number, number, number], string[]] => [[RACK_BASKET[0] + dx, RACK_FLOOR, RACK_BASKET[1]], ['fourchette', 'couteau de table', 'cuillère']]),
+];
 /** Ce qui se met au four et au micro-ondes. */
 export const OVEN_FOOD = ['lasagne', 'steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte'];
 
@@ -86,7 +101,8 @@ function carcass(w: number, d: number, color: THREE.ColorRepresentation = WOOD):
 const CUP_W = 0.6;
 const CUP_D = 0.55;
 const CUP_SHELVES = [0.08 + WALL, 0.48];
-const CUP_SLOTS = CUP_SHELVES.flatMap((y) => [-0.18, 0, 0.18].map((x): [number, number, number] => [x, y, 0.04]));
+// une rangée devant (places 0 à 5), puis une au fond (6 à 11) pour les verres et les bols
+const CUP_SLOTS = [0.04, -0.13].flatMap((z) => CUP_SHELVES.flatMap((y) => [-0.18, 0, 0.18].map((x): [number, number, number] => [x, y, z])));
 
 /** Tiroir : largeur, profondeur du meuble, fond du tiroir (y), course (m). */
 const DRAWER_W = 0.5;
@@ -137,7 +153,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     fragility: 7,
     // la porte : charnière à droite, comme le frigo
     door: THREE.MathUtils.degToRad(100),
-    holds: [...DISHES, "bouteille d'eau", 'pomme', 'pain', 'boîte de pastilles'],
+    holds: [...DISHES.filter((d) => !DRAWER_THINGS.includes(d)), "bouteille d'eau", 'pomme', 'pain', 'boîte de pastilles'],
     slots: CUP_SLOTS,
     build: () => {
       const g = carcass(CUP_W, CUP_D);
@@ -166,8 +182,8 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     fragility: 7,
     drawer: DRAWER_OUT,
     holds: DRAWER_THINGS,
-    // au fond du tiroir, deux rangées de deux
-    slots: [-0.11, 0.11].flatMap((x) => [-0.12, 0.08].map((z): [number, number, number] => [x, DRAWER_Y + 0.006, z])),
+    // au fond du tiroir, deux rangées de deux, puis deux colonnes étroites au milieu (cuillères)
+    slots: [-0.11, 0.11, -0.03, 0.03].flatMap((x) => [-0.12, 0.08].map((z): [number, number, number] => [x, DRAWER_Y + 0.006, z])),
     build: () => {
       const g = carcass(DRAWER_W, DRAWER_D);
       // deux fausses façades de tiroir en bas, avec leur poignée
@@ -255,6 +271,65 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     wipes: true,
     // jaune, le côté qui gratte en vert
     build: () => group(box(0.1, 0.03, 0.065, 0xf2d34a, 0, 0.015, 0), box(0.1, 0.008, 0.065, 0x3f8f4a, 0, 0.034, 0)),
+  },
+  {
+    id: 'torchon',
+    name: 'torchon',
+    portable: true,
+    // plié, tenu par un coin
+    grip: 'fist',
+    gripPoint: [0.07, 0.006, 0.04],
+    // sèche la vaisselle mouillée et les mains ; essuie aussi la table et les flaques, comme l'éponge
+    towel: true,
+    wipes: true,
+    // du tissu : il ne casse pas, il s'use et finit par se déchirer
+    fragility: 10,
+    durability: 80,
+    breakWord: 'déchiré',
+    // plié à plat : blanc à deux rayures rouges
+    build: () => {
+      const g = group(box(0.2, 0.012, 0.13, 0xf3efe6, 0, 0.006, 0));
+      for (const z of [-0.045, 0.045]) g.add(box(0.201, 0.0125, 0.012, 0xb33a3a, 0, 0.00625, z));
+      return g;
+    },
+  },
+  {
+    id: 'egouttoir',
+    name: 'égouttoir',
+    portable: false,
+    // posé sur le lave-vaisselle, contre l'évier (ON_TOP) : il ne se déplace pas seul
+    movable: false,
+    fragility: 7,
+    durability: 150,
+    holds: DISHES,
+    slots: RACK_SLOTS.map(([at]) => at),
+    slotHolds: RACK_SLOTS.map(([, names]) => names),
+    // la vaisselle lavée à la main y sèche en une demi-heure de jeu
+    rack: { minutes: 30 },
+    build: () => {
+      const W = RACK_W, D = RACK_D;
+      const wire = 0xc7ccd2;
+      // bac en plastique qui recueille l'eau, grille dessus, rebord en fil d'inox
+      const g = group(
+        box(W, 0.012, D, 0xdfe4e8, 0, 0.006, 0),
+        box(0.008, 0.02, D, 0xd0d6dc, W / 2 - 0.004, 0.01, 0),
+        box(0.008, 0.02, D, 0xd0d6dc, -W / 2 + 0.004, 0.01, 0),
+      );
+      for (let i = 0; i < 11; i++) g.add(box(W - 0.02, 0.006, 0.006, wire, 0, RACK_FLOOR - 0.003, -D / 2 + 0.02 + i * ((D - 0.04) / 10)));
+      for (const x of [-W / 2 + 0.005, W / 2 - 0.005]) g.add(box(0.006, 0.006, D - 0.01, wire, x, RACK_H, 0));
+      for (const z of [-D / 2 + 0.005, D / 2 - 0.005]) g.add(box(W - 0.01, 0.006, 0.006, wire, 0, RACK_H, z));
+      for (const x of [-W / 2 + 0.005, W / 2 - 0.005]) for (const z of [-D / 2 + 0.005, D / 2 - 0.005]) g.add(box(0.006, RACK_H, 0.006, wire, x, RACK_H / 2, z));
+      // panier à couverts, devant à droite
+      const [bx, bz] = RACK_BASKET, bw = 0.09, bd = 0.07, bh = 0.1, plastic = 0x9fb7c9;
+      g.add(
+        box(bw, 0.004, bd, plastic, bx, RACK_FLOOR, bz),
+        box(bw, bh, 0.004, plastic, bx, RACK_FLOOR + bh / 2, bz - bd / 2),
+        box(bw, bh, 0.004, plastic, bx, RACK_FLOOR + bh / 2, bz + bd / 2),
+        box(0.004, bh, bd, plastic, bx - bw / 2, RACK_FLOOR + bh / 2, bz),
+        box(0.004, bh, bd, plastic, bx + bw / 2, RACK_FLOOR + bh / 2, bz),
+      );
+      return g;
+    },
   },
   {
     id: 'plateau',
@@ -359,7 +434,8 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     door: THREE.MathUtils.degToRad(85),
     doorAxis: 'x',
     holds: DISHES,
-    slots: DW_RACKS.flatMap((y) => [-0.17, 0, 0.17].map((x): [number, number, number] => [x, y + 0.008, -0.02])),
+    // deux paniers ; une rangée au milieu (places 0 à 5), puis une à l'avant (6 à 11)
+    slots: [-0.02, 0.15].flatMap((z) => DW_RACKS.flatMap((y) => [-0.17, 0, 0.17].map((x): [number, number, number] => [x, y + 0.008, z]))),
     washes: { seconds: 6 },
     build: () => {
       const w = DW_W, d = DW_D, h = COUNTER_H - TOP;
@@ -528,7 +604,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     holds: FRUITS,
     slots: [[0, MIXER_BASE + 0.02, 0], [0, MIXER_BASE + 0.09, 0]],
     blends: { seconds: 4 },
-    pour: { at: [MIXER_CUP, 0, 0.02], fills: ['tasse'], liquid: 'jus de fruits', seconds: 2.2, color: 0xe8b04a },
+    pour: { at: [MIXER_CUP, 0, 0.02], fills: ['tasse', 'verre'], liquid: 'jus de fruits', seconds: 2.2, color: 0xe8b04a },
     build: () => {
       const dark = 0x2e3135;
       const r = 0.065, h = MIXER_JAR, y0 = MIXER_BASE;
