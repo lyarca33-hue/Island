@@ -122,6 +122,10 @@ export interface ItemDef {
   breakWord?: string;
   /** Garde au frais (frigo) : on y range ce qui se mange et se boit. */
   cold?: boolean;
+  /** Congélateur : garde au froid ce qu'on y range (glaçons, plats surgelés). */
+  freezer?: boolean;
+  /** État avant cuisson s'il ne se dit pas « cru » (« congelé » pour un plat surgelé). */
+  rawWord?: string;
   /**
    * Axe de la charnière de la porte : 'y' (défaut : frigo, placard, micro-ondes) ou 'x' (posée
    * en bas, elle s'abaisse vers l'avant : four, lave-vaisselle ; en haut, angle négatif : couvercle).
@@ -597,6 +601,15 @@ export const ITEMS: ItemDef[] = [
         mesh(new THREE.BoxGeometry(0.025, 0.025, 0.03), 0x9ea4aa, -W + 0.05, 0.85, FRIDGE_DOOR_T + 0.01),
       );
       g.add(door);
+      // la lampe du frigo, sous le dessus : allumée quand la porte s'ouvre (Game.tickDoors)
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.05), new THREE.MeshBasicMaterial({ color: 0xe8e2d0 }));
+      lamp.name = 'lampe';
+      lamp.position.set(0, H - t - 0.012, -D / 2 + 0.12);
+      lamp.visible = false;
+      const glow = new THREE.PointLight(0xfff3d6, 0, 0.45, 2);
+      glow.name = 'lampe-lumiere';
+      glow.position.set(0, H - t - 0.1, -0.05);
+      g.add(lamp, glow);
       return g;
     },
   },

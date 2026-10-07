@@ -208,6 +208,30 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.drinkAtTap(),
   },
   {
+    name: 'regarder_dedans',
+    description: 'Aller ouvrir un meuble (frigo, congélateur, placard, tiroir) et regarder ce qu’il contient (le compte rendu le dit).',
+    params: { objet: 'ref du meuble' },
+    run: (g, a) => g.lookInside(a.objet),
+  },
+  {
+    name: 'ranger_place',
+    description: 'Ranger ce qu’on tient à sa place, sans nommer le meuble : aliments et bouteille au frigo, bac à glaçons et lasagne au congélateur, tasse et assiette au placard, couverts et lettre au tiroir, livres à la bibliothèque.',
+    params: {},
+    run: (g) => g.storeAway(),
+  },
+  {
+    name: 'laisser_ouvert',
+    description: 'Ouvrir la porte (ou le tiroir) d’un meuble et la laisser ouverte : elle ne se referme plus seule quand le perso s’éloigne.',
+    params: { objet: 'ref du meuble' },
+    run: (g, a) => g.keepOpen(a.objet),
+  },
+  {
+    name: 'glacons',
+    description: 'Mettre des glaçons dans une tasse (il faut tenir le bac à glaçons, rangé au congélateur ; `dans` facultatif : la tasse visée). Une boisson avec glaçons désaltère un peu plus.',
+    params: {},
+    run: (g, a) => g.addIce(a.dans),
+  },
+  {
     name: 'laver_mains',
     description: 'Se laver les mains à l’évier (les mains doivent être libres).',
     params: {},

@@ -110,6 +110,11 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier ; il coule jusqu'à ce qu'on le ferme
 - {"tache": "bouchon", "mettre": true} : boucher l'évier (ou enlever le bouchon, « mettre » faux). Bouché avec le robinet ouvert, la cuve se remplit puis déborde
 - {"tache": "boire_robinet"} : boire au robinet, dans le creux des mains (pose d'abord ce que le perso tient)
+- {"tache": "regarder", "objet": "<ref>"} : ouvrir un meuble (frigo, congélateur, placard, tiroir) et regarder ce qu'il contient
+- {"tache": "ranger_place", "objet": "<ref>"} : ranger un objet à sa place sans nommer le meuble (« objet » facultatif : ce qu'on tient) : aliments au frigo, glaçons et lasagne au congélateur, vaisselle au placard, couverts au tiroir
+- {"tache": "laisser_ouvert", "objet": "<ref>"} : ouvrir un meuble et laisser sa porte ouverte (elle ne se referme plus seule)
+- {"tache": "glacons", "dans": "<ref>"} : mettre des glaçons (bac au congélateur) dans une tasse (« dans » facultatif)
+- La lasagne du congélateur est congelée : il faut la « mettre » au micro-ondes (ou au four) et l'« allumer » avant de la manger
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
@@ -185,6 +190,10 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'robinet': return { kind: 'robinet', ouvrir: o.ouvrir !== false };
     case 'bouchon': return { kind: 'bouchon', mettre: o.mettre !== false };
     case 'boire_robinet': return { kind: 'boire_robinet' };
+    case 'regarder': return s('objet') ? { kind: 'regarder', ref: s('objet') } : null;
+    case 'ranger_place': return { kind: 'ranger_place', ref: s('objet') || undefined };
+    case 'laisser_ouvert': return s('objet') ? { kind: 'laisser_ouvert', ref: s('objet') } : null;
+    case 'glacons': return { kind: 'glacons', dans: s('dans') || undefined };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };

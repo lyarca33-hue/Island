@@ -53,6 +53,14 @@ export type Intent =
   /** Boucher l'évier ou enlever le bouchon. */
   | { kind: 'bouchon'; mettre: boolean }
   | { kind: 'boire_robinet' }
+  /** Regarder ce que contient le meuble `ref`. */
+  | { kind: 'regarder'; ref: string }
+  /** Ranger à sa place l'objet `ref` (pris d'abord si besoin), sinon ce qu'on tient. */
+  | { kind: 'ranger_place'; ref?: string }
+  /** Ouvrir le meuble `ref` et laisser la porte ouverte. */
+  | { kind: 'laisser_ouvert'; ref: string }
+  /** Mettre des glaçons (bac pris au congélateur si besoin) dans la tasse `dans` (sinon la tasse). */
+  | { kind: 'glacons'; dans?: string }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
   | { kind: 'laver'; visage: boolean }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
@@ -419,6 +427,23 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'boire_robinet':
       await freeHands(game, act);
       return act('boire_robinet');
+    case 'regarder':
+      return act('regarder_dedans', { objet: intent.ref });
+    case 'ranger_place':
+      if (intent.ref) await take(game, act, intent.ref);
+      return act('ranger_place');
+    case 'laisser_ouvert':
+      return act('laisser_ouvert', { objet: intent.ref });
+    case 'glacons': {
+      const w = world(game);
+      const tray = w.objets.find((o) => o.nom === 'bac à glaçons');
+      if (!tray) throw new Failed('Il n’y a pas de glaçons.');
+      const cup = intent.dans ?? w.objets.find((o) => o.nom === 'tasse')?.ref;
+      // la tasse dans une main, le bac dans l'autre
+      if (cup) await take(game, act, cup);
+      await take(game, act, tray.ref);
+      return act('glacons', cup ? { dans: cup } : {});
+    }
     case 'laver':
       // les mains doivent être libres
       await freeHands(game, act);

@@ -46,11 +46,15 @@ const VERBS: Record<string, string[]> = {
   verser: ['verse', 'verser', 'transvase', 'transvaser'],
   boucher: ['bouche', 'boucher', 'rebouche', 'reboucher'],
   enlever: ['enleve', 'enlever', 'retire', 'retirer'],
+  regarder: ['regarde', 'regarder', 'inspecte', 'inspecter', 'fouille', 'fouiller', 'inventorie'],
+  laisser: ['laisse', 'laisser'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
 /** Meubles qu'on ouvre et ferme (porte, tiroir, couvercle). */
 const OPENS = new Set(['frigo', 'placard', 'appareil', 'poubelle']);
+/** Meubles où l'on range (et où l'on peut regarder ce qu'il y a). */
+const STORES = new Set(['frigo', 'placard', 'rangement']);
 /** Où se range un objet qui ne va ni au frais ni dans la bibliothèque. */
 const STORED_IN: Record<string, string> = { tasse: 'placard', assiette: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir' };
 const VERB_OF = new Map(Object.entries(VERBS).flatMap(([k, vs]) => vs.map((v) => [v, k] as const)));
@@ -62,7 +66,7 @@ const FILLERS = [
   'allez', 'bon', 'alors', 'maintenant', 'et',
 ];
 /** Petits mots sans importance pour reconnaître un objet. */
-const STOP = new Set(['le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'd', 'a', 'au', 'aux', 'toi', 'moi', 'te', 'me', 'm', 't', 'se', 's', 'y', 'en', 'vers', 'jusqu', 'jusque', 'sur', 'dans', 'tous', 'toutes', 'tout', 'toute', 'ce', 'cette', 'ces', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'qui', 'trainent', 'traine', 'piece', 'ici', 'et', 'aussi', 'stp', 'svp']);
+const STOP = new Set(['le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'd', 'a', 'au', 'aux', 'toi', 'moi', 'te', 'me', 'm', 't', 'se', 's', 'y', 'en', 'vers', 'jusqu', 'jusque', 'sur', 'dans', 'tous', 'toutes', 'tout', 'toute', 'ce', 'cette', 'ces', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'qui', 'trainent', 'traine', 'piece', 'ici', 'et', 'aussi', 'stp', 'svp', 'ouvert', 'ouverte', 'ouverts', 'place']);
 
 /** Autres noms donnés aux objets (forme normalisée). */
 const ALIASES: Record<string, string[]> = {
@@ -225,6 +229,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return portable.filter((o) => o.nom === portable[0].nom).slice(0, n).map((o) => ({ kind: 'prendre', ref: o.ref }));
     }
     case 'poser': {
+      // « mets des glaçons dans la tasse »
+      if (rest.some((x) => x.startsWith('glacon'))) return [{ kind: 'glacons', dans: found.find((o) => o.nom === 'tasse')?.ref }];
       // « pose la tasse sur la caisse » : prendre la tasse si besoin, aller à la caisse, poser
       // « au four », « à la poubelle » seulement si un objet suit (« pose la tasse au sol » : devant soi)
       const where = rest.findIndex((x, i) => x === 'sur' || x === 'dans' || x === 'pres' || ((x === 'au' || x === 'a') && findObjects(rest.slice(i + 1), world.objets).found.length > 0));
@@ -244,6 +250,13 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'ranger': {
       // « range-le » : ce qu'on tient
       if (rest.length && rest.every((x) => ['le', 'la', 'les', 'l', 'ca'].includes(x))) return [{ kind: 'ranger', refs: [], onlyHeld: true }];
+      // « range la vaisselle », « range les couverts » : chaque pièce propre qui traîne, à sa place
+      if (rest.includes('vaisselle') || rest.includes('couverts')) {
+        const dishes = world.objets.filter((o) => (o.sorte === 'vaisselle' || o.nom === 'tasse') && isLoose(o) && !o.ou.includes('sale') && !o.ou.includes('contient') && (rest.includes('vaisselle') || o.sorte === 'vaisselle' && o.nom !== 'assiette'));
+        return dishes.length ? dishes.map((o): Intent => ({ kind: 'ranger_place', ref: o.ref })) : null;
+      }
+      // « range-le à sa place », « range tout ça »
+      if (rest.includes('place')) return [{ kind: 'ranger_place', ref: found.find((o) => o.portable)?.ref }];
       const things = found.filter((o) => o.portable);
       // « range la pomme (dans le frigo) » : ce qui se garde au frais
       const fridge = world.objets.find((o) => o.sorte === 'frigo');
@@ -331,6 +344,16 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (cut >= 0 && !into) return null;
       if (into?.sorte === 'évier') return [{ kind: 'vider_recipient', ref: from?.ref }];
       return [{ kind: 'verser', ref: from?.ref, dans: into?.ref }];
+    }
+    case 'regarder': {
+      // « regarde dans le frigo », « fouille le placard »
+      const store = found.find((o) => STORES.has(o.sorte ?? ''));
+      return store ? [{ kind: 'regarder', ref: store.ref }] : null;
+    }
+    case 'laisser': {
+      // « laisse le frigo ouvert », « laisse la porte du placard ouverte »
+      const store = found.find((o) => OPENS.has(o.sorte ?? ''));
+      return store && rest.some((x) => x.startsWith('ouvert')) ? [{ kind: 'laisser_ouvert', ref: store.ref }] : null;
     }
     case 'boucher':
       // « bouche l'évier »
