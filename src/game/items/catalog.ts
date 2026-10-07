@@ -10,6 +10,7 @@ import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
 import { DISHES } from './recipes';
+import { BATHROOM_ITEMS } from './bathroom';
 
 export interface ItemDef {
   id: string;
@@ -176,6 +177,18 @@ export interface ItemDef {
   board?: boolean;
   /** Couteau : sert à couper sur la planche. */
   knife?: boolean;
+  /** Lavabo : un miroir où se regarder (hauteur de son milieu, m) ; sa pièce `buee` se couvre après la douche. */
+  mirror?: { y: number };
+  /**
+   * Douche : on y entre pour se laver de la tête aux pieds en `seconds` secondes. `stand` : où se
+   * tenir sous l'eau (x, z, repère de la douche) ; `head` : le pommeau. La pièce `jet` (les filets
+   * d'eau) et la pièce `vapeur` se montrent pendant la douche.
+   */
+  shower?: { seconds: number; stand: [number, number]; head: [number, number, number] };
+  /** Toilettes : on s'y assoit pour se soulager (besoin « vessie »), puis on tire la chasse. Pièces `couvercle` et `eau`. */
+  toilet?: boolean;
+  /** Serviette : sert à se sécher après la douche ; sa pièce `mouillee` se montre ensuite, le temps qu'elle sèche. */
+  towel?: boolean;
   build(): THREE.Object3D;
 }
 
@@ -1130,6 +1143,8 @@ export const ITEMS: ItemDef[] = [
   ...KITCHEN_ITEMS,
   // les plats des recettes (recipes.ts)
   ...DISHES,
+  // la salle de bain : lavabo, douche, toilettes, serviette (bathroom.ts)
+  ...BATHROOM_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

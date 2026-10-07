@@ -80,6 +80,12 @@ export type Intent =
   | { kind: 'glacons'; dans?: string }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
   | { kind: 'laver'; visage: boolean }
+  /** Salle de bain : prendre une douche, se sécher (serviette), aller aux toilettes, tirer la chasse, se regarder dans le miroir. */
+  | { kind: 'douche' }
+  | { kind: 'secher' }
+  | { kind: 'toilettes' }
+  | { kind: 'chasse' }
+  | { kind: 'miroir' }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
@@ -525,6 +531,24 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       // les mains doivent être libres
       await freeHands(game, act);
       return act(intent.visage ? 'se_laver' : 'laver_mains');
+    case 'douche':
+      // les mains doivent être libres
+      await freeHands(game, act);
+      return act('douche');
+    case 'secher': {
+      const towel = world(game).objets.find((o) => o.nom === 'serviette');
+      if (!towel) throw new Failed('Il n’y a pas de serviette.');
+      await take(game, act, towel.ref);
+      await act('secher');
+      // la serviette retourne sur le porte-serviettes
+      return act('ranger_place').then(() => {}, () => {});
+    }
+    case 'toilettes':
+      return act('toilettes');
+    case 'chasse':
+      return act('chasse');
+    case 'miroir':
+      return act('miroir');
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;

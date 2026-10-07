@@ -56,6 +56,8 @@ const VERBS: Record<string, string[]> = {
   pousser: ['pousse', 'pousser', 'glisse', 'glisser', 'rentre', 'rentrer'],
   essuyer: ['essuie', 'essuyer', 'nettoie', 'nettoyer', 'eponge', 'eponger'],
   empiler: ['empile', 'empiler'],
+  doucher: ['douche', 'doucher', 'douches'],
+  secher: ['seche', 'secher', 'seches'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
@@ -232,6 +234,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
   const held = world.objets.filter((o) => world.enMain.includes(o.ref));
   switch (verb) {
     case 'prendre': {
+      // « prends une douche »
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
       // ceux qui traînent avant ceux qui sont rangés, puis les plus proches
       const portable = found.filter((o) => o.portable && !world.enMain.includes(o.ref)).sort((a, b) => +!isLoose(a) - +!isLoose(b));
       if (!portable.length) return null;
@@ -293,6 +297,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'ranger', refs: [(things.find(isLoose) ?? things[0]).ref] }];
     }
     case 'aller': {
+      // « va aux toilettes », « va aux WC », « va faire pipi » ; « va sous la douche »
+      if (rest.some((x) => ['toilettes', 'toilette', 'wc', 'pipi'].includes(x)) && !rest.includes('ta')) return [{ kind: 'toilettes' }];
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
       const target = found[0];
       return target ? [{ kind: 'aller', ref: target.ref }] : null;
     }
@@ -381,6 +388,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return machineWash(original) || rest.includes('vaisselle') ? [{ kind: 'charger_lv' }] : null;
     case 'tirer':
     case 'pousser': {
+      // « tire la chasse (d'eau) »
+      if (rest.includes('chasse')) return [{ kind: 'chasse' }];
       // « tire la chaise », « pousse la chaise sous la table »
       const chair = found.find((o) => o.sorte === 'siège');
       return chair ? [{ kind: 'chaise', ref: chair.ref, sous: verb === 'pousser' }] : null;
@@ -388,7 +397,13 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'empiler':
       // « empile les assiettes »
       return !found.length || found.every((o) => o.nom === 'assiette') ? [{ kind: 'empiler' }] : null;
+    case 'doucher':
+      return [{ kind: 'douche' }];
+    case 'secher':
+      return [{ kind: 'secher' }];
     case 'essuyer':
+      // « essuie-toi », « essuie-toi avec la serviette »
+      if (rest.includes('toi') || rest.includes('serviette')) return [{ kind: 'secher' }];
       // « essuie la flaque », « nettoie par terre », « éponge l'eau »
       if (rest.some((x) => ['flaque', 'flaques', 'sol', 'terre', 'eau'].includes(x))) return [{ kind: 'essuyer_sol' }];
       // « essuie la table », « nettoie la table »
@@ -397,6 +412,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « débarrasse la table », « débarrasse »
       return [{ kind: 'debarrasser' }];
     case 'regarder': {
+      // « regarde-toi dans le miroir »
+      if (rest.includes('miroir') || rest.includes('glace')) return [{ kind: 'miroir' }];
       // « regarde dans le frigo », « fouille le placard »
       const store = found.find((o) => STORES.has(o.sorte ?? ''));
       return store ? [{ kind: 'regarder', ref: store.ref }] : null;
