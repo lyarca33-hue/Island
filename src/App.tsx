@@ -35,6 +35,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, seated: false });
   const [notice, setNotice] = useState<string | null>(null);
   /** Objet sous la souris : sa jauge de durabilité. */
+  const [drag, setDrag] = useState<{ name: string; over: string | null; x: number; y: number } | null>(null);
   const [hover, setHover] = useState<{ name: string; grade: string; condition: number; state: string; x: number; y: number } | null>(null);
   /** Menu au clic droit ouvert. */
   const [ctx, setCtx] = useState<Menu3D | null>(null);
@@ -58,6 +59,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
     };
     g.onHover = setHover;
     g.onInventory = setInv;
+    g.onDrag = setDrag;
     g.onMenu = (m) => {
       setCtx(m);
       if (m) setHover(null);
@@ -189,7 +191,13 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       {notice && <div className="hud-notice">{notice}</div>}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
-      {hover && !ctx && (
+      {drag && (
+        <div className="hud-drag" style={{ left: drag.x, top: drag.y }}>
+          {drag.name}
+          {drag.over && <span> → {drag.over}</span>}
+        </div>
+      )}
+      {hover && !ctx && !drag && (
         <div className="hud-wear" style={{ left: hover.x, top: hover.y }}>
           <div>
             {hover.name} · <b>{hover.grade}</b>

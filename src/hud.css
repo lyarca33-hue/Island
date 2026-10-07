@@ -173,3 +173,19 @@
 .inv-list button:hover, .inv-close:hover { border-color: #ffd98a; }
 .inv-empty { margin: 4px 0; opacity: 0.75; }
 .inv-close { margin-top: 8px; }
+
+/* glisser-déposer : l'objet traîné et la cible sous la souris */
+.hud-drag {
+  position: absolute;
+  transform: translate(12px, 12px);
+  pointer-events: none;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(20, 24, 36, 0.86);
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.hud-drag span {
+  color: #ffd27a;
+}

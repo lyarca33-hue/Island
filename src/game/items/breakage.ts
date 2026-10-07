@@ -13,6 +13,8 @@ const GRAVITY = 9.8;
 /** Durée de vie des éclats (s), dont la fin passée à rétrécir. */
 const LIFE = 3.2;
 const FADE = 0.6;
+/** Une flaque essuyée s'efface en ce temps (s). */
+const WIPE_FADE = 0.8;
 
 /**
  * Chance qu'un objet lancé se casse en touchant le sol, selon sa fragilité (1 à 10) et la
@@ -140,14 +142,16 @@ export class Debris {
 }
 
 /**
- * Flaque d'eau seule, sans objet brisé (l'évier qui déborde) : elle s'étale, reste un moment,
- * puis sèche. Même usage que Debris (group, update, dispose).
+ * Flaque d'eau seule, sans objet brisé (l'évier qui déborde) : elle s'étale et reste là jusqu'à
+ * ce qu'on l'essuie (wipe). Même usage que Debris (group, update, dispose).
  */
 export class Spill {
   readonly group = new THREE.Group();
   private mesh: THREE.Mesh;
   private t = 0;
   private size: number;
+  /** Essuyée : le temps de s'effacer (s), sinon null. */
+  private fading: number | null = null;
 
   constructor(at: THREE.Vector3, color: THREE.ColorRepresentation, size: number) {
     this.size = size;
@@ -165,10 +169,26 @@ export class Spill {
     const grow = 1 - Math.pow(1 - Math.min(1, this.t / 1.5), 3);
     this.mesh.scale.setScalar(Math.max(0.01, this.size * grow));
     const mat = this.mesh.material as THREE.MeshBasicMaterial;
-    mat.opacity = 0.8 * THREE.MathUtils.clamp((LIFE * 3 - this.t) / 2, 0, 1);
-    const alive = this.t < LIFE * 3;
+    if (this.fading !== null) this.fading -= dt;
+    mat.opacity = 0.8 * (this.fading === null ? 1 : THREE.MathUtils.clamp(this.fading / WIPE_FADE, 0, 1));
+    const alive = this.fading === null || this.fading > 0;
     if (!alive) this.dispose();
     return alive;
+  }
+
+  /** Où est la flaque (au sol). */
+  get position(): THREE.Vector3 {
+    return this.mesh.position;
+  }
+
+  /** Encore là (pas essuyée) ? */
+  get wet(): boolean {
+    return this.fading === null;
+  }
+
+  /** Essuyée à l'éponge : elle s'efface. */
+  wipe(): void {
+    if (this.fading === null) this.fading = WIPE_FADE;
   }
 
   dispose(): void {

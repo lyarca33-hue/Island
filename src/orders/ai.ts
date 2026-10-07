@@ -116,6 +116,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "vider_lv"} : vider le lave-vaisselle et ranger la vaisselle propre à sa place
 - {"tache": "chaise", "objet": "<ref>", "sous": true} : ranger la chaise sous la table (« sous »: false pour la tirer)
 - {"tache": "essuyer", "objet": "<ref>"} : essuyer les miettes de la table avec l'éponge (« objet » facultatif)
+- {"tache": "empiler"} : empiler les assiettes propres (prendre celle du dessous emporte la pile)
+- {"tache": "essuyer_sol"} : essuyer les flaques d'eau par terre avec l'éponge
+- Le plateau : « poser » un objet avec « sur »: le plateau, puis prendre le plateau emporte tout ce qui est dessus
 - {"tache": "mettre_table"} : mettre le couvert devant la chaise (assiette, fourchette, couteau de table pris au placard et au tiroir)
 - {"tache": "debarrasser"} : débarrasser la table (vaisselle sale au lave-vaisselle, propre à sa place)
 - {"tache": "couper_assiette"} : assis devant l'assiette servie, couper le plat en bouchées avec le couteau de table
@@ -205,6 +208,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'vider_lv': return { kind: 'vider_lv' };
     case 'chaise': return s('objet') ? { kind: 'chaise', ref: s('objet'), sous: o.sous !== false } : null;
     case 'essuyer': return { kind: 'essuyer', ref: s('objet') || undefined };
+    case 'empiler': return { kind: 'empiler' };
+    case 'essuyer_sol': return { kind: 'essuyer_sol' };
     case 'mettre_table': return { kind: 'mettre_table' };
     case 'debarrasser': return { kind: 'debarrasser' };
     case 'couper_assiette': return { kind: 'couper_assiette' };

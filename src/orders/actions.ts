@@ -250,6 +250,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.wipeTable(a.objet),
   },
   {
+    name: 'poser_sur',
+    description: 'Poser l’objet tenu `objet` (sinon le dernier pris) sur l’objet `sur` : le plateau (ce qui est dessus part avec lui quand on le porte), une assiette vide (pour empiler)…',
+    params: { sur: 'ref de l’objet où poser' },
+    run: (g, a) => g.putOn(a.sur, a.objet),
+  },
+  {
+    name: 'empiler',
+    description: 'Empiler les assiettes propres qui traînent sur une seule ; prendre celle du dessous emporte toute la pile. Les mains doivent être vides.',
+    params: {},
+    run: (g) => g.stackPlates(),
+  },
+  {
+    name: 'essuyer_sol',
+    description: 'Essuyer les flaques d’eau par terre (l’évier qui a débordé) avec l’éponge tenue ; elles ne sèchent pas toutes seules.',
+    params: {},
+    run: (g) => g.cleanFloor(),
+  },
+  {
     name: 'mettre_table',
     description: 'Mettre la table devant la chaise : une assiette, une fourchette et un couteau de table propres, pris au placard et au tiroir, posés chacun à sa place. Les mains doivent être vides.',
     params: {},
