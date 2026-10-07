@@ -22,7 +22,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ranger',
-    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, pomme, sandwich dans le frigo ; la tasse au placard ou au lave-vaisselle ; la lettre dans le tiroir ; pomme, sandwich au four ou au micro-ondes (le perso ouvre la porte ou le tiroir).',
+    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, aliments (entiers ou coupés) dans le frigo ; la tasse au placard ou au lave-vaisselle ; la lettre dans le tiroir ; pomme, sandwich au four ou au micro-ondes (le perso ouvre la porte ou le tiroir).',
     params: { meuble: 'ref du meuble' },
     // `objet` (facultatif) : ne ranger que lui
     run: (g, a) => g.store(a.meuble, a.objet),
@@ -69,9 +69,16 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'manger',
-    description: 'Prendre une bouchée de l’aliment tenu (pomme, sandwich) ; une fois fini, il disparaît et la faim remonte.',
+    description: 'Prendre une bouchée de l’aliment tenu (pomme, sandwich, pain, légumes, morceaux) ; une fois fini, il disparaît et la faim remonte.',
     params: {},
     run: (g) => g.eat(),
+  },
+  {
+    name: 'couper',
+    description: 'Couper en morceaux l’aliment entier tenu (pomme, pain, carotte, tomate, concombre) : le perso le pose sur la planche à découper, prend le couteau, coupe, puis repose le couteau. Les morceaux restent sur la planche.',
+    params: {},
+    // `objet` (facultatif) : l'aliment tenu à couper
+    run: (g, a) => g.cut(a.objet),
   },
   {
     name: 'ouvrir',

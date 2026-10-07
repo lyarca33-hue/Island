@@ -28,6 +28,7 @@ const VERBS: Record<string, string[]> = {
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
   manger: ['mange', 'manges', 'manger', 'croque', 'croquer', 'grignote', 'grignoter', 'avale', 'avaler'],
+  couper: ['coupe', 'coupes', 'couper', 'decoupe', 'decouper', 'tranche', 'trancher', 'emince', 'emincer', 'hache', 'hacher'],
   dire: ['dis', 'dit', 'dire', 'crie', 'crier'],
   lire: ['lis', 'lit', 'lire', 'ouvre', 'ouvrir', 'feuillette', 'feuilleter', 'bouquine'],
   remplir: ['remplis', 'remplir', 'remplit', 'rempli'],
@@ -78,6 +79,18 @@ const ALIASES: Record<string, string[]> = {
   'micro ondes': ['micro', 'microondes', 'ondes'],
   'lave vaisselle': ['vaisselle'],
   poubelle: ['poubelle', 'poubelles', 'corbeille'],
+  'plan de travail': ['plan', 'comptoir', 'paillasse'],
+  'planche a decouper': ['planche', 'planches'],
+  couteau: ['couteau', 'couteaux'],
+  pain: ['pain', 'pains', 'miche', 'batard'],
+  carotte: ['carotte', 'carottes'],
+  tomate: ['tomate', 'tomates'],
+  concombre: ['concombre', 'concombres'],
+  'quartiers de pomme': ['quartiers', 'quartier'],
+  'tranches de pain': ['tranches', 'tranche', 'tartine', 'tartines'],
+  'rondelles de carotte': ['rondelles', 'rondelle'],
+  'tranches de tomate': ['tranches', 'tranche'],
+  'rondelles de concombre': ['rondelles', 'rondelle'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -100,9 +113,19 @@ function findObjects(clause: string[], objets: WorldObject[]): { found: WorldObj
     return true;
   });
   found.sort((a, b) => a.distance - b.distance);
+  // un nom entier dit dans l'ordre l'emporte sur un nom voisin : « les tranches de tomate » (pas
+  // celles de pain), « les quartiers de pomme » (pas la pomme)
+  const text = ` ${clause.join(' ')} `;
+  const said = (o: WorldObject) => text.includes(` ${normalize(o.nom)} `);
+  const exact = found.filter((x) => !found.some((y) => {
+    if (y.nom === x.nom || !said(y)) return false;
+    if (y.nom.includes(x.nom)) return true;
+    const kx = words(x).kind;
+    return !said(x) && words(y).kind.some((k) => kx.includes(k));
+  }));
   // « tous », « les », ou un nom au pluriel (« livres »)
   const all = clause.some((w) => ['tous', 'toutes', 'les'].includes(w) || (w.endsWith('s') && w.length > 3 && Object.values(ALIASES).flat().includes(w)));
-  return { found, all };
+  return { found: exact, all };
 }
 
 /** Découpe l'ordre en morceaux (« … puis … », « … et va … »), en gardant le texte d'origine. */
@@ -240,6 +263,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const food = found.filter((o) => o.sorte === 'nourriture');
       if (found.length && !food.length) return null;
       return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
+    }
+    case 'couper': {
+      // « coupe la pomme », « coupe le pain sur la planche », « coupe » (ce qu'on tient, sinon ce qu'il y a)
+      const food = found.filter((o) => o.coupable);
+      if (found.length && !food.length) return null;
+      return [{ kind: 'couper', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food.find(isLoose) ?? food[0])?.ref }];
     }
     case 'remplir':
       // « remplis la tasse (d'eau / de café) » ; d'eau si rien n'est dit

@@ -30,6 +30,8 @@ export type Intent =
   | { kind: 'boire'; ref?: string; liquide?: 'eau' | 'café' }
   /** Manger l'aliment `ref` en entier (sinon celui qu'on tient, sinon le plus proche). */
   | { kind: 'manger'; ref?: string }
+  /** Couper en morceaux l'aliment `ref` (sinon celui qu'on tient, sinon le plus proche) sur la planche. */
+  | { kind: 'couper'; ref?: string }
   | { kind: 'ouvrir'; ref: string }
   | { kind: 'fermer'; ref: string }
   /** Remplir la tasse d'eau à l'évier. */
@@ -217,6 +219,16 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       // bouchée après bouchée jusqu'à la fin (l'aliment disparaît)
       for (let i = 0; i < 12 && world(game).enMain.includes(food.ref); i++) await act('manger');
       return;
+    }
+    case 'couper': {
+      const w = world(game);
+      const foods = w.objets.filter((o) => o.coupable);
+      const food = intent.ref
+        ? foods.find((o) => o.ref === intent.ref)
+        : (foods.find((o) => w.enMain.includes(o.ref)) ?? [...foods].sort((a, b) => +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0]);
+      if (!food) throw new Failed(intent.ref ? `On ne peut pas couper : ${intent.ref}.` : 'Il n’y a rien à couper.');
+      await take(game, act, food.ref);
+      return act('couper', { objet: food.ref });
     }
     case 'mettre':
       if (intent.ref) await take(game, act, intent.ref);

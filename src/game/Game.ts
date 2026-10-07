@@ -84,6 +84,19 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['lave-vaisselle', 0.742, 0, -2.03, -Math.PI / 4],
   ['tiroir', 0.357, 0, -2.437, -Math.PI / 4],
   ['poubelle', 0.021, 0, -2.737, -Math.PI / 4],
+  // de l'autre côté de l'évier, dans son alignement : de quoi couper
+  ['plan-de-travail', 3.17, 0, 0.37, -Math.PI / 4],
+];
+
+/**
+ * Posés sur le plan de travail au départ : [id, x, z, rotation] dans le repère du meuble (sur le
+ * dessus, l'avant vers +Z).
+ */
+const START_ON_WORKTOP: Array<[string, number, number, number]> = [
+  ['planche', -0.14, 0.02, 0],
+  // couché à plat, le long de la profondeur, le manche vers l'avant
+  ['couteau', 0.14, 0.04, -Math.PI / 2],
+  ['pain', 0.32, -0.08, 0.3],
 ];
 
 /** Rangés au départ dans un meuble : [id, meuble, place]. */
@@ -93,6 +106,9 @@ const START_STORED: Array<[string, string, number]> = [
   ['pomme', 'frigo', 5],
   ['pomme', 'frigo', 6],
   ['sandwich', 'frigo', 1],
+  ['tomate', 'frigo', 2],
+  ['carotte', 'frigo', 4],
+  ['concombre', 'frigo', 7],
 ];
 
 /** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
@@ -109,6 +125,10 @@ const WEAR_BREW = { machine: 1.5, cup: 0.5 };
 const WEAR_DOOR = 0.4;
 /** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
 const WEAR_TAP = 0.4;
+/** Usure à chaque aliment coupé : le couteau (il s'émousse) et la planche. */
+const WEAR_CUT = { knife: 1, board: 0.6 };
+/** Distance de la face avant du meuble où se tenir pour couper sur la planche (m). */
+const CUT_STAND = 0.28;
 
 /** « le café », « l'eau » ; « de café », « d'eau » ; « du café », « de l'eau ». */
 const elides = (w: string) => /^[aeiouyéèêh]/i.test(w);
@@ -141,9 +161,11 @@ export interface WorldObject {
   /**
    * Meuble de rangement (bibliothèque), frigo, placard (porte ou tiroir), appareil (four,
    * micro-ondes, lave-vaisselle), poubelle, machine (à café), évier (eau, se laver), récipient
-   * (tasse, bouteille), nourriture ou siège (chaise).
+   * (tasse, bouteille), nourriture, siège (chaise), planche (à découper) ou couteau.
    */
-  sorte?: 'rangement' | 'frigo' | 'placard' | 'appareil' | 'poubelle' | 'machine' | 'évier' | 'récipient' | 'nourriture' | 'siège';
+  sorte?: 'rangement' | 'frigo' | 'placard' | 'appareil' | 'poubelle' | 'machine' | 'évier' | 'récipient' | 'nourriture' | 'siège' | 'planche' | 'couteau';
+  /** Aliment entier qui se coupe en morceaux sur la planche (pomme, pain, légumes). */
+  coupable?: boolean;
   ou: string;
   /** Grade d'usure et durabilité restante (« usé (52 %) »). */
   etat: string;
@@ -151,11 +173,14 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle']);
-/** « La pomme », « le four ». */
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre']);
+/** Noms au pluriel (les morceaux d'un aliment coupé). */
+const PLURAL = new Set(['quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre']);
+/** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
+const agree = (name: string) => `${FEMININE.has(name) ? 'e' : ''}${PLURAL.has(name) ? 's' : ''}`;
+const theName = (name: string) => `${PLURAL.has(name) ? 'Les' : FEMININE.has(name) ? 'La' : 'Le'} ${name}`;
+/** « la pomme », « le four ». */
 const the = (name: string) => `${FEMININE.has(name) ? 'la' : 'le'} ${name}`;
-/** Accord : « cuit » / « cuite ». */
-const agree = (name: string, w: string) => (FEMININE.has(name) ? `${w}e` : w);
 
 /** Pesanteur des objets lancés (m/s²). */
 const GRAVITY = 9.8;
@@ -178,6 +203,8 @@ export interface HandActions {
   drink: boolean;
   /** Un aliment en main (pomme, sandwich). */
   eat: boolean;
+  /** Un aliment entier à couper en main (pomme, pain, légumes). */
+  cut: boolean;
   /** L'objet tenu (le dernier pris) peut être lancé. */
   throw: boolean;
   /** En train de déplacer un gros meuble. */
@@ -329,6 +356,17 @@ export class Game {
       const slot = this.slot(where, i);
       it.object.position.copy(slot.pos);
       it.object.quaternion.copy(slot.rot);
+    }
+    const worktop = this.items.find((i) => i.def.id === 'plan-de-travail');
+    if (worktop) {
+      worktop.object.updateMatrixWorld(true);
+      for (const [id, x, z, rot] of START_ON_WORKTOP) {
+        const it = add(id);
+        it.object.quaternion.setFromAxisAngle(UP, worktop.object.rotation.y + rot);
+        if (it.def.layFlat) it.object.quaternion.multiply(LAY_FLAT);
+        const at = new THREE.Vector3(x, worktop.box.max.y, z).applyMatrix4(worktop.object.matrixWorld);
+        it.object.position.copy(at).setY(at.y + it.restLift(it.object.quaternion));
+      }
     }
     const shelf = this.items.find((i) => i.def.id === 'bibliotheque')!;
     for (const [id, at] of START_BOOKS) {
@@ -759,12 +797,13 @@ export class Game {
     for (const it of above) this.flying.push({ item: it, vel: new THREE.Vector3(), spin: new THREE.Vector3(), bounced: false });
     if (this.isObstacle(item)) this.character.nav = this.buildNav();
     const name = `${item.name[0].toUpperCase()}${item.name.slice(1)}`;
-    const e = FEMININE.has(item.name) ? 'e' : '';
+    const e = agree(item.name);
     const broke = item.def.breakWord ?? 'brisé';
+    const se = PLURAL.has(item.name) ? 'se sont' : 's\'est';
     this.doors.delete(item);
     this.appliances.delete(item);
     this.binFill.delete(item);
-    this.onNotice?.(note ?? (worn ? `${name}, trop usé${e}, s'est ${broke}${e} !` : `${name} s'est ${broke}${e} !`));
+    this.onNotice?.(note ?? (worn ? `${name}, trop usé${e}, ${se} ${broke}${e} !` : `${name} ${se} ${broke}${e} !`));
   }
 
   /** Objets posés sur `base` ou rangés dedans (pas ceux qu'on tient). */
@@ -788,8 +827,7 @@ export class Game {
     if (points <= 0 || item.durability <= 0) return;
     const changed = item.wear(points);
     if (changed && tell && item.durability > 0) {
-      const art = FEMININE.has(item.name) ? 'La' : 'Le';
-      this.onNotice?.(`${art} ${item.name} est maintenant ${gradeName(item.condition, FEMININE.has(item.name))}.`);
+      this.onNotice?.(`${theName(item.name)} ${PLURAL.has(item.name) ? 'sont' : 'est'} maintenant ${gradeName(item.condition, FEMININE.has(item.name))}.`);
     }
   }
 
@@ -879,7 +917,7 @@ export class Game {
         const n = this.binFill.get(item) ?? 0;
         ou += n >= item.def.bin ? ', pleine' : n ? `, ${n} objet${n > 1 ? 's' : ''} jeté${n > 1 ? 's' : ''}` : ', vide';
       }
-      if (item.def.food && item.portion < 1) ou += `, entamé${FEMININE.has(item.name) ? 'e' : ''}`;
+      if (item.def.food && item.portion < 1) ou += `, entamé${agree(item.name)}`;
       const cooked = this.cookedWord(item);
       if (cooked) ou += `, ${cooked}`;
       if (item.contents) ou += `, contient ${someLiquid(item.contents)}`;
@@ -887,11 +925,12 @@ export class Game {
       if (item.dirty) ou += ', sale';
       const sorte: WorldObject['sorte'] = item.def.bin ? 'poubelle' : item.def.heats || item.def.washes ? 'appareil' : item.def.cold ? 'frigo'
         : item.def.door || item.def.drawer ? 'placard' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine'
-        : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : undefined;
+        : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : item.def.board ? 'planche' : item.def.knife ? 'couteau' : undefined;
       if (item === this.sitting) ou += ', le perso est assis dessus';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
-      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
+      const coupable = (!!item.def.cut && item.portion === 1) || undefined;
+      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, coupable, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
     });
     const perso = this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)';
     return {
@@ -1148,15 +1187,14 @@ export class Game {
       this.lastBite.delete(item);
       this.items = this.items.filter((i) => i !== item);
       item.object.removeFromParent();
-      const fem = FEMININE.has(item.name);
-      this.onNotice?.(`${fem ? 'La' : 'Le'} ${item.name} est fini${fem ? 'e' : ''}. Miam !`);
+      this.onNotice?.(`${theName(item.name)} ${PLURAL.has(item.name) ? 'sont' : 'est'} fini${agree(item.name)}. Miam !`);
     }
   }
 
   /** « cuit », « brûlée »… : la cuisson d'un aliment, ou null s'il est cru. */
   private cookedWord(item: WorldItem): string | null {
     if (!item.def.food || item.cooked < 1) return null;
-    return agree(item.name, item.cooked >= 1.5 ? 'brûlé' : 'cuit');
+    return `${item.cooked >= 1.5 ? 'brûlé' : 'cuit'}${agree(item.name)}`;
   }
 
   /** Faim rendue par un aliment selon sa cuisson (part de sa valeur crue). */
@@ -1329,6 +1367,141 @@ export class Game {
     this.lastBite.delete(item);
     this.lastSips.delete(item);
     item.object.removeFromParent();
+  }
+
+  /**
+   * Coupe en morceaux l'aliment tenu (`ref`, sinon le premier qui se coupe) sur la planche la plus
+   * proche : le perso le pose sur la planche, prend le couteau, coupe, puis repose le couteau.
+   */
+  cut(ref?: string, running = false): boolean {
+    const c = this.character;
+    const food = ref ? this.byRef(ref) : undefined;
+    if (ref && (!food || !c.heldItems.includes(food))) {
+      this.onNotice?.(`Pas de ${food?.name ?? ref} en main.`);
+      return false;
+    }
+    const board = this.nearest((i) => !!i.def.board && !c.carried.includes(i) && !this.flying.some((f) => f.item === i));
+    return this.cutOn(board, running, food);
+  }
+
+  /** Planche à découper posée sur le meuble `item` (ou null). */
+  private boardOn(item: WorldItem): WorldItem | null {
+    if (item.def.portable && !isTwoHanded(item.grip)) return null;
+    const carried = this.character.carried;
+    return this.items.find((b) => b.def.board && !carried.includes(b) && b.object.position.y > item.object.position.y && this.isAbove(b, item)) ?? null;
+  }
+
+  /** Dessus de la planche (monde) : au milieu, ou décalé de `dx`, `dz` dans le repère de la planche. */
+  private boardTop(board: WorldItem, dx = 0, dz = 0): THREE.Vector3 {
+    board.object.updateMatrixWorld(true);
+    const c = board.box.getCenter(new THREE.Vector3());
+    return new THREE.Vector3(c.x + dx, board.box.max.y, c.z + dz).applyMatrix4(board.object.matrixWorld);
+  }
+
+  /** Une place libre sur la planche (pas sur les morceaux déjà coupés), le milieu d'abord. */
+  private boardSpot(board: WorldItem, skip: WorldItem): THREE.Vector3 {
+    const spots = [[0, 0], [-0.1, 0], [0.1, 0], [-0.1, 0.05], [0.1, -0.05]].map(([x, z]) => this.boardTop(board, x, z));
+    const taken = (v: THREE.Vector3) => this.items.some((i) => i !== skip && i !== board && i.def.food && p0(i.object.position).distanceTo(p0(v)) < 0.07);
+    return spots.find((v) => !taken(v)) ?? spots[0];
+  }
+
+  /**
+   * Où se tenir pour couper sur la planche : devant le meuble qui la porte (plan de travail,
+   * table), face à elle ; sinon tout près d'elle.
+   */
+  private cutStand(board: WorldItem): THREE.Vector3 {
+    const under = this.items.find((o) => o !== board && (!o.def.portable || isTwoHanded(o.grip)) && !this.character.carried.includes(o) && o.object.position.y < board.object.position.y && this.isAbove(board, o));
+    if (!under) return this.character.standFor(board);
+    const o = under.object;
+    o.updateMatrixWorld(true);
+    const b = under.box;
+    const at = o.worldToLocal(board.object.position.clone());
+    // l'avant du meuble d'abord, sinon le côté libre le plus proche du perso
+    const sides = [
+      new THREE.Vector3(at.x, 0, b.max.z + CUT_STAND),
+      new THREE.Vector3(b.max.x + CUT_STAND, 0, at.z),
+      new THREE.Vector3(b.min.x - CUT_STAND, 0, at.z),
+      new THREE.Vector3(at.x, 0, b.min.z - CUT_STAND),
+    ].map((v) => o.localToWorld(v).setY(0));
+    const nav = this.character.nav;
+    if (!nav?.blocked(sides[0])) return sides[0];
+    const p = this.character.position;
+    return sides.filter((v) => !nav.blocked(v)).sort((u, v) => u.distanceTo(p) - v.distanceTo(p))[0] ?? sides[0];
+  }
+
+  private cutOn(board: WorldItem | null | undefined, running: boolean, only?: WorldItem): boolean {
+    const c = this.character;
+    const held = c.heldItems;
+    const food = only ?? held.find((i) => i.def.cut);
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!c.canCarry) return fail('Crée un perso pour pouvoir cuisiner.');
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (this.washing || c.washing) return fail('Tu te laves, un instant.');
+    if (!food) {
+      const other = held.find((h) => h.def.food);
+      return fail(other ? `${theName(other.name)} ne se coupe${PLURAL.has(other.name) ? 'nt' : ''} pas.` : 'Prends un aliment à couper : pomme, pain, carotte, tomate ou concombre (le frigo en a).');
+    }
+    if (!food.def.cut) return fail(`${theName(food.name)} ne se coupe pas.`);
+    if (food.portion < 1) return fail(`${theName(food.name)} est entamé${agree(food.name)} : mange-l${FEMININE.has(food.name) ? 'a' : 'e'} plutôt.`);
+    if (!board) return fail(held.some((h) => h.def.board) ? 'Pose d’abord la planche sur le plan de travail.' : 'Il n’y a pas de planche à découper.');
+    if (board.object.position.y < 0.5) return fail('Pose d’abord la planche sur le plan de travail (ou une table).');
+    const knife = held.find((h) => h.def.knife) ?? this.nearest((i) => !!i.def.knife && !c.carried.includes(i) && !this.flying.some((f) => f.item === i));
+    if (!knife) return fail('Il n’y a pas de couteau.');
+    if (c.busy || c.bracing) return false;
+    if (this.closeBookThen(() => this.cutOn(board, running, only))) return true;
+    if (c.seated) return c.standUp(() => this.cutOn(board, running, only));
+    const stand = this.cutStand(board);
+    const face = board.object.position;
+    // 3. la lame va et vient au-dessus de l'aliment ; ensuite il est en morceaux
+    const chop = (from: { pos: THREE.Vector3; yaw: number } | null) => {
+      const hand = c.handOf(knife);
+      const top = () => food.object.position.clone().setY(food.object.position.y + food.size.y * 0.6);
+      if (!hand?.cut(top, () => {
+        this.slice(food, board);
+        this.wearItem(knife, WEAR_CUT.knife);
+        this.wearItem(board, WEAR_CUT.board);
+        // le couteau retourne à sa place s'il est à portée, sinon il reste en main
+        if (from && p0(from.pos).distanceTo(p0(c.position)) < 0.9) c.drop(from.pos, from.yaw, undefined, false, knife);
+      })) this.onNotice?.('Impossible de couper pour l’instant.');
+    };
+    // 2. le couteau : déjà en main, sinon on va le prendre, puis on revient devant la planche
+    const takeKnife = () => {
+      if (c.handOf(knife)) return chop(null);
+      const q = knife.object.quaternion.clone();
+      if (knife.def.layFlat) q.multiply(LAY_FLAT.clone().invert());
+      const from = {
+        pos: knife.object.position.clone().setY(knife.object.position.y - knife.restLift(knife.object.quaternion)),
+        yaw: new THREE.Euler().setFromQuaternion(q, 'YXZ').y,
+      };
+      if (!c.pickUp(knife, running, undefined, () => c.approachThen(stand, face, () => chop(from), running))) this.onNotice?.('Il faut une main libre pour prendre le couteau.');
+    };
+    // 1. devant la planche, l'aliment posé dessus
+    c.approachThen(stand, face, () => {
+      if (!c.drop(this.boardSpot(board, food), undefined, takeKnife, false, food)) this.onNotice?.(`Impossible de poser ${food.name} sur la planche.`);
+    }, running);
+    return true;
+  }
+
+  /** L'aliment posé sur la planche devient ses morceaux (quartiers, tranches, rondelles). */
+  private slice(food: WorldItem, board: WorldItem): void {
+    const def = ITEM_BY_ID.get(food.def.cut!);
+    if (!def || !this.items.includes(food)) return;
+    const pieces = new WorldItem(def);
+    const yaw = new THREE.Euler().setFromQuaternion(food.object.quaternion, 'YXZ').y;
+    pieces.object.quaternion.setFromAxisAngle(UP, yaw);
+    const top = this.boardTop(board);
+    pieces.object.position.set(food.object.position.x, top.y + pieces.restLift(pieces.object.quaternion), food.object.position.z);
+    pieces.setCondition(food.condition);
+    this.items = this.items.filter((i) => i !== food);
+    this.riders = this.riders.filter((r) => r.item !== food && r.base !== food);
+    this.lastBite.delete(food);
+    food.object.removeFromParent();
+    this.items.push(pieces);
+    this.scene.add(pieces.object);
+    this.onNotice?.(`${cap(food.name)} coupé${agree(food.name)} : ${pieces.name} sur la planche.`);
   }
 
   /** Se fait un café à la machine la plus proche (il faut tenir la tasse). */
@@ -1522,6 +1695,8 @@ export class Game {
     else if (door && !opts.body) {
       return this.withDoorOpen(item, () => {}, running);
     }
+    // un aliment à couper en main : clic sur la planche, ou sur le meuble où elle est posée
+    else if (held.some((h) => h.def.cut) && (item.def.board || this.boardOn(item))) return this.cutOn(item.def.board ? item : this.boardOn(item), running);
     // appareil (four, micro-ondes, lave-vaisselle) : clic sur le côté, on le met en marche ou on l'arrête
     else if (item.def.heats || item.def.washes) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
@@ -1670,6 +1845,7 @@ export class Game {
       // M : la lettre, quelle que soit la disposition du clavier (AZERTY ou QWERTY)
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
       if (e.code === 'KeyT' && !e.repeat) this.throwItem();
+      if (e.code === 'KeyK' && !e.repeat) this.cut();
       if (e.code === 'KeyC' && !e.repeat) {
         if (this.character.seated) this.standUp();
         else this.sit();
@@ -1869,6 +2045,7 @@ export class Game {
     const can: HandActions = {
       drink: held.some((h) => !!h.contents),
       eat: held.some((h) => !!h.def.food),
+      cut: held.some((h) => !!h.def.cut && h.portion === 1),
       throw: !!last && !!c.handOf(last)?.canThrow,
       moving: !!this.moving,
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),

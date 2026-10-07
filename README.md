@@ -43,7 +43,7 @@ ouvre le créateur, et « Jouer » ramène sur la map.
 
 Les ordres simples sont compris directement par le jeu, sans IA (`src/orders/parser.ts`) :
 prendre, poser (« pose la lettre sur la table »), ranger (les livres), aller (« va à la table »),
-café, boire (« bois de l'eau »), remplir la tasse d'eau, se laver (« lave-toi les mains », « fais ta toilette »), dire (« dis bonjour »), enchaînés avec « puis », « ensuite » ou « et ».
+café, boire (« bois de l'eau »), manger, couper (« coupe la pomme »), remplir la tasse d'eau, se laver (« lave-toi les mains », « fais ta toilette »), dire (« dis bonjour »), enchaînés avec « puis », « ensuite » ou « et ».
 
 Les autres (« mets un peu d'ordre ») passent par un modèle de chat via
 [OpenRouter](https://openrouter.ai), par défaut celui de Lumen (`qwen/qwen3.7-flash`). Il choisit
@@ -212,6 +212,22 @@ de nouveau à la machine.
 - Fiche : `pour` (comme la machine, liquide `eau`, `drain` : on peut y vider la tasse) et `wash`
   (où vont les mains). Ce qui manque encore (ouvrir le robinet, boire au robinet, vaisselle,
   douche) est noté dans Menu → Manques.
+
+Plan de travail (à côté de l'évier, dans son alignement ; il se déplace comme la table) : une
+planche à découper, un couteau et un pain posés dessus. Le frigo a aussi une tomate, une carotte
+et un concombre.
+- un aliment entier en main (pomme, pain, carotte, tomate, concombre), clic sur la planche (ou
+  sur le meuble qui la porte), bouton « Couper » ou touche K : le perso pose l'aliment sur la
+  planche, prend le couteau, coupe (la lame monte et descend au-dessus de l'aliment), puis repose
+  le couteau à sa place. L'aliment devient ses morceaux, restés sur la planche : quartiers de
+  pomme, tranches de pain, rondelles de carotte, tranches de tomate, rondelles de concombre. Ils
+  se mangent comme l'aliment entier (même faim rendue) et se rangent au frigo.
+- un aliment entamé ne se coupe plus ; la planche doit être posée en hauteur (plan de travail,
+  table). Couper use un peu le couteau et la planche.
+- Ordres : « coupe la pomme », « tranche le pain », « coupe une tomate », « mange les tranches de
+  tomate ». Console : `game.cut()` (ou `game.cut('pomme')` pour l'aliment tenu de ce nom).
+- Fiches : `cut` (l'id des morceaux que devient l'aliment), `board` (planche), `knife` (couteau).
+  Ce qui manque encore (éplucher, cuire, servir dans une assiette) est noté dans Menu → Manques.
 
 Cuisine (`src/game/items/kitchen.ts`), alignée de l'autre côté de la machine à café : placard
 (le micro-ondes posé dessus), four, lave-vaisselle, meuble à tiroir et poubelle. Leurs dessus font
