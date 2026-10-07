@@ -162,9 +162,9 @@ export class WorldItem {
 
 type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45 };
-/** Temps pour qu'un objet ajouté à la pile y trouve sa place (s). */
-const STACK_BLEND = 0.4;
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.9, store: 0.9, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45 };
+/** Temps pour qu'un objet ajouté à la pile y trouve sa place (s) : la main l'y ramène (moitié de DURATION.add). */
+const STACK_BLEND = 0.45;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
 const STACK_MAX = 5;
 /**
@@ -217,8 +217,27 @@ export const SPLASH_CYCLE = SPLASH.basin + SPLASH.up + SPLASH.face + SPLASH.down
 const FACE_HOLD: [number, number, number] = [-0.045, -0.03, 0.1];
 const FACE_HAND = { fingers: [0.2, 1, 0.1] as [number, number, number], palm: [0.15, 0, -1] as [number, number, number] };
 
-/** Temps de fondu de l'objet entre sa pose au sol et sa pose en main (s). */
+/** Lâché : temps pour que l'objet finisse de se poser, s'il n'y était pas tout à fait (s). */
 const SNAP = 0.25;
+/**
+ * Saisie : l'objet reste collé à la main tel qu'elle l'a touché, puis glisse dans la prise
+ * pendant ce temps (s) ; à la dépose, il prend sa pose au sol dans la main avant d'être lâché.
+ */
+const SETTLE = 0.35;
+/** Main ouverte, en approche d'un objet ou en le lâchant (degrés par phalange, pouce). */
+const OPEN_HAND = { curl: 6, thumb: 8 };
+/** Les doigts se referment sur l'objet sur la fin de l'approche (part de DURATION.reach). */
+const CLOSE_FROM = 0.72;
+/** Temps pour ouvrir la main en lâchant un objet (s). */
+const OPEN_TIME = 0.18;
+/** Poignet tourné vers l'objet pendant l'approche (part de l'angle entre la prise et le bras). */
+const WRIST_FOLLOW = 0.4;
+/**
+ * S'accroupir plus bas si la main n'atteint pas l'objet (au sol) : descente du bassin et flexion
+ * du buste en plus, au plus (part de la taille, degrés).
+ */
+const CROUCH_DROP_MAX = 0.55;
+const CROUCH_BEND_MAX = 35;
 
 const ease = (t: number) => t * t * (3 - 2 * t);
 
@@ -233,6 +252,7 @@ const ARM_REST: Record<Side, { dir: THREE.Vector3; hinge: THREE.Vector3; fingers
   left: { dir: new THREE.Vector3(1, 0, 0), hinge: new THREE.Vector3(0, -1, 0), fingers: new THREE.Vector3(1, 0, 0) },
 };
 const PALM_REST = new THREE.Vector3(0, -1, 0);
+const DOWN = new THREE.Vector3(0, -1, 0);
 const LEG_DIR = new THREE.Vector3(0, -1, 0);
 const LEG_HINGE = new THREE.Vector3(1, 0, 0);
 
@@ -312,6 +332,8 @@ export class Carry {
   private washT = 0;
   /** Main imposée par un geste (lancer) : position depuis l'épaule et coude. */
   private swing: { reach: THREE.Vector3; pole: THREE.Vector3 } | null = null;
+  /** Pose de l'objet dans la main au moment où elle le touche (voir SETTLE). */
+  private contact: { pos: THREE.Vector3; rot: THREE.Quaternion } | null = null;
 
   /** `side` : la main qui tient l'objet (une prise à deux mains prend aussi l'autre). */
   constructor(rig: Rig, readonly side: Side = 'right') {
@@ -530,6 +552,7 @@ export class Carry {
     this.phase = phase;
     this.t = 0;
     this.onDone = onDone ?? null;
+    this.contact = null;
   }
 
   private advance(dt: number): void {
@@ -550,6 +573,7 @@ export class Carry {
     }
     this.phase = n;
     this.t = 0;
+    this.contact = null;
     if (n === 'idle' && this.item) {
       this.item.object.position.copy(this.groundPos);
       this.item.object.quaternion.copy(this.groundRot);
@@ -590,9 +614,9 @@ export class Carry {
       case 'throw': return { w: 1 - ease(THREE.MathUtils.clamp((this.t - THROW_SWING) / (DURATION.throw - THROW_SWING), 0, 1)), r: 0, c: 0 };
       case 'lower': return { w: 1, r: k, c: k };
       case 'release': return { w: 1 - k, r: 1, c: 1 - k };
-      // on se penche un peu pour attraper / poser un livre sans lâcher la pile
+      // on se penche pour attraper / poser un livre sans lâcher la pile (une main va le chercher)
       case 'add':
-      case 'store': return { w: 1, r: 0, c: 0.6 * Math.sin(Math.PI * Math.min(1, this.t / DURATION[this.phase])) };
+      case 'store': return { w: 1, r: 0, c: Math.sin(Math.PI * Math.min(1, this.t / DURATION[this.phase])) };
       default: return { w: 0, r: 0, c: 0 };
     }
   }
@@ -600,7 +624,9 @@ export class Carry {
   apply(dt: number): void {
     this.advance(dt);
     if (this.phase === 'idle' || (!this.item && this.phase !== 'throw' && this.phase !== 'let' && !this.bracing)) return;
-    if (this.phase !== 'reach') for (const e of this.stack) e.age += dt;
+    // le livre ajouté attend que la main l'ait rejoint
+    const adding = this.phase === 'add' && this.t < DURATION.add / 2 ? this.stack[this.stack.length - 1] : null;
+    if (this.phase !== 'reach') for (const e of this.stack) if (e !== adding) e.age += dt;
     if (this.bracing) this.washT += dt;
     const { w, r, c } = this.weights();
     this.sip = this.phase === 'drink' || this.phase === 'eat' ? this.sipAmount() : 0;
@@ -621,7 +647,7 @@ export class Carry {
     const root = this.rig.vrm.scene;
     root.updateMatrixWorld(true);
     const scale = root.getWorldScale(new THREE.Vector3()).y;
-    if (c > 0) this.crouch(c, scale);
+    const bent = c > 0 ? this.crouch(c, scale, this.reachesTarget ? this.side : null) : 0;
     // lecture : la tête se penche vers le livre
     const open = this.openAmount();
     const neck = this.rig.node('neck');
@@ -650,6 +676,9 @@ export class Carry {
       const spec = this.bracing ? GRIPS[this.braceGrip] : this.phase === 'read' ? GRIPS.read : this.spec();
       hands = this.pose(spec, r, scale);
     }
+    // penché en avant, la main libre pend au lieu de partir en arrière avec le buste
+    const hang = THREE.MathUtils.clamp(bent / 60, 0, 1);
+    if (hang > 0) for (const side of SIDES) if (!hands.includes(side)) this.hangArm(side, hang);
     // fondu entre la pose animée et la pose calculée
     if (w < 1) {
       for (const s of this.saved) {
@@ -742,8 +771,16 @@ export class Carry {
     return 1;
   }
 
-  /** Penche le buste et plie les jambes (pieds fixes) selon la hauteur de la cible. */
-  private crouch(c: number, scale: number): void {
+  /** La main va-t-elle vers la cible (objet à prendre, endroit où le poser, livre de la pile) ? */
+  private get reachesTarget(): boolean {
+    return this.phase === 'reach' || this.phase === 'lift' || this.phase === 'lower' || this.phase === 'release' || this.phase === 'add' || this.phase === 'store';
+  }
+
+  /**
+   * Penche le buste et plie les jambes (pieds fixes) selon la hauteur de la cible ; si la main
+   * de `reach` n'y arrive pas encore (objet au sol), on descend plus bas.
+   */
+  private crouch(c: number, scale: number, reach: Side | null): number {
     const rig = this.rig;
     const low = THREE.MathUtils.clamp((0.85 * scale - this.target.y) / (0.75 * scale), 0, 1);
     const feet = SIDES.map((side) => {
@@ -752,19 +789,49 @@ export class Carry {
     });
     const hips = rig.node('hips')!;
     const hipsScale = hips.parent!.getWorldScale(new THREE.Vector3()).y;
-    hips.position.y -= (0.3 * scale * low * c) / hipsScale;
-    const bend = THREE.MathUtils.degToRad((15 + 50 * low) * c);
-    for (const n of ['spine', 'chest'] as const) {
-      const node = rig.node(n);
-      if (node) node.quaternion.multiply(rig.local(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), bend / 2)));
+    const hipsY = hips.position.y;
+    const spine = (['spine', 'chest'] as const).map((n) => rig.node(n)).filter((n): n is THREE.Object3D => !!n);
+    const rest = spine.map((n) => n.quaternion.clone());
+    const armLen = reach ? this.armLength(reach) : 0;
+    let drop = 0.3 * low, bendMore = 0, deg = 0;
+    for (let i = 0; i < 6; i++) {
+      hips.position.y = hipsY - (drop * scale * c) / hipsScale;
+      deg = (15 + 50 * low + bendMore) * c;
+      const bend = THREE.MathUtils.degToRad(deg);
+      spine.forEach((node, j) => node.quaternion.copy(rest[j]).multiply(rig.local(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), bend / 2))));
+      this.rig.vrm.scene.updateMatrixWorld(true);
+      if (!reach) break;
+      // ce qui manque au bras (presque tendu) pour toucher la cible
+      const short = rig.worldPos(rig.node(`${reach}UpperArm`)!).distanceTo(this.target) - 0.97 * armLen;
+      if (short < 0.005 * scale || (drop >= CROUCH_DROP_MAX && bendMore >= CROUCH_BEND_MAX)) break;
+      // objet en hauteur (table) : on se penche plutôt ; au sol, on plie aussi les genoux
+      drop = Math.min(CROUCH_DROP_MAX, drop + (short * low) / scale);
+      bendMore = Math.min(CROUCH_BEND_MAX, bendMore + (40 * (2 - low) * short) / scale);
     }
-    this.rig.vrm.scene.updateMatrixWorld(true);
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(rig.worldRot(hips));
     for (const f of feet) {
       const up = rig.node(`${f.side}UpperLeg`)!, mid = rig.node(`${f.side}LowerLeg`)!, foot = rig.node(`${f.side}Foot`)!;
       solveTwoBone(rig, up, mid, foot, f.pos, fwd, LEG_DIR, LEG_HINGE);
       rig.setWorldRot(foot, f.rot);
     }
+    return deg;
+  }
+
+  /** Bras libre qui pend sous l'épaule, coude vers l'arrière (fondu `k` avec la pose animée). */
+  private hangArm(side: Side, k: number): void {
+    const rig = this.rig;
+    const nodes = (['UpperArm', 'LowerArm', 'Hand'] as const).map((n) => rig.node(`${side}${n}`)!);
+    const [upper, lower, hand] = nodes;
+    const before = nodes.map((n) => n.quaternion.clone());
+    const len = this.armLength(side);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chestRot).setY(0).normalize();
+    const out = new THREE.Vector3(side === 'left' ? 1 : -1, 0, 0).applyQuaternion(this.chestRot).setY(0).normalize();
+    const wrist = rig.worldPos(upper).addScaledVector(DOWN, 0.9 * len).addScaledVector(fwd, 0.15 * len).addScaledVector(out, 0.08 * len);
+    const pole = fwd.clone().negate().addScaledVector(out, 0.4).normalize();
+    const rest = ARM_REST[side];
+    solveTwoBone(rig, upper, lower, hand, wrist, pole, rest.dir, rest.hinge);
+    rig.setWorldRot(hand, basisRotation(rest.fingers, PALM_REST, DOWN.clone().addScaledVector(fwd, 0.25).normalize(), out.clone().negate()));
+    nodes.forEach((n, i) => n.quaternion.copy(before[i].slerp(n.quaternion, k)));
   }
 
   /** Centre de la prise à deux mains (monde) : devant le buste, ou sur l'objet au sol. */
@@ -791,6 +858,8 @@ export class Carry {
     const palm = vec(hand.palm).normalize().applyQuaternion(this.chestRot);
     const handRot = basisRotation(rest.fingers, PALM_REST, fingers, palm);
     const sipping = this.sip > 0 && side === this.side && !spec.left;
+    const fetch = (this.phase === 'add' || this.phase === 'store') && side === this.side && !!spec.left;
+    let anchorPalm: THREE.Vector3 | null = null;
     if (sipping) {
       // tasse inclinée vers la bouche : rotation autour de l'axe gauche-droite du buste
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(this.chestRot);
@@ -827,11 +896,23 @@ export class Carry {
         if (Math.abs(onGround.y) < 0.5) sideDir = onGround.setY(0).normalize();
       }
       palmTarget = center.clone().addScaledVector(sideDir, half);
+      if (fetch) {
+        // la prise reste où elle était (la pile ne bouge pas), la main va chercher le livre
+        anchorPalm = palmTarget.clone();
+        palmTarget.lerp(this.target, this.fetchAmount());
+      }
     } else {
       const shoulder = rig.worldPos(upper);
       const reach = this.swing && side === this.side ? this.swing.reach : vec(hand.reach);
       const hold = shoulder.add(reach.clone().multiplyScalar(this.armLength(side)).applyQuaternion(this.chestRot));
       palmTarget = hold.lerp(this.target, r);
+      if (r > 0 && !this.swing) {
+        // en approche, le poignet suit un peu le bras : les doigts vers l'objet
+        const along = palmTarget.clone().sub(rig.worldPos(upper)).normalize();
+        const now = rest.fingers.clone().applyQuaternion(handRot);
+        const turn = new THREE.Quaternion().setFromUnitVectors(now, along);
+        handRot.premultiply(new THREE.Quaternion().slerp(turn, WRIST_FOLLOW * r));
+      }
       if (sipping) {
         palmTarget.lerp(this.mouthHold(scale, side), this.sip);
         // le goulot (ou le bord croqué) aux lèvres plutôt que le bord de la tasse
@@ -851,9 +932,9 @@ export class Carry {
     pole.applyQuaternion(this.chestRot);
     solveTwoBone(rig, upper, lower, handNode, wrist, pole, rest.dir, rest.hinge);
     rig.setWorldRot(handNode, handRot);
-    this.palms[side] = palmTarget;
+    this.palms[side] = anchorPalm ?? palmTarget;
     this.handRots[side] = handRot;
-    this.curl(side, hand);
+    this.curl(side, hand, this.grasp(fetch));
   }
 
   /** Où tenir la main pour que le bord de la tasse touche les lèvres (monde). */
@@ -868,11 +949,36 @@ export class Carry {
     return this.phase === 'lower' || this.phase === 'release' ? this.groundRot : this.item!.object.quaternion;
   }
 
-  private curl(side: Side, hand: HandSpec): void {
+  /**
+   * Main refermée sur l'objet (1) ou ouverte (0) : elle s'ouvre en approchant, se referme au
+   * contact, se rouvre en le lâchant. `fetch` : la main qui va chercher un livre pour la pile.
+   */
+  private grasp(fetch = false): number {
+    const T = DURATION[this.phase], u = T ? Math.min(1, this.t / T) : 1;
+    switch (this.phase) {
+      case 'reach': return ease(THREE.MathUtils.clamp((u - CLOSE_FROM) / (1 - CLOSE_FROM), 0, 1));
+      case 'release':
+      case 'let': return 1 - ease(Math.min(1, this.t / OPEN_TIME));
+      case 'throw': return this.t < THROW_RELEASE ? 1 : 1 - ease(Math.min(1, (this.t - THROW_RELEASE) / OPEN_TIME));
+      // la main s'ouvre en partant, se referme sur le livre (ajout) ; le lâche puis revient (rangement)
+      case 'add': return fetch && u < 0.5 ? 1 - Math.sin(Math.PI * u * 2) : 1;
+      case 'store': return fetch && u > 0.5 ? 1 - Math.sin(Math.PI * (u - 0.5) * 2) : 1;
+      default: return 1;
+    }
+  }
+
+  /** Main tendue vers la cible puis revenue (aller jusqu'à la moitié du geste, retour ensuite). */
+  private fetchAmount(): number {
+    const u = Math.min(1, this.t / DURATION[this.phase]);
+    return u < 0.5 ? ease(u * 2) : 1 - ease((u - 0.5) * 2);
+  }
+
+  private curl(side: Side, hand: HandSpec, grasp = 1): void {
     const rig = this.rig;
     const sign = side === 'right' ? 1 : -1;
     for (const f of FINGERS) {
-      const deg = f === 'Index' && hand.index !== undefined ? hand.index : hand.curl;
+      const shut = f === 'Index' && hand.index !== undefined ? hand.index : hand.curl;
+      const deg = THREE.MathUtils.lerp(OPEN_HAND.curl, shut, grasp);
       for (const j of JOINTS) {
         const node = rig.node(`${side}${f}${j}` as VRMHumanBoneName);
         if (!node) continue;
@@ -885,7 +991,7 @@ export class Carry {
     for (const j of ['Proximal', 'Distal'] as const) {
       const node = rig.node(`${side}Thumb${j}` as VRMHumanBoneName);
       if (!node) continue;
-      node.quaternion.copy(rig.local(new THREE.Quaternion().setFromAxisAngle(axis, sign * THREE.MathUtils.degToRad(hand.thumb))));
+      node.quaternion.copy(rig.local(new THREE.Quaternion().setFromAxisAngle(axis, sign * THREE.MathUtils.degToRad(THREE.MathUtils.lerp(OPEN_HAND.thumb, hand.thumb, grasp)))));
     }
   }
 
@@ -914,10 +1020,24 @@ export class Carry {
       pos.sub(this.pointFor(spec).applyQuaternion(rot));
     }
     const o = item.object;
-    if (this.phase === 'lift' && this.t < SNAP) {
-      const k = ease(this.t / SNAP);
-      o.position.copy(this.groundPos).lerp(pos, k);
-      o.quaternion.copy(this.groundRot).slerp(rot, k);
+    if ((this.phase === 'lift' || this.phase === 'lower') && !this.blendPose) {
+      // l'objet suit la main (ou les deux) : il ne glisse plus tout seul vers elle ni vers le sol
+      const anchor = this.anchor(spec);
+      const inHand = this.relative(anchor, pos, rot);
+      let rel = inHand;
+      if (this.phase === 'lift') {
+        // tel que la main l'a touché, puis il se cale dans la prise
+        this.contact ??= this.relative(anchor, o.position, o.quaternion);
+        const k = ease(Math.min(1, this.t / SETTLE));
+        rel = { pos: this.contact.pos.clone().lerp(inHand.pos, k), rot: this.contact.rot.clone().slerp(inHand.rot, k) };
+      } else {
+        // il prend dans la main sa pose au sol, pour être lâché sans bouger
+        const k = ease(Math.min(1, this.t / DURATION.lower));
+        const down = this.relative(anchor, this.groundPos, this.groundRot);
+        rel = { pos: inHand.pos.lerp(down.pos, k), rot: inHand.rot.slerp(down.rot, k) };
+      }
+      o.position.copy(rel.pos).applyQuaternion(anchor.rot).add(anchor.pos);
+      o.quaternion.copy(anchor.rot).multiply(rel.rot);
     } else if (this.phase === 'release') {
       const k = ease(Math.min(1, this.t / SNAP));
       o.position.copy(this.heldPos).lerp(this.groundPos, k);
@@ -927,6 +1047,19 @@ export class Carry {
       o.quaternion.copy(rot);
     }
     this.placeStack(o.position, o.quaternion, false);
+  }
+
+  /** Repère qui porte l'objet : l'os de la main, ou le buste entre les deux paumes. */
+  private anchor(spec: GripSpec): { pos: THREE.Vector3; rot: THREE.Quaternion } {
+    if (spec.left) return { pos: this.palms.left!.clone().add(this.palms.right!).multiplyScalar(0.5), rot: this.chestRot.clone() };
+    const hand = `${this.side}Hand` as const;
+    return { pos: this.rig.worldPos(this.rig.raw(hand)!), rot: this.rig.worldRot(this.rig.node(hand)!) };
+  }
+
+  /** Pose (`pos`, `rot`, monde) exprimée dans le repère `anchor`. */
+  private relative(anchor: { pos: THREE.Vector3; rot: THREE.Quaternion }, pos: THREE.Vector3, rot: THREE.Quaternion): { pos: THREE.Vector3; rot: THREE.Quaternion } {
+    const inv = anchor.rot.clone().invert();
+    return { pos: pos.clone().sub(anchor.pos).applyQuaternion(inv), rot: inv.multiply(rot) };
   }
 
   /** Point saisi de l'objet tenu ; une pile se porte par en dessous (face opposée, +X). */
@@ -946,7 +1079,8 @@ export class Carry {
       h -= e.item.size.x;
       const at = local.applyQuaternion(rot).add(pos);
       if (e.leaving && !final) {
-        const k = ease(Math.min(1, this.t / DURATION.store));
+        // la main l'emporte pendant la première moitié du geste
+        const k = ease(Math.min(1, (2 * this.t) / DURATION.store));
         o.position.copy(at).lerp(e.leaving.pos, k);
         o.quaternion.copy(rot).slerp(e.leaving.rot, k);
       } else if (e.age < STACK_BLEND && !final) {
