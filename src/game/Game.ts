@@ -1335,7 +1335,7 @@ export class Game {
       const count = c.handOf(h)?.carried.length ?? 1;
       return count > 1 ? `${n} ×${count}` : `${n}, ${grade(h)}`;
     });
-    if (this.sitting && !c.seated && c.idle) this.sitting = null;
+    if (this.sitting && !c.seated && (c.idle || c.washing)) this.sitting = null;
     const label = this.moving ? `${this.moving.item.name}, ${grade(this.moving.item)}` : names.length ? names.join(' et ') : null;
     const bookHand = book ? c.handOf(book) : null;
     const last = c.held;
