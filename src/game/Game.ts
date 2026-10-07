@@ -1160,6 +1160,30 @@ export class Game {
     return this.tryPickUp(item, false);
   }
 
+  /** Va à l'interrupteur près de la porte et allume (`on`) ou éteint les lampes de la cuisine ; sans `on`, inverse. */
+  switchLights(on = !this.room.lightsOn, running = false): boolean {
+    if (this.moving) {
+      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+      return false;
+    }
+    const { stand, face } = this.room.switchSpot();
+    this.character.approachThen(stand, face, () => {
+      this.room.setLights(on);
+      this.onNotice?.(on ? 'Lumière allumée.' : 'Lumière éteinte.');
+    }, running);
+    return true;
+  }
+
+  /** L'interrupteur est-il sous ce pixel (avant tout objet) ? */
+  private switchAt(cx: number, cy: number): boolean {
+    this.aim(cx, cy);
+    const d = this.room.switchHit(this.raycaster);
+    if (d === null) return false;
+    const carried = this.character.carried;
+    const item = this.raycaster.intersectObjects(this.items.filter((i) => !carried.includes(i)).map((i) => i.object), true)[0];
+    return !item || item.distance > d;
+  }
+
   /** Marche jusqu'à l'objet `ref` (s'arrête devant lui). */
   walkTo(ref: string): boolean {
     const item = this.byRef(ref);
@@ -3689,6 +3713,11 @@ export class Game {
       this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
     on(el, 'pointermove', (e) => {
+      if (!e.buttons && this.switchAt(e.clientX, e.clientY)) {
+        const r = el.getBoundingClientRect();
+        this.onHover?.({ name: 'interrupteur', grade: gradeName(1, false), condition: 1, state: this.room.lightsOn ? 'lumière allumée' : 'lumière éteinte', x: e.clientX - r.left, y: e.clientY - r.top });
+        return;
+      }
       const item = e.buttons ? null : this.itemAt(e.clientX, e.clientY);
       if (!item) {
         this.onHover?.(null);
@@ -3701,6 +3730,11 @@ export class Game {
     on(el, 'contextmenu', (e) => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
+      if (this.switchAt(e.clientX, e.clientY)) {
+        const on = this.room.lightsOn;
+        this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: 'interrupteur', entries: [{ label: on ? 'Éteindre la lumière' : 'Allumer la lumière', run: () => this.switchLights(!on) }] });
+        return;
+      }
       const item = this.hitAt(e.clientX, e.clientY)?.item ?? null;
       const entries = this.menuFor(item);
       if (!entries.length) {
@@ -3713,6 +3747,10 @@ export class Game {
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
       this.onMenu?.(null);
+      if (this.switchAt(e.clientX, e.clientY)) {
+        this.switchLights(undefined, e.shiftKey);
+        return;
+      }
       const hit = this.hitAt(e.clientX, e.clientY);
       if (hit) {
         // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser

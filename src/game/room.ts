@@ -4,7 +4,8 @@
  * étagère, horloge qui donne l'heure du jeu, meuble d'angle).
  *
  * Lumière jour et nuit, réglée par l'horloge du jeu : les suspensions s'allument au crépuscule
- * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit.
+ * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit. L'interrupteur à côté
+ * de la porte allume ou éteint à la main ; l'horloge reprend la main au prochain lever ou coucher.
  *
  * Murs « en coupe » comme dans les Sims : les murs tournés vers la caméra s'abaissent à hauteur
  * de plinthe pour qu'on voie dedans ; ils se relèvent quand la caméra tourne. Le perso hors de la
@@ -51,6 +52,11 @@ const LAMP_I = 7;
 const LAMP_RANGE = 7;
 /** Les lampes s'allument sur cette durée (h) avant le coucher, s'éteignent après le lever. */
 const LAMP_FADE = 1.5;
+/** Vitesse du fondu quand on appuie sur l'interrupteur (part de lumière par seconde). */
+const SWITCH_FADE = 4;
+/** Interrupteur : sur le mur ouest, à côté de la porte (côté sud), hauteur. */
+const SWITCH_Z = DOOR.z1 + 0.2;
+const SWITCH_Y = 1.1;
 /** Vitres : ciel de jour, ciel de nuit (couleur, opacité). */
 const PANE_DAY = { color: new THREE.Color(0xbfe3f2), opacity: 0.35 };
 const PANE_NIGHT = { color: new THREE.Color(0x1c2748), opacity: 0.75 };
@@ -199,6 +205,14 @@ export class Room {
   private lamps: THREE.PointLight[] = [];
   private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
   private shadeMat = toon(0x2f5d50);
+  /** Part de lumière des lampes en ce moment (0 à 1). */
+  private lampK = 0;
+  /** Allumé ou éteint à l'interrupteur (null : l'horloge décide), et ce que l'horloge voulait alors. */
+  private manual: { on: boolean; auto: boolean } | null = null;
+  private hour = 0;
+  /** L'interrupteur (plaque et bascule), et sa bascule qui montre s'il est allumé. */
+  readonly lightSwitch = new THREE.Group();
+  private rocker = new THREE.Group();
   /** Matériau partagé des vitres, teinté selon l'heure. */
   private glassMat = new THREE.MeshBasicMaterial({ color: PANE_DAY.color, transparent: true, opacity: PANE_DAY.opacity, depthWrite: false });
 
@@ -353,6 +367,37 @@ export class Room {
     // suspensions : une au-dessus de la table, une au milieu du coin cuisine
     this.addLamp(tableAt ? tableAt.x : 1.6, tableAt ? tableAt.z - 0.2 : 1);
     this.addLamp((sinkX + stoveX) / 2, z0 + 1.3);
+
+    // interrupteur à côté de la porte : plaque blanche, bascule (haut enfoncé = allumé)
+    const sw = this.lightSwitch;
+    sw.name = 'interrupteur';
+    sw.add(box(0.012, 0.11, 0.08, toon(0xf4f1ea), 0.006, 0, 0, false));
+    this.rocker.add(box(0.014, 0.05, 0.035, toon(0xffffff), 0.007, 0, 0, false));
+    this.rocker.position.x = 0.012;
+    sw.add(this.rocker);
+    sw.position.set(x0, SWITCH_Y, SWITCH_Z);
+    west.full.add(sw);
+  }
+
+  /** Les lampes sont-elles allumées (ou en train de s'allumer) ? */
+  get lightsOn(): boolean {
+    return this.manual ? this.manual.on : lampLevel(this.hour) > 0.5;
+  }
+
+  /** Allume ou éteint à l'interrupteur, jusqu'au prochain lever ou coucher du soleil. */
+  setLights(on: boolean): void {
+    this.manual = { on, auto: lampLevel(this.hour) > 0.5 };
+  }
+
+  /** Où se tenir pour appuyer sur l'interrupteur, et le point à regarder. */
+  switchSpot(): { stand: THREE.Vector3; face: THREE.Vector3 } {
+    return { stand: new THREE.Vector3(ROOM.x0 + 0.45, 0, SWITCH_Z), face: new THREE.Vector3(ROOM.x0, SWITCH_Y, SWITCH_Z) };
+  }
+
+  /** Distance de l'interrupteur sur le rayon, s'il est visible et touché. */
+  switchHit(ray: THREE.Raycaster): number | null {
+    if (!this.visibleChain(this.lightSwitch)) return null;
+    return ray.intersectObject(this.lightSwitch, true)[0]?.distance ?? null;
   }
 
   /** Suspension au plafond (fil, abat-jour, ampoule) et sa lumière, éteinte au départ. */
@@ -378,8 +423,14 @@ export class Room {
   }
 
   /** Lampes et vitres selon l'heure `hour` (0 à 24). */
-  private applyLight(hour: number): void {
-    const k = lampLevel(hour);
+  private applyLight(dt: number, hour: number): void {
+    const auto = lampLevel(hour);
+    // l'horloge reprend la main quand elle change d'avis (lever ou coucher du soleil)
+    if (this.manual && (auto > 0.5) !== this.manual.auto) this.manual = null;
+    if (this.manual) this.lampK = THREE.MathUtils.clamp(this.lampK + (this.manual.on ? 1 : -1) * SWITCH_FADE * dt, 0, 1);
+    else this.lampK = Math.abs(auto - this.lampK) < SWITCH_FADE * dt ? auto : this.lampK + Math.sign(auto - this.lampK) * SWITCH_FADE * dt;
+    const k = this.lampK;
+    this.rocker.rotation.z = this.lightsOn ? 0.25 : -0.25;
     for (const l of this.lamps) l.intensity = LAMP_I * k;
     // ampoule éteinte grise, allumée au-dessus de 1 : le bloom la fait briller
     this.bulbMat.color.setRGB(0.23 + 2.4 * k, 0.2 + 1.9 * k, 0.17 + 1.1 * k);
@@ -504,7 +555,8 @@ export class Room {
     const m = ((hour % 12) + 12) % 12;
     this.hands.hour.rotation.x = -(m / 12) * Math.PI * 2;
     this.hands.minute.rotation.x = -(hour % 1) * Math.PI * 2;
-    this.applyLight(hour);
+    this.hour = hour;
+    this.applyLight(dt, hour);
   }
 
   /** Point du sol au pied du mur visé par le rayon (côté pièce), s'il touche un mur avant le sol. */
