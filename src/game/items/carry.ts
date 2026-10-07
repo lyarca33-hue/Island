@@ -33,6 +33,8 @@ export class WorldItem {
   contents: string | null = null;
   /** Durabilité restante (points, sur maxDurability) ; à zéro, l'objet se brise. */
   durability: number;
+  /** Part qui reste d'un aliment (1 entier, 0 mangé ; voir ItemDef.food). */
+  portion = 1;
 
   private closed: THREE.Object3D;
   private opened: THREE.Object3D | null = null;
@@ -53,7 +55,8 @@ export class WorldItem {
     }
     this.grip = def.grip ?? guessGrip(this.size);
     this.gripPoint = def.gripPoint ? vec(def.gripPoint) : new THREE.Vector3(0, this.size.y / 2, 0);
-    if (def.fill) this.setLevel(0);
+    if (def.fill) this.setLevel(def.startFull ? 1 : 0);
+    this.contents = def.startFull ?? null;
     this.durability = this.maxDurability;
   }
 
@@ -97,9 +100,24 @@ export class WorldItem {
     if (!this.def.fill || !liquid) return;
     this.level = THREE.MathUtils.clamp(level, 0, 1);
     liquid.visible = this.level > 0.01;
+    if (liquid.userData.column) {
+      // colonne (bouteille) : de fill[0] jusqu'au niveau
+      liquid.position.y = this.def.fill[0];
+      liquid.scale.y = Math.max(0.001, this.level * (this.def.fill[1] - this.def.fill[0]));
+      return;
+    }
     liquid.position.y = THREE.MathUtils.lerp(this.def.fill[0], this.def.fill[1], this.level);
     const r = THREE.MathUtils.lerp(0.87, 1, this.level);
     liquid.scale.set(r, 1, r);
+  }
+
+  /** Une bouchée : l'aliment rétrécit (autour du point tenu, il reste dans la main). */
+  bite(): void {
+    if (!this.def.food) return;
+    this.portion = Math.max(0, this.portion - 1 / this.def.food.bites);
+    const s = 0.4 + 0.6 * this.portion;
+    this.closed.scale.setScalar(s);
+    this.closed.position.copy(this.gripPoint).multiplyScalar(1 - s);
   }
 
   get name(): string {
@@ -123,9 +141,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s). */
 const STACK_BLEND = 0.4;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -155,6 +173,16 @@ const SIP_MOUTH: [number, number, number] = [-0.05, -0.02, 0.13];
 /** Vers où pointe le coude pendant la gorgée (repère du buste). */
 const SIP_POLE: [number, number, number] = [-0.35, -0.9, 0.25];
 const SIP_TILT = THREE.MathUtils.degToRad(55);
+/** Aliment porté à la bouche : à peine incliné (rad). */
+const BITE_TILT = THREE.MathUtils.degToRad(12);
+/**
+ * Bord de la tasse qui touche les lèvres, depuis l'anse (repère de la tasse) : SIP_MOUTH est
+ * réglé pour lui. Un objet qui a son propre point `mouth` (goulot) est décalé d'autant.
+ */
+const CUP_LIP = new THREE.Vector3(0, 0.045, -0.104);
+/** Goulot (bouteille) : plus près des lèvres que le bord large d'une tasse (repère du buste), et plus incliné. */
+const NECK_IN: [number, number, number] = [0, -0.035, -0.06];
+const NECK_TILT = THREE.MathUtils.degToRad(85);
 
 /** Temps de fondu de l'objet entre sa pose au sol et sa pose en main (s). */
 const SNAP = 0.25;
@@ -229,8 +257,10 @@ export class Carry {
   /** Centre des paumes calculé à cette image (pour placer l'objet tenu). */
   private palms: Partial<Record<Side, THREE.Vector3>> = {};
   private chestRot = new THREE.Quaternion();
-  /** Part du geste « boire » (0 : tasse tenue, 1 : à la bouche). */
+  /** Part du geste « boire » ou « manger » (0 : objet tenu, 1 : à la bouche). */
   private sip = 0;
+  /** La bouchée de ce geste « manger » est prise. */
+  private bitten = false;
   /** Orientation de chaque main calculée à cette image. */
   private handRots: Partial<Record<Side, THREE.Quaternion>> = {};
   /** Pose de l'objet pendant l'ouverture / la fermeture du livre (fondu entre les deux prises). */
@@ -408,6 +438,14 @@ export class Carry {
     return true;
   }
 
+  /** Prend une bouchée de l'aliment tenu (pomme, sandwich). */
+  eat(onDone?: () => void): boolean {
+    if (!this.item?.def.food || this.phase !== 'hold' || this.stack.length || this.item.portion <= 0) return false;
+    this.bitten = false;
+    this.start('eat', onDone);
+    return true;
+  }
+
   /** Saisit un objet à portée (le perso doit déjà lui faire face). */
   pickUp(item: WorldItem, onDone?: () => void): boolean {
     if (this.item || this.busy || !item.def.portable) return false;
@@ -444,7 +482,7 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', eat: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
@@ -484,6 +522,7 @@ export class Carry {
       case 'lift': return { w: 1, r: 1 - k, c: 1 - k };
       case 'hold':
       case 'drink':
+      case 'eat':
       case 'open':
       case 'read':
       case 'close': return { w: 1, r: 0, c: 0 };
@@ -508,12 +547,17 @@ export class Carry {
     if (this.phase === 'idle' || (!this.item && this.phase !== 'throw' && this.phase !== 'let' && !this.bracing)) return;
     if (this.phase !== 'reach') for (const e of this.stack) e.age += dt;
     const { w, r, c } = this.weights();
-    this.sip = this.phase === 'drink' ? this.sipAmount() : 0;
+    this.sip = this.phase === 'drink' || this.phase === 'eat' ? this.sipAmount() : 0;
     this.swing = this.phase === 'throw' ? this.throwSwing() : null;
     // gorgée : le niveau baisse quand la tasse est à la bouche
     if (this.sip > 0.9 && this.item?.contents) {
       this.item.setLevel(this.item.level - SIP_RATE * dt);
       if (this.item.level <= 0) this.item.contents = null;
+    }
+    // bouchée : une fois l'aliment à la bouche
+    if (this.phase === 'eat' && this.sip > 0.95 && !this.bitten && this.item) {
+      this.bitten = true;
+      this.item.bite();
     }
     this.saved = this.touched.map((node) => ({ node, q: node.quaternion.clone(), p: node.position.clone() }));
     const root = this.rig.vrm.scene;
@@ -622,7 +666,7 @@ export class Carry {
 
   /** Tasse vers la bouche : monte, reste le temps de la gorgée, redescend. */
   private sipAmount(): number {
-    const t = this.t, T = DURATION.drink;
+    const t = this.t, T = DURATION[this.phase];
     if (t < SIP_UP) return ease(t / SIP_UP);
     if (t > T - SIP_DOWN) return ease(Math.max(0, (T - t) / SIP_DOWN));
     return 1;
@@ -680,7 +724,7 @@ export class Carry {
     if (sipping) {
       // tasse inclinée vers la bouche : rotation autour de l'axe gauche-droite du buste
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(this.chestRot);
-      handRot.premultiply(new THREE.Quaternion().setFromAxisAngle(across, -SIP_TILT * this.sip));
+      handRot.premultiply(new THREE.Quaternion().setFromAxisAngle(across, -(this.phase === 'eat' ? BITE_TILT : this.item?.def.mouth ? NECK_TILT : SIP_TILT) * this.sip));
     }
     // où va le centre de la paume
     let palmTarget: THREE.Vector3;
@@ -703,7 +747,16 @@ export class Carry {
       const reach = this.swing && side === this.side ? this.swing.reach : vec(hand.reach);
       const hold = shoulder.add(reach.clone().multiplyScalar(this.armLength(side)).applyQuaternion(this.chestRot));
       palmTarget = hold.lerp(this.target, r);
-      if (sipping) palmTarget.lerp(this.mouthHold(scale, side), this.sip);
+      if (sipping) {
+        palmTarget.lerp(this.mouthHold(scale, side), this.sip);
+        // le goulot (ou le bord croqué) aux lèvres plutôt que le bord de la tasse
+        const mouth = this.item?.def.mouth;
+        if (mouth) {
+          const extra = vec(mouth).sub(this.item!.gripPoint).sub(CUP_LIP).applyQuaternion(handRot.clone().multiply(gripRotation(spec)));
+          palmTarget.addScaledVector(extra, -this.sip);
+          if (this.phase === 'drink') palmTarget.addScaledVector(vec(flip(NECK_IN, side)).multiplyScalar(scale).applyQuaternion(this.chestRot), this.sip);
+        }
+      }
     }
     const offset = mirror(vec(spec.hold), side).multiplyScalar(scale).applyQuaternion(handRot);
     const wrist = palmTarget.clone().sub(offset);

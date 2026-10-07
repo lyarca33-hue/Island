@@ -100,7 +100,10 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
 - {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
-- {"tache": "boire"} : boire dans la tasse (fait un café d'abord si elle est vide)
+- {"tache": "boire", "objet": "<ref>"} : boire une gorgée (« objet » facultatif : la bouteille d'eau, la tasse… ; sans objet, la tasse, avec un café fait d'abord si elle est vide)
+- {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier, pomme ou sandwich (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
+- {"tache": "mettre", "objet": "<ref>", "dans": "<ref du frigo>"} : ranger dans le frigo une bouteille, une pomme ou un sandwich (« objet » facultatif : ce qu'on tient)
+- {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte du frigo
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
@@ -110,7 +113,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
 Pour prendre plusieurs livres, enchaîne plusieurs « prendre » (6 livres au plus en pile).
 Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
-Si l'ordre demande une action que les tâches ne permettent pas (danser, manger, s'asseoir…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
+Si l'ordre demande une action que les tâches ne permettent pas (danser, s'asseoir, cuisiner…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour. Une seule tâche par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
 
@@ -151,7 +154,11 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'aller': return s('objet') ? { kind: 'aller', ref: s('objet') } : null;
     case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
     case 'cafe': return { kind: 'cafe' };
-    case 'boire': return { kind: 'boire' };
+    case 'boire': return { kind: 'boire', ref: s('objet') || undefined };
+    case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
+    case 'mettre': return s('dans') ? { kind: 'mettre', ref: s('objet') || undefined, dans: s('dans') } : null;
+    case 'ouvrir': return s('objet') ? { kind: 'ouvrir', ref: s('objet') } : null;
+    case 'fermer': return s('objet') ? { kind: 'fermer', ref: s('objet') } : null;
     case 'lire': return { kind: 'lire', ref: s('objet') || undefined };
     case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;

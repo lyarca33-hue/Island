@@ -19,12 +19,13 @@ export function normalize(text: string): string {
 }
 
 const VERBS: Record<string, string[]> = {
-  prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer'],
-  poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer'],
+  prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer', 'sors', 'sort', 'sortir'],
+  poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer', 'mets', 'met', 'mettre', 'remets', 'remettre'],
   ranger: ['range', 'ranger', 'rangez'],
   aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher'],
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
+  manger: ['mange', 'manges', 'manger', 'croque', 'croquer', 'grignote', 'grignoter', 'avale', 'avaler'],
   dire: ['dis', 'dit', 'dire', 'crie', 'crier'],
   lire: ['lis', 'lit', 'lire', 'ouvre', 'ouvrir', 'feuillette', 'feuilleter', 'bouquine'],
   arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
@@ -49,6 +50,10 @@ const ALIASES: Record<string, string[]> = {
   bibliotheque: ['bibliotheque', 'etagere', 'etageres'],
   table: ['table'],
   'machine a cafe': ['machine', 'cafetiere'],
+  frigo: ['frigo', 'frigos', 'frigidaire', 'refrigerateur'],
+  'bouteille d eau': ['bouteille', 'bouteilles', 'eau', 'flotte'],
+  pomme: ['pomme', 'pommes', 'fruit', 'fruits'],
+  sandwich: ['sandwich', 'sandwichs', 'sandwiches', 'casse'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -156,12 +161,18 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const target = where >= 0 ? findObjects(rest.slice(where + 1), world.objets).found.find((o) => o.ref !== item?.ref) : undefined;
       if (where >= 0 && !target) return null;
       if (target?.sorte === 'rangement' && (item?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: item ? [item.ref] : [], onlyHeld: !item }];
+      // « mets la pomme dans le frigo »
+      if (target?.sorte === 'frigo') return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
       return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
     case 'ranger': {
       // « range-le » : ce qu'on tient
       if (rest.length && rest.every((x) => ['le', 'la', 'les', 'l', 'ca'].includes(x))) return [{ kind: 'ranger', refs: [], onlyHeld: true }];
       const things = found.filter((o) => o.portable);
+      // « range la pomme (dans le frigo) » : ce qui se garde au frais
+      const fridge = world.objets.find((o) => o.sorte === 'frigo');
+      const cold = things.filter((o) => o.sorte === 'nourriture' || o.nom === 'bouteille d\'eau');
+      if (fridge && cold.length && cold.length === things.length) return [{ kind: 'mettre', ref: (cold.find((o) => !o.ou.startsWith('rangé')) ?? cold[0]).ref, dans: fridge.ref }];
       // « range » tout court, « range les livres », « range le livre rouge »
       if (things.some((o) => o.nom !== 'livre')) return null;
       if (all || !things.length) return [{ kind: 'ranger', refs: [] }];
@@ -173,9 +184,22 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'cafe':
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
-    case 'boire':
-      return [{ kind: 'boire' }];
+    case 'boire': {
+      // « bois de l'eau » : la bouteille ; « bois » : ce qu'on tient, sinon un café
+      const drink = found.filter((o) => o.sorte === 'récipient');
+      if (found.length && !drink.length) return null;
+      return [{ kind: 'boire', ref: (drink.find((o) => world.enMain.includes(o.ref)) ?? drink[0])?.ref }];
+    }
+    case 'manger': {
+      // « mange une pomme », « mange » (ce qu'on tient, sinon ce qu'il y a)
+      const food = found.filter((o) => o.sorte === 'nourriture');
+      if (found.length && !food.length) return null;
+      return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
+    }
     case 'lire': {
+      // « ouvre le frigo »
+      const door = found.find((o) => o.sorte === 'frigo');
+      if (door) return [{ kind: 'ouvrir', ref: door.ref }];
       // « lis le livre rouge », « lis un livre », « lis » (celui qu'on tient)
       const books = found.filter((o) => o.nom === 'livre');
       if (found.length && !books.length) return null;
@@ -183,6 +207,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'lire', ref: named ? books.find(isLoose)?.ref ?? books[0]?.ref : undefined }];
     }
     case 'arreter':
+      // « ferme le frigo »
+      if (found[0]?.sorte === 'frigo') return [{ kind: 'fermer', ref: found[0].ref }];
       // « arrête de lire », « ferme le livre », « stop »
       return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;
     case 'dire': {
