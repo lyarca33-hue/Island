@@ -146,6 +146,11 @@ export interface ItemDef {
   heats?: { seconds: number; burns: boolean; turns?: Record<string, string> };
   /** Lave-vaisselle : durée d'un lavage (s) ; ce qui est rangé dedans ressort propre. */
   washes?: { seconds: number };
+  /**
+   * Mixeur : durée d'un mixage (s). Les fruits rangés dans le bol deviennent le liquide de sa fiche
+   * `pour` (une tasse par fruit) ; la pièce `liquide` du bol se montre tant qu'il en reste.
+   */
+  blends?: { seconds: number };
   /** Éponge : essuie la table (le geste va et vient comme un couteau). */
   wipes?: boolean;
   /** Poubelle : nombre d'objets jetés avant qu'il faille la vider. La pièce `dechets` monte avec. */

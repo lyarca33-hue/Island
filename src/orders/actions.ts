@@ -62,6 +62,12 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.makeCoffee(),
   },
   {
+    name: 'jus',
+    description: 'Se servir un jus de fruits : il faut tenir la tasse et que le mixeur ait mixé des fruits ; le perso la pose sous le bec du mixeur puis la reprend pleine.',
+    params: {},
+    run: (g) => g.makeJuice(),
+  },
+  {
     name: 'the',
     description: 'Se faire un thé : il faut tenir la tasse ; le perso la pose sous le bec de la bouilloire puis la reprend pleine. La bouilloire doit avoir de l’eau (sinon : verser de l’eau dedans).',
     params: {},

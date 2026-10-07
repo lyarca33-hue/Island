@@ -23,11 +23,12 @@ export type Intent =
   | { kind: 'vider'; ref: string }
   | { kind: 'cafe' }
   | { kind: 'the' }
+  | { kind: 'jus' }
   /**
    * Boire dans le récipient `ref` (bouteille d'eau), sinon dans ce qu'on tient, sinon dans la
    * tasse ; vide, la tasse est d'abord remplie de `liquide` (café par défaut).
    */
-  | { kind: 'boire'; ref?: string; liquide?: 'eau' | 'café' | 'thé' }
+  | { kind: 'boire'; ref?: string; liquide?: 'eau' | 'café' | 'thé' | 'jus de fruits' }
   /** Manger l'aliment `ref` en entier (sinon celui qu'on tient, sinon le plus proche). */
   | { kind: 'manger'; ref?: string }
   /** Couper en morceaux l'aliment `ref` (sinon celui qu'on tient, sinon le plus proche) sur la planche. */
@@ -156,7 +157,7 @@ const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rang
 const WHOLE_OF = new Map(ITEMS.filter((d) => d.cut).map((d) => [ITEMS.find((p) => p.id === d.cut)?.name ?? '', d.name]));
 /** La tasse est sale : on la lave d'abord à l'évier (sinon pas de café). */
 /** L'action qui remplit la tasse de `liquide` (café par défaut). */
-const fillWith = (liquide?: string) => (liquide === 'eau' ? 'eau' : liquide === 'thé' ? 'the' : 'cafe');
+const fillWith = (liquide?: string) => (liquide === 'eau' ? 'eau' : liquide === 'thé' ? 'the' : liquide === 'jus de fruits' ? 'jus' : 'cafe');
 const isDirty = (game: Game, ref: string) => !!world(game).objets.find((o) => o.ref === ref)?.ou.includes(', sale');
 /** L'aliment servi dans l'assiette `plate` (« posé sur assiette »), ou undefined. */
 const servedOn = (w: ReturnType<typeof world>, plate: string) => w.objets.find((o) => o.sorte === 'nourriture' && o.ou.split(',')[0] === `posé sur ${plate}`);
@@ -269,6 +270,13 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       if (isDirty(game, cup.ref)) await act('vaisselle');
       return act('the');
     }
+    case 'jus': {
+      const cup = world(game).objets.find((o) => o.nom === 'tasse');
+      if (!cup) throw new Failed('Il n’y a pas de tasse.');
+      await take(game, act, cup.ref);
+      if (isDirty(game, cup.ref)) await act('vaisselle');
+      return act('jus');
+    }
     case 'boire': {
       const w = world(game);
       const full = (o: WorldObject) => o.ou.includes('contient');
@@ -288,6 +296,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
         await act(fillWith(intent.liquide));
       } else if (intent.liquide === 'eau' && !ou.includes('contient de l’eau')) await act('eau');
       else if (intent.liquide === 'thé' && !ou.includes('contient du thé')) await act('the');
+      else if (intent.liquide === 'jus de fruits' && !ou.includes('contient du jus')) await act('jus');
       else if (!ou.includes('contient')) await act(fillWith(intent.liquide));
       return act('boire');
     }
