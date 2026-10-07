@@ -6,6 +6,8 @@
  * Lumière jour et nuit, réglée par l'horloge du jeu : les suspensions s'allument au crépuscule
  * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit. L'interrupteur à côté
  * de la porte allume ou éteint à la main ; l'horloge reprend la main au prochain lever ou coucher.
+ * Le jour, une lumière entre par chaque fenêtre (projecteur dehors, ombre du croisillon au sol) ;
+ * la nuit, un peu de clair de lune. Un vrai toit couvre la pièce quand le perso est dehors.
  * Un toit et des murs invisibles, qui ne font que de l'ombre, gardent le soleil et la lune dehors
  * (sauf par les fenêtres, même quand un mur est abaissé en coupe) : dedans, ce sont les lampes
  * qui éclairent et projettent les ombres.
@@ -51,10 +53,19 @@ const COUNTER = 0xd9d3c5;
 /** Suspensions : hauteur de l'ampoule, couleur et force de la lumière allumée, portée (m). */
 const LAMP_Y = 1.95;
 const LAMP_COLOR = 0xffc98a;
-const LAMP_I = 7;
+const LAMP_I = 9;
 const LAMP_RANGE = 7;
 /** Les lampes s'allument sur cette durée (h) avant le coucher, s'éteignent après le lever. */
 const LAMP_FADE = 1.5;
+/** Lumière par les fenêtres : couleur et force en plein jour, au lever/coucher, et clair de lune. */
+const WIN_DAY = new THREE.Color(0xfff1d8);
+const WIN_WARM = new THREE.Color(0xffb878);
+const WIN_MOON = new THREE.Color(0x9fb4ff);
+const WIN_I = 12;
+const WIN_MOON_I = 3;
+/** Toit : pente (rad), débord autour des murs (m). */
+const ROOF_PITCH = THREE.MathUtils.degToRad(30);
+const ROOF_OVER = 0.3;
 /** Taille de la carte d'ombre des lampes (par face du cube). */
 const LAMP_SHADOW = 512;
 /** Vitesse du fondu quand on appuie sur l'interrupteur (part de lumière par seconde). */
@@ -149,6 +160,24 @@ function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y:
   return m;
 }
 
+let cookie: THREE.CanvasTexture | null = null;
+
+/** Forme de la lumière d'une fenêtre au sol : quatre carreaux clairs, croisillon sombre, bords doux. */
+function windowCookie(): THREE.CanvasTexture {
+  if (cookie) return cookie;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 256;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 256, 256);
+  g.filter = 'blur(6px)';
+  g.fillStyle = '#fff';
+  for (const [x, y] of [[40, 50], [134, 50], [40, 134], [134, 134]]) g.fillRect(x, y, 82, 72);
+  cookie = new THREE.CanvasTexture(cv);
+  cookie.colorSpace = THREE.SRGBColorSpace;
+  return cookie;
+}
+
 /** Texture de carreaux : `n` × `n` carreaux de deux tons, joints clairs. */
 function tiles(size: number, n: number, a: string, b: string, grout: string, line = 3): THREE.CanvasTexture {
   const cv = document.createElement('canvas');
@@ -212,6 +241,11 @@ export class Room {
   private solid: THREE.Object3D[] = [];
   /** Lumières des suspensions, et leurs ampoules (qui brillent allumées). */
   private lamps: THREE.PointLight[] = [];
+  /** Lumières qui entrent par les fenêtres. */
+  private winLights: THREE.SpotLight[] = [];
+  /** Toit visible, montré quand le perso est dehors. */
+  private roof = new THREE.Group();
+  private roofBox = new THREE.Box3();
   private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
   private shadeMat = toon(0x2f5d50);
   /** Part de lumière des lampes en ce moment (0 à 1). */
@@ -386,9 +420,12 @@ export class Room {
     // tapis devant l'évier
     this.group.add(box(0.8, 0.01, 0.45, toon(0x5b7fa8), sinkX, 0.008, z0 + 1.0, false));
 
-    // suspensions : une au-dessus de la table, une au milieu du coin cuisine
+    // suspension au-dessus de la table
     this.addLamp(tableAt ? tableAt.x : 1.6, tableAt ? tableAt.z - 0.2 : 1);
-    this.addLamp((sinkX + stoveX) / 2, z0 + 1.3);
+    // lumière du dehors par les fenêtres, et le toit vu du dehors
+    this.addWindowLight(north, winNorth);
+    this.addWindowLight(east, winEast);
+    this.buildRoof();
 
     // interrupteur à côté de la porte : plaque blanche, bascule (haut enfoncé = allumé)
     const sw = this.lightSwitch;
@@ -453,6 +490,85 @@ export class Room {
     this.group.add(lamp, light);
   }
 
+  /**
+   * Lumière du dehors par la fenêtre `o` du mur `w` : un projecteur dans la pièce, juste sous le
+   * haut de la fenêtre, projette au sol la forme des carreaux (texture `windowCookie`). Placé
+   * dedans, il n'éclaire pas la façade ni l'herbe.
+   */
+  private addWindowLight(w: Wall, o: Opening): void {
+    const alongX = w.n.x === 0;
+    const inner = alongX ? w.at.y : w.at.x;
+    const um = (o.u0 + o.u1) / 2;
+    const at = (u: number, along: number, y: number) =>
+      alongX ? new THREE.Vector3(u, y, inner + w.n.y * along) : new THREE.Vector3(inner + w.n.x * along, y, u);
+    const light = lightAllPasses(new THREE.SpotLight(WIN_DAY, 0, 7, 0.55, 0.15, 1.2));
+    light.position.copy(at(um, 0.3, WALL_H - 0.1));
+    light.target.position.copy(at(um, 2.1, 0));
+    light.map = windowCookie();
+    light.castShadow = true;
+    light.shadow.mapSize.set(LAMP_SHADOW, LAMP_SHADOW);
+    light.shadow.camera.near = 0.1;
+    light.shadow.camera.far = 7;
+    light.shadow.bias = -0.001;
+    light.shadow.radius = 4;
+    light.shadow.autoUpdate = false;
+    light.shadow.needsUpdate = true;
+    this.winLights.push(light);
+    this.group.add(light, light.target);
+  }
+
+  /** Toit à deux pentes (faîtage le long de x) et pignons, au-dessus des murs. */
+  private buildRoof(): void {
+    const { x0, x1, z0, z1 } = ROOM;
+    const lx = x1 - x0 + 2 * (WALL_T + ROOF_OVER);
+    const half = (z1 - z0) / 2 + WALL_T + ROOF_OVER;
+    const rise = half * Math.tan(ROOF_PITCH);
+    const slope = half / Math.cos(ROOF_PITCH);
+    const zc = (z0 + z1) / 2, xc = (x0 + x1) / 2;
+    // tuiles : rangées en quinconce
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const g = cv.getContext('2d')!;
+    g.fillStyle = '#a4513a';
+    g.fillRect(0, 0, 128, 128);
+    for (let r = 0; r < 4; r++) {
+      g.fillStyle = '#7e3a28';
+      g.fillRect(0, r * 32 + 28, 128, 4);
+      for (let i = 0; i < 4; i++) g.fillRect(((i + (r % 2) * 0.5) * 32) % 128, r * 32, 3, 28);
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(lx / 0.8, slope / 0.6);
+    const tileMat = toon(0xffffff, tex);
+    const y0 = WALL_H - 0.02 - ROOF_OVER * Math.tan(ROOF_PITCH);
+    for (const side of [-1, 1]) {
+      const pan = box(lx, 0.06, slope, tileMat, xc, y0 + rise / 2, zc + side * half / 2, false);
+      pan.rotation.x = side * ROOF_PITCH;
+      this.roof.add(pan);
+    }
+    this.roof.add(box(lx + 0.04, 0.08, 0.12, toon(0x7e3a28), xc, y0 + rise + 0.03, zc, false));
+    // pignons, en crépi comme les murs, à l'aplomb des murs est et ouest
+    const tri = new THREE.Shape();
+    const hw = (z1 - z0) / 2 + WALL_T;
+    const top = (hw + ROOF_OVER) * Math.tan(ROOF_PITCH) - ROOF_OVER * Math.tan(ROOF_PITCH);
+    tri.moveTo(-hw, 0);
+    tri.lineTo(hw, 0);
+    tri.lineTo(0, top);
+    const gable = new THREE.ExtrudeGeometry(tri, { depth: WALL_T, bevelEnabled: false });
+    for (const x of [x0 - WALL_T, x1]) {
+      const m = new THREE.Mesh(gable, this.wallMat);
+      m.rotation.y = Math.PI / 2;
+      m.position.set(x, WALL_H, zc);
+      this.roof.add(m);
+    }
+    this.roof.updateMatrixWorld(true);
+    this.roofBox.setFromObject(this.roof);
+    this.roof.visible = false;
+    this.roof.name = 'toit';
+    this.group.add(this.roof);
+  }
+
   /** Lampes et vitres selon l'heure `hour` (0 à 24). */
   private applyLight(dt: number, hour: number): void {
     const auto = lampLevel(hour);
@@ -471,6 +587,14 @@ export class Room {
     const night = Math.max(1 - THREE.MathUtils.smoothstep(hour, SUNRISE - 0.5, SUNRISE + 1), THREE.MathUtils.smoothstep(hour, SUNSET - 1, SUNSET + 0.5));
     this.glassMat.color.copy(PANE_DAY.color).lerp(PANE_NIGHT.color, night);
     this.glassMat.opacity = THREE.MathUtils.lerp(PANE_DAY.opacity, PANE_NIGHT.opacity, night);
+    // fenêtres : plein jour (doré près du lever et du coucher), clair de lune la nuit
+    const day = THREE.MathUtils.smoothstep(hour, SUNRISE, SUNRISE + 1.5) * (1 - THREE.MathUtils.smoothstep(hour, SUNSET - 1.5, SUNSET));
+    const warm = 1 - THREE.MathUtils.smoothstep(Math.min(hour - SUNRISE, SUNSET - hour), 1, 3.5);
+    for (const l of this.winLights) {
+      l.color.copy(WIN_DAY).lerp(WIN_WARM, warm).lerp(WIN_MOON, 1 - day);
+      l.intensity = day * WIN_I + night * WIN_MOON_I;
+      l.shadow.autoUpdate = l.intensity > 0.01;
+    }
   }
 
   private wall(name: WallName): Wall {
@@ -558,6 +682,13 @@ export class Room {
       const m = alongX ? box(lu, ly, t, mat, u, y, c + off) : box(t, ly, lu, mat, c + off, y, u);
       m.castShadow = false;
       w.full.add(m);
+      // le cadre et le croisillon dessinent leur ombre au sol, même mur abaissé
+      if (mat === frame) {
+        const ghost = new THREE.Mesh(m.geometry, this.shadowMat);
+        ghost.position.copy(m.position);
+        ghost.castShadow = true;
+        this.group.add(ghost);
+      }
       return m;
     };
     const um = (o.u0 + o.u1) / 2, ym = (o.y0 + o.y1) / 2, lu = o.u1 - o.u0, ly = o.y1 - o.y0, f = 0.05;
@@ -583,17 +714,21 @@ export class Room {
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
     const p2 = new THREE.Vector2(player.x, player.z);
     const inside = !this.walls.some((w) => p2.clone().sub(w.at).dot(w.n) < 0);
+    let anyCut = false;
     // dehors : rayons du perso (jambes, buste, tête) vers la caméra
     const rays = inside ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
     for (const w of this.walls) {
       // dedans : les murs côté caméra s'abaissent ; dehors, ils restent pleins, sauf celui qui cache le perso
       const cut = inside ? w.n.dot(view) < -0.1 : rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
+      anyCut ||= cut;
       if (cut !== w.cut) {
         w.cut = cut;
         w.full.visible = !cut;
         w.low.visible = cut;
       }
     }
+    // toit : dehors, sauf s'il cache le perso (ou qu'un mur abaissé le cache)
+    this.roof.visible = !inside && !anyCut && !rays.some((r) => r.intersectsBox(this.roofBox));
     const { x0 } = ROOM;
     const zc = (DOOR.z0 + DOOR.z1) / 2;
     const near = Math.hypot(player.x - x0, player.z - zc) < DOOR_NEAR;
