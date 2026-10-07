@@ -9,8 +9,8 @@
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
-import { applySky, GameClock } from './clock';
-import { createGround, GROUND_HALF } from './ground';
+import { applySky, GameClock, seasonLook } from './clock';
+import { createGround, GROUND_HALF, setGroundSeason } from './ground';
 import { breakChance, Debris, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
@@ -18,7 +18,7 @@ import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/catalog';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
-import { createMotes } from './motes';
+import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
 import { placeRuns, Room, WALL_T } from './room';
@@ -387,7 +387,7 @@ export class Game {
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
   private activeRoom: Room | null = null;
-  private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3) => void };
+  private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3, look: MotesLook) => void };
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
   private quarter = 0;
@@ -5133,10 +5133,13 @@ export class Game {
     const inRoom = this.rooms.find((r) => r.contains(c.position));
     if (inRoom) this.activeRoom = inRoom;
     else if (this.activeRoom && !this.activeRoom.contains(c.position, 2 * WALL_T + 0.15)) this.activeRoom = null;
-    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, toCamera, this.activeRoom?.rect ?? null);
+    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null);
     for (const tv of this.tvs.values()) tv.tick(dt);
     this.placeBubble();
-    this.motes.update(now / 1000, this.character.position);
+    // saison dehors : herbe, neige, pétales, feuilles ou flocons ; dans une pièce, poussières dorées
+    const look = seasonLook(this.clock.yearPos);
+    setGroundSeason(this.ground, look.grass, look.snow);
+    this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
     this.post.render();
   };
 
@@ -5240,8 +5243,8 @@ export class Game {
       this.focus.z + Math.sin(this.yaw) * Math.cos(ISO_ELEVATION) * CAM_DIST,
     );
     c.lookAt(this.focus);
-    // lumière selon l'heure ; soleil et carte d'ombre suivent le perso
-    applySky(this.clock.hour, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus);
+    // lumière selon l'heure et la saison ; soleil et carte d'ombre suivent le perso
+    applySky(this.clock.solarHour, this.clock.noonElevation, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus);
     // flou de profondeur : net autour du perso (distance caméra -> point suivi), plus large au dézoom
     this.post.setDof({ focus: CAM_DIST, range: 2.2 / this.zoom, falloff: 6 / this.zoom, strength: 1 });
   }

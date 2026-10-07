@@ -1,17 +1,60 @@
 /**
- * Horloge du jeu et lumière du jour.
+ * Horloge du jeu, calendrier, saisons et lumière du jour.
  *
  * Le temps du jeu passe 4 fois plus vite que le temps réel (une journée = 6 h de jeu réel).
- * L'heure peut être changée à la volée (setHour) pour régler l'éclairage : ce saut ne compte
+ * L'heure et la date peuvent être changées à la volée (setHour, setDayOfYear) : ce saut ne compte
  * pas comme du temps écoulé, les besoins du perso n'en sont pas affectés.
+ *
+ * Calendrier : semaines de 7 jours, 4 saisons d'une semaine chacune (année de 28 jours), le jeu
+ * commence le lundi 1er du printemps. Les jours rallongent jusqu'au milieu de l'été et raccourcissent
+ * jusqu'au milieu de l'hiver.
  */
 import * as THREE from 'three';
 
 /** Vitesse normale : 4 minutes de jeu par minute réelle. */
 export const TIME_SPEED = 4;
-/** Lever et coucher du soleil (heures). */
+/**
+ * Lever et coucher du soleil de l'« heure solaire » : la lumière (ciel, lampes, fenêtres) est réglée
+ * pour une journée de 6 h à 20 h, et l'heure réelle y est ramenée selon la saison (solarHour).
+ */
 export const SUNRISE = 6;
 export const SUNSET = 20;
+
+/** Jours par saison, et par année. */
+export const SEASON_DAYS = 7;
+export const YEAR_DAYS = 4 * SEASON_DAYS;
+export const SEASONS = [
+  { name: 'Printemps', icon: '🌸' },
+  { name: 'Été', icon: '🌻' },
+  { name: 'Automne', icon: '🍂' },
+  { name: 'Hiver', icon: '❄️' },
+] as const;
+export const WEEKDAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+
+/** Position dans l'année (0 à 1) où le jour est le plus long : le milieu de l'été. */
+const LONGEST = 1.5 / 4;
+/** Lever et coucher aux équinoxes, et leur écart au plus long et au plus court des jours (heures). */
+const RISE_MID = 6.5, RISE_SWING = 1.75;
+const SET_MID = 19.5, SET_SWING = 2;
+/** Hauteur du soleil à midi (degrés) : moyenne et écart entre l'été et l'hiver. */
+const ELEV_MID = 54, ELEV_SWING = 14;
+
+/** Longueur du jour à la position `yearPos` dans l'année : 1 au plus long, -1 au plus court. */
+function daylight(yearPos: number): number {
+  return Math.cos(2 * Math.PI * (yearPos - LONGEST));
+}
+
+/** Heure de lever et de coucher du soleil à la position `yearPos` dans l'année. */
+export function sunTimes(yearPos: number): { rise: number; set: number } {
+  const d = daylight(yearPos);
+  return { rise: RISE_MID - RISE_SWING * d, set: SET_MID + SET_SWING * d };
+}
+
+/** « 05:45 » */
+export function hhmm(h: number): string {
+  const m = Math.round(h * 60) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
 
 export class GameClock {
   /** Minutes de jeu depuis le jour 1 à 0 h. */
@@ -39,6 +82,66 @@ export class GameClock {
     return Math.floor(this.minutes / 1440) + 1;
   }
 
+  /** Jour dans l'année, de 0 à YEAR_DAYS - 1. */
+  get dayOfYear(): number {
+    return (this.day - 1) % YEAR_DAYS;
+  }
+
+  get year(): number {
+    return Math.floor((this.day - 1) / YEAR_DAYS) + 1;
+  }
+
+  /** Saison : 0 printemps, 1 été, 2 automne, 3 hiver. */
+  get season(): number {
+    return Math.floor(this.dayOfYear / SEASON_DAYS);
+  }
+
+  /** Jour dans la saison, de 1 à SEASON_DAYS. */
+  get dayOfSeason(): number {
+    return (this.dayOfYear % SEASON_DAYS) + 1;
+  }
+
+  get weekday(): string {
+    return WEEKDAYS[(this.day - 1) % 7];
+  }
+
+  /** « Lundi 3 printemps, an 1 » */
+  get dateLabel(): string {
+    return `${this.weekday} ${this.dayOfSeason === 1 ? '1er' : this.dayOfSeason} ${SEASONS[this.season].name.toLowerCase()}, an ${this.year}`;
+  }
+
+  /** Position dans l'année, de 0 (début du printemps) à 1, qui avance aussi avec les heures. */
+  get yearPos(): number {
+    return ((this.minutes / 1440) % YEAR_DAYS) / YEAR_DAYS;
+  }
+
+  /** Lever et coucher du soleil aujourd'hui. */
+  get sun(): { rise: number; set: number } {
+    return sunTimes(this.yearPos);
+  }
+
+  /**
+   * Heure ramenée à une journée de SUNRISE à SUNSET : en été, 5 h du matin donne déjà l'aube de
+   * 6 h ; en hiver, il fait encore nuit à 7 h. Sert à toute la lumière (ciel, lampes, fenêtres).
+   */
+  get solarHour(): number {
+    const h = this.hour, { rise, set } = this.sun;
+    if (h < rise) return (h / rise) * SUNRISE;
+    if (h < set) return SUNRISE + ((h - rise) / (set - rise)) * (SUNSET - SUNRISE);
+    return SUNSET + ((h - set) / (24 - set)) * (24 - SUNSET);
+  }
+
+  /** Hauteur du soleil à midi aujourd'hui (rad) : haut l'été, bas l'hiver. */
+  get noonElevation(): number {
+    return THREE.MathUtils.degToRad(ELEV_MID + ELEV_SWING * daylight(this.yearPos));
+  }
+
+  /** Va au jour `d` de l'année en cours (0 à YEAR_DAYS - 1), à la même heure. */
+  setDayOfYear(d: number): void {
+    const day = (this.year - 1) * YEAR_DAYS + THREE.MathUtils.clamp(Math.round(d), 0, YEAR_DAYS - 1);
+    this.minutes = day * 1440 + (this.minutes % 1440);
+  }
+
   /** Règle l'heure du jour en cours (0 à 24). */
   setHour(h: number): void {
     this.minutes = (this.day - 1) * 1440 + THREE.MathUtils.clamp(h, 0, 23.999) * 60;
@@ -51,9 +154,43 @@ export class GameClock {
   }
 
   get isNight(): boolean {
-    const h = this.hour;
+    const h = this.solarHour;
     return h < SUNRISE || h >= SUNSET;
   }
+}
+
+/** Allure d'une saison dehors. */
+interface SeasonLook {
+  /** Teinte de l'herbe (multipliée à sa texture). */
+  grass: [number, number, number];
+  /** Part de neige au sol (0 à 1). */
+  snow: number;
+  /** Poussières dehors : couleur (au-dessus de 1 pour le bloom) et vitesse de chute (m/s). */
+  motes: [number, number, number];
+  fall: number;
+}
+
+const LOOKS: SeasonLook[] = [
+  // printemps : herbe fraîche, pétales roses qui flottent
+  { grass: [0.92, 1.08, 0.92], snow: 0, motes: [2.3, 1.35, 1.75], fall: 0.12 },
+  // été : herbe dorée, poussières de lumière
+  { grass: [1.12, 1.02, 0.7], snow: 0, motes: [2.2, 1.9, 1.2], fall: 0 },
+  // automne : herbe rousse, feuilles qui tombent
+  { grass: [1.55, 0.78, 0.38], snow: 0, motes: [2.3, 1.05, 0.35], fall: 0.35 },
+  // hiver : neige au sol, flocons
+  { grass: [1.0, 1.0, 1.05], snow: 0.85, motes: [2.1, 2.2, 2.5], fall: 0.7 },
+];
+
+/** Allure du dehors à la position `yearPos` dans l'année : chaque saison passe à la suivante en un jour ou deux. */
+export function seasonLook(yearPos: number): SeasonLook {
+  // de milieu de saison en milieu de saison
+  const f = (((yearPos * 4 - 0.5) % 4) + 4) % 4;
+  const i = Math.floor(f);
+  const a = LOOKS[i], b = LOOKS[(i + 1) % 4];
+  const t = THREE.MathUtils.smoothstep(f - i, 0.35, 0.65);
+  const mix3 = (x: [number, number, number], y: [number, number, number]): [number, number, number] =>
+    [x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t];
+  return { grass: mix3(a.grass, b.grass), snow: a.snow + (b.snow - a.snow) * t, motes: mix3(a.motes, b.motes), fall: a.fall + (b.fall - a.fall) * t };
 }
 
 /** Ambiance d'une heure de la journée. */
@@ -118,8 +255,6 @@ export interface SkyTargets {
   grade: (gain: THREE.Vector3, saturation: number) => void;
 }
 
-/** Plus haut point du soleil à midi (rad), comme l'éclairage d'origine. */
-const SUN_MAX_ELEV = THREE.MathUtils.degToRad(56);
 /** Hauteur minimale de la lumière : ombres longues mais pas infinies. */
 const MIN_ELEV = THREE.MathUtils.degToRad(9);
 /** Direction de la lune (vers la lumière), fixe. */
@@ -130,8 +265,11 @@ const LIGHT_DIST = 20;
 const gain = new THREE.Vector3();
 const dir = new THREE.Vector3();
 
-/** Règle la lumière pour l'heure `hour` ; la lumière principale reste centrée sur `focus`. */
-export function applySky(hour: number, t: SkyTargets, focus: THREE.Vector3): void {
+/**
+ * Règle la lumière pour l'heure solaire `hour` (voir GameClock.solarHour), avec le soleil à
+ * `noonElev` (rad) à midi ; la lumière principale reste centrée sur `focus`.
+ */
+export function applySky(hour: number, noonElev: number, t: SkyTargets, focus: THREE.Vector3): void {
   let i = 0;
   while (i < KEYS.length - 2 && KEYS[i + 1].h <= hour) i++;
   const a = KEYS[i], b = KEYS[i + 1];
@@ -150,7 +288,7 @@ export function applySky(hour: number, t: SkyTargets, focus: THREE.Vector3): voi
     // le soleil se lève à l'est, passe au sud, se couche à l'ouest ; à midi il vient du même côté
     // que la lumière d'origine (arrière gauche du perso vu par la caméra de départ)
     const day = (hour - SUNRISE) / (SUNSET - SUNRISE);
-    const elev = Math.max(MIN_ELEV, Math.sin(Math.PI * day) * SUN_MAX_ELEV);
+    const elev = Math.max(MIN_ELEV, Math.sin(Math.PI * day) * noonElev);
     const az = THREE.MathUtils.degToRad(148 + (day - 0.5) * 160);
     dir.set(Math.cos(az) * Math.cos(elev), Math.sin(elev), Math.sin(az) * Math.cos(elev));
   } else {
