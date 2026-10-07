@@ -105,6 +105,13 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.cut(a.objet),
   },
   {
+    name: 'preparer',
+    description: 'Préparer un plat avec les ingrédients réunis sur la planche à découper (ou dans une assiette) et ceux qu’on tient : salade composée (tranches de tomate + rondelles de concombre, carotte en plus), tartine à la tomate (tranches de pain + tranches de tomate), sandwich au steak (tranches de pain + steak cuit, tomate ou concombre en plus), steak aux pommes de terre (steak cuit + pomme de terre cuite). Le perso pose ce qu’il tient sur la planche, et les ingrédients deviennent le plat.',
+    params: {},
+    // `plat` (facultatif) : l'id du plat voulu
+    run: (g, a) => g.prepare(a.plat),
+  },
+  {
     name: 'ouvrir',
     description: 'Aller ouvrir la porte d’un meuble (frigo, placard, four, micro-ondes, lave-vaisselle), un tiroir, ou le couvercle de la poubelle.',
     params: { objet: 'ref du meuble' },

@@ -4,6 +4,8 @@
  * par piles de 6 au plus, les ranger, recommencer tant qu'il en traîne.
  */
 import type { Game, WorldObject } from '../game/Game';
+import { DISHES, RECIPE_BY_DISH } from '../game/items/recipes';
+import { ITEMS } from '../game/items/catalog';
 import { perform } from './actions';
 
 export type Intent =
@@ -30,6 +32,12 @@ export type Intent =
   | { kind: 'manger'; ref?: string }
   /** Couper en morceaux l'aliment `ref` (sinon celui qu'on tient, sinon le plus proche) sur la planche. */
   | { kind: 'couper'; ref?: string }
+  /**
+   * Préparer le plat `plat` (id d'une recette) : couper et cuire ce qu'il faut, puis réunir les
+   * ingrédients sur la planche (ou dans l'assiette). Sans `plat` : le plat que permettent les
+   * ingrédients déjà réunis.
+   */
+  | { kind: 'preparer'; plat?: string }
   | { kind: 'ouvrir'; ref: string }
   | { kind: 'fermer'; ref: string }
   /** Remplir la tasse d'eau à l'évier. */
@@ -70,6 +78,7 @@ export function intentLabel(i: Intent): string {
   if (i.kind === 'laver') return i.visage ? 'se laver' : 'se laver les mains';
   if (i.kind === 'vaisselle') return `faire la vaisselle${i.refs.length ? ` ${i.refs.join(', ')}` : ''}`;
   if (i.kind === 'repas') return `manger à table${i.ref ? ` ${i.ref}` : ''}`;
+  if (i.kind === 'preparer') return `préparer${i.plat ? ` ${i.plat}` : ' un plat'}`;
   return `${i.kind.replace('_', ' ')}${what ? ` ${what}` : ''}${sur}`;
 }
 
@@ -111,6 +120,8 @@ const held = (game: Game) => {
   return w.objets.filter((o) => w.enMain.includes(o.ref));
 };
 const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rangé');
+/** L'aliment entier qui, coupé, donne ces morceaux (« tranches de tomate » → « tomate »). */
+const WHOLE_OF = new Map(ITEMS.filter((d) => d.cut).map((d) => [ITEMS.find((p) => p.id === d.cut)?.name ?? '', d.name]));
 /** La tasse est sale : on la lave d'abord à l'évier (sinon pas de café). */
 /** L'action qui remplit la tasse de `liquide` (café par défaut). */
 const fillWith = (liquide?: string) => (liquide === 'eau' ? 'eau' : liquide === 'thé' ? 'the' : 'cafe');
@@ -273,6 +284,39 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       if (!food) throw new Failed(intent.ref ? `On ne peut pas couper : ${intent.ref}.` : 'Il n’y a rien à couper.');
       await take(game, act, food.ref);
       return act('couper', { objet: food.ref });
+    }
+    case 'preparer': {
+      const recipe = intent.plat ? RECIPE_BY_DISH.get(intent.plat) : undefined;
+      if (!recipe) return act('preparer');
+      const dishName = DISHES.find((d) => d.id === recipe.dish)?.name ?? recipe.dish;
+      const usable = (o: WorldObject, name: string) => o.nom === name && o.cuisson !== 'cru' && !o.ou.includes('entamé');
+      // chaque ingrédient : déjà là, sinon coupé dans l'aliment entier, sinon cuit ; les extras
+      // seulement s'il y a de quoi les couper
+      for (const name of [...recipe.needs, ...(recipe.extras ?? [])]) {
+        const needed = recipe.needs.includes(name);
+        const w = world(game);
+        if (w.objets.some((o) => usable(o, name))) continue;
+        const whole = WHOLE_OF.get(name);
+        const toCut = whole && w.objets.filter((o) => o.nom === whole && o.coupable).sort((a, b) => +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0];
+        if (toCut) {
+          await runOne(game, { kind: 'couper', ref: toCut.ref }, act);
+          continue;
+        }
+        const raw = w.objets.find((o) => o.nom === name && o.cuisson === 'cru');
+        if (raw && needed) {
+          await runOne(game, { kind: 'cuire', ref: raw.ref }, act);
+          continue;
+        }
+        if (needed) throw new Failed(`Pour ${dishName}, il manque : ${name}${whole ? ` (ou ${whole})` : ''}.`);
+      }
+      // ce qui n'est pas déjà sur la planche ou dans l'assiette (le steak dans la poêle) : en main
+      // (posé sur la planche, ou sur d'autres morceaux posés dessus ; pas sur un meuble)
+      const onBase = (o: WorldObject) => o.ou.startsWith('posé sur') && !/^posé sur (plan-de-travail|table)/.test(o.ou);
+      const loose = recipe.needs
+        .map((name) => world(game).objets.filter((o) => usable(o, name)).sort((a, b) => +!onBase(a) - +!onBase(b) || a.distance - b.distance)[0])
+        .filter((o): o is WorldObject => !!o && !onBase(o) && !world(game).enMain.includes(o.ref));
+      for (const o of loose.slice(0, 2)) await take(game, act, o.ref);
+      return act('preparer', { plat: recipe.dish });
     }
     case 'mettre': {
       if (intent.ref) await take(game, act, intent.ref);

@@ -17,6 +17,7 @@ import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
 import { doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
+import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { createMotes } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
@@ -198,7 +199,7 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire']);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', ...DISH_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre']);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -234,6 +235,8 @@ export interface HandActions {
   dishes: boolean;
   /** Un aliment entier à couper en main (pomme, pain, légumes). */
   cut: boolean;
+  /** De quoi préparer un plat : les ingrédients d'une recette sur la planche ou dans l'assiette, ou en main. */
+  prepare: boolean;
   /** L'objet tenu (le dernier pris) peut être lancé. */
   throw: boolean;
   /** En train de déplacer un gros meuble. */
@@ -1805,6 +1808,157 @@ export class Game {
     this.onNotice?.(`${cap(food.name)} coupé${agree(food.name)} : ${pieces.name} sur la planche.`);
   }
 
+  /**
+   * Prépare un plat (recipes.ts) : les ingrédients réunis sur une planche à découper ou dans une
+   * assiette, avec ceux qu'on tient, deviennent le plat. Le perso va jusqu'à la planche (ou
+   * l'assiette), y pose ce qu'il tient, et le plat apparaît à la place des ingrédients.
+   * `plat` : l'id du plat voulu (sinon le plus complet possible) ; `ref` : la planche ou l'assiette.
+   */
+  prepare(plat?: string, ref?: string, running = false): boolean {
+    const c = this.character;
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!c.canCarry) return fail('Crée un perso pour pouvoir cuisiner.');
+    if (plat && !RECIPE_BY_DISH.has(plat)) return fail(`Pas de recette « ${plat} ».`);
+    if (ref && !this.byRef(ref)) return fail(`Aucun objet « ${ref} ».`);
+    const plan = this.dishPlan(plat, ref ? this.byRef(ref) : undefined);
+    if (!plan) return fail(this.dishHint(plat));
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (this.washing || c.washing) return fail('Tu te laves, un instant.');
+    if (c.busy || c.bracing) return false;
+    if (this.closeBookThen(() => this.prepare(plat, ref, running))) return true;
+    if (c.seated) return c.standUp(() => this.prepare(plat, ref, running));
+    const { base, recipe, use } = plan;
+    const toDrop = use.filter((i) => c.carried.includes(i));
+    // 2. ce qu'on tient, posé sur la planche (ou dans l'assiette) l'un après l'autre ; puis le plat
+    const next = () => {
+      const item = toDrop.shift();
+      if (!item) return this.assemble(base, recipe, use);
+      const spot = base.def.board ? this.boardSpot(base, item) : this.plateFloor(base);
+      if (!c.drop(spot, undefined, next, false, item)) this.onNotice?.(`Impossible de poser ${the(item.name)}.`);
+    };
+    // 1. devant la planche ou l'assiette
+    if (!toDrop.length && base.object.position.distanceTo(c.position) < 1.2) next();
+    else c.approachThen(base.def.board ? this.cutStand(base) : c.standFor(base), base.object.position, next, running);
+    return true;
+  }
+
+  /** Fond de l'assiette (monde), là où l'on sert. */
+  private plateFloor(plate: WorldItem): THREE.Vector3 {
+    plate.object.updateMatrixWorld(true);
+    return new THREE.Vector3(0, plate.def.plate!, 0).applyMatrix4(plate.object.matrixWorld);
+  }
+
+  /** Planches et assiettes posées (pas en main, pas au sol) où l'on peut préparer un plat. */
+  private dishBases(): WorldItem[] {
+    const carried = this.character.carried;
+    return this.items.filter((i) => (i.def.board || (i.def.plate && !i.dirty)) && !carried.includes(i) && i.object.position.y > 0.5 && !this.flying.some((f) => f.item === i));
+  }
+
+  /** Ingrédient utilisable dans une recette : entier (pas entamé) et, s'il cuit, cuit. */
+  private ingredientOk(i: WorldItem): boolean {
+    return i.portion === 1 && doneness(i.def, i.cooking) !== 'cru';
+  }
+
+  /** Les ingrédients de `recipe` pris parmi `pool` (null s'il en manque un obligatoire). */
+  private recipeUse(recipe: DishRecipe, pool: WorldItem[]): WorldItem[] | null {
+    const left = pool.filter((i) => this.ingredientOk(i));
+    const take = (name: string) => {
+      const i = left.findIndex((x) => x.name === name);
+      return i < 0 ? null : left.splice(i, 1)[0];
+    };
+    const use: WorldItem[] = [];
+    for (const name of recipe.needs) {
+      const got = take(name);
+      if (!got) return null;
+      use.push(got);
+    }
+    for (const name of recipe.extras ?? []) {
+      const got = take(name);
+      if (got) use.push(got);
+    }
+    return use;
+  }
+
+  /**
+   * Le plat qu'on peut préparer maintenant : sur quelle planche ou assiette, avec quels
+   * ingrédients (posés dessus, ou en main). Le plus complet d'abord, puis celui où il y a déjà le
+   * plus d'ingrédients posés, puis le bon support, puis le plus proche.
+   */
+  private dishPlan(plat?: string, only?: WorldItem): { base: WorldItem; recipe: DishRecipe; use: WorldItem[] } | null {
+    const held = this.character.heldItems.filter((i) => i.def.food);
+    const bases = only ? [only].filter((b) => this.dishBases().includes(b)) : this.dishBases();
+    const recipes = plat ? RECIPES.filter((r) => r.dish === plat) : RECIPES;
+    const p = this.character.position;
+    let best: { base: WorldItem; recipe: DishRecipe; use: WorldItem[]; score: number[] } | null = null;
+    for (const base of bases) {
+      const on = this.itemsOn(base).filter((i) => i.def.food);
+      for (const recipe of recipes) {
+        const use = this.recipeUse(recipe, [...on, ...held]);
+        if (!use) continue;
+        const kind = base.def.board ? 'planche' : 'assiette';
+        // un plat déjà servi dans l'assiette ne se mélange pas à autre chose
+        if (kind === 'assiette' && on.some((i) => !use.includes(i))) continue;
+        const score = [use.length, use.filter((i) => on.includes(i)).length, +(recipe.on === kind), -base.object.position.distanceTo(p)];
+        // comparés dans l'ordre : le premier critère qui diffère décide
+        const k = best ? score.findIndex((v, i) => v !== best!.score[i]) : -1;
+        if (!best || (k >= 0 && score[k] > best.score[k])) best = { base, recipe, use, score };
+      }
+    }
+    return best && { base: best.base, recipe: best.recipe, use: best.use };
+  }
+
+  /** Pourquoi on ne peut rien préparer : ce qui manque (au plat voulu, ou au plus proche d'être prêt). */
+  private dishHint(plat?: string): string {
+    if (!this.dishBases().length) return 'Pose une planche à découper ou une assiette propre (plan de travail, table) pour y préparer un plat.';
+    const pool = this.items.filter((i) => i.def.food && !this.shelfOf(i));
+    const list = plat ? RECIPES.filter((r) => r.dish === plat) : RECIPES;
+    const missing = (r: DishRecipe) => r.needs.filter((n) => !pool.some((i) => i.name === n && this.ingredientOk(i)));
+    const r = [...list].sort((a, b) => missing(a).length - missing(b).length)[0];
+    const name = ITEM_BY_ID.get(r.dish)!.name;
+    const raw = r.needs.map((n) => pool.find((i) => i.name === n && doneness(i.def, i.cooking) === 'cru')).find(Boolean);
+    if (raw && missing(r).length === 1) return `${cap(the(raw.name))} est cru${agree(raw.name)} : fais-${FEMININE.has(raw.name) ? 'la' : 'le'} cuire d’abord.`;
+    const miss = missing(r);
+    if (miss.length) return `Pour ${FEMININE.has(name) ? 'une' : 'un'} ${name}, il manque : ${miss.join(', ')} (coupe ou cuis les ingrédients du frigo).`;
+    return `Pour ${FEMININE.has(name) ? 'une' : 'un'} ${name} : réunis ${r.needs.join(' et ')} sur la planche (ou prends-les en main).`;
+  }
+
+  /** Les ingrédients posés sur `base` deviennent le plat. */
+  private assemble(base: WorldItem, recipe: DishRecipe, use: WorldItem[]): void {
+    const c = this.character;
+    if (use.some((i) => !this.items.includes(i) || c.carried.includes(i))) {
+      this.onNotice?.('Il manque un ingrédient sur la planche : recommence.');
+      return;
+    }
+    const proto = ITEM_BY_ID.get(recipe.dish)!;
+    // autant que ses ingrédients (brûlés : presque rien), plus le bonus de la recette
+    const hunger = use.reduce((sum, i) => {
+      const done = doneness(i.def, i.cooking);
+      return sum + i.def.food!.hunger * i.portion * (done ? DONENESS_HUNGER[done] : 1);
+    }, recipe.bonus);
+    const burnt = use.some((i) => doneness(i.def, i.cooking) === 'brûlé');
+    const dish = new WorldItem({ ...proto, food: { ...proto.food!, hunger: Math.round(hunger) } });
+    const yaw = new THREE.Euler().setFromQuaternion(base.object.quaternion, 'YXZ').y;
+    dish.object.quaternion.setFromAxisAngle(UP, yaw);
+    const at = base.def.board ? this.boardTop(base) : this.plateFloor(base);
+    dish.object.position.set(at.x, at.y + dish.restLift(dish.object.quaternion), at.z);
+    for (const i of use) {
+      this.items = this.items.filter((x) => x !== i);
+      this.riders = this.riders.filter((r) => r.item !== i && r.base !== i);
+      this.lastBite.delete(i);
+      i.object.removeFromParent();
+    }
+    this.items.push(dish);
+    this.scene.add(dish.object);
+    if (base.def.board) this.wearItem(base, WEAR_CUT.board);
+    const fem = FEMININE.has(dish.name);
+    const where = base.def.board ? 'sur la planche' : 'dans l’assiette';
+    const then = base.def.board ? ` Sers-l${fem ? 'a' : 'e'} dans l’assiette (P) ou mange-l${fem ? 'a' : 'e'} (M).` : ' Bon appétit !';
+    this.onNotice?.(`${cap(dish.name)} prêt${fem ? 'e' : ''} ${where}${burnt ? ' (un peu brûlé…)' : ''}.${then}`);
+  }
+
   /** Se fait un café à la machine la plus proche (il faut tenir la tasse). */
   makeCoffee(running = false): boolean {
     const machine = this.nearest((i) => i.def.pour?.liquid === 'café');
@@ -2519,6 +2673,7 @@ export class Game {
       if (e.code === 'KeyP' && !e.repeat) this.serve();
       if (e.code === 'KeyV' && !e.repeat) this.washDishes();
       if (e.code === 'KeyK' && !e.repeat) this.cut();
+      if (e.code === 'KeyG' && !e.repeat) this.prepare();
       if (e.code === 'KeyC' && !e.repeat) {
         if (this.character.seated) this.standUp();
         else this.sit();
@@ -2731,6 +2886,7 @@ export class Game {
       serve: held.some((h) => !!h.def.food) && this.items.some((i) => i.def.plate && !c.carried.includes(i) && !i.dirty && !this.foodOn(i)),
       dishes: held.some((h) => h.def.dish && h.dirty),
       cut: held.some((h) => !!h.def.cut && h.portion === 1),
+      prepare: !!this.dishPlan(),
       throw: !!last && !!c.handOf(last)?.canThrow,
       moving: !!this.moving,
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),

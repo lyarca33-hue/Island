@@ -106,6 +106,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
+- {"tache": "preparer", "plat": "<id du plat>"} : préparer un plat d'une recette ; le perso coupe et fait cuire ce qu'il faut, réunit les ingrédients sur la planche à découper et les assemble. Plats : "salade-composee" (tomate et concombre coupés, carotte en plus), "tartine-tomate" (pain et tomate coupés), "sandwich-steak" (pain coupé et steak cuit, tomate ou concombre en plus), "steak-pommes-de-terre" (steak et pomme de terre cuits). Le plat se mange comme le sandwich, ou se sert dans l'assiette pour un repas à table
 - {"tache": "servir", "objet": "<ref>", "assiette": "<ref>"} : servir un aliment (pomme, sandwich) dans une assiette propre et vide (« objet » et « assiette » facultatifs : ce qu'on tient, ou le plus proche ; la plus proche)
 - {"tache": "repas", "objet": "<ref>"} : un vrai repas à table : sert l'aliment dans l'assiette si elle est vide, prend la fourchette, s'assoit devant l'assiette et mange tout le plat (rassasie un peu plus que manger debout). Assiette et couverts sont ensuite sales
 - {"tache": "vaisselle", "objets": ["<ref>", ...]} : laver à l'évier la vaisselle sale (pour le lave-vaisselle : « mettre » chaque pièce dedans puis « allumer » le lave-vaisselle) (assiette, fourchette, couteau, tasse après un café ; liste vide = toute la vaisselle sale). Le perso la reprend propre
@@ -174,6 +175,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };
+    case 'preparer': return { kind: 'preparer', plat: s('plat') || undefined };
     case 'mettre': return s('dans') ? { kind: 'mettre', ref: s('objet') || undefined, dans: s('dans') } : null;
     case 'ouvrir': return s('objet') ? { kind: 'ouvrir', ref: s('objet') } : null;
     case 'jeter': return { kind: 'jeter', ref: s('objet') || undefined };
