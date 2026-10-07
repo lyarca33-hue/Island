@@ -10,6 +10,7 @@ import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
 import { DISHES } from './recipes';
+import { SALON_ITEMS } from './salon';
 import { BATHROOM_ITEMS } from './bathroom';
 
 export interface ItemDef {
@@ -177,6 +178,8 @@ export interface ItemDef {
   board?: boolean;
   /** Couteau : sert à couper sur la planche. */
   knife?: boolean;
+  /** Télé : s'allume et s'éteint ; sa pièce `ecran` montre un programme allumée, le `voyant` de veille éteinte. */
+  screen?: boolean;
   /** Lavabo : un miroir où se regarder (hauteur de son milieu, m) ; sa pièce `buee` se couvre après la douche. */
   mirror?: { y: number };
   /**
@@ -1143,6 +1146,8 @@ export const ITEMS: ItemDef[] = [
   ...KITCHEN_ITEMS,
   // les plats des recettes (recipes.ts)
   ...DISHES,
+  // le salon : canapé, table basse, télé (salon.ts)
+  ...SALON_ITEMS,
   // la salle de bain : lavabo, douche, toilettes, serviette (bathroom.ts)
   ...BATHROOM_ITEMS,
 ];
