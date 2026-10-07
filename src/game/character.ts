@@ -448,6 +448,11 @@ export class Character {
     });
   }
 
+  /** Direction où regarde le perso (au sol). */
+  get forward(): THREE.Vector3 {
+    return new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+  }
+
   get position(): THREE.Vector3 {
     return this.root.position;
   }
