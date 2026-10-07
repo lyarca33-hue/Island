@@ -17,7 +17,7 @@ const TABS: Array<[PanelTab, string]> = [
 ];
 
 const GESTURES: Array<[string, string]> = [
-  ['idle', 'Repos'], ['walk', 'Marche'], ['run', 'Course'], ['agree', 'Oui'], ['headShake', 'Non'], ['sad_pose', 'Abattu'], ['sneak_pose', 'Discret'],
+  ['idle_xbot', 'Repos A'], ['idle_pixiv', 'Repos B'], ['idle', 'Repos C'], ['idle_talk', 'Repos D'], ['walk', 'Marche'], ['run', 'Course'], ['agree', 'Oui'], ['headShake', 'Non'], ['sad_pose', 'Abattu'], ['sneak_pose', 'Discret'],
 ];
 
 export function loadSavedRecipe(): Recipe | null {
