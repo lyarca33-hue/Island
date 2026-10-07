@@ -31,6 +31,22 @@ export interface Recipe {
 
 export const RECIPES: Recipe[] = [
   {
+    dish: 'salade-verte',
+    needs: ['feuilles de salade'],
+    extras: ['tranches de tomate', 'rondelles de concombre', 'rondelles de carotte'],
+    bonus: 4,
+    on: 'planche',
+    words: ['salade verte', 'laitue'],
+  },
+  {
+    dish: 'salade-fruits',
+    needs: ['rondelles de banane', "quartiers d'orange"],
+    extras: ['fraises', 'quartiers de pomme'],
+    bonus: 6,
+    on: 'assiette',
+    words: ['salade de fruits', 'salade fruits', 'dessert'],
+  },
+  {
     dish: 'salade-composee',
     needs: ['tranches de tomate', 'rondelles de concombre'],
     extras: ['rondelles de carotte'],
@@ -44,6 +60,21 @@ export const RECIPES: Recipe[] = [
     bonus: 4,
     on: 'planche',
     words: ['tartine', 'tartines', 'bruschetta'],
+  },
+  {
+    dish: 'sandwich-jambon',
+    needs: ['tranches de pain', 'jambon'],
+    extras: ['feuilles de salade', 'tranches de tomate'],
+    bonus: 5,
+    on: 'planche',
+    words: ['sandwich jambon', 'jambon beurre', 'croque'],
+  },
+  {
+    dish: 'hot-dog',
+    needs: ['tranches de pain', 'saucisses'],
+    bonus: 5,
+    on: 'planche',
+    words: ['hot dog', 'hotdog', 'hot dogs', 'hotdogs'],
   },
   {
     dish: 'sandwich-steak',
@@ -61,12 +92,27 @@ export const RECIPES: Recipe[] = [
     on: 'assiette',
     words: ['steak patates', 'steak frites', 'steak pommes', 'steak pomme', 'steak puree'],
   },
+  {
+    dish: 'poulet-frites',
+    needs: ['poulet', 'frites'],
+    bonus: 8,
+    on: 'assiette',
+    words: ['poulet frites', 'poulet'],
+  },
+  {
+    dish: 'poelee-legumes',
+    needs: ['courgette', 'poivron'],
+    extras: ['champignons', 'oignon'],
+    bonus: 8,
+    on: 'assiette',
+    words: ['poelee', 'legumes sautes', 'poelee de legumes'],
+  },
 ];
 
 export const RECIPE_BY_DISH = new Map(RECIPES.map((r) => [r.dish, r]));
 
 /** Noms des plats au féminin (accord des messages). */
-export const DISH_FEMININE = ['salade composée', 'tartine à la tomate'];
+export const DISH_FEMININE = ['salade composée', 'tartine à la tomate', 'salade verte', 'salade de fruits', 'poêlée de légumes'];
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -111,7 +157,76 @@ function slice(g: THREE.Group, y: number, rot = 0): void {
   g.add(s);
 }
 
+/** Petit tas de feuilles de salade (vertes, plus ou moins foncées). */
+function leaves(g: THREE.Group, n: number, r: number): void {
+  for (let i = 0; i < n; i++) {
+    const a = i * 2.4, d = i ? r : 0;
+    const leaf = mesh(new THREE.SphereGeometry(0.03, 10, 6), i % 2 ? 0x8bc34a : 0x689f38, Math.cos(a) * d, 0.012, Math.sin(a) * d);
+    leaf.scale.set(1.2, 0.45, 0.9);
+    leaf.rotation.y = a;
+    g.add(leaf);
+  }
+}
+
 export const DISHES: ItemDef[] = [
+  dish('salade-verte', 'salade verte', { hunger: 9, bites: 3, color: 0x8bc34a }, () => {
+    const g = new THREE.Group();
+    leaves(g, 8, 0.035);
+    return g;
+  }),
+  dish('salade-fruits', 'salade de fruits', { hunger: 28, bites: 5, color: 0xf5a623 }, () => {
+    // rondelles de banane, quartiers d'orange et fraises mêlés
+    const g = new THREE.Group();
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.4, d = Math.sqrt(i / 9) * 0.045;
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      const color = [0xf6eec8, 0xf5a623, 0xd8352a][i % 3];
+      const bit = i % 3 === 2 ? mesh(new THREE.ConeGeometry(0.012, 0.022, 8).rotateX(Math.PI), color, x, 0.016, z) : mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.008, 10), color, x, 0.006 + (i % 2) * 0.006, z);
+      g.add(bit);
+    }
+    return g;
+  }),
+  dish('sandwich-jambon', 'sandwich au jambon', { hunger: 45, bites: 5, color: 0xe8a0a0 }, () => {
+    const g = new THREE.Group();
+    slice(g, 0);
+    g.add(mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.006, 18), 0xe8a0a0, 0, 0.015, 0));
+    leaves(g, 3, 0.02);
+    g.children.slice(-3).forEach((l) => (l.position.y = 0.021));
+    slice(g, 0.026, 0.1);
+    return g;
+  }),
+  dish('hot-dog', 'hot-dog', { hunger: 60, bites: 5, color: 0x8a4a2a }, () => {
+    const g = new THREE.Group();
+    slice(g, 0);
+    g.add(mesh(new THREE.CapsuleGeometry(0.013, 0.09, 4, 10).rotateZ(Math.PI / 2), 0x8a4a2a, 0, 0.026, 0));
+    // un trait de ketchup
+    g.add(mesh(new THREE.BoxGeometry(0.08, 0.004, 0.006), 0xc0302a, 0, 0.04, 0));
+    return g;
+  }),
+  dish('poulet-frites', 'poulet frites', { hunger: 78, bites: 6, color: 0xc8803a }, () => {
+    const g = new THREE.Group();
+    const leg = mesh(new THREE.SphereGeometry(0.04, 12, 8), 0xc8803a, -0.03, 0.016, 0);
+    leg.scale.set(1.3, 0.5, 0.9);
+    g.add(leg);
+    // un tas de frites
+    for (let i = 0; i < 8; i++) {
+      const f = mesh(new THREE.BoxGeometry(0.06, 0.008, 0.008), 0xe6c060, 0.04, 0.006 + (i % 3) * 0.007, -0.03 + i * 0.008);
+      f.rotation.y = (i % 2 ? 0.4 : -0.3) + i * 0.1;
+      g.add(f);
+    }
+    return g;
+  }),
+  dish('poelee-legumes', 'poêlée de légumes', { hunger: 24, bites: 4, color: 0x7a9a3a }, () => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 12; i++) {
+      const a = i * 2.4, d = Math.sqrt(i / 12) * 0.05;
+      const color = [0x7a9a3a, 0xa83a2a, 0x9a7a5a, 0xb07a3a][i % 4];
+      const bit = mesh(new THREE.BoxGeometry(0.018, 0.01, 0.014), color, Math.cos(a) * d, 0.006 + (i % 2) * 0.006, Math.sin(a) * d);
+      bit.rotation.y = a;
+      g.add(bit);
+    }
+    return g;
+  }),
   dish('salade-composee', 'salade composée', { hunger: 23, bites: 5, color: 0x7cb342 }, () => {
     // un petit tas de feuilles, les rondelles de légumes dessus
     const g = new THREE.Group();

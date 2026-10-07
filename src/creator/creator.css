@@ -5,6 +5,10 @@
   font: 700 20px system-ui, sans-serif; letter-spacing: 0.04em; color: #fdf6e3; background: rgba(20, 24, 40, 0.5);
   border: 1px solid rgba(255, 240, 210, 0.25); border-radius: 8px; padding: 6px 10px; width: 180px;
 }
+.creator-dice {
+  background: rgba(20, 24, 40, 0.5); border: 1px solid rgba(255, 240, 210, 0.25); border-radius: 8px; padding: 6px 8px;
+  font-size: 18px; cursor: pointer; line-height: 1;
+}
 .creator-stat { font-size: 14px; opacity: 0.85; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
 .creator-tools { position: absolute; left: 16px; right: 396px; bottom: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .seg { display: inline-flex; border-radius: 999px; overflow: hidden; border: 1px solid rgba(255, 240, 210, 0.35); }

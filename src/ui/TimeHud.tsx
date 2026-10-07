@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { TIME_SPEED } from '../game/clock';
+import { hhmm, SEASON_DAYS, SEASONS, TIME_SPEED, YEAR_DAYS } from '../game/clock';
 import type { Game } from '../game/Game';
 import { NEEDS } from '../game/needs';
 import { forecast, type GaugeKey, type GaugeState, GaugeWatch } from './gauges';
@@ -28,7 +28,7 @@ function levelOf(v: number, prev: Level | undefined): Level {
   return v < low ? 'low' : v < mid ? 'mid' : 'ok';
 }
 
-const ICONS: Record<GaugeKey, IconName> = { health: 'heart', fatigue: 'sleep', faim: 'food', soif: 'drop', hygiene: 'bubbles' };
+const ICONS: Record<GaugeKey, IconName> = { health: 'heart', fatigue: 'sleep', faim: 'food', soif: 'drop', hygiene: 'bubbles', vessie: 'toilet' };
 /** Ce qui fait remonter la jauge, rappelé au survol quand elle baisse. */
 const TIPS: Record<GaugeKey, string> = {
   health: 'Remonte quand tous les besoins dépassent 30 %',
@@ -36,6 +36,7 @@ const TIPS: Record<GaugeKey, string> = {
   faim: 'Manger quelque chose (M)',
   soif: 'Boire (B)',
   hygiene: 'Se laver les mains, prendre une douche',
+  vessie: 'Aller aux toilettes',
 };
 const GAUGES: Array<{ key: GaugeKey; label: string }> = [{ key: 'health', label: 'Santé' }, ...NEEDS.map((n) => ({ key: n.key, label: n.label }))];
 
@@ -156,7 +157,7 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
         </span>
         <b>{clock.label}</b>
         {clock.speed === 0 && <Icon name="pause" size={13} className="hud-paused" />}
-        <span className="hud-day">Jour {clock.day}</span>
+        <span className="hud-day" title={`Jour ${clock.day} · lever ${hhmm(clock.sun.rise)}, coucher ${hhmm(clock.sun.set)}`}>{clock.dateLabel}</span>
       </button>
     </div>
   );
@@ -164,13 +165,30 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
 
 const SPEEDS: Array<[number, string]> = [[0, '⏸ Pause'], [TIME_SPEED, '×4'], [60, '×60']];
 
-/** Réglage de l'heure (dans le menu) : curseur 0 h → 24 h et vitesse du temps. */
+/** Réglage de l'heure et de la date (dans le menu) : curseurs, saisons et vitesse du temps. */
 export function TimeControls({ game }: { game: Game | null }) {
   useTick(game);
   if (!game) return null;
   const { clock } = game;
+  const sun = clock.sun;
   return (
     <div className="menu-form time-controls">
+      <label>
+        <span>Date : <b>{clock.dateLabel}</b></span>
+        <input
+          type="range" min={0} max={YEAR_DAYS - 1} step={1} value={clock.dayOfYear}
+          onChange={(e) => clock.setDayOfYear(Number(e.target.value))}
+        />
+      </label>
+      <div className="time-speeds">
+        {SEASONS.map((s, i) => (
+          <button key={s.name} className={clock.season === i ? 'active' : ''} title={s.name}
+            onClick={() => clock.setDayOfYear(i * SEASON_DAYS + Math.floor(SEASON_DAYS / 2))}>
+            {s.icon} {s.name}
+          </button>
+        ))}
+      </div>
+      <small>Soleil : lever {hhmm(sun.rise)}, coucher {hhmm(sun.set)}. Une saison dure {SEASON_DAYS} jours.</small>
       <label>
         <span>Heure : <b>{clock.label}</b></span>
         <input

@@ -12,6 +12,8 @@ import { KITCHEN_ITEMS } from './kitchen';
 import { BEDROOM_ITEMS } from './bedroom';
 import { DISHES } from './recipes';
 import { SALON_ITEMS } from './salon';
+import { FRESH_THINGS, PAN_FOOD, PANTRY_ITEMS } from './pantry';
+import { BATHROOM_ITEMS } from './bathroom';
 
 export interface ItemDef {
   id: string;
@@ -210,6 +212,18 @@ export interface ItemDef {
   lamp?: { y: number; color: THREE.ColorRepresentation; intensity: number; range: number };
   /** Télé : s'allume et s'éteint ; sa pièce `ecran` montre un programme allumée, le `voyant` de veille éteinte. */
   screen?: boolean;
+  /** Lavabo : un miroir où se regarder (hauteur de son milieu, m) ; sa pièce `buee` se couvre après la douche. */
+  mirror?: { y: number };
+  /**
+   * Douche : on y entre pour se laver de la tête aux pieds en `seconds` secondes. `stand` : où se
+   * tenir sous l'eau (x, z, repère de la douche) ; `head` : le pommeau. La pièce `jet` (les filets
+   * d'eau) et la pièce `vapeur` se montrent pendant la douche.
+   */
+  shower?: { seconds: number; stand: [number, number]; head: [number, number, number] };
+  /** Toilettes : on s'y assoit pour se soulager (besoin « vessie »), puis on tire la chasse. Pièces `couvercle` et `eau`. */
+  toilet?: boolean;
+  /** Serviette de bain : sert à se sécher après la douche ; sa pièce `mouillee` se montre ensuite, le temps qu'elle sèche. */
+  bathTowel?: boolean;
   build(): THREE.Object3D;
 }
 
@@ -299,8 +313,10 @@ const FRIDGE_H = 1.55;
 const FRIDGE_T = 0.03;
 const FRIDGE_DOOR_T = 0.05;
 /** Dessus des clayettes (le bas du frigo compris) ; places de gauche à droite, près de la porte. */
-const FRIDGE_SHELVES = [FRIDGE_T + 0.03, 0.55, 0.98];
-const FRIDGE_SLOTS = FRIDGE_SHELVES.flatMap((y) => [-0.19, -0.065, 0.065, 0.19].map((x): [number, number, number] => [x, y, 0.13]));
+const FRIDGE_SHELVES = [FRIDGE_T + 0.03, 0.55, 0.98, 1.25];
+const FRIDGE_ROW = (z: number, shelves: number[]) => shelves.flatMap((y) => [-0.19, -0.065, 0.065, 0.19].map((x): [number, number, number] => [x, y, z]));
+/** Devant sur les trois premières clayettes (places 0 à 11), puis au fond, puis la clayette du haut. */
+const FRIDGE_SLOTS = [...FRIDGE_ROW(0.13, FRIDGE_SHELVES.slice(0, 3)), ...FRIDGE_ROW(-0.1, FRIDGE_SHELVES.slice(0, 3)), ...FRIDGE_ROW(0.13, [1.25]), ...FRIDGE_ROW(-0.1, [1.25])];
 
 /** Gazinière : largeur, profondeur ; feux (avant gauche, avant droit, arrière gauche, arrière droit), dessus des grilles. */
 const STOVE_W = 0.6;
@@ -627,7 +643,7 @@ export const ITEMS: ItemDef[] = [
     durability: 350,
     door: THREE.MathUtils.degToRad(105),
     cold: true,
-    holds: ["bouteille d'eau", 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'concombre', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', 'steak', 'pomme de terre'],
+    holds: ["bouteille d'eau", 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'concombre', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', 'steak', ...FRESH_THINGS],
     slots: FRIDGE_SLOTS,
     build: () => {
       const W = FRIDGE_W, D = FRIDGE_D, H = FRIDGE_H, t = FRIDGE_T;
@@ -907,7 +923,7 @@ export const ITEMS: ItemDef[] = [
     grip: 'fist',
     // tenue par le bout du manche
     gripPoint: [0, PAN_H, PAN_R + 0.015 + HANDLE_L * 0.7],
-    cookware: { holds: ['steak'], places: [[-0.045, PAN_FLOOR, 0], [0.045, PAN_FLOOR, 0]] },
+    cookware: { holds: ['steak', ...PAN_FOOD], places: [[-0.045, PAN_FLOOR, 0], [0.045, PAN_FLOOR, 0]] },
     // fonte : ne casse pas
     fragility: 10,
     durability: 200,
@@ -1326,6 +1342,10 @@ export const ITEMS: ItemDef[] = [
   ...DISHES,
   // le salon : canapé, table basse, télé (salon.ts)
   ...SALON_ITEMS,
+  // les provisions, le garde-manger et les courses (pantry.ts)
+  ...PANTRY_ITEMS,
+  // la salle de bain : lavabo, douche, toilettes, serviette (bathroom.ts)
+  ...BATHROOM_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

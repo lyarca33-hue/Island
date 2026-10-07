@@ -96,4 +96,5 @@
 .time-controls input[type='range'] { width: 100%; padding: 0; border: none; background: none; accent-color: var(--hud-honey); }
 .time-speeds { display: flex; gap: 6px; }
 .time-speeds button { flex: 1; }
+.time-controls .time-speeds button { padding-left: 2px; padding-right: 2px; font-size: 11px; white-space: nowrap; }
 .time-speeds button.active { background: rgba(245, 190, 91, 0.22); border-color: rgba(245, 190, 91, 0.6); color: #ffe2a8; }

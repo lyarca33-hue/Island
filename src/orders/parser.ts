@@ -9,6 +9,7 @@
 import type { WorldObject } from '../game/Game';
 import { RECIPES } from '../game/items/recipes';
 import { FRUITS } from '../game/items/kitchen';
+import { DRINK_COLORS, FRESH_THINGS, FROZEN_FOOD, PANTRY_THINGS } from '../game/items/pantry';
 import type { Intent } from './tasks';
 
 /** Minuscules, sans accents ni ponctuation, apostrophes et tirets en espaces. */
@@ -42,6 +43,7 @@ const VERBS: Record<string, string[]> = {
   reveiller: ['reveille', 'reveiller', 'reveil'],
   mixer: ['mixe', 'mixer', 'mixes', 'mouline'],
   cuire: ['cuis', 'cuit', 'cuire', 'cuisine', 'cuisiner', 'grille', 'griller', 'rechauffe', 'rechauffer', 'chauffe', 'chauffer'],
+  commander: ['commande', 'commander', 'achete', 'acheter', 'recommande', 'recommander'],
   allumer: ['allume', 'allumer', 'rallume', 'rallumer', 'lance', 'lancer', 'demarre', 'demarrer', 'active', 'activer'],
   eteindre: ['eteins', 'eteint', 'eteindre', 'coupe', 'couper'],
   arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
@@ -58,6 +60,7 @@ const VERBS: Record<string, string[]> = {
   pousser: ['pousse', 'pousser', 'glisse', 'glisser', 'rentre', 'rentrer'],
   essuyer: ['essuie', 'essuyer', 'nettoie', 'nettoyer', 'eponge', 'eponger', 'seche', 'secher', 'seches'],
   empiler: ['empile', 'empiler'],
+  doucher: ['douche', 'doucher', 'douches'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
@@ -66,7 +69,11 @@ const OPENS = new Set(['frigo', 'placard', 'appareil', 'poubelle']);
 /** Meubles où l'on range (et où l'on peut regarder ce qu'il y a). */
 const STORES = new Set(['frigo', 'placard', 'rangement', 'égouttoir']);
 /** Où se range un objet qui ne va ni au frais ni dans la bibliothèque. */
-const STORED_IN: Record<string, string> = { tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'tiroir' };
+const STORED_IN: Record<string, string> = { tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'tiroir',
+  // les provisions : l'épicerie au garde-manger, le frais au frigo, les surgelés au congélateur
+  ...Object.fromEntries([...PANTRY_THINGS.map((n) => [n, 'garde-manger']), ...FRESH_THINGS.map((n) => [n, 'frigo']), ...FROZEN_FOOD.map((n) => [n, 'congélateur'])]) };
+/** Boissons du frigo (se boivent à la bouteille ou se versent dans un verre). */
+const DRINKS = new Set(Object.keys(DRINK_COLORS));
 /** Les couverts (« lave les couverts », « range les couverts »). */
 const COUVERTS = ['fourchette', 'couteau de table', 'cuillère'];
 /** Où l'on sert un plat (et mange assis) ; le couvert qui va avec. */
@@ -102,7 +109,11 @@ const ALIASES: Record<string, string[]> = {
   table: ['table'],
   chaise: ['chaise', 'chaises', 'siege'],
   'machine a cafe': ['machine', 'cafetiere'],
-  evier: ['evier', 'lavabo', 'robinet'],
+  evier: ['evier', 'robinet'],
+  lavabo: ['lavabo', 'lavabos', 'miroir', 'glace', 'vasque'],
+  douche: ['douche', 'douches'],
+  toilettes: ['toilettes', 'toilette', 'wc', 'cuvette', 'chiottes'],
+  serviette: ['serviette', 'serviettes'],
   frigo: ['frigo', 'frigos', 'frigidaire', 'refrigerateur'],
   'bouteille d eau': ['bouteille', 'bouteilles'],
   pomme: ['pomme', 'pommes', 'fruit', 'fruits'],
@@ -147,6 +158,45 @@ const ALIASES: Record<string, string[]> = {
   'tartine a la tomate': ['tartine', 'tartines'],
   'sandwich au steak': ['sandwich', 'sandwichs', 'burger', 'hamburger'],
   'steak aux pommes de terre': ['plat', 'steak', 'patates'],
+  'salade verte': ['salade', 'salades'],
+  'salade de fruits': ['salade', 'dessert'],
+  'sandwich au jambon': ['sandwich', 'sandwichs'],
+  'hot dog': ['hotdog', 'hot'],
+  'poulet frites': ['poulet', 'frites'],
+  'poelee de legumes': ['poelee', 'legumes'],
+  // les provisions
+  'tablette de chocolat': ['chocolat', 'chocolats', 'tablette'],
+  'pate a tartiner': ['tartiner', 'nutella', 'pate'],
+  'sauce tomate': ['sauce', 'sauces'],
+  confiture: ['confiture', 'confitures'],
+  biscuits: ['biscuit', 'biscuits', 'gateaux', 'cookies'],
+  oignon: ['oignon', 'oignons'],
+  salade: ['salade', 'salades', 'laitue'],
+  'feuilles de salade': ['feuilles', 'feuille'],
+  poulet: ['poulet', 'cuisse'],
+  poisson: ['poisson', 'poissons', 'filet'],
+  saucisses: ['saucisse', 'saucisses'],
+  yaourt: ['yaourt', 'yaourts', 'yogourt'],
+  banane: ['banane', 'bananes'],
+  orange: ['orange', 'oranges'],
+  fraises: ['fraise', 'fraises'],
+  citron: ['citron', 'citrons'],
+  champignons: ['champignon', 'champignons'],
+  poivron: ['poivron', 'poivrons'],
+  courgette: ['courgette', 'courgettes'],
+  mayonnaise: ['mayonnaise', 'mayo'],
+  'jus d orange': ['jus'],
+  soda: ['soda', 'sodas', 'coca', 'canette'],
+  'eau gazeuse': ['gazeuse', 'perrier', 'badoit'],
+  frites: ['frite', 'frites'],
+  pizza: ['pizza', 'pizzas'],
+  'legumes surgeles': ['legumes', 'surgeles'],
+  'rondelles de banane': ['rondelles', 'rondelle'],
+  'quartiers d orange': ['quartiers', 'quartier'],
+  'rondelles de citron': ['rondelles', 'rondelle'],
+  'garde manger': ['garde', 'gardemanger', 'cellier', 'provisions', 'reserve'],
+  'sac de courses': ['sac', 'cabas'],
+  'liste de courses': ['liste'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -254,6 +304,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
   const held = world.objets.filter((o) => world.enMain.includes(o.ref));
   switch (verb) {
     case 'prendre': {
+      // « prends une douche »
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
       // ceux qui traînent avant ceux qui sont rangés, puis les plus proches
       const portable = found.filter((o) => o.portable && !world.enMain.includes(o.ref)).sort((a, b) => +!isLoose(a) - +!isLoose(b));
       if (!portable.length) return null;
@@ -293,6 +345,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
     case 'ranger': {
+      // « range les courses » : le sac, vidé à sa place
+      if (rest.includes('courses') || found.some((o) => o.nom === 'sac de courses')) return [{ kind: 'ranger_courses' }];
       // « range-le » : ce qu'on tient
       if (rest.length && rest.every((x) => ['le', 'la', 'les', 'l', 'ca'].includes(x))) return [{ kind: 'ranger', refs: [], onlyHeld: true }];
       // « range la chaise (sous la table) »
@@ -328,20 +382,33 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'ranger', refs: [(things.find(isLoose) ?? things[0]).ref] }];
     }
     case 'aller': {
+      // « va aux toilettes », « va aux WC », « va faire pipi » ; « va sous la douche »
+      if (rest.some((x) => ['toilettes', 'toilette', 'wc', 'pipi'].includes(x)) && !rest.includes('ta')) return [{ kind: 'toilettes' }];
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
       const target = found[0];
       return target ? [{ kind: 'aller', ref: target.ref }] : null;
     }
     case 'cafe':
       // « fais ta toilette »
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
+      // « fais les courses »
+      if (rest.includes('courses')) return [{ kind: 'courses' }];
       // « fais cuire la pomme », « fais chauffer le sandwich »
       if (VERB_OF.get(rest[0]) === 'cuire') return parseClause('cuire', rest.slice(1), original, world, rest[0]);
       // « fais la vaisselle » (à l'évier), « fais la vaisselle au lave-vaisselle »
       if (rest.includes('vaisselle')) return machineWash(original) ? machineDishes(world) : [{ kind: 'vaisselle', refs: [] }];
       // « fais-toi une salade », « prépare un sandwich », « fais un steak frites » : une recette
       if (!['sers', 'servir'].includes(word)) {
-        const recipe = RECIPES.find((r) => r.words.some((w) => w.split(' ').every((x) => rest.includes(x))));
-        if (recipe) return [{ kind: 'preparer', plat: recipe.dish }];
+        // le nom le plus long dit l'emporte (« salade de fruits » plutôt que « salade »)
+        const said = (r: (typeof RECIPES)[number]) => Math.max(0, ...r.words.filter((w) => w.split(' ').every((x) => rest.includes(x))).map((w) => w.split(' ').length));
+        const recipe = [...RECIPES].sort((a, b) => said(b) - said(a))[0];
+        if (recipe && said(recipe)) return [{ kind: 'preparer', plat: recipe.dish }];
+      }
+      // « sers-moi du soda », « sers un verre de vin » : la boisson du frigo versée dans un verre
+      {
+        const src = found.find((o) => DRINKS.has(o.nom));
+        const glass = found.find((o) => o.nom === 'verre' || o.nom === 'tasse') ?? world.objets.filter((o) => o.nom === 'verre').sort(byUse(world.enMain))[0];
+        if (src && glass) return pourOrFill(glass, src, world);
       }
       // « fais-toi un jus de pomme », « prépare un smoothie » : au mixeur
       if (rest.includes('jus') || rest.includes('smoothie')) return juice(world, found, true);
@@ -364,8 +431,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »
       // « bois au robinet »
       if (rest.includes('robinet')) return [{ kind: 'boire_robinet' }];
-      // « bois un jus de pomme » : mixé d'abord s'il n'y en a pas de prêt
-      if (rest.includes('jus') || rest.includes('smoothie')) {
+      // « bois un jus de pomme » : mixé d'abord s'il n'y en a pas de prêt (le jus d'orange est en brique)
+      if ((rest.includes('jus') && !rest.includes('orange')) || rest.includes('smoothie')) {
         const prep = juice(world, found, false);
         return prep ? [...prep, { kind: 'boire', liquide: 'jus de fruits' }] : null;
       }
@@ -437,6 +504,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return machineWash(original) || rest.includes('vaisselle') ? [{ kind: 'charger_lv' }] : null;
     case 'tirer':
     case 'pousser': {
+      // « tire la chasse (d'eau) »
+      if (rest.includes('chasse')) return [{ kind: 'chasse' }];
       // « tire la chaise », « pousse la chaise sous la table »
       const chair = found.find((o) => o.sorte === 'siège');
       return chair ? [{ kind: 'chaise', ref: chair.ref, sous: verb === 'pousser' }] : null;
@@ -446,6 +515,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return !found.length || found.every((o) => o.nom === 'assiette') ? [{ kind: 'empiler' }] : null;
     case 'essuyer': {
       const { tool, rest: r } = withTool(rest, world.objets);
+      // « essuie-toi », « sèche-toi (avec la serviette) » : après la douche
+      if (r.includes('serviette') || (rest.some((x) => x === 'toi' || x === 'te') && !r.some((x) => x === 'mains' || x === 'main'))) return [{ kind: 'secher' }];
       // « essuie-toi les mains (avec le torchon) »
       if (r.some((x) => x === 'mains' || x === 'main')) return [{ kind: 'essuyer_mains' }];
       // « essuie la vaisselle (avec le torchon) », « sèche le bol », « essuie les verres »
@@ -466,6 +537,10 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « débarrasse la table », « débarrasse »
       return [{ kind: 'debarrasser' }];
     case 'regarder': {
+      // « regarde la liste de courses »
+      if (rest.includes('liste')) return [{ kind: 'liste_courses' }];
+      // « regarde-toi dans le miroir »
+      if (rest.includes('miroir') || rest.includes('glace')) return [{ kind: 'miroir' }];
       // « regarde dans le frigo », « fouille le placard »
       const store = found.find((o) => STORES.has(o.sorte ?? ''));
       return store ? [{ kind: 'regarder', ref: store.ref }] : null;
@@ -507,6 +582,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'laver', visage: !handsOnly }];
     }
     case 'lire': {
+      // « lis la liste de courses »
+      if (rest.includes('liste')) return [{ kind: 'liste_courses' }];
       // « ouvre le robinet »
       if (rest.includes('robinet') || (rest.includes('eau') && found.some((o) => o.sorte === 'évier'))) return [{ kind: 'robinet', ouvrir: true }];
       // « ouvre le frigo », « ouvre le four », « ouvre le tiroir »
@@ -536,6 +613,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'reveiller':
       return [{ kind: 'reveiller' }];
+    case 'commander':
+      // « commande les courses », « achète du lait » : la liste de ce qui manque est commandée
+      return [{ kind: 'courses' }];
     case 'mixer': {
       // « mixe la pomme », « mixe les quartiers de pomme »
       const fruits = found.filter((o) => FRUITS.includes(o.nom));
@@ -605,6 +685,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'jeter', ref: (thing.find((o) => world.enMain.includes(o.ref)) ?? thing[0])?.ref }];
     }
     case 'vider': {
+      // « vide le sac (de courses) »
+      if (found.some((o) => o.nom === 'sac de courses') || rest.includes('courses')) return [{ kind: 'ranger_courses' }];
       // « vide le lave-vaisselle » : la vaisselle propre rangée à sa place
       if (machineWash(original) && appliance('lave-vaisselle')) return [{ kind: 'vider_lv' }];
       // « vide l'égouttoir » : la vaisselle sèche à sa place
