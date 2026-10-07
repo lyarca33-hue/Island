@@ -110,6 +110,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier ; il coule jusqu'à ce qu'on le ferme
 - {"tache": "bouchon", "mettre": true} : boucher l'évier (ou enlever le bouchon, « mettre » faux). Bouché avec le robinet ouvert, la cuve se remplit puis déborde
 - {"tache": "boire_robinet"} : boire au robinet, dans le creux des mains (pose d'abord ce que le perso tient)
+- {"tache": "charger_lv"} : charger toute la vaisselle sale au lave-vaisselle
+- {"tache": "pastille"} : mettre une pastille dans le lave-vaisselle (boîte au placard) ; sans pastille, le lavage rate. Pour laver : charger_lv, pastille, puis allumer le lave-vaisselle
+- {"tache": "vider_lv"} : vider le lave-vaisselle et ranger la vaisselle propre à sa place
 - {"tache": "mettre_table"} : mettre le couvert devant la chaise (assiette, fourchette, couteau de table pris au placard et au tiroir)
 - {"tache": "debarrasser"} : débarrasser la table (vaisselle sale au lave-vaisselle, propre à sa place)
 - {"tache": "couper_assiette"} : assis devant l'assiette servie, couper le plat en bouchées avec le couteau de table
@@ -193,6 +196,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'robinet': return { kind: 'robinet', ouvrir: o.ouvrir !== false };
     case 'bouchon': return { kind: 'bouchon', mettre: o.mettre !== false };
     case 'boire_robinet': return { kind: 'boire_robinet' };
+    case 'charger_lv': return { kind: 'charger_lv' };
+    case 'pastille': return { kind: 'pastille' };
+    case 'vider_lv': return { kind: 'vider_lv' };
     case 'mettre_table': return { kind: 'mettre_table' };
     case 'debarrasser': return { kind: 'debarrasser' };
     case 'couper_assiette': return { kind: 'couper_assiette' };

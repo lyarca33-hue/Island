@@ -143,6 +143,8 @@ const START_STORED: Array<[string, string, number]> = [
   ['bac-glacons', 'congelateur', 0],
   ['lasagne', 'congelateur', 1],
   ['lasagne', 'congelateur', 3],
+  // sous l'évier, en vrai ; ici au placard
+  ['pastilles', 'placard', 2],
 ];
 
 /** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
@@ -157,6 +159,8 @@ const WEAR_GRAB = 0.3;
 const WEAR_BREW = { machine: 1.5, cup: 0.5 };
 /** Usure de la porte (frigo) à chaque ouverture. */
 const WEAR_DOOR = 0.4;
+/** Pastilles dans une boîte neuve (lave-vaisselle). */
+const TABLETS = 12;
 /** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
 const WEAR_TAP = 0.4;
 /** Usure d'un appareil (bouton du feu, de la machine) à chaque allumage, et de l'ustensile à chaque plat cuit. */
@@ -221,7 +225,7 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', ...DISH_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', ...DISH_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre']);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -369,6 +373,9 @@ export class Game {
   private iced = new Map<WorldItem, { cubes: THREE.Mesh[]; t: number; fresh: boolean }>();
   /** Plats coupés en bouchées dans l'assiette (cutInPlate) : chaque bouchée compte double. */
   private cutUp = new WeakSet<WorldItem>();
+  /** Pastilles qui restent dans chaque boîte ; lave-vaisselle où l'on en a mis une (consommée au lavage). */
+  private tablets = new Map<WorldItem, number>();
+  private tabletIn = new Set<WorldItem>();
   /** Fenêtre « ce qu'il y a dedans » ouverte sur un meuble (null : la fermer). */
   onInventory: ((ref: string | null) => void) | null = null;
   /** Ingrédient dont on attend la cuisson (ordre « cuire »). */
@@ -495,6 +502,7 @@ export class Game {
       const slot = this.slot(where, i);
       it.object.position.copy(slot.pos);
       it.object.quaternion.copy(slot.rot);
+      if (id === 'pastilles') this.tablets.set(it, TABLETS);
     }
     const worktop = this.items.find((i) => i.def.id === 'plan-de-travail');
     if (worktop) {
@@ -1069,6 +1077,8 @@ export class Game {
         ou += `, ${part} ${door.target ? 'ouvert' : 'fermé'}${part === 'porte' ? 'e' : ''}`;
       }
       if (this.appliances.has(item)) ou += ', en marche';
+      if (item.def.washes) ou += this.tabletIn.has(item) ? ', pastille mise' : ', sans pastille';
+      if (this.tablets.has(item)) ou += `, ${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`;
       if (item.def.bin) {
         const n = this.binFill.get(item) ?? 0;
         ou += n >= item.def.bin ? ', pleine' : n ? `, ${n} objet${n > 1 ? 's' : ''} jeté${n > 1 ? 's' : ''}` : ', vide';
@@ -1529,21 +1539,127 @@ export class Game {
     if (c.seated) return c.standUp(() => this.clearTable(running));
     // ce qui va au même endroit ensemble : les couverts, puis l'assiette et la tasse
     dishes.sort((a, b) => +!!a.def.plate - +!!b.def.plate || +!!a.def.fill - +!!b.def.fill);
-    const steps: Array<() => boolean> = [];
-    // chaque pièce à sa place, l'une après l'autre (pas storeAway, qui enchaîne de son côté)
+    const why = (it: WorldItem) => `${cap(the(it.name))} est sale et le lave-vaisselle est plein (ou en marche) : lave-l${FEMININE.has(it.name) ? 'a' : 'e'} à l’évier.`;
+    return this.ferry(dishes, (it) => this.homeOf(it), why, running, () => this.onNotice?.(left ? 'Table débarrassée (il reste l’assiette entamée).' : 'Table débarrassée.'));
+  }
+
+  /**
+   * Porte les objets `items` deux par deux (une main chacun) jusqu'au meuble que `dest` choisit
+   * pour chacun, où ils sont rangés ; un objet sans meuble arrête la suite (`stuck` dit pourquoi).
+   */
+  private ferry(items: WorldItem[], dest: (it: WorldItem) => WorldItem | undefined, stuck: (it: WorldItem) => string, running: boolean, onEnd?: () => void): boolean {
+    const c = this.character;
     const store = (it: WorldItem) => () => {
       if (!c.handOf(it)) return true;
-      const home = this.homeOf(it);
+      const home = dest(it);
       if (home) return this.storeIn(home, running, it);
-      this.onNotice?.(`${cap(the(it.name))} est sale et le lave-vaisselle est plein (ou en marche) : lave-l${FEMININE.has(it.name) ? 'a' : 'e'} à l’évier.`);
+      this.onNotice?.(stuck(it));
       return false;
     };
-    for (let i = 0; i < dishes.length; i += 2) {
-      const pair = dishes.slice(i, i + 2);
-      for (const it of pair) steps.push(() => this.take(it, running));
+    const steps: Array<() => boolean> = [];
+    for (let i = 0; i < items.length; i += 2) {
+      const pair = items.slice(i, i + 2);
+      for (const it of pair) steps.push(() => c.handOf(it) ? true : this.take(it, running));
       for (const it of pair) steps.push(store(it));
     }
-    return this.chain(steps, () => this.onNotice?.(left ? 'Table débarrassée (il reste l’assiette entamée).' : 'Table débarrassée.'));
+    return this.chain(steps, onEnd);
+  }
+
+  /** Le lave-vaisselle `ref`, sinon le plus proche. */
+  private dishwasher(ref?: string): WorldItem | undefined {
+    const it = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.washes);
+    return it?.def.washes ? it : undefined;
+  }
+
+  /** Vaisselle sale qui traîne (pas rangée), tenue comprise. */
+  private looseDirtyDishes(): WorldItem[] {
+    return this.items.filter((i) => i.def.dish && i.dirty && !this.shelfOf(i) && !this.flying.some((f) => f.item === i));
+  }
+
+  /** Charge d'un coup au lave-vaisselle toute la vaisselle sale qui traîne (deux pièces par voyage). */
+  loadDishwasher(ref?: string, running = false): boolean {
+    const c = this.character;
+    const dw = this.dishwasher(ref);
+    const p = c.position;
+    // l'assiette en dernier : un couvert posé dessus partirait avec elle
+    const dirty = this.looseDirtyDishes().filter((i) => !(i.def.plate && this.foodOn(i))).sort((a, b) => +!c.carried.includes(a) - +!c.carried.includes(b) || +!!a.def.plate - +!!b.def.plate || a.object.position.distanceTo(p) - b.object.position.distanceTo(p));
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!dw) return fail('Il n’y a pas de lave-vaisselle.');
+    if (this.appliances.has(dw)) return fail('Le lave-vaisselle tourne déjà.');
+    if (!dirty.length) return fail('Pas de vaisselle sale qui traîne.');
+    if (c.heldItems.some((h) => !dirty.includes(h))) return fail('Pose d’abord ce que tu tiens.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.loadDishwasher(ref, running));
+    const room = this.freeSlots(dw).length;
+    const todo = dirty.slice(0, room);
+    if (!todo.length) return fail('Le lave-vaisselle est plein.');
+    return this.ferry(todo, () => (this.freeSlots(dw).length ? dw : undefined), () => 'Le lave-vaisselle est plein.', running, () => {
+      const left = dirty.length - todo.length;
+      this.onNotice?.(`Vaisselle sale chargée${left ? ` (plus de place pour ${left} pièce${left > 1 ? 's' : ''})` : ''}.${this.tabletIn.has(dw) ? '' : ' Pense à la pastille.'}`);
+    });
+  }
+
+  /** Met une pastille (boîte tenue) dans le lave-vaisselle `ref` : sans elle, le lavage rate. */
+  addTablet(ref?: string, running = false): boolean {
+    const c = this.character;
+    const dw = this.dishwasher(ref);
+    const box = c.heldItems.find((h) => h.def.id === 'pastilles');
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!dw) return fail('Il n’y a pas de lave-vaisselle.');
+    if (!box) return fail('Prends la boîte de pastilles (au placard).');
+    if (!(this.tablets.get(box) ?? 0)) return fail('La boîte de pastilles est vide.');
+    if (this.tabletIn.has(dw)) return fail('Il y a déjà une pastille dans le lave-vaisselle.');
+    if (this.appliances.has(dw)) return fail('Le lave-vaisselle tourne : attends la fin.');
+    if (c.busy || c.bracing) return false;
+    // porte ouverte, la boîte penchée au-dessus du bac à pastille (sur la porte), puis refermée
+    const put = () => {
+      dw.object.updateMatrixWorld(true);
+      const at = () => new THREE.Vector3(0, 0.45, 0.35).applyMatrix4(dw.object.matrixWorld);
+      if (!c.handOf(box)?.pour(at, () => {
+        this.tablets.set(box, (this.tablets.get(box) ?? 1) - 1);
+        this.tabletIn.add(dw);
+        this.onNotice?.(`Pastille mise (il en reste ${this.tablets.get(box)}).`);
+      })) this.onNotice?.('Impossible pour l’instant.');
+      return true;
+    };
+    if (this.doors.get(dw)?.target === 1) {
+      c.approachThen(this.doorStand(dw), dw.object.position, put, running);
+      return true;
+    }
+    return this.withDoorOpen(dw, put, running);
+  }
+
+  /**
+   * Vide le lave-vaisselle `ref` (arrêté) : la vaisselle propre part à sa place, au placard et au
+   * tiroir, deux pièces par voyage.
+   */
+  unloadDishwasher(ref?: string, running = false): boolean {
+    const c = this.character;
+    const dw = this.dishwasher(ref);
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!dw) return fail('Il n’y a pas de lave-vaisselle.');
+    if (this.appliances.has(dw)) return fail('Le lave-vaisselle tourne : attends la fin.');
+    const inside = this.storedIn(dw);
+    const clean = inside.filter((i) => !i.dirty);
+    if (!inside.length) return fail('Le lave-vaisselle est vide.');
+    if (!clean.length) return fail('Tout est encore sale dans le lave-vaisselle : lance-le (avec une pastille).');
+    if (c.heldItems.length) return fail('Pose d’abord ce que tu tiens pour vider le lave-vaisselle.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.unloadDishwasher(ref, running));
+    clean.sort((a, b) => +!!a.def.plate - +!!b.def.plate);
+    return this.ferry(clean, (it) => this.homeOf(it), (it) => `Plus de place où ranger ${the(it.name)}.`, running, () => {
+      const dirty = inside.length - clean.length;
+      this.onNotice?.(`Lave-vaisselle vidé, tout est rangé.${dirty ? ` Il reste ${dirty} pièce${dirty > 1 ? 's' : ''} sale${dirty > 1 ? 's' : ''}.` : ''}`);
+    });
   }
 
   /**
@@ -1835,7 +1951,8 @@ export class Game {
         if (!inside.length || this.appliances.has(item)) return;
         this.appliances.set(item, { t: 0, start: new Map(inside.map((it) => [it, it.cooking])) });
         this.wearItem(item, WEAR_RUN);
-        this.onNotice?.(`${cap(the(item.name))} ${item.def.heats ? 'chauffe' : 'tourne'}…`);
+        const bare = item.def.washes && !this.tabletIn.has(item);
+        this.onNotice?.(`${cap(the(item.name))} ${item.def.heats ? 'chauffe' : 'tourne'}…${bare ? ' Mais sans pastille !' : ''}`);
       }, running);
       return true;
     }
@@ -1883,12 +2000,14 @@ export class Game {
       if (k < 1) continue;
       const inside = [...r.start.keys()].filter((it) => this.items.includes(it));
       if (item.def.washes) {
+        // sans pastille, l'eau passe mais la vaisselle reste sale
+        const tablet = this.tabletIn.delete(item);
         for (const it of inside) {
-          if (it.def.dish) it.setDirty(false);
+          if (it.def.dish && tablet) it.setDirty(false);
           it.setLevel(0);
           it.contents = null;
         }
-        this.endAppliance(item, 'Ding ! La vaisselle est propre.');
+        this.endAppliance(item, tablet ? 'Ding ! La vaisselle est propre.' : 'Ding ! Lavage raté : sans pastille, la vaisselle est encore sale.');
         continue;
       }
       const done = inside.flatMap((it) => {
@@ -3558,6 +3677,12 @@ export class Game {
       if (this.appliances.has(item)) add('Arrêter', () => this.stopAppliance(ref));
       else add(item.def.washes ? 'Lancer un lavage' : 'Mettre en marche', () => this.startAppliance(ref));
     }
+    if (item.def.washes && !this.appliances.has(item)) {
+      const box = held.find((h) => h.def.id === 'pastilles');
+      if (box && !this.tabletIn.has(item)) add('Mettre une pastille', () => this.addTablet(ref));
+      if (this.looseDirtyDishes().length && !held.some((h) => !h.def.dish || !h.dirty)) add('Charger la vaisselle sale', () => this.loadDishwasher(ref));
+      if (!held.length && this.storedIn(item).some((i) => !i.dirty)) add('Vider et ranger', () => this.unloadDishwasher(ref));
+    }
     // poubelle
     if (item.def.bin && held.length) add(`Jeter : ${c.held!.name}`, () => this.throwInto(item, c.held!, false));
     if (item.def.bin && this.binFill.get(item)) add('Vider la poubelle', () => this.emptyBin(ref));
@@ -3617,6 +3742,8 @@ export class Game {
     const cuisson = doneness(item.def, item.cooking);
     if (cuisson) words.push(doneWord(item, cuisson) + (PLURAL.has(item.name) ? 's' : ''));
     if (item.def.food && item.portion < 1) words.push(`entamé${a}`);
+    if (this.tablets.has(item)) words.push(`${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`);
+    if (item.def.washes && this.tabletIn.has(item)) words.push('pastille mise');
     if (item.def.tank) {
       const cups = Math.floor((item.level * item.def.tank) / SERVING + 0.2);
       words.push(cups ? `eau pour ${cups} tasse${cups > 1 ? 's' : ''}` : 'vide');

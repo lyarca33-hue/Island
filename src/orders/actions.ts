@@ -208,6 +208,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.drinkAtTap(),
   },
   {
+    name: 'charger_lave_vaisselle',
+    description: 'Charger d’un coup au lave-vaisselle toute la vaisselle sale qui traîne (deux pièces par voyage). Une assiette où il reste à manger reste là.',
+    params: {},
+    run: (g) => g.loadDishwasher(),
+  },
+  {
+    name: 'pastille',
+    description: 'Mettre une pastille dans le lave-vaisselle (il faut tenir la boîte de pastilles, rangée au placard). Sans pastille, le lavage rate : la vaisselle reste sale.',
+    params: {},
+    run: (g) => g.addTablet(),
+  },
+  {
+    name: 'vider_lave_vaisselle',
+    description: 'Vider le lave-vaisselle arrêté : la vaisselle propre part à sa place (placard, tiroir). Les mains doivent être vides.',
+    params: {},
+    run: (g) => g.unloadDishwasher(),
+  },
+  {
     name: 'mettre_table',
     description: 'Mettre la table devant la chaise : une assiette, une fourchette et un couteau de table propres, pris au placard et au tiroir, posés chacun à sa place. Les mains doivent être vides.',
     params: {},

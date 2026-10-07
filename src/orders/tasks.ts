@@ -53,6 +53,10 @@ export type Intent =
   /** Boucher l'évier ou enlever le bouchon. */
   | { kind: 'bouchon'; mettre: boolean }
   | { kind: 'boire_robinet' }
+  /** Lave-vaisselle : charger la vaisselle sale, mettre une pastille, le vider et tout ranger. */
+  | { kind: 'charger_lv' }
+  | { kind: 'pastille' }
+  | { kind: 'vider_lv' }
   /** Mettre le couvert devant la chaise ; débarrasser la table. */
   | { kind: 'mettre_table' }
   | { kind: 'debarrasser' }
@@ -432,6 +436,20 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'boire_robinet':
       await freeHands(game, act);
       return act('boire_robinet');
+    case 'charger_lv':
+      await freeHands(game, act, (ref) => world(game).objets.some((o) => o.ref === ref && o.ou.includes(', sale') && o.sorte === 'vaisselle'));
+      return act('charger_lave_vaisselle');
+    case 'pastille': {
+      const box = world(game).objets.find((o) => o.nom === 'boîte de pastilles');
+      if (!box) throw new Failed('Il n’y a pas de pastilles.');
+      await take(game, act, box.ref);
+      await act('pastille');
+      // la boîte retourne au placard
+      return act('ranger_place').then(() => {}, () => {});
+    }
+    case 'vider_lv':
+      await freeHands(game, act);
+      return act('vider_lave_vaisselle');
     case 'mettre_table':
       await freeHands(game, act);
       return act('mettre_table');
