@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { hhmm, SEASON_DAYS, SEASONS, TIME_SPEED, YEAR_DAYS } from '../game/clock';
 import type { Game } from '../game/Game';
 import { NEEDS } from '../game/needs';
+import { forecast, type GaugeKey, type GaugeState, GaugeWatch } from './gauges';
+import { Icon, type IconName } from './icons';
 import './time.css';
 
 /** Relit l'horloge et les besoins du jeu quelques fois par seconde. */
@@ -14,36 +16,149 @@ function useTick(game: Game | null): void {
   }, [game]);
 }
 
-/** En haut à droite, sous la caméra : date, saison, heure et jauges de besoins du perso. */
-export function NeedsHud({ game }: { game: Game | null }) {
-  useTick(game);
-  if (!game) return null;
-  const { clock, needs } = game;
-  const season = SEASONS[clock.season];
-  const sun = clock.sun;
+type Level = 'ok' | 'mid' | 'low';
+const LOW = 20;
+const MID = 45;
+/** Marge autour des seuils : une jauge qui oscille autour de 20 % ne clignote pas. */
+const MARGIN = 2;
+
+function levelOf(v: number, prev: Level | undefined): Level {
+  const low = prev === 'low' ? LOW + MARGIN : LOW;
+  const mid = prev === 'ok' || !prev ? MID : MID + MARGIN;
+  return v < low ? 'low' : v < mid ? 'mid' : 'ok';
+}
+
+const ICONS: Record<GaugeKey, IconName> = { health: 'heart', fatigue: 'sleep', faim: 'food', soif: 'drop', hygiene: 'bubbles', vessie: 'toilet' };
+/** Ce qui fait remonter la jauge, rappelé au survol quand elle baisse. */
+const TIPS: Record<GaugeKey, string> = {
+  health: 'Remonte quand tous les besoins dépassent 30 %',
+  fatigue: 'Dormir dans un lit, ou boire un café',
+  faim: 'Manger quelque chose (M)',
+  soif: 'Boire (B)',
+  hygiene: 'Se laver les mains, prendre une douche',
+  vessie: 'Aller aux toilettes',
+};
+const GAUGES: Array<{ key: GaugeKey; label: string }> = [{ key: 'health', label: 'Santé' }, ...NEEDS.map((n) => ({ key: n.key, label: n.label }))];
+
+/** Relève les jauges quelques fois par seconde, avec leur tendance et leur couleur. */
+function useGauges(game: Game | null): { states: Record<GaugeKey, GaugeState>; levels: Record<GaugeKey, Level> } | null {
+  const [read, setRead] = useState<{ states: Record<GaugeKey, GaugeState>; levels: Record<GaugeKey, Level> } | null>(null);
+  useEffect(() => {
+    if (!game) return;
+    const watch = new GaugeWatch();
+    let levels = {} as Record<GaugeKey, Level>;
+    const tick = () => {
+      const states = watch.read(game);
+      levels = Object.fromEntries(GAUGES.map(({ key }) => [key, levelOf(states[key].value, levels[key])])) as Record<GaugeKey, Level>;
+      setRead({ states, levels });
+    };
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [game]);
+  return read;
+}
+
+/** Une jauge ronde ; au survol (ou au toucher) : valeur, tendance et prévision. */
+function Gauge({ label, icon, state, level, open, onOpen, minutes, tip }: {
+  label: string; icon: IconName; state: GaugeState; level: Level; open: boolean; onOpen: (open: boolean) => void; minutes: number; tip: string;
+}) {
+  const pct = Math.round(state.value);
+  const f = forecast(state, minutes);
+  const trend = state.trend === 'up' ? 'Remonte' : state.trend === 'fast' ? 'Baisse vite' : null;
+  /** Doigt ou stylet : un appui ouvre ou ferme le détail (Safari ne donne pas le focus au toucher). */
+  const touch = useRef<string | null>(null);
   return (
-    <div className="hud-needs">
-      <div className="hud-clock">
-        <span aria-hidden>{clock.isNight ? '🌙' : '☀️'}</span> <b>{clock.label}</b>
-        {clock.speed === 0 && <span className="hud-paused"> ⏸</span>}
-        <span className="hud-date" title={`Jour ${clock.day} · lever ${hhmm(sun.rise)}, coucher ${hhmm(sun.set)}`}>
-          <span aria-hidden>{season.icon}</span> {clock.dateLabel}
-        </span>
-      </div>
-      <div className="need need-health" title={`Santé : ${Math.round(needs.health)} / 100`}>
-        <span className="need-label"><span aria-hidden>❤️</span> Santé</span>
-        <span className="need-bar"><span className="need-fill health" style={{ width: `${needs.health}%` }} /></span>
-      </div>
-      {NEEDS.map((n) => {
-        const v = needs.values[n.key];
-        const level = v < 20 ? 'low' : v < 45 ? 'mid' : 'ok';
-        return (
-          <div key={n.key} className="need" title={`${n.label} : ${Math.round(v)} / 100`}>
-            <span className="need-label"><span aria-hidden>{n.icon}</span> {n.label}</span>
-            <span className="need-bar"><span className={`need-fill ${level}`} style={{ width: `${v}%` }} /></span>
+    <div className={`gauge ${level}`}>
+      <button
+        className="gauge-ring"
+        aria-label={`${label} : ${pct} %${trend ? `, ${trend.toLowerCase()}` : ''}`}
+        aria-expanded={open}
+        onPointerEnter={(e) => e.pointerType === 'mouse' && onOpen(true)}
+        onPointerLeave={(e) => e.pointerType === 'mouse' && onOpen(false)}
+        onPointerDown={(e) => (touch.current = e.pointerType === 'mouse' ? null : e.pointerType)}
+        onClick={() => {
+          if (touch.current) onOpen(!open);
+          touch.current = null;
+        }}
+        onFocus={() => !touch.current && onOpen(true)}
+        onBlur={() => onOpen(false)}
+      >
+        <svg className="gauge-track" viewBox="0 0 36 36" aria-hidden>
+          <circle className="gauge-bg" cx="18" cy="18" r="15.5" pathLength={100} />
+          <circle className="gauge-fill" cx="18" cy="18" r="15.5" pathLength={100} strokeDasharray={`${Math.max(0.01, state.value)} 100`} />
+        </svg>
+        <Icon name={icon} size={15} />
+        {state.trend && (
+          <span className={`gauge-trend ${state.trend}`}>
+            <Icon name={state.trend === 'up' ? 'up' : 'down'} size={9} />
+          </span>
+        )}
+      </button>
+      {level === 'low' && !open && <span className="gauge-low" aria-hidden>{pct} %</span>}
+      {open && (
+        <div className="gauge-tip" role="tooltip">
+          <div className="gauge-tip-head">
+            <Icon name={icon} size={15} />
+            <b>{label}</b>
+            <span className="gauge-tip-value">{pct} %</span>
           </div>
-        );
-      })}
+          <div className="gauge-tip-bar"><span style={{ width: `${state.value}%` }} /></div>
+          {trend && (
+            <div className={`gauge-tip-row ${state.trend}`}>
+              <Icon name={state.trend === 'up' ? 'up' : 'down'} size={13} /> {trend}
+            </div>
+          )}
+          {f.text !== 'Remonte' && (
+            <div className="gauge-tip-row">
+              <Icon name="clock" size={13} />
+              <span>
+                <strong>{f.text}</strong>
+                {f.when && ` · ${f.when}`}
+              </span>
+            </div>
+          )}
+          {level !== 'ok' && state.trend !== 'up' && <div className="gauge-tip-row gauge-tip-hint">{tip}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * En haut à droite : les jauges de besoins (rondes, sans texte ; le détail au survol) et
+ * l'horloge, qui ouvre le réglage de l'heure.
+ */
+export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => void }) {
+  const read = useGauges(game);
+  const [open, setOpen] = useState<GaugeKey | null>(null);
+  if (!game || !read) return null;
+  const { clock } = game;
+  return (
+    <div className="hud-status">
+      <div className="hud-gauges" role="group" aria-label="Besoins du perso">
+        {GAUGES.map(({ key, label }) => (
+          <Gauge
+            key={key}
+            label={label}
+            icon={ICONS[key]}
+            tip={TIPS[key]}
+            state={read.states[key]}
+            level={read.levels[key]}
+            open={open === key}
+            onOpen={(o) => setOpen((cur) => (o ? key : cur === key ? null : cur))}
+            minutes={clock.minutes}
+          />
+        ))}
+      </div>
+      <button className="hud-clock" onClick={onClock} title="Régler l’heure (Menu → Heure)">
+        <span className={`hud-sky${clock.isNight ? ' night' : ''}`}>
+          <Icon name={clock.isNight ? 'moon' : 'sun'} size={14} />
+        </span>
+        <b>{clock.label}</b>
+        {clock.speed === 0 && <Icon name="pause" size={13} className="hud-paused" />}
+        <span className="hud-day" title={`Jour ${clock.day} · lever ${hhmm(clock.sun.rise)}, coucher ${hhmm(clock.sun.set)}`}>{clock.dateLabel}</span>
+      </button>
     </div>
   );
 }

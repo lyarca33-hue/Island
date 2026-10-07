@@ -6,6 +6,13 @@
   Sitting_Talking_Loop, Sitting_Exit) : [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)
   de Quaternius, **CC0** (squelette et clips extraits par `tools/build_anim_assets.py` depuis la copie publique
   [adharshsivan/animationlibrary](https://github.com/adharshsivan/animationlibrary)).
+- Poses du créateur (`public/anim/ual_poses1.glb` : Dance_Loop, Idle_Talking_Loop, Crouch_Idle_Loop,
+  Spell_Simple_Idle_Loop, Walk_Formal_Loop ; `public/anim/ual_poses2.glb` : Idle_FoldArms_Loop,
+  Idle_TalkingPhone_Loop, Consume) : même [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)
+  de Quaternius, **CC0**, volumes 1 et 2 (`UAL1_Standard.glb`, `UAL2_Standard.glb` de la même copie publique), extraits par
+  `tools/build_anim_assets.py`.
+- Accessoires du créateur (`src/creator/accessories.ts` : toque, chapeaux, lunettes, nœuds, écharpe...) : formes three.js
+  faites pour le jeu, aucun fichier tiers.
 - Persos du créateur (`public/vrm/`) : modèles d'exemple officiels de [VRoid Studio](https://vroid.com/en/studio) (pixiv).
   - AvatarSample_A, B, C : licence VRoid Hub inscrite dans les fichiers (usage par tous, usage commercial
     autorisé, modification et redistribution autorisées, mention non obligatoire).
