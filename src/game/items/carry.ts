@@ -550,10 +550,11 @@ export class Carry {
 
   /**
    * Coupe avec le couteau tenu : la lame va et vient au-dessus du point `at()` (monde, le dessus de
-   * l'aliment posé sur la planche) ; `onDone` une fois le couteau revenu en main.
+   * l'aliment posé sur la planche, ou dans l'assiette pour le couteau de table) ; `onDone` une fois
+   * le couteau revenu en main.
    */
   cut(at: () => THREE.Vector3, onDone?: () => void): boolean {
-    if (!this.item?.def.knife || this.phase !== 'hold' || this.stack.length) return false;
+    if (!(this.item?.def.knife || this.item?.name === 'couteau de table') || this.phase !== 'hold' || this.stack.length) return false;
     this.cutAt = at;
     // le buste se penche vers la planche (voir weights)
     this.target.copy(at());

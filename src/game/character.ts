@@ -330,8 +330,9 @@ export class Character {
   drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false, item: WorldItem | null = this.held): boolean {
     const hand = item ? this.handOf(item) : null;
     if (!hand || this.busy) return false;
-    if (spot.y < 0.3) {
+    if (spot.y < 0.05) {
       // au sol, on le pose aussi près qu'on le prendrait (voir standFor) : la main y arrive
+      // (pas sur une surface basse, comme le panier du bas du lave-vaisselle)
       const near = 0.22 + Math.max(item!.size.x, item!.size.z) / 2;
       const fwd = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
       const ahead = spot.clone().sub(this.root.position).setY(0).dot(fwd);
