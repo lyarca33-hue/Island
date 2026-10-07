@@ -287,12 +287,15 @@ export class Character {
     return !!this.carries;
   }
 
-  /** Va jusqu'à l'objet et le prend dans une main libre. Faux si impossible (mains prises, non portable). */
-  pickUp(item: WorldItem, running = false, from?: THREE.Vector3): boolean {
+  /**
+   * Va jusqu'à l'objet et le prend dans une main libre ; `then` une fois en main. Faux si
+   * impossible (mains prises, non portable).
+   */
+  pickUp(item: WorldItem, running = false, from?: THREE.Vector3, then?: () => void): boolean {
     if (!this.freeHand(item) || this.busy || !item.def.portable) return false;
     this.approachThen(this.standFor(item, from), item.object.position, () => {
       const hand = this.freeHand(item);
-      if (hand?.pickUp(item)) {
+      if (hand?.pickUp(item, then)) {
         this.order = [...this.order.filter((s) => s !== hand.side), hand.side];
         this.onGrab?.(item, hand);
       }

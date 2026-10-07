@@ -81,6 +81,9 @@ const KNOWN: Array<{ id: string } & Omit<Missing, 'at'>> = [
   { id: 'evier-boire', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'boire au robinet', detail: 'On boit l’eau de l’évier seulement avec la tasse : pas de geste pour boire dans ses mains ou au robinet.' },
   { id: 'evier-vaisselle', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'laver la tasse', detail: 'Pas encore de vaisselle : la tasse ne se lave pas (son usure ne baisse pas avec ça non plus).' },
   { id: 'evier-vider', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'vider la tasse', detail: 'La tasse se vide dans l’évier seulement quand on la remplit d’eau : pas de geste pour la vider seule.' },
+  { id: 'planche-eplucher', kind: 'action', ordre: '(ajout de la planche et du couteau)', quoi: 'éplucher', detail: 'Le couteau coupe seulement en morceaux sur la planche : pas encore d’épluchage (carotte, pomme, concombre).' },
+  { id: 'planche-cuire', kind: 'action', ordre: '(ajout de la planche et du couteau)', quoi: 'cuisiner les morceaux', detail: 'Les morceaux se mangent tels quels : pas encore de plaque de cuisson, de poêle ni de recette qui les assemble.' },
+  { id: 'planche-assiette', kind: 'action', ordre: '(ajout de la planche et du couteau)', quoi: 'servir dans une assiette', detail: 'Les morceaux restent sur la planche ou se prennent à la main : pas encore d’assiette ni de bol.' },
   { id: 'evier-douche', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'se laver entièrement', detail: 'À l’évier, la toilette est faite d’eau sur les mains et le visage (hygiène +40) : pas de douche ni de bain, ni de geste de toilette du corps.' },
 ];
 const KNOWN_KEY = 'rp-island.manques.connus';

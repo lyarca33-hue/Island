@@ -103,8 +103,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "boire", "objet": "<ref>", "liquide": "eau"} : boire une gorgée (« objet » facultatif : une bouteille d'eau du frigo, la tasse… ; sans objet, la tasse ; « liquide » facultatif, "eau" ou "café" : si la tasse est vide, elle est d'abord remplie, de café par défaut). Boire fait baisser la soif
 - {"tache": "eau"} : remplir la tasse d'eau à l'évier (prend la tasse si besoin)
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
-- {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier, pomme ou sandwich (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
-- {"tache": "mettre", "objet": "<ref>", "dans": "<ref du frigo>"} : ranger dans le frigo une bouteille, une pomme ou un sandwich (« objet » facultatif : ce qu'on tient)
+- {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
+- {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
+- {"tache": "mettre", "objet": "<ref>", "dans": "<ref du frigo>"} : ranger dans le frigo une bouteille ou un aliment (entier ou coupé) (« objet » facultatif : ce qu'on tient)
 - {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte du frigo
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
@@ -162,6 +163,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'eau': return { kind: 'eau' };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
+    case 'couper': return { kind: 'couper', ref: s('objet') || undefined };
     case 'mettre': return s('dans') ? { kind: 'mettre', ref: s('objet') || undefined, dans: s('dans') } : null;
     case 'ouvrir': return s('objet') ? { kind: 'ouvrir', ref: s('objet') } : null;
     case 'fermer': return s('objet') ? { kind: 'fermer', ref: s('objet') } : null;
@@ -183,7 +185,7 @@ export type OnMissing = (m: Omit<Missing, 'at' | 'ordre'>) => void;
 export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: Step | null) => void, signal?: AbortSignal, onMissing?: OnMissing): Promise<string> {
   const state = () => {
     const w = game.describe();
-    return `État de la pièce : ${JSON.stringify({ mains: w.mains, mainsLibres: w.mainsLibres, lit: w.lit, objets: w.objets.map(({ ref, nom, ou }) => ({ ref, nom, ou })) })}`;
+    return `État de la pièce : ${JSON.stringify({ mains: w.mains, mainsLibres: w.mainsLibres, lit: w.lit, objets: w.objets.map(({ ref, nom, ou, coupable }) => ({ ref, nom, ou, coupable })) })}`;
   };
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM },
