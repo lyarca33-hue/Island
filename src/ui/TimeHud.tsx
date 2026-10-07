@@ -25,6 +25,10 @@ export function NeedsHud({ game }: { game: Game | null }) {
         <span aria-hidden>{clock.isNight ? '🌙' : '☀️'}</span> Jour {clock.day} · <b>{clock.label}</b>
         {clock.speed === 0 && <span className="hud-paused"> ⏸</span>}
       </div>
+      <div className="need need-health" title={`Santé : ${Math.round(needs.health)} / 100`}>
+        <span className="need-label"><span aria-hidden>❤️</span> Santé</span>
+        <span className="need-bar"><span className="need-fill health" style={{ width: `${needs.health}%` }} /></span>
+      </div>
       {NEEDS.map((n) => {
         const v = needs.values[n.key];
         const level = v < 20 ? 'low' : v < 45 ? 'mid' : 'ok';

@@ -34,6 +34,9 @@ mène à la map, « ✎ Perso » y revient.
 - Besoins du perso (en haut à droite) : fatigue, faim, soif, hygiène, de 100 à 0. Ils baissent
   avec l'heure du jeu, plus vite en marchant ou en courant (la fatigue aussi la nuit) ; boire
   remonte la soif, et un café réveille un peu. Console : `game.needs.set('faim', 10)`.
+- Santé (au-dessus des besoins) : elle baisse quand un besoin reste à zéro (la soif fait le plus
+  de mal, puis la faim, la fatigue, et un peu l'hygiène) et remonte doucement quand tous les
+  besoins sont au-dessus de 30. Console : `game.needs.hurt(20)`, `game.needs.heal(20)`.
 
 ### Les ordres
 
