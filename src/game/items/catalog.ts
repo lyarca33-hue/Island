@@ -73,7 +73,11 @@ export interface ItemDef {
    * Point d'eau où se laver (évier) : où vont les mains sous le robinet (repère du meuble). La
    * pièce `jet` (l'eau qui coule) sert aussi pendant qu'on se lave.
    */
-  wash?: { hands: [number, number, number] };
+  wash?: {
+    hands: [number, number, number];
+    /** Où poser la vaisselle à laver au fond de la cuve (repère du meuble), une place par main. */
+    dishes?: Array<[number, number, number]>;
+  };
   /** Récipient déjà plein au départ (bouteille d'eau) : ce qu'il contient. */
   startFull?: string;
   /**
@@ -81,8 +85,23 @@ export interface ItemDef {
    * le bord de la tasse, à l'opposé de l'anse.
    */
   mouth?: [number, number, number];
-  /** Se mange en `bites` bouchées ; la faim remonte de `hunger` points pour l'objet entier. */
-  food?: { hunger: number; bites: number };
+  /**
+   * Se mange en `bites` bouchées ; la faim remonte de `hunger` points pour l'objet entier.
+   * `color` : la bouchée piquée sur la fourchette quand on le mange dans l'assiette.
+   */
+  food?: { hunger: number; bites: number; color?: THREE.ColorRepresentation };
+  /**
+   * Vaisselle (assiette, couverts, tasse) : se salit quand on s'en sert et se lave à l'évier. Sa
+   * pièce nommée `sale` (taches) n'est montrée que sale.
+   */
+  dish?: boolean;
+  /** Assiette : hauteur (m) où se pose un plat qu'on y sert. */
+  plate?: number;
+  /**
+   * Couvert pour manger dans l'assiette (fourchette) : sa pièce `bouchee` porte la bouchée jusqu'à
+   * la bouche (le point `mouth`).
+   */
+  utensil?: boolean;
   /**
    * Porte qui s'ouvre (frigo) : la pièce nommée `porte`, posée sur sa charnière, tourne autour de
    * Y de cet angle (rad) quand on l'ouvre.
@@ -231,6 +250,15 @@ const BOARD_D = 0.24;
 const BOTTLE_R = 0.033;
 const BOTTLE_H = 0.24;
 const APPLE_R = 0.04;
+/** Assiette : rayon, hauteur du bord, hauteur du fond où l'on sert (m). */
+const PLATE_R = 0.12;
+const PLATE_H = 0.022;
+const PLATE_IN = 0.012;
+/** Couverts : longueur et épaisseur ; couchés à plat, le plat du manche tourné vers le haut. */
+const CUTLERY_L = 0.19;
+const CUTLERY_T = 0.004;
+/** Taches de repas sur la vaisselle sale. */
+const STAIN = 0x8a5a2b;
 /** Chaise en bois : assise (hauteur, largeur, profondeur), haut du dossier, section des pieds (m). */
 const SEAT_H = 0.45;
 const SEAT_W = 0.42;
@@ -280,6 +308,8 @@ export const ITEMS: ItemDef[] = [
     // tenue par l'anse
     gripPoint: [0, CUP_H * 0.55, CUP_R + 0.02],
     fill: [0.012, CUP_H - 0.012],
+    // un café bu laisse un fond : elle se lave à l'évier
+    dish: true,
     fragility: 2,
     durability: 40,
     build: () => {
@@ -291,7 +321,10 @@ export const ITEMS: ItemDef[] = [
       coffee.name = 'liquide';
       const handle = mesh(new THREE.TorusGeometry(0.025, 0.007, 8, 16), 0xe9e2d0, 0, CUP_H * 0.55, CUP_R + 0.012);
       handle.rotation.y = Math.PI / 2;
-      return group(body, bottom, coffee, handle);
+      // fond de café séché, caché sous le liquide quand elle est pleine
+      const stain = mesh(new THREE.RingGeometry(CUP_R * 0.45, CUP_R * 0.82, 20).rotateX(-Math.PI / 2), 0x5a3a22, 0, 0.008, 0);
+      stain.name = 'sale';
+      return group(body, bottom, coffee, handle, stain);
     },
   },
   {
@@ -441,7 +474,8 @@ export const ITEMS: ItemDef[] = [
     // la tasse se pose au fond de la cuve, sous le robinet, l'anse vers l'avant
     // la tasse, ou la casserole pour faire cuire à l'eau
     pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'casserole'], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
-    wash: { hands: [0, COUNTER_H + 0.08, TAP_Z + 0.05] },
+    // la vaisselle au fond de la cuve, de part et d'autre du filet d'eau
+    wash: { hands: [0, COUNTER_H + 0.08, TAP_Z + 0.05], dishes: [[-0.11, COUNTER_H - BASIN_H, BASIN_Z + 0.02], [0.11, COUNTER_H - BASIN_H, BASIN_Z - 0.04]] },
     build: () => {
       const H = COUNTER_H, top = 0.04;
       const wood = 0x8a6440, counter = 0xd9d3c5, steel = 0xb9bfc6, inside = 0x98a1aa;
@@ -571,7 +605,7 @@ export const ITEMS: ItemDef[] = [
     gripPoint: [0, APPLE_R, APPLE_R],
     // on croque le côté opposé à la paume
     mouth: [0, APPLE_R * 1.2, -APPLE_R],
-    food: { hunger: 12, bites: 4 },
+    food: { hunger: 12, bites: 4, color: 0xf3e3b0 },
     cut: 'quartiers-pomme',
     // un fruit ne se brise pas : il s'écrase s'il tombe fort
     fragility: 6,
@@ -592,7 +626,7 @@ export const ITEMS: ItemDef[] = [
     // tenu par un bord, croqué par l'autre
     gripPoint: [0, 0.025, 0.045],
     mouth: [0, 0.03, -0.045],
-    food: { hunger: 30, bites: 4 },
+    food: { hunger: 30, bites: 4, color: 0xe2b871 },
     // pain et garniture : rien à casser
     fragility: 10,
     durability: 20,
@@ -915,6 +949,92 @@ export const ITEMS: ItemDef[] = [
   pieces('rondelles-carotte', 'rondelles de carotte', { hunger: 6, bites: 3 }, () => disks(9, 0.015, 0.006, 0xe8792a, 0xf2a35a)),
   pieces('tranches-tomate', 'tranches de tomate', { hunger: 6, bites: 3 }, () => disks(4, 0.032, 0.008, 0xd8352a, 0xf07a5f)),
   pieces('rondelles-concombre', 'rondelles de concombre', { hunger: 5, bites: 3 }, () => disks(7, 0.021, 0.006, 0x3f7a35, 0xd9ecb0)),
+  {
+    id: 'assiette',
+    name: 'assiette',
+    portable: true,
+    // tenue par le bord, à plat, comme une tasse par l'anse
+    grip: 'fist',
+    gripPoint: [0, PLATE_H / 2, PLATE_R - 0.01],
+    dish: true,
+    plate: PLATE_IN,
+    // porcelaine
+    fragility: 2,
+    durability: 60,
+    build: () => {
+      const white = 0xf2efe8;
+      const rim = mesh(new THREE.CylinderGeometry(PLATE_R, PLATE_R * 0.62, PLATE_H, 28, 1, true), white, 0, PLATE_H / 2, 0);
+      (rim.material as THREE.Material).side = THREE.DoubleSide;
+      const well = mesh(new THREE.CylinderGeometry(PLATE_R * 0.66, PLATE_R * 0.6, PLATE_IN, 28), 0xe8e3d8, 0, PLATE_IN / 2, 0);
+      const band = mesh(new THREE.RingGeometry(PLATE_R * 0.9, PLATE_R * 0.95, 32).rotateX(-Math.PI / 2), 0x3e6f9e, 0, PLATE_H * 0.8, 0);
+      // restes de sauce et miettes
+      const stain = group(
+        mesh(new THREE.CircleGeometry(0.035, 14).rotateX(-Math.PI / 2), STAIN, -0.02, PLATE_IN + 0.0015, 0.01),
+        mesh(new THREE.CircleGeometry(0.018, 10).rotateX(-Math.PI / 2), STAIN, 0.035, PLATE_IN + 0.0015, -0.025),
+        mesh(new THREE.CircleGeometry(0.008, 8).rotateX(-Math.PI / 2), 0xc79a5a, 0.01, PLATE_IN + 0.002, 0.045),
+      );
+      stain.name = 'sale';
+      return group(rim, well, band, stain);
+    },
+  },
+  {
+    id: 'fourchette',
+    name: 'fourchette',
+    portable: true,
+    // par le bout du manche, les dents vers le haut ; elles vont aux lèvres
+    grip: 'fist',
+    gripPoint: [0, 0.035, 0],
+    mouth: [0, CUTLERY_L, 0],
+    // couchée à plat sur la table (le long de +Y quand on la tient)
+    layFlat: true,
+    dish: true,
+    utensil: true,
+    fragility: 10,
+    durability: 200,
+    breakWord: 'tordu',
+    build: () => {
+      const steel = 0xc3c8ce;
+      const T = CUTLERY_T, L = CUTLERY_L;
+      const g = group(
+        // manche, col, tête, quatre dents (dans le plan YZ : le plat de la fourchette regarde ±X)
+        mesh(new THREE.BoxGeometry(T, 0.11, 0.016), steel, 0, 0.055, 0),
+        mesh(new THREE.BoxGeometry(T, 0.025, 0.008), steel, 0, 0.1225, 0),
+        mesh(new THREE.BoxGeometry(T, 0.015, 0.024), steel, 0, 0.1425, 0),
+      );
+      for (const z of [-0.0105, -0.0035, 0.0035, 0.0105]) g.add(mesh(new THREE.BoxGeometry(T, L - 0.15, 0.003), steel, 0, (0.15 + L) / 2, z));
+      const stain = mesh(new THREE.BoxGeometry(T + 0.002, 0.02, 0.022), STAIN, 0, L - 0.02, 0);
+      stain.name = 'sale';
+      // la bouchée piquée au bout des dents (montrée pendant qu'on mange dans l'assiette)
+      const morsel = mesh(new THREE.BoxGeometry(0.018, 0.016, 0.02), 0xe2b871, 0, L - 0.012, 0);
+      morsel.name = 'bouchee';
+      g.add(stain, morsel);
+      return g;
+    },
+  },
+  {
+    id: 'couteau-table',
+    // couteau de table (le couteau de cuisine, pour couper sur la planche, est « couteau »)
+    name: 'couteau de table',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.035, 0],
+    layFlat: true,
+    dish: true,
+    fragility: 10,
+    durability: 200,
+    breakWord: 'tordu',
+    build: () => {
+      const T = CUTLERY_T;
+      const stain = mesh(new THREE.BoxGeometry(T + 0.002, 0.04, 0.012), STAIN, 0, 0.15, 0.002);
+      stain.name = 'sale';
+      return group(
+        // manche en bois, lame d'acier (le tranchant côté -Z)
+        mesh(new THREE.BoxGeometry(T * 2.5, 0.095, 0.017), 0x6b4a2b, 0, 0.0475, 0),
+        mesh(new THREE.BoxGeometry(T, 0.095, 0.016), 0xc3c8ce, 0, 0.1425, 0.001),
+        stain,
+      );
+    },
+  },
   {
     id: 'table',
     name: 'table',

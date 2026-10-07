@@ -1,7 +1,8 @@
 /**
  * Ordres simples en français, compris sans IA : « prends la tasse », « range tous les livres »,
  * « va à la table puis pose la lettre », « fais-toi un café », « lis le livre rouge », « dis bonjour »,
- * « assieds-toi sur la chaise », « lève-toi », « fais cuire le steak », « éteins le feu ». Rend null dès
+ * « assieds-toi sur la chaise », « lève-toi », « fais cuire le steak », « éteins le feu »,
+ * « sers le sandwich dans l'assiette », « mange à table », « fais la vaisselle ». Rend null dès
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
@@ -65,6 +66,9 @@ const ALIASES: Record<string, string[]> = {
   'bouteille d eau': ['bouteille', 'bouteilles'],
   pomme: ['pomme', 'pommes', 'fruit', 'fruits'],
   sandwich: ['sandwich', 'sandwichs', 'sandwiches', 'casse'],
+  assiette: ['assiette', 'assiettes'],
+  fourchette: ['fourchette', 'fourchettes', 'couverts'],
+  'couteau de table': ['couteau', 'couteaux', 'couverts'],
   gaziniere: ['gaziniere', 'cuisiniere', 'feu', 'feux', 'gaz', 'plaque', 'plaques'],
   poele: ['poele', 'poeles'],
   casserole: ['casserole', 'casseroles'],
@@ -205,6 +209,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (target?.sorte === 'rangement' && (item?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: item ? [item.ref] : [], onlyHeld: !item }];
       // « mets la pomme dans le frigo », « mets la poêle sur le feu », « mets le steak dans la poêle »
       if (target?.sorte === 'frigo' || target?.sorte === 'ustensile' || target?.sorte === 'gazinière') return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
+      // « mets le sandwich dans l'assiette »
+      if (target?.nom === 'assiette' && (item ?? held[0])?.sorte === 'nourriture') return [{ kind: 'servir', ref: (item ?? held[0]).ref, sur: target.ref }];
       return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
     case 'ranger': {
@@ -229,6 +235,14 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
       // « fais cuire le steak »
       if (rest[0] === 'cuire') return parseClause('cuire', rest.slice(1), original, world);
+      // « fais la vaisselle »
+      if (rest.includes('vaisselle')) return [{ kind: 'vaisselle', refs: [] }];
+      // « sers le sandwich (dans l'assiette) », « sers-toi une pomme »
+      {
+        const food = found.find((o) => o.sorte === 'nourriture');
+        const plate = found.find((o) => o.nom === 'assiette');
+        if (food || plate) return [{ kind: 'servir', ref: food?.ref, sur: plate?.ref }];
+      }
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
     case 'boire': {
       // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »
@@ -244,7 +258,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'manger': {
       // « mange une pomme », « mange » (ce qu'on tient, sinon ce qu'il y a)
       const food = found.filter((o) => o.sorte === 'nourriture');
+      // « mange à table », « mange dans l'assiette », « mange le sandwich à table »
+      if (rest.some((x) => ['table', 'assiette', 'fourchette'].includes(x))) return [{ kind: 'repas', ref: food[0]?.ref }];
       if (found.length && !food.length) return null;
+      // « mange » sans rien en main, un plat servi dans l'assiette : on mange à table
+      const served = world.objets.find((o) => o.sorte === 'nourriture' && o.ou.startsWith('posé sur assiette'));
+      if (!food.length && served && !held.some((o) => o.sorte === 'nourriture')) return [{ kind: 'repas', ref: served.ref }];
       return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
     }
     case 'couper': {
@@ -258,7 +277,16 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine')) return null;
       return [rest.includes('cafe') ? { kind: 'cafe' } : { kind: 'eau' }];
     case 'laver': {
-      // « lave-toi les mains », « lave-toi », « rince-toi le visage » ; « lave la tasse » : pas encore
+      // « lave la vaisselle », « lave l'assiette », « lave les couverts », « rince la tasse »
+      const dishes = found.filter((o) => o.sorte === 'vaisselle' || o.nom === 'tasse');
+      if (rest.includes('vaisselle') || rest.includes('couverts') || dishes.length) {
+        if (found.some((o) => o.sorte !== 'évier' && !dishes.includes(o))) return null;
+        // « lave les couverts » : fourchettes et couteaux
+        if (!dishes.length && rest.includes('couverts')) return [{ kind: 'vaisselle', refs: world.objets.filter((o) => o.nom === 'fourchette' || o.nom === 'couteau de table').map((o) => o.ref) }];
+        if (all || !dishes.length) return [{ kind: 'vaisselle', refs: dishes.map((o) => o.ref) }];
+        return [{ kind: 'vaisselle', refs: [(dishes.find((o) => o.ou.includes('sale')) ?? dishes[0]).ref] }];
+      }
+      // « lave-toi les mains », « lave-toi », « rince-toi le visage »
       if (found.some((o) => o.sorte !== 'évier')) return null;
       const self = rest.some((x) => ['toi', 'te', 't', 'mains', 'main', 'visage', 'figure', 'corps'].includes(x)) || !rest.length;
       if (!self) return null;
@@ -276,6 +304,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'lire', ref: named ? books.find(isLoose)?.ref ?? books[0]?.ref : undefined }];
     }
     case 'asseoir': {
+      // « assieds-toi à table »
+      if (rest.includes('table') || found.some((o) => o.nom === 'assiette')) return [{ kind: 'attabler' }];
       // « assieds-toi », « assieds-toi sur la chaise » (sinon le siège le plus proche)
       const seat = found.find((o) => o.sorte === 'siège');
       if (found.length && !seat) return null;
