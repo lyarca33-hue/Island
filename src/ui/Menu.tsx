@@ -52,7 +52,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['G', 'Préparer un plat'],
   ['L', 'Lire'],
   ['T', 'Lancer'],
-  ['C', 'S’asseoir / se lever'],
+  ['C', 'S’asseoir / se lever ; endormi : se réveiller'],
   ['Entrée', 'Écrire'],
   ['Tab', 'Parole ↔ Action'],
   ['Échap', 'Menu'],

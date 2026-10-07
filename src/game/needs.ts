@@ -30,6 +30,10 @@ export const NEEDS: NeedDef[] = [
 /** Assis, on se fatigue deux fois moins vite. */
 const SIT_FATIGUE = 0.5;
 
+/** Endormi : la fatigue remonte (pleine en 7 h de sommeil), les autres besoins baissent deux fois moins vite. */
+const SLEEP_REST = 100 / 7;
+const SLEEP_SLOW = 0.5;
+
 /** La nuit (heure du coucher passée), la fatigue se fait sentir plus vite. */
 const NIGHT_FATIGUE = 1.4;
 
@@ -51,9 +55,13 @@ export class Needs {
   health = 100;
 
   /** Fait passer `hours` heures de jeu ; `gait` : ce que fait le perso pendant ce temps. */
-  tick(hours: number, gait: 'idle' | 'walk' | 'run' | 'sit', night: boolean): void {
+  tick(hours: number, gait: 'idle' | 'walk' | 'run' | 'sit' | 'sleep', night: boolean): void {
     if (hours <= 0) return;
     for (const n of NEEDS) {
+      if (gait === 'sleep') {
+        this.values[n.key] = n.key === 'fatigue' ? Math.min(100, this.values[n.key] + SLEEP_REST * hours) : Math.max(0, this.values[n.key] - n.perHour * SLEEP_SLOW * hours);
+        continue;
+      }
       let rate = n.perHour * (gait === 'run' ? n.run : gait === 'walk' ? n.walk : 1);
       if (n.key === 'fatigue' && night) rate *= NIGHT_FATIGUE;
       if (n.key === 'fatigue' && gait === 'sit') rate *= SIT_FATIGUE;
