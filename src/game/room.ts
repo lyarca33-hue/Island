@@ -298,6 +298,8 @@ export class Room {
   private lamps: THREE.PointLight[] = [];
   /** Lumières qui entrent par les fenêtres. */
   private winLights: THREE.SpotLight[] = [];
+  /** Les lumières de la pièce font-elles des ombres (perso dans la pièce) ? */
+  private shadowsOn = true;
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
   private roofBox = new THREE.Box3();
@@ -744,7 +746,21 @@ export class Room {
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
     let anyCut = false;
     // perso hors de cette pièce : rayons du perso (jambes, buste, tête) vers la caméra
-    const rays = this.contains(player) ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
+    const here = this.contains(player);
+    const rays = here ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
+    // seules les lampes et les fenêtres de la pièce où est le perso font des ombres : chaque ombre
+    // prend une texture au shader, et beaucoup de cartes graphiques n'en ont que 16 (au-delà, les
+    // matériaux ne s'affichent plus du tout)
+    if (here !== this.shadowsOn) {
+      this.shadowsOn = here;
+      for (const l of [...this.lamps, ...this.winLights]) {
+        l.castShadow = here;
+        l.shadow.needsUpdate = true;
+      }
+      // une fenêtre sans ombre perd aussi sa forme de carreaux : les matériaux des persos (MToon)
+      // ne s'affichent plus si des projecteurs ont une forme sans avoir d'ombre
+      for (const l of this.winLights) l.map = here ? windowCookie() : null;
+    }
     const hides = (w: Wall) => rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
     for (const w of this.walls) {
       // dans une pièce : les murs côté caméra s'abaissent, et celui qui cache le perso dans la pièce
