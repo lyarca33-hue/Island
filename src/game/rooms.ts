@@ -5,5 +5,6 @@
  */
 import { KITCHEN, type RoomSpec } from './room';
 import { SALON_SPEC } from './salon';
+import { BATHROOM_SPEC } from './salle-de-bain';
 
-export const ROOMS: RoomSpec[] = [KITCHEN, SALON_SPEC];
+export const ROOMS: RoomSpec[] = [KITCHEN, SALON_SPEC, BATHROOM_SPEC];
