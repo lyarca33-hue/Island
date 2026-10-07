@@ -139,9 +139,11 @@ export interface ItemDef {
   /**
    * Appareil qui chauffe ce qu'on y range (four, micro-ondes), porte fermée : durée d'un
    * programme (s). `burns` : une deuxième cuisson brûle (four) ; sinon, on réchauffe seulement.
-   * La pièce `lumiere` s'allume pendant qu'il tourne.
+   * La pièce `lumiere` s'allume pendant qu'il tourne. `turns` : ce qui ressort changé (grille-pain :
+   * les tranches de pain deviennent du pain grillé), nom de l'objet rangé → id de la fiche obtenue.
+   * Sans porte, on le lance d'un clic mains vides ; la pièce `levier` s'abaisse pendant qu'il tourne.
    */
-  heats?: { seconds: number; burns: boolean };
+  heats?: { seconds: number; burns: boolean; turns?: Record<string, string> };
   /** Lave-vaisselle : durée d'un lavage (s) ; ce qui est rangé dedans ressort propre. */
   washes?: { seconds: number };
   /** Éponge : essuie la table (le geste va et vient comme un couteau). */
@@ -1000,6 +1002,18 @@ export const ITEMS: ItemDef[] = [
       const s = new THREE.Group();
       s.add(mesh(new THREE.BoxGeometry(0.075, 0.01, 0.065), 0xb98a4a, 0, 0.005, 0));
       s.add(mesh(new THREE.BoxGeometry(0.065, 0.011, 0.055), 0xf2dca8, 0, 0.0055, 0));
+      s.position.set(-0.04 + i * 0.02, i * 0.009, 0);
+      g.add(s);
+    }
+    return g;
+  }),
+  pieces('pain-grille', 'pain grillé', { hunger: 30, bites: 5 }, () => {
+    // les tranches sorties du grille-pain : dorées, la croûte plus foncée
+    const g = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const s = new THREE.Group();
+      s.add(mesh(new THREE.BoxGeometry(0.075, 0.01, 0.065), 0x8a5a2b, 0, 0.005, 0));
+      s.add(mesh(new THREE.BoxGeometry(0.065, 0.011, 0.055), 0xd9a45c, 0, 0.0055, 0));
       s.position.set(-0.04 + i * 0.02, i * 0.009, 0);
       g.add(s);
     }

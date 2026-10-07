@@ -1989,7 +1989,7 @@ export class Game {
   /** Où se tenir devant un meuble (frigo, bibliothèque), à `gap` m de sa face avant. */
   private standBefore(item: WorldItem, gap: number): THREE.Vector3 {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
-    return item.object.position.clone().addScaledVector(fwd, item.box.max.z + gap).setY(0);
+    return item.object.position.clone().addScaledVector(fwd, this.frontDepth(item) + gap).setY(0);
   }
 
   /** La porte du meuble ouverte (le perso va d'abord devant et l'ouvre), puis `then`. */
@@ -2121,7 +2121,7 @@ export class Game {
 
   private runAppliance(item: WorldItem, running: boolean): boolean {
     if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-    else if (!this.storedIn(item).length) this.onNotice?.(`${cap(the(item.name))} est vide : mets-y d’abord quelque chose ${item.def.heats ? 'à cuire' : 'à laver'}.`);
+    else if (!this.storedIn(item).length) this.onNotice?.(`${cap(the(item.name))} est vide : mets-y d’abord quelque chose ${item.def.heats?.turns ? 'à griller' : item.def.heats ? 'à cuire' : 'à laver'}.`);
     else {
       this.character.approachThen(this.doorStand(item), item.object.position, () => {
         // on ferme la porte ; il démarre une fois fermée (tickAppliances)
@@ -2134,6 +2134,8 @@ export class Game {
         if (!inside.length || this.appliances.has(item)) return;
         this.appliances.set(item, { t: 0, start: new Map(inside.map((it) => [it, it.cooking])) });
         this.wearItem(item, WEAR_RUN);
+        const lever = item.part('levier');
+        if (lever) lever.position.y = -0.06;
         const bare = item.def.washes && !this.tabletIn.has(item);
         this.onNotice?.(`${cap(the(item.name))} ${item.def.heats ? 'chauffe' : 'tourne'}…${bare ? ' Mais sans pastille !' : ''}`);
       }, running);
@@ -2147,6 +2149,8 @@ export class Game {
     this.appliances.delete(item);
     const light = item.part('lumiere');
     if (light) light.visible = false;
+    const lever = item.part('levier');
+    if (lever) lever.position.y = 0;
     this.onNotice?.(note);
   }
 
@@ -2193,6 +2197,13 @@ export class Game {
         this.endAppliance(item, tablet ? 'Ding ! La vaisselle est propre.' : 'Ding ! Lavage raté : sans pastille, la vaisselle est encore sale.');
         continue;
       }
+      // grille-pain : les tranches ressortent en pain grillé
+      const turns = heats?.turns;
+      if (turns && inside.some((it) => turns[it.name])) {
+        const made = inside.flatMap((it) => (turns[it.name] ? [this.turnInto(it, turns[it.name])] : [])).filter((x): x is WorldItem => !!x);
+        this.endAppliance(item, `Ding ! ${made.map((it) => `${cap(the(it.name))} est prêt${agree(it.name)}.`).join(' ')}`);
+        continue;
+      }
       const done = inside.flatMap((it) => {
         const d = doneness(it.def, it.cooking);
         if (!d || d === 'cru') return [];
@@ -2200,6 +2211,23 @@ export class Game {
       });
       this.endAppliance(item, `Ding ! ${done.join(' ') || 'C’est chaud.'}`);
     }
+  }
+
+  /** L'objet devient celui de la fiche `id`, à la même place (les tranches de pain grillées). */
+  private turnInto(item: WorldItem, id: string): WorldItem | null {
+    const def = ITEM_BY_ID.get(id);
+    if (!def || !this.items.includes(item)) return null;
+    const made = new WorldItem(def);
+    made.object.position.copy(item.object.position);
+    made.object.quaternion.copy(item.object.quaternion);
+    made.setCondition(item.condition);
+    this.items = this.items.filter((i) => i !== item);
+    this.riders = this.riders.filter((r) => r.item !== item && r.base !== item);
+    this.lastBite.delete(item);
+    item.object.removeFromParent();
+    this.items.push(made);
+    this.scene.add(made.object);
+    return made;
   }
 
   /** Jette l'objet tenu (le dernier pris, ou celui nommé) dans la poubelle la plus proche. */
@@ -2604,11 +2632,18 @@ export class Game {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
     // contre l'évier pour atteindre le robinet, contre la gazinière pour atteindre les feux du fond (le perso se penche un peu)
     const gap = item.def.wash ? 0.22 : item.def.heat && !item.def.pour ? 0.16 : 0.26;
-    // posé sur un meuble (la bouilloire sur le tiroir) : devant le meuble, pas dedans
+    return item.object.position.clone().addScaledVector(fwd, this.frontDepth(item) + gap).setY(0);
+  }
+
+  /**
+   * Distance de l'objet à son avant, le long de son axe Z ; posé sur un meuble (la bouilloire sur
+   * le tiroir, le grille-pain sur le lave-vaisselle), jusqu'à l'avant du meuble : on se tient devant, pas dedans.
+   */
+  private frontDepth(item: WorldItem): number {
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
     const p = item.object.position;
     const under = p.y > 0.05 ? this.items.find((o) => o !== item && o.object.position.y < p.y && this.isAbove(item, o)) : undefined;
-    const depth = under ? Math.max(item.box.max.z, under.box.max.z + fwd.dot(under.object.position.clone().sub(p))) : item.box.max.z;
-    return p.clone().addScaledVector(fwd, depth + gap).setY(0);
+    return under ? Math.max(item.box.max.z, under.box.max.z + fwd.dot(under.object.position.clone().sub(p))) : item.box.max.z;
   }
 
   /**
@@ -3525,6 +3560,8 @@ export class Game {
     }
     // un aliment à couper en main : clic sur la planche, ou sur le meuble où elle est posée
     else if (held.some((h) => h.def.cut) && (item.def.board || this.boardOn(item))) return this.cutOn(item.def.board ? item : this.boardOn(item), running);
+    // appareil sans porte (grille-pain) : on y met ce qu'on tient
+    else if (item.def.heats && !door && held.some((h) => this.fits(item, h))) return this.storeIn(item, running);
     // appareil (four, micro-ondes, lave-vaisselle) : clic sur le côté, on le met en marche ou on l'arrête
     else if (item.def.heats || item.def.washes) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide

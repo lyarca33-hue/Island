@@ -112,6 +112,8 @@ const ALIASES: Record<string, string[]> = {
   concombre: ['concombre', 'concombres'],
   'quartiers de pomme': ['quartiers', 'quartier'],
   'tranches de pain': ['tranches', 'tranche', 'tartine', 'tartines'],
+  'pain grille': ['toast', 'toasts', 'grillees', 'grille'],
+  'grille pain': ['toaster', 'grille', 'grillepain'],
   'rondelles de carotte': ['rondelles', 'rondelle'],
   'tranches de tomate': ['tranches', 'tranche'],
   'rondelles de concombre': ['rondelles', 'rondelle'],
@@ -443,6 +445,15 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'lever':
       return [{ kind: 'lever' }];
     case 'cuire': {
+      // « grille le pain », « fais griller les tartines », « mets en marche le grille-pain » : au grille-pain
+      const toaster = appliance('grille-pain');
+      const bread = ['tranches de pain', 'pain', 'grille-pain'];
+      if (toaster && (['grille', 'griller'].includes(word) || found.some((o) => o.nom === 'grille-pain')) && found.every((o) => bread.includes(o.nom))) {
+        const slices = world.objets.filter((o) => o.nom === 'tranches de pain');
+        const item = slices.find((o) => world.enMain.includes(o.ref)) ?? slices.find(isLoose) ?? slices[0];
+        if (!item) return found.length ? null : [{ kind: 'allumer', ref: toaster.ref }];
+        return [{ kind: 'mettre', ref: item.ref, dans: toaster.ref }, { kind: 'allumer', ref: toaster.ref }];
+      }
       // au four ou au micro-ondes : « cuis la pomme de terre au four », « réchauffe le steak »
       const oven = found.find((o) => o.sorte === 'appareil' && o.nom !== 'lave-vaisselle') ?? (REHEAT.has(word) ? appliance('micro-ondes') : undefined);
       if (oven) {

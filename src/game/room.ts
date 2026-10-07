@@ -105,7 +105,7 @@ export const RUNS: Array<{ wall: WallName; from: number; items: Array<string | n
 ];
 
 /** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
-export const ON_TOP: Array<[string, string]> = [['micro-ondes', 'placard'], ['bouilloire', 'tiroir'], ['frigo', 'congelateur']];
+export const ON_TOP: Array<[string, string]> = [['micro-ondes', 'placard'], ['bouilloire', 'tiroir'], ['grille-pain', 'lave-vaisselle'], ['frigo', 'congelateur']];
 
 /**
  * Range les meubles des rangées (RUNS) contre leurs murs. `pick(id)` donne le prochain objet de

@@ -1,6 +1,6 @@
 /**
  * La cuisine : meubles de rangement (placard, tiroir), gros appareils (four, micro-ondes,
- * lave-vaisselle), poubelle et petits appareils (bouilloire). Mêmes fiches que le reste du catalogue (catalog.ts) ; les portes,
+ * lave-vaisselle), poubelle et petits appareils (bouilloire, grille-pain). Mêmes fiches que le reste du catalogue (catalog.ts) ; les portes,
  * le tiroir, la cuisson et le lavage sont joués par Game.ts.
  *
  * Tous sont posés au sol, l'avant vers +Z, et font la hauteur du plan de travail (sauf le
@@ -37,6 +37,8 @@ function glow(w: number, h: number, d: number, color: THREE.ColorRepresentation,
   return m;
 }
 
+/** Hauteur du grille-pain (m). */
+const TOASTER_H = 0.17;
 /** Où se pose la tasse à côté de la bouilloire, sous son bec (x, m). */
 const KETTLE_CUP = 0.1;
 /** Hauteur du plan de travail (m), comme sous la machine à café et l'évier. */
@@ -458,6 +460,37 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       jet.visible = false;
       jet.position.set(KETTLE_CUP, 0.18, 0.03);
       g.add(jet);
+      return g;
+    },
+  },
+  {
+    id: 'grille-pain',
+    name: 'grille-pain',
+    portable: false,
+    movable: false,
+    durability: 200,
+    fragility: 5,
+    // les tranches se posent dans la fente, sur le dessus ; elles en ressortent grillées
+    holds: ['tranches de pain'],
+    slots: [[0, TOASTER_H - 0.05, 0]],
+    heats: { seconds: 5, burns: false, turns: { 'tranches de pain': 'pain-grille' } },
+    build: () => {
+      const w = 0.24, d = 0.14, h = TOASTER_H;
+      const body = 0xc8ccd0, dark = 0x2e3135;
+      const g = group(
+        box(w, h - 0.01, d, body, 0, (h - 0.01) / 2, 0),
+        box(w - 0.01, 0.012, d - 0.01, body, 0, h - 0.006, 0),
+        // la fente, sombre, et ses pieds
+        box(0.15, 0.002, 0.08, dark, 0, h + 0.001, 0),
+        box(w - 0.02, 0.01, d - 0.02, dark, 0, 0.005, 0),
+        // bouton du minuteur
+        mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 14).rotateZ(Math.PI / 2), dark, w / 2 + 0.006, 0.05, 0.03),
+        glow(0.14, 0.004, 0.07, 0xff8a3a, 0, h + 0.003, 0),
+      );
+      // levier sur le côté : il descend quand le grille-pain tourne
+      const lever = group(box(0.03, 0.012, 0.02, dark, w / 2 + 0.015, h - 0.04, -0.02));
+      lever.name = 'levier';
+      g.add(lever);
       return g;
     },
   },
