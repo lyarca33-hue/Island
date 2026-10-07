@@ -18,6 +18,12 @@
   color: #fdf6e3; font-size: 14px; cursor: pointer; white-space: nowrap;
 }
 .hud-held button:hover { background: rgba(40, 46, 74, 0.85); }
+.hud-wear {
+  position: absolute; transform: translate(14px, 14px); padding: 6px 10px; border-radius: 8px; pointer-events: none;
+  background: rgba(20, 24, 40, 0.8); border: 1px solid rgba(255, 240, 210, 0.35); font-size: 13px; white-space: nowrap;
+}
+.hud-wear-bar { margin-top: 4px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.hud-wear-bar span { display: block; height: 100%; }
 .hud-notice {
   position: absolute; top: 64px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 8px;
   background: rgba(60, 24, 24, 0.75); font-size: 14px; pointer-events: none; max-width: calc(100% - 32px); text-align: center;

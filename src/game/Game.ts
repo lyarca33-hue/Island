@@ -12,6 +12,7 @@ import { Character } from './character';
 import { applySky, GameClock } from './clock';
 import { createGround, GROUND_HALF } from './ground';
 import { breakChance, Debris } from './items/breakage';
+import { gradeName } from './items/durability';
 import { LAY_FLAT, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
@@ -48,6 +49,17 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['machine-a-cafe', 2.1, 0, -0.8, -Math.PI / 4],
 ];
 
+/** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
+const START_WEAR: Record<string, number> = { table: 0.55, caisse: 0.3, livre: 0.12, 'livre-vert': 0.8 };
+
+/** Usure (points de durabilité) : par gorgée bue (tasse pleine = 1), par seconde de lecture, par mètre poussé. */
+const WEAR_DRINK = 6;
+const WEAR_READ = 0.15;
+const WEAR_PUSH = 2;
+/** Usure en prenant un objet, et à chaque café (machine, tasse). */
+const WEAR_GRAB = 0.3;
+const WEAR_BREW = { machine: 1.5, cup: 0.5 };
+
 /** Livres de départ : rangés dans la bibliothèque (place) ou posés à plat ([x, y, z, rotation]). */
 const START_BOOKS: Array<[string, number | [number, number, number, number]]> = [
   ['livre-rouge', SLOTS_PER_SHELF],
@@ -70,6 +82,8 @@ export interface WorldObject {
   /** Meuble de rangement, machine (à café) ou récipient (tasse). */
   sorte?: 'rangement' | 'machine' | 'récipient';
   ou: string;
+  /** Grade d'usure et durabilité restante (« usé (52 %) »). */
+  etat: string;
   distance: number;
 }
 
@@ -151,6 +165,8 @@ export class Game {
   private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
+  /** Objet sous la souris (nom, grade, durabilité de 0 à 1, position à l'écran), ou null. */
+  onHover: ((info: { name: string; grade: string; condition: number; x: number; y: number } | null) => void) | null = null;
   /** Petit message à afficher (ex. objet non portable). */
   onNotice: ((text: string) => void) | null = null;
   /** Bulle de parole au-dessus du perso, et quand elle disparaît (ms, horloge de la page). */
@@ -197,6 +213,7 @@ export class Game {
     // au moment de la prise, l'objet est encore posé : on note ce qui est dessus ; les livres
     // posés sur un livre forment la pile qu'on emporte
     this.character.onGrab = (item, hand) => {
+      this.wearItem(item, WEAR_GRAB);
       const riders = this.ridersOf(item);
       // une pile se porte à deux mains : seulement si l'autre main est libre
       const same = item.def.stack && this.character.otherFree(hand) ? riders.filter((r) => r.item.def.stack === item.def.stack) : [];
@@ -230,6 +247,8 @@ export class Game {
         book.object.position.set(at[0], at[1] + book.restLift(book.object.quaternion), at[2]);
       }
     }
+
+    for (const item of this.items) item.setCondition(START_WEAR[item.def.id] ?? 1);
 
     this.motes = createMotes();
     this.scene.add(this.motes.points);
@@ -437,6 +456,7 @@ export class Game {
         && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)));
       if (blocked || others.blocked(c.position.clone().add(step))) return false;
       o.position.copy(next);
+      this.wearItem(item, step.length() * WEAR_PUSH);
       o.updateMatrixWorld(true);
       for (const r of riders) {
         const ro = r.item.object;
@@ -526,7 +546,16 @@ export class Game {
   private impact(f: Flying, surf: number): void {
     const item = f.item;
     const speed = f.vel.length();
-    if (!f.bounced && Math.random() < breakChance(item.def.fragility ?? 5, speed)) {
+    // un objet usé casse plus facilement
+    const fragility = (item.def.fragility ?? 5) * (0.4 + 0.6 * item.condition);
+    if (!f.bounced && Math.random() < breakChance(fragility, speed)) {
+      this.flying = this.flying.filter((x) => x !== f);
+      this.shatter(item, surf, f.vel);
+      return;
+    }
+    // le choc l'use (moins s'il est solide) ; à zéro, il se brise
+    this.wearItem(item, speed * (11 - (item.def.fragility ?? 5)) * 0.6, false);
+    if (item.durability <= 0) {
       this.flying = this.flying.filter((x) => x !== f);
       this.shatter(item, surf, f.vel);
       return;
@@ -553,11 +582,91 @@ export class Game {
   }
 
   /** L'objet se brise : il disparaît de la pièce, ses éclats s'éparpillent. */
-  private shatter(item: WorldItem, floor: number, vel = new THREE.Vector3()): void {
+  private shatter(item: WorldItem, floor: number, vel = new THREE.Vector3(), worn = false, note?: string): void {
+    // ce qui était posé dessus ou rangé dedans tombe
+    const above = item.def.portable && !isTwoHanded(item.grip) ? [] : this.itemsOn(item);
     this.addDebris(new Debris(item, floor, vel));
     this.items = this.items.filter((i) => i !== item);
+    this.riders = this.riders.filter((r) => r.base !== item && r.item !== item);
+    if (this.brew && (this.brew.machine === item || this.brew.cup === item)) {
+      const jet = this.brew.machine.part('jet');
+      if (jet) jet.visible = false;
+      this.brew = null;
+    }
     item.object.removeFromParent();
-    this.onNotice?.(`${item.name[0].toUpperCase()}${item.name.slice(1)} s'est brisé${FEMININE.has(item.name) ? 'e' : ''} !`);
+    for (const it of above) this.flying.push({ item: it, vel: new THREE.Vector3(), spin: new THREE.Vector3(), bounced: false });
+    if (!item.def.portable) this.character.nav = this.buildNav();
+    const name = `${item.name[0].toUpperCase()}${item.name.slice(1)}`;
+    const e = FEMININE.has(item.name) ? 'e' : '';
+    this.onNotice?.(note ?? (worn ? `${name}, trop usé${e}, s'est brisé${e} !` : `${name} s'est brisé${e} !`));
+  }
+
+  /** Objets posés sur `base` ou rangés dedans (pas ceux qu'on tient). */
+  private itemsOn(base: WorldItem): WorldItem[] {
+    const o = base.object;
+    o.updateMatrixWorld(true);
+    const b = base.box;
+    const carried = this.character.carried;
+    return this.items.filter((it) => {
+      if (it === base || carried.includes(it) || this.flying.some((f) => f.item === it)) return false;
+      const q = o.worldToLocal(new THREE.Box3().setFromObject(it.object).getCenter(new THREE.Vector3()));
+      return q.x > b.min.x && q.x < b.max.x && q.z > b.min.z && q.z < b.max.z && q.y > b.min.y + 0.02 && q.y < b.max.y + 0.6;
+    });
+  }
+
+  /**
+   * Use un objet de `points` de durabilité ; prévient quand il change de grade (sauf `tell`
+   * faux). À zéro, il se brise (checkWorn, dès qu'il n'est plus en plein geste).
+   */
+  wearItem(item: WorldItem, points: number, tell = true): void {
+    if (points <= 0 || item.durability <= 0) return;
+    const changed = item.wear(points);
+    if (changed && tell && item.durability > 0) {
+      const art = FEMININE.has(item.name) ? 'La' : 'Le';
+      this.onNotice?.(`${art} ${item.name} est maintenant ${gradeName(item.condition, FEMININE.has(item.name))}.`);
+    }
+  }
+
+  /** Objets usés jusqu'à zéro : ils se brisent, en main (le bras retombe) ou là où ils sont. */
+  private checkWorn(): void {
+    const c = this.character;
+    for (const item of this.items) {
+      if (item.durability > 0 || this.flying.some((f) => f.item === item)) continue;
+      if (this.moving?.item === item) this.release();
+      if (c.carried.includes(item)) {
+        // en main : seulement une fois le geste fini (gorgée, livre refermé)
+        if (c.reading?.held === item) {
+          c.reading.stopReading();
+          continue;
+        }
+        if (!c.loseItem(item)) continue;
+        const p = item.object.position;
+        // un objet fragile qui casse dans la main blesse un peu
+        const hurts = (item.def.fragility ?? 5) <= 4;
+        const fem = FEMININE.has(item.name);
+        if (hurts) this.needs.hurt(3);
+        const note = hurts ? `Aïe ! ${fem ? 'La' : 'Le'} ${item.name}, trop usé${fem ? 'e' : ''}, s'est brisé${fem ? 'e' : ''} dans la main.` : undefined;
+        this.shatter(item, this.surfaceAt(p.x, p.z, item), new THREE.Vector3(), true, note);
+      } else {
+        const p = item.object.position;
+        this.shatter(item, this.surfaceAt(p.x, p.z, item), new THREE.Vector3(), true);
+      }
+      return;
+    }
+  }
+
+  /** Durabilité de l'objet `ref` : grade et part restante (0 à 1). */
+  conditionOf(ref: string): { grade: string; condition: number } | null {
+    const item = this.byRef(ref);
+    return item ? { grade: gradeName(item.condition, FEMININE.has(item.name)), condition: item.condition } : null;
+  }
+
+  /** Fixe la durabilité de l'objet `ref` (0 à 1 ; 0 le brise). Faux si aucun objet de ce nom. */
+  setCondition(ref: string, condition: number): boolean {
+    const item = this.byRef(ref);
+    if (!item) return false;
+    item.setCondition(condition);
+    return true;
   }
 
   private addDebris(d: Debris): void {
@@ -597,7 +706,8 @@ export class Game {
       if (item.contents) ou += `, contient du ${item.contents}`;
       const sorte: WorldObject['sorte'] = item.def.slots ? 'rangement' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : undefined;
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
-      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, ou, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
+      const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
+      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
     });
     return {
       perso: this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)',
@@ -692,6 +802,8 @@ export class Game {
         // la tasse sous le bec, l'anse vers le perso
         this.character.drop(spot, machine.object.rotation.y, () => {
           this.brew = { machine, cup, t: 0 };
+          this.wearItem(machine, WEAR_BREW.machine);
+          this.wearItem(cup, WEAR_BREW.cup);
         }, true, cup);
       }, running);
       return true;
@@ -869,6 +981,16 @@ export class Game {
       e.preventDefault();
       this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
+    on(el, 'pointermove', (e) => {
+      const item = e.buttons ? null : this.itemAt(e.clientX, e.clientY);
+      if (!item) {
+        this.onHover?.(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      this.onHover?.({ name: item.name, grade: gradeName(item.condition, FEMININE.has(item.name)), condition: item.condition, x: e.clientX - r.left, y: e.clientY - r.top });
+    });
+    on(el, 'pointerleave', () => this.onHover?.(null));
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
       const item = this.itemAt(e.clientX, e.clientY);
@@ -995,13 +1117,17 @@ export class Game {
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));
     this.tickNeeds(dt);
+    const book = held.find((h) => h.def.buildOpen);
+    if (book && c.reading?.held === book) this.wearItem(book, dt * WEAR_READ);
+    this.checkWorn();
+    // avec le grade d'usure de chacun (« tasse de café, usée »)
+    const grade = (i: WorldItem) => gradeName(i.condition, FEMININE.has(i.name));
     const names = held.map((h) => {
       const n = h.contents ? `${h.name} de ${h.contents}` : h.name;
       const count = c.handOf(h)?.carried.length ?? 1;
-      return count > 1 ? `${n} ×${count}` : n;
+      return count > 1 ? `${n} ×${count}` : `${n}, ${grade(h)}`;
     });
-    const label = this.moving ? this.moving.item.name : names.length ? names.join(' et ') : null;
-    const book = held.find((h) => h.def.buildOpen);
+    const label = this.moving ? `${this.moving.item.name}, ${grade(this.moving.item)}` : names.length ? names.join(' et ') : null;
     const bookHand = book ? c.handOf(book) : null;
     const last = c.held;
     const can: HandActions = {
@@ -1039,6 +1165,7 @@ export class Game {
     if (held) {
       const drunk = this.lastSip?.item === held ? this.lastSip.level - held.level : 0;
       if (drunk > 0) {
+        this.wearItem(held, drunk * WEAR_DRINK);
         this.needs.restore('soif', drunk * DRINK_THIRST);
         if (this.lastSip?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
       }

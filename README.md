@@ -178,6 +178,15 @@ clic sur le meuble. Le perso se place contre le côté le plus proche et pose le
 Z Q S D le poussent ou le tirent (ce qui est posé ou rangé dedans suit), il bute sur les autres
 meubles. E le lâche.
 
+Durabilité : chaque objet a une jauge (fiche `durability`, en points : tasse 40, lettre 30,
+livre 100, caisse 150, machine 250, table 300, bibliothèque 400). Elle baisse à l'usage (prendre
+l'objet, boire, lire, faire un café, pousser un meuble) et sur les chocs. Grades : neuf, bon état,
+usé, abîmé, très abîmé ; plus elle baisse, plus l'objet paraît usé (couleurs ternies, taches,
+rayures, bords sombres : `src/game/items/durability.ts`). Un objet usé casse plus facilement
+quand on le lance. À zéro il se brise, là où il est ou dans la main (une tasse blesse un peu) ;
+ce qui était posé dessus tombe. La souris sur un objet montre son grade et sa jauge. Au départ,
+la table, la caisse et deux livres sont déjà usés.
+
 Boire : tasse de café en main, bouton « Boire » ou touche B. Le perso porte la tasse à la bouche,
 l'incline et boit une gorgée ; le niveau baisse (environ trois gorgées). Vide, elle se remplit
 de nouveau à la machine.
@@ -188,4 +197,5 @@ Les meubles (objets non portables) sont des rectangles au sol que le perso conto
 Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()` (ou
 `game.drop('livre')` pour poser cet objet-là), `game.read()`, `game.stopReading()`, `game.heldNames`,
 `game.store()` (ranger les livres tenus), `game.makeCoffee()`, `game.drink()`, `game.throwItem()` (ou `game.throwItem('tasse')`),
+`game.conditionOf('tasse')` / `game.setCondition('tasse', 0.3)` (durabilité, 0 à 1),
 `game.grab('table')` / `game.release()`, `game.itemNames`.
