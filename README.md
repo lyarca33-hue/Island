@@ -12,8 +12,9 @@ npm install
 npm run dev
 ```
 
-Puis ouvrir http://localhost:5173. Le jeu s'ouvre sur le créateur de personnage ; « Jouer »
-mène à la map, « ✎ Perso » y revient.
+Puis ouvrir http://localhost:5173. Le jeu s'ouvre directement sur la map avec le dernier perso
+créé (un perso par défaut la première fois) ; Menu → Personnage → « ✎ Modifier le personnage »
+ouvre le créateur, et « Jouer » ramène sur la map.
 
 - Clic sur le sol : le perso y marche (Maj + clic : il court)
 - ZQSD, WASD ou flèches : marcher (Maj : courir)
@@ -104,7 +105,7 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/character.ts` | Perso glTF au squelette Mixamo, animations repos / marche / course |
 | `src/game/ground.ts` | Sol d'herbe (texture peinte par programme) |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
-| `src/App.tsx` | Interface React : créateur puis map |
+| `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
 | `src/creator/vrm.ts` | Chargement des fichiers VRM (three-vrm) |
 | `src/creator/avatar.ts` | Assemblage tenue + visage + coiffure de modèles différents, proportions, couleurs |
