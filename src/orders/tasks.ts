@@ -104,6 +104,9 @@ export type Intent =
   /** Laver à l'évier ces pièces de vaisselle (toute la vaisselle sale si `refs` est vide). */
   | { kind: 'vaisselle'; refs: string[] }
   | { kind: 'lever' }
+  /** Aller dormir dans le lit `ref` (sinon le plus proche) ; se réveiller. */
+  | { kind: 'dormir'; ref?: string }
+  | { kind: 'reveiller' }
   /**
    * Faire cuire l'ingrédient `ref` (sinon celui qu'on tient, sinon le plus proche) : ustensile
    * (rempli d'eau pour la casserole) sur le feu, ingrédient dedans, feu allumé, puis éteint une fois cuit.
@@ -629,8 +632,20 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return;
     }
     case 'lever':
+      if (world(game).perso.includes('endormi')) return act('reveiller');
       if (!world(game).perso.includes('assis')) return;
       return act('lever');
+    case 'dormir': {
+      const bed = intent.ref ?? world(game).objets.filter((o) => o.sorte === 'lit').sort((a, b) => a.distance - b.distance)[0]?.ref;
+      if (!bed) throw new Failed('Il n’y a pas de lit.');
+      if (world(game).perso.includes('endormi')) return;
+      // on se couche les mains vides
+      await freeHands(game, act, () => false);
+      return act('dormir', { lit: bed });
+    }
+    case 'reveiller':
+      if (!world(game).perso.includes('endormi')) return;
+      return act('reveiller');
     case 'arreter_lire':
       if (!world(game).lit) return;
       return act('arreter_lire');

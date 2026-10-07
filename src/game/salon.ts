@@ -78,8 +78,9 @@ export const SALON_SPEC: RoomSpec = {
   name: 'salon',
   rect: SALON,
   floor: () => parquet(SALON),
-  doors: [{ wall: 'ouest', u0: SALON_PASS.z0, u1: SALON_PASS.z1 }],
-  joined: ['ouest'],
+  // passage vers la cuisine (ouest) et vers la chambre (nord, x 7.6 à 8.4 : voir chambre.ts)
+  doors: [{ wall: 'ouest', u0: SALON_PASS.z0, u1: SALON_PASS.z1 }, { wall: 'nord', u0: 7.6, u1: 8.4 }],
+  joined: ['ouest', 'nord'],
   windows: () => [
     { wall: 'sud', u0: 5.3, u1: 6.5, y0: 0.95, y1: WIN_HIGH },
     { wall: 'est', u0: 1.25, u1: 2.25, y0: 0.95, y1: WIN_HIGH },

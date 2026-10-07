@@ -38,6 +38,8 @@ const VERBS: Record<string, string[]> = {
   laver: ['lave', 'laver', 'lavez', 'rince', 'rincer', 'debarbouille', 'debarbouiller'],
   asseoir: ['assieds', 'assied', 'assois', 'assoit', 'asseoir', 'assoir', 'assoie', 'rassieds', 'rassois'],
   lever: ['leve', 'lever', 'releve', 'relever', 'debout'],
+  dormir: ['dors', 'dort', 'dormir', 'couche', 'coucher', 'recouche', 'endors', 'endormir', 'sieste', 'roupille', 'roupiller'],
+  reveiller: ['reveille', 'reveiller', 'reveil'],
   mixer: ['mixe', 'mixer', 'mixes', 'mouline'],
   cuire: ['cuis', 'cuit', 'cuire', 'cuisine', 'cuisiner', 'grille', 'griller', 'rechauffe', 'rechauffer', 'chauffe', 'chauffer'],
   allumer: ['allume', 'allumer', 'rallume', 'rallumer', 'lance', 'lancer', 'demarre', 'demarrer', 'active', 'activer'],
@@ -483,6 +485,14 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'lever':
       return [{ kind: 'lever' }];
+    case 'dormir': {
+      // « va dormir », « couche-toi dans le lit », « fais une sieste »
+      const bed = found.find((o) => o.sorte === 'lit');
+      if (found.length && !bed) return null;
+      return [{ kind: 'dormir', ref: bed?.ref }];
+    }
+    case 'reveiller':
+      return [{ kind: 'reveiller' }];
     case 'mixer': {
       // « mixe la pomme », « mixe les quartiers de pomme »
       const fruits = found.filter((o) => FRUITS.includes(o.nom));
@@ -520,6 +530,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'allumer':
     case 'eteindre': {
+      // « allume la lampe de chevet », « éteins la lampe »
+      const lamp = found.find((o) => o.sorte === 'lampe');
+      if (lamp) return [{ kind: verb, ref: lamp.ref }];
       // « allume le four », « lance le lave-vaisselle »
       const app = found.find((o) => o.sorte === 'appareil');
       if (app) return [{ kind: verb, ref: app.ref }];

@@ -85,7 +85,7 @@ export const BATHROOM_SPEC: RoomSpec = {
   rect: BATHROOM,
   floor: () => bathFloor(BATHROOM),
   doors: [{ wall: 'est', u0: BATHROOM_DOOR.z0, u1: BATHROOM_DOOR.z1, leaf: true }],
-  joined: ['sud'],
+  joined: ['sud', 'est'],
   // petite fenêtre haute au fond, au-dessus de rien
   windows: () => [{ wall: 'nord', u0: 2.15, u1: 2.85, y0: 1.45, y1: 2.05 }],
   lamps: () => [{ x: (BATHROOM.x0 + BATHROOM.x1) / 2, z: (BATHROOM.z0 + BATHROOM.z1) / 2, kind: 'suspension', shade: 0xe9eef0 }],

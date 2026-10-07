@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
+import { BEDROOM_ITEMS } from './bedroom';
 import { DISHES } from './recipes';
 import { SALON_ITEMS } from './salon';
 import { BATHROOM_ITEMS } from './bathroom';
@@ -178,6 +179,17 @@ export interface ItemDef {
   board?: boolean;
   /** Couteau : sert à couper sur la planche. */
   knife?: boolean;
+  /**
+   * Lit : on s'y couche pour dormir (la tête à -Z, sur l'oreiller). `top` : dessus du matelas (m),
+   * `length` : longueur du lit. La pièce `couette-dormeur` se montre sur le dormeur, à la place
+   * de la pièce `couette`.
+   */
+  bed?: { top: number; length: number };
+  /**
+   * Lampe qu'on allume d'un clic (lampe de chevet) : la lumière part à `y` (m) au-dessus du pied ;
+   * la pièce `ampoule` brille et la pièce `abat-jour` s'éclaire quand elle est allumée.
+   */
+  lamp?: { y: number; color: THREE.ColorRepresentation; intensity: number; range: number };
   /** Télé : s'allume et s'éteint ; sa pièce `ecran` montre un programme allumée, le `voyant` de veille éteinte. */
   screen?: boolean;
   /** Lavabo : un miroir où se regarder (hauteur de son milieu, m) ; sa pièce `buee` se couvre après la douche. */
@@ -1144,6 +1156,8 @@ export const ITEMS: ItemDef[] = [
   },
   // la cuisine : rangements et appareils (kitchen.ts)
   ...KITCHEN_ITEMS,
+  // la chambre : lit, table de nuit, lampe de chevet, armoire (bedroom.ts)
+  ...BEDROOM_ITEMS,
   // les plats des recettes (recipes.ts)
   ...DISHES,
   // le salon : canapé, table basse, télé (salon.ts)

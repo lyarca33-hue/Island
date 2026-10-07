@@ -41,6 +41,8 @@ const SIT_HIPS_FORWARD = 0.03;
 const SIT_CONTACT = 0.82;
 /** Devant le siège : rayon du perso et un peu de marge (m). */
 const SIT_ROOM = 0.27;
+/** Couché : la tête relevée par l'oreiller (rad). */
+const LIE_TILT = 0.1;
 
 const SIDES_: Side[] = ['right', 'left'];
 /** Vitesse en poussant un gros meuble (m/s). */
@@ -91,6 +93,8 @@ export class Character {
    * Assis (perso du créateur) : on s'assoit (`enter`), on reste assis (`sit`), on se relève
    * (`exit`). `from` : où l'on était avant (hors de la chaise), `at` / `y` : place et hauteur assis.
    */
+  /** Couché dans un lit : où se relever (à côté du lit) et vers où regarder une fois debout. */
+  private bed: { stand: THREE.Vector3; heading: number } | null = null;
   private seat: { phase: 'enter' | 'sit' | 'exit'; t: number; from: THREE.Vector3; at: THREE.Vector3; y: number; yaw: number; up?: () => void; talk: number } | null = null;
   /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
   private approach: { face: THREE.Vector3; then: () => void } | null = null;
@@ -460,7 +464,7 @@ export class Character {
   }
 
   get idle(): boolean {
-    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
+    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && !this.bed && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
   }
 
   update(dt: number, bounds: number): void {
@@ -507,6 +511,12 @@ export class Character {
         } else this.turnLeft = 0;
       }
       this.setGait(moved ? 'walk' : 'idle');
+      this.mixer?.update(dt);
+      this.puppet?.update(dt);
+      return;
+    }
+    if (this.bed) {
+      // couché : on respire (clip de repos) sans bouger ; Game réveille le perso s'il veut bouger
       this.mixer?.update(dt);
       this.puppet?.update(dt);
       return;
@@ -560,6 +570,49 @@ export class Character {
     this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
     this.mixer?.update(dt);
     this.puppet?.update(dt);
+  }
+
+  /** Couché dans un lit. */
+  get lying(): boolean {
+    return !!this.bed;
+  }
+
+  /** Une envie de bouger (touches, clic au sol, objet à prendre) : de quoi sortir du lit. */
+  get wantsToMove(): boolean {
+    return this.move.lengthSq() > 0 || !!this.target || !!this.approach;
+  }
+
+  /**
+   * Se couche sur le dos : les pieds en `feet` (au-dessus du matelas), la tête vers l'avant de
+   * `head` (direction au sol, vers l'oreiller). L'écran est dans le noir pendant ce temps (Game) :
+   * pas d'animation de passage, le perso est posé là. `stand` : où il se relèvera.
+   */
+  lieDown(feet: THREE.Vector3, head: THREE.Vector3, stand: THREE.Vector3): boolean {
+    if (this.busy || this.seat || this.pushing || this.bed) return false;
+    const yaw = Math.atan2(-head.x, -head.z);
+    this.bed = { stand: stand.clone().setY(0), heading: Math.atan2(stand.x - feet.x, stand.z - feet.z) };
+    this.target = null;
+    this.path = [];
+    this.approach = null;
+    this.root.position.copy(feet);
+    // basculé en arrière autour de son axe X (le visage vers le haut, la tête un peu relevée par
+    // l'oreiller), puis tourné comme le lit
+    this.root.rotation.set(-Math.PI / 2 + LIE_TILT, yaw, 0, 'YXZ');
+    this.setGait('idle');
+    return true;
+  }
+
+  /** Sort du lit (l'écran est dans le noir) : debout à côté, puis reprend la marche demandée. */
+  getUp(): boolean {
+    const b = this.bed;
+    if (!b) return false;
+    this.bed = null;
+    const dest = this.path.length ? this.path[this.path.length - 1] : this.target;
+    this.root.position.copy(b.stand);
+    this.heading = b.heading;
+    this.root.rotation.set(0, this.heading, 0, 'XYZ');
+    if (dest) this.setRoute(dest);
+    return true;
   }
 
   /** Peut s'asseoir (perso du créateur, clips pour s'asseoir chargés). */

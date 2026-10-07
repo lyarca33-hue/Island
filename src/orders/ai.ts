@@ -149,7 +149,10 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
 - {"tache": "asseoir", "objet": "<ref>"} : s'asseoir sur un siège (sorte « siège », ex. la chaise ; « objet » facultatif : le plus proche). Assis, le perso peut boire, lire, parler ; il se lève tout seul pour marcher ou prendre un objet
-- {"tache": "lever"} : se lever quand on est assis
+- {"tache": "lever"} : se lever quand on est assis (ou se réveiller quand on dort)
+- {"tache": "dormir", "objet": "<ref>"} : aller se coucher dans le lit et dormir (« objet » facultatif : le lit le plus proche). L'écran passe au noir, le temps file, la fatigue remonte ; le perso se réveille seul une fois reposé. Pas possible si la fatigue est presque pleine
+- {"tache": "reveiller"} : se réveiller et sortir du lit
+- La lampe de chevet (sorte « lampe ») s'allume et s'éteint avec « allumer » / « eteindre »
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
 - {"tache": "manque", "action": "<verbe court, ex. danser>", "sorte": "geste", "objet": "<nom>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore (« sorte » : "geste" si l'objet existe mais pas le geste, ex. laver la tasse ; "objet" si l'objet n'est pas dans la pièce, ex. une casserole ; "autre" sinon. « objet » facultatif : l'objet concerné)
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
@@ -243,6 +246,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'repas': return { kind: 'repas', ref: s('objet') || undefined };
     case 'vaisselle': return { kind: 'vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'lever': return { kind: 'lever' };
+    case 'dormir': return { kind: 'dormir', ref: s('objet') || undefined };
+    case 'reveiller': return { kind: 'reveiller' };
     case 'cuire': return { kind: 'cuire', ref: s('objet') || undefined };
     case 'allumer': return { kind: 'allumer', ref: s('objet') || undefined };
     case 'eteindre': return { kind: 'eteindre', ref: s('objet') || undefined };
