@@ -95,7 +95,7 @@ export async function claudePageChat(): Promise<Chat | null> {
 const SYSTEM = `Tu joues le personnage du joueur dans un petit monde 3D de jeu de rôle. Le joueur te donne un ordre ; tu le réalises en enchaînant les tâches du jeu, une par tour.
 
 Tâches possibles (réponds avec l'une d'elles) :
-- {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable. Le perso a deux mains : un objet par main (ex. la tasse et un livre) ; un livre s'ajoute à la pile de livres tenue (une pile ou une caisse prend les deux mains) ; si les mains sont prises, il pose d'abord ce qu'il faut
+- {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable. Le perso a deux mains : un objet par main (ex. la tasse et un livre) ; un livre s'ajoute à la pile de livres tenue (une pile, une caisse ou une chaise prend les deux mains) ; si les mains sont prises, il pose d'abord ce qu'il faut
 - {"tache": "poser", "objet": "<ref>", "sur": "<ref>"} : poser un objet sur un autre objet ou un meuble (« objet » et « sur » sont facultatifs : sans « objet », ce qu'on tient ; sans « sur », devant soi). Si l'objet n'est pas en main, il est pris d'abord
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)

@@ -52,6 +52,8 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['tasse', 1.07, TABLE_H, 1.28, 0.6],
   ['lettre', 1.34, TABLE_H, 1.05, Math.PI / 3],
   ['caisse', 0.6, 0, -1.9, 0.2],
+  // au bout de la table, tournée vers elle
+  ['chaise', 1.83, 0, 0.77, -Math.PI / 4],
   ['bibliotheque', -1.7, 0, -1.2, Math.PI / 4],
   ['machine-a-cafe', 2.1, 0, -0.8, -Math.PI / 4],
   // l'évier à côté de la machine à café, dos alignés : un coin cuisine
@@ -106,7 +108,7 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'table', 'bibliothèque', 'machine à café']);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café']);
 
 /** Pesanteur des objets lancés (m/s²). */
 const GRAVITY = 9.8;
@@ -174,6 +176,8 @@ export class Game {
   private riders: Array<{ base: WorldItem; item: WorldItem; rel: THREE.Matrix4 }> = [];
   /** Objets tenus à l'image précédente (les objets posés dessus suivent jusqu'à la dépose). */
   private prevHeld: WorldItem[] = [];
+  /** Obstacles pris en compte par les chemins (voir updateNav). */
+  private navKey = '';
   /** Gros meuble en train d'être déplacé, et ce qui est posé ou rangé dedans (suit le meuble). */
   private moving: { item: WorldItem; riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> } | null = null;
   /** Objets lancés en vol, et éclats des objets brisés. */
@@ -377,11 +381,29 @@ export class Game {
     return this.character.idle && !this.brew && !this.washing && !this.flying.length;
   }
 
-  /** Les meubles (objets non portables) à contourner, sauf `skip`. */
+  /** Les obstacles à contourner, sauf `skip`. */
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
-    for (const it of this.items) if (!it.def.portable && it !== skip) nav.add(it.box, it.object.position, it.object.rotation.y);
+    for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(it.box, it.object.position, it.object.rotation.y);
     return nav;
+  }
+
+  /** Obstacle : un meuble, ou un gros objet (porté à deux mains : chaise, caisse) posé au sol. */
+  private isObstacle(it: WorldItem): boolean {
+    if (!it.def.portable) return true;
+    return isTwoHanded(it.grip) && it.object.position.y < 0.05 && !this.character.carried.includes(it) && !this.flying.some((f) => f.item === it);
+  }
+
+  /** Recalcule les chemins quand un obstacle apparaît, disparaît ou bouge (gros objet pris ou posé). */
+  private updateNav(): void {
+    if (this.moving) return;
+    const key = this.items
+      .filter((it) => this.isObstacle(it))
+      .map((it) => `${it.object.id}:${it.object.position.x.toFixed(2)},${it.object.position.z.toFixed(2)}`)
+      .join('|');
+    if (key === this.navKey) return;
+    this.navKey = key;
+    this.character.nav = this.buildNav();
   }
 
   /**
@@ -615,7 +637,7 @@ export class Game {
     }
     item.object.removeFromParent();
     for (const it of above) this.flying.push({ item: it, vel: new THREE.Vector3(), spin: new THREE.Vector3(), bounced: false });
-    if (!item.def.portable) this.character.nav = this.buildNav();
+    if (this.isObstacle(item)) this.character.nav = this.buildNav();
     const name = `${item.name[0].toUpperCase()}${item.name.slice(1)}`;
     const e = FEMININE.has(item.name) ? 'e' : '';
     this.onNotice?.(note ?? (worn ? `${name}, trop usé${e}, s'est brisé${e} !` : `${name} s'est brisé${e} !`));
@@ -1140,13 +1162,22 @@ export class Game {
         if (it === base || out.some((r) => r.item === it)) continue;
         const b = new THREE.Box3().setFromObject(it.object);
         const c = b.getCenter(new THREE.Vector3());
-        if (Math.abs(b.min.y - box.max.y) > 0.03 || c.x < box.min.x || c.x > box.max.x || c.z < box.min.z || c.z > box.max.z) continue;
+        if (c.x < box.min.x || c.x > box.max.x || c.z < box.min.z || c.z > box.max.z) continue;
+        // posé sur le dessus, ou sur une surface plus basse (l'assise d'une chaise, sous le dossier)
+        if (Math.abs(b.min.y - box.max.y) > 0.03 && !this.restsOn(c.setY(b.min.y), under)) continue;
         it.object.updateMatrixWorld(true);
         out.push({ item: it, rel: inv.clone().multiply(it.object.matrixWorld) });
         stack.push(it);
       }
     }
     return out;
+  }
+
+  /** Le point `base` (dessous d'un objet) repose-t-il sur une surface de `under` ? */
+  private restsOn(base: THREE.Vector3, under: WorldItem): boolean {
+    this.raycaster.set(base.clone().setY(base.y + 0.02), new THREE.Vector3(0, -1, 0));
+    const hit = this.raycaster.intersectObject(under.object, true)[0];
+    return !!hit && hit.distance < 0.05;
   }
 
   /** E : reposer l'objet tenu, sinon prendre l'objet portable le plus proche (à 1,5 m). */
@@ -1228,6 +1259,7 @@ export class Game {
     }
     this.riders = this.riders.filter((r) => held.includes(r.base));
     this.prevHeld = held;
+    this.updateNav();
     this.tickBrew(dt);
     this.tickWash(dt);
     this.tickFlying(dt);
