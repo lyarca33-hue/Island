@@ -87,6 +87,11 @@ Fichier : `src/game/items/catalog.ts`. Repère de l'objet : posé au sol, base �
 | `buildOpen` | Se lit : modèle ouvert montré pendant la lecture (pages vers +Z). | non |
 | `fill` | Récipient : hauteur du liquide vide → plein. Il lui faut une pièce nommée `liquide`. | non |
 | `pour` | Machine qui remplit un récipient : `at` (où poser le récipient), `fills` (nom du récipient), `liquid`, `seconds`. Pièce `jet` cachée au repos. | non |
+| `food` | Aliment : `hunger` (faim rendue pour l'objet entier), `bites` (bouchées), `color` (la bouchée sur la fourchette). | non |
+| `dish` | Vaisselle : se salit à l'usage (pièce `sale`, cachée quand propre), se lave à l'évier. | non |
+| `plate` | Assiette : hauteur du fond où l'on sert un aliment. | non |
+| `utensil` | Couvert pour manger dans l'assiette (fourchette) : pièce `bouchee`, point `mouth` au bout. | non |
+| `wash.dishes` | Évier : places au fond de la cuve où poser la vaisselle à laver (une par main). | non |
 | `build()` | Construit le modèle 3D. | obligatoire |
 
 Pour construire le modèle, utiliser les aides `mesh()` et `group()` du fichier : elles donnent un
@@ -257,8 +262,13 @@ Si l'écran est noir en mode sans écran, lancer Chromium avec WebGL logiciel
   remplace la texture (`map`) de chaque pièce par celle de l'usure, ou la retire à l'état neuf.
   Un objet importé (.glb) avec ses propres textures les perdrait : à adapter avant le premier
   import.
-- **Pièces spéciales** : `liquide` (monte avec le niveau, ne s'use pas, ne fait pas d'éclats)
-  et `jet` (écoulement de la machine, caché au repos). Garder ces noms exacts.
+- **Pièces spéciales** : `liquide` (monte avec le niveau, ne s'use pas, ne fait pas d'éclats),
+  `jet` (écoulement de la machine, caché au repos), `sale` (taches de la vaisselle sale) et
+  `bouchee` (au bout de la fourchette). Garder ces noms exacts.
+- **Petits objets à côté d'un support** : ce qui « est posé dessus » se repère avec la boîte
+  alignée sur les axes du support ; une assiette tournée de 45° a une boîte plus large que
+  l'assiette, et emportait les couverts posés à côté. Poser l'assiette sans rotation et les
+  couverts bien à l'écart.
 - **Boîte de l'objet** : taille, prise devinée et hauteur de pose viennent de la boîte de
   `build()`. Une pièce qui dépasse (ou cachée mais présente) fausse tout ; le modèle ouvert
   (`buildOpen`) est ajouté après, il ne compte pas.
