@@ -6,6 +6,7 @@
  * Tous sont posés au sol, l'avant vers +Z, le dos contre le mur (-Z).
  */
 import * as THREE from 'three';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
 
@@ -61,28 +62,21 @@ const TOWEL_W = 0.42;
 const TOWEL_H = 0.46;
 const TOWEL_T = 0.02;
 
-/** Miroir : verre clair, reflet du ciel en haut, deux traits de lumière en biais. */
-function mirrorTexture(): THREE.CanvasTexture {
+/** Bouffée de vapeur : un disque blanc aux bords fondus. */
+let steamTex: THREE.CanvasTexture | null = null;
+function steamTexture(): THREE.CanvasTexture {
+  if (steamTex) return steamTex;
   const cv = document.createElement('canvas');
-  cv.width = 128;
-  cv.height = 160;
+  cv.width = cv.height = 64;
   const g = cv.getContext('2d')!;
-  const gr = g.createLinearGradient(0, 0, 0, 160);
-  gr.addColorStop(0, '#e9f3f7');
-  gr.addColorStop(0.55, '#b9cdd6');
-  gr.addColorStop(1, '#93a9b4');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,0.9)');
+  gr.addColorStop(0.5, 'rgba(255,255,255,0.35)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr;
-  g.fillRect(0, 0, 128, 160);
-  g.fillStyle = 'rgba(255,255,255,0.55)';
-  g.beginPath();
-  g.moveTo(18, 0); g.lineTo(46, 0); g.lineTo(0, 64); g.lineTo(0, 26);
-  g.fill();
-  g.beginPath();
-  g.moveTo(58, 0); g.lineTo(66, 0); g.lineTo(0, 92); g.lineTo(0, 81);
-  g.fill();
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  g.fillRect(0, 0, 64, 64);
+  steamTex = new THREE.CanvasTexture(cv);
+  return steamTex;
 }
 
 export const BATHROOM_ITEMS: ItemDef[] = [
@@ -129,7 +123,8 @@ export const BATHROOM_ITEMS: ItemDef[] = [
       );
       // miroir et sa petite tablette, contre le mur
       const frame = box(MIRROR_W + 0.04, MIRROR_Y1 - MIRROR_Y0 + 0.04, 0.02, 0xe9e1cf, 0, (MIRROR_Y0 + MIRROR_Y1) / 2, -SINK_D / 2 + 0.01);
-      const glass = new THREE.Mesh(new THREE.PlaneGeometry(MIRROR_W, MIRROR_Y1 - MIRROR_Y0), new THREE.MeshBasicMaterial({ map: mirrorTexture() }));
+      // vrai reflet de la pièce (une image de plus à dessiner, petite)
+      const glass = new Reflector(new THREE.PlaneGeometry(MIRROR_W, MIRROR_Y1 - MIRROR_Y0), { textureWidth: 384, textureHeight: 448, color: 0xc9d6dc });
       glass.position.set(0, (MIRROR_Y0 + MIRROR_Y1) / 2, -SINK_D / 2 + 0.022);
       glass.name = 'miroir';
       // buée sur le miroir après la douche (Game.tickBathroom)
@@ -204,10 +199,10 @@ export const BATHROOM_ITEMS: ItemDef[] = [
       const steam = new THREE.Group();
       steam.name = 'vapeur';
       steam.visible = false;
-      const puff = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false });
-      for (let i = 0; i < 8; i++) {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), puff);
-        m.userData.phase = i / 8;
+      const puff = new THREE.SpriteMaterial({ map: steamTexture(), color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
+      for (let i = 0; i < 10; i++) {
+        const m = new THREE.Sprite(puff);
+        m.userData.phase = i / 10;
         steam.add(m);
       }
       g.add(rain, steam);
@@ -245,13 +240,7 @@ export const BATHROOM_ITEMS: ItemDef[] = [
       lid.position.set(0, TOILET_SEAT + 0.005, -0.15);
       const cover = mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.02, 24).scale(1, 1, 1.15), 0xffffff, 0, 0.01, 0.22);
       lid.add(cover);
-      // rouleau de papier, accroché sur le côté
-      const holder = group(
-        box(0.02, 0.02, 0.12, CHROME, 0, 0, 0),
-        mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.1, 16).rotateZ(Math.PI / 2), 0xfbfbf6, 0.06, -0.03, 0.04),
-      );
-      holder.position.set(0.32, 0.7, -0.25);
-      g.add(pool, ring, lid, holder);
+      g.add(pool, ring, lid);
       return g;
     },
   },

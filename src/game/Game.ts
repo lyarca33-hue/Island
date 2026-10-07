@@ -172,6 +172,8 @@ const START_STORED: Array<[string, string, number]> = [
   // deux assiettes de plus, pour recevoir (et empiler)
   ['assiette', 'placard', 0],
   ['assiette', 'placard', 1],
+  // la serviette, étendue sur le porte-serviettes de la salle de bain
+  ['serviette', 'porte-serviettes', 0],
 ];
 
 /** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
@@ -3345,7 +3347,7 @@ export class Game {
       for (const m of steam.children) {
         const k = (m.userData.phase + s.t * 0.22) % 1;
         m.position.set(hx + Math.sin(m.userData.phase * 40) * 0.25, 0.5 + k * 1.7, hz + 0.15 + Math.cos(m.userData.phase * 40) * 0.2);
-        m.scale.setScalar(0.5 + k * 1.2);
+        m.scale.setScalar(0.25 + k * 0.6);
       }
     }
     if (done < 1) return;
