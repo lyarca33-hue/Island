@@ -289,6 +289,9 @@ plan de travail (on y pose ce qu'on tient).
   l'arrête.
 - Vaisselle sale : la machine à café refuse une tasse sale (il faut la laver à l'évier d'abord) ; le
   lave-vaisselle lave tasse, assiette et couverts d'un coup.
+- Grille-pain (posé sur le lave-vaisselle) : tranches de pain en main, clic dessus, elles vont dans
+  la fente ; mains vides, clic : le levier descend et elles ressortent en pain grillé (plus
+  nourrissant). « grille le pain », « fais griller les tartines ». Fiche : `heats.turns`.
 - Bouilloire (posée sur le tiroir) : comme la machine à café, tasse en main, clic dessus ; son
   bouton rouge l'allume, l'eau chauffe, puis le thé coule dans la tasse posée sous le bec. Le thé
   désaltère comme le café et réveille moitié moins. « fais-toi un thé », « bois un thé ».
