@@ -4113,7 +4113,7 @@ export class Game {
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);
     this.updateCamera(dt);
-    this.room.update(dt, this.yaw, c.position, this.clock.hour);
+    this.room.update(dt, this.yaw, c.position, this.clock.hour, this.camera.position.clone().sub(this.focus).normalize());
     this.placeBubble();
     this.motes.update(now / 1000, this.character.position);
     this.post.render();
