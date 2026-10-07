@@ -5,7 +5,7 @@
  */
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { modelUrl } from './catalog';
 
 const files = new Map<string, Promise<ArrayBuffer>>();
@@ -41,7 +41,28 @@ export async function loadVrm(id: string): Promise<VRM> {
   loader.register((parser) => new VRMLoaderPlugin(parser));
   const gltf = await loader.parseAsync(data.slice(0), '');
   const vrm = gltf.userData.vrm as VRM;
+  nameMorphTargets(gltf.scene, gltf.parser);
   // VRM 0.x regarde vers -Z : demi-tour pour faire face à +Z comme X Bot
   VRMUtils.rotateVRM0(vrm);
   return vrm;
+}
+
+/**
+ * Noms des formes du visage (Fcl_EYE_Close...) : VRoid les range dans les « extras » de chaque
+ * primitive, que GLTFLoader ne lit pas (il ne regarde que ceux du maillage). On les ajoute au
+ * dictionnaire des formes, à côté des numéros.
+ */
+function nameMorphTargets(scene: THREE.Object3D, parser: GLTFParser): void {
+  const meshesJson = (parser.json as { meshes?: Array<{ primitives: Array<{ extras?: { targetNames?: string[] } }> }> }).meshes ?? [];
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.morphTargetDictionary) return;
+    const a = parser.associations.get(m) as { meshes?: number; primitives?: number } | undefined;
+    if (a?.meshes === undefined) return;
+    const prims = meshesJson[a.meshes]?.primitives ?? [];
+    const names = prims[a.primitives ?? 0]?.extras?.targetNames ?? prims[0]?.extras?.targetNames;
+    names?.forEach((n, i) => {
+      if (m.morphTargetDictionary![n] === undefined) m.morphTargetDictionary![n] = i;
+    });
+  });
 }

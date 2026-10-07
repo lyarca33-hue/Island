@@ -1,23 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import { MODELS, MODEL_BY_ID, thumbUrl, type Gender } from './catalog';
+import { ACC_COLORS, ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from './accessories';
 import { CreatorScene, type Framing } from './CreatorScene';
 import { EXPRESSIONS } from './expressions';
 import {
-  BODY_RANGE, DEFAULT_BODY, defaultRecipe, EYE_COLORS, HAIR_COLORS, randomRecipe, sanitizeRecipe, SKIN_TONES,
-  type Body, type Recipe,
+  BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, defaultRecipe, EYE_COLORS, HAIR_COLORS, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
+  SKIN_TONES, type Body, type Clothes, type Recipe,
 } from './recipe';
 import { prefetchModel } from './vrm';
 import './creator.css';
 
 const STORAGE_KEY = 'rp-island.recipe';
 
-type PanelTab = 'style' | 'visage' | 'coiffure' | 'corps' | 'couleurs';
+type PanelTab = 'style' | 'visage' | 'coiffure' | 'accessoires' | 'corps' | 'couleurs';
 const TABS: Array<[PanelTab, string]> = [
-  ['style', 'Tenue'], ['visage', 'Visage'], ['coiffure', 'Coiffure'], ['corps', 'Corps'], ['couleurs', 'Couleurs'],
+  ['style', 'Tenue'], ['visage', 'Visage'], ['coiffure', 'Coiffure'], ['accessoires', 'Accessoires'], ['corps', 'Corps'], ['couleurs', 'Couleurs'],
 ];
+
+const CLOTHES: Array<[keyof Clothes, string]> = [['top', 'Haut'], ['bottom', 'Bas'], ['shoes', 'Chaussures']];
 
 const GESTURES: Array<[string, string]> = [
   ['idle', 'Repos'], ['walk', 'Marche'], ['run', 'Course'], ['agree', 'Oui'], ['headShake', 'Non'], ['sad_pose', 'Abattu'], ['sneak_pose', 'Discret'],
+  // poses Quaternius (CC0)
+  ['Walk_Formal_Loop', 'Défilé'], ['Dance_Loop', 'Danse'], ['Idle_Talking_Loop', 'Bavarder'], ['Idle_FoldArms_Loop', 'Bras croisés'],
+  ['Idle_TalkingPhone_Loop', 'Téléphone'], ['Consume', 'Grignoter'], ['Crouch_Idle_Loop', 'Accroupi'], ['Spell_Simple_Idle_Loop', 'Magie'],
 ];
 
 export function loadSavedRecipe(): Recipe | null {
@@ -103,6 +109,19 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
 
   const set = (patch: Partial<Recipe>) => setRecipe((r) => ({ ...r, ...patch }));
   const setBody = (k: keyof Body, v: number) => setRecipe((r) => ({ ...r, body: { ...r.body, [k]: v } }));
+  const setCloth = (k: keyof Clothes, c: string | null) => setRecipe((r) => ({ ...r, clothes: { ...NO_CLOTHES, ...r.clothes, [k]: c } }));
+  const setAcc = (slot: AccSlot, id: string | null, color?: string) =>
+    setRecipe((r) => {
+      const acc = { ...r.accessories };
+      const a = id ? ACCESSORY_BY_ID.get(id) : null;
+      if (a) acc[slot] = { id: a.id, color: color ?? (acc[slot]?.id === a.id ? acc[slot]!.color : a.color) };
+      else delete acc[slot];
+      return { ...r, accessories: acc };
+    });
+  const randomName = () => {
+    const names = NAMES[recipe.gender].filter((n) => n !== recipe.name);
+    set({ name: names[Math.floor(Math.random() * names.length)] });
+  };
   const setGender = (g: Gender) =>
     setRecipe((r) => {
       if (r.gender === g) return r;
@@ -128,7 +147,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
   const same = MODELS.filter((m) => m.gender === recipe.gender);
   const chooseTab = (k: PanelTab) => {
     setTab(k);
-    setFraming(k === 'visage' || k === 'coiffure' ? 'visage' : 'corps');
+    setFraming(k === 'visage' || k === 'coiffure' || k === 'accessoires' ? 'visage' : 'corps');
   };
 
   return (
@@ -137,6 +156,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
       <div className="creator-top">
         <input className="creator-name" value={recipe.name} maxLength={24} aria-label="Nom du personnage"
           onChange={(e) => set({ name: e.target.value })} />
+        <button className="creator-dice" onClick={randomName} title="Prénom au hasard" aria-label="Prénom au hasard">🎲</button>
         <span className="creator-stat">{Math.round(height)} cm{busy ? ' · chargement…' : ''}</span>
       </div>
       <div className="creator-tools">
@@ -204,6 +224,27 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
               <Swatches colors={HAIR_COLORS} value={recipe.hairColor} onChange={(c) => set({ hairColor: c })} />
             </>
           )}
+          {tab === 'accessoires' && (
+            <>
+              {SLOTS.map(([slot, label]) => {
+                const worn = recipe.accessories?.[slot];
+                return (
+                  <div key={slot}>
+                    <h3>{label}</h3>
+                    <div className="chips wrap">
+                      <button className={!worn ? 'on' : ''} onClick={() => setAcc(slot, null)}>Aucun</button>
+                      {ACCESSORIES.filter((a) => a.slot === slot).map((a) => (
+                        <button key={a.id} className={worn?.id === a.id ? 'on' : ''} onClick={() => setAcc(slot, a.id)}>{a.label}</button>
+                      ))}
+                    </div>
+                    {worn && (
+                      <Swatches colors={ACC_COLORS} value={worn.color} onChange={(c) => setAcc(slot, worn.id, c ?? ACCESSORY_BY_ID.get(worn.id)!.color)} />
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
           {tab === 'corps' && (
             <>
               <h3>Proportions</h3>
@@ -222,6 +263,12 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
               <Swatches colors={EYE_COLORS} value={recipe.eyeColor} onChange={(c) => set({ eyeColor: c })} />
               <h3>Cheveux</h3>
               <Swatches colors={HAIR_COLORS} value={recipe.hairColor} onChange={(c) => set({ hairColor: c })} />
+              {CLOTHES.map(([k, label]) => (
+                <div key={k}>
+                  <h3>{label}</h3>
+                  <Swatches colors={CLOTH_COLORS} value={recipe.clothes?.[k] ?? null} onChange={(c) => setCloth(k, c)} />
+                </div>
+              ))}
             </>
           )}
         </div>
