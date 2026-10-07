@@ -1,26 +1,91 @@
-/* Horloge et besoins (en haut à droite, sous les boutons de caméra) */
-.hud-needs {
-  position: absolute; top: 62px; right: 16px; width: 168px; padding: 8px 10px; border-radius: 12px;
-  background: rgba(20, 24, 40, 0.6); font-size: 12px; display: flex; flex-direction: column; gap: 5px; pointer-events: none;
+/* En haut à droite : jauges rondes des besoins, puis l'horloge */
+.hud-status { position: absolute; top: var(--hud-gap); right: var(--hud-gap); display: flex; align-items: center; gap: 10px; }
+.hud-gauges { display: flex; align-items: center; gap: 6px; }
+
+.gauge { position: relative; --c: var(--hud-ok); }
+.gauge.mid { --c: var(--hud-mid); }
+.gauge.low { --c: var(--hud-low); }
+.gauge-ring {
+  position: relative; width: var(--hud-ring); height: var(--hud-ring); padding: 0; border-radius: 50%; display: grid; place-items: center;
+  background: var(--hud-glass); border: 1px solid var(--hud-line); box-shadow: var(--hud-shadow), var(--hud-hi); color: var(--hud-ink); cursor: default;
 }
-.hud-clock { font-size: 13px; margin-bottom: 2px; white-space: nowrap; }
-.hud-clock b { font-variant-numeric: tabular-nums; }
-.need { display: flex; flex-direction: column; gap: 2px; }
-.need-label { opacity: 0.9; }
-.need-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
-.need-fill { display: block; height: 100%; border-radius: 3px; transition: width 0.25s linear; }
-.need-fill.ok { background: #8fd16a; }
-.need-fill.mid { background: #f0c25a; }
-.need-fill.low { background: #e8664f; }
-.need-fill.health { background: #e04a5f; }
-.need-health { padding-bottom: 5px; margin-bottom: 1px; border-bottom: 1px solid rgba(255, 240, 210, 0.15); }
-.need-health .need-bar { height: 8px; }
-@media (max-width: 520px) {
-  .hud-needs { width: 128px; font-size: 11px; }
+.gauge-ring:hover, .gauge-ring[aria-expanded='true'] { background: var(--hud-glass-strong); border-color: var(--hud-line-strong); }
+.gauge-ring:focus-visible { outline: 2px solid var(--hud-honey); outline-offset: 2px; }
+.gauge-ring > svg:not(.gauge-track) { position: relative; }
+.gauge-track { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); transform: rotate(-90deg); }
+.gauge-track circle { fill: none; stroke-width: 2.8; }
+.gauge-bg { stroke: rgba(255, 240, 215, 0.13); }
+.gauge-fill { stroke: var(--c); stroke-linecap: round; transition: stroke-dasharray 0.3s linear, stroke 0.3s; }
+.gauge.low .gauge-ring { color: #ffd6cb; animation: gauge-pulse 1.8s ease-in-out infinite; }
+@keyframes gauge-pulse {
+  0%, 100% { box-shadow: var(--hud-shadow), 0 0 0 1px rgba(242, 121, 91, 0.35), 0 0 8px rgba(242, 121, 91, 0.25); }
+  50% { box-shadow: var(--hud-shadow), 0 0 0 1px rgba(242, 121, 91, 0.55), 0 0 16px rgba(242, 121, 91, 0.5); }
+}
+.gauge-trend {
+  position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center;
+  background: #2b1f17; border: 1px solid var(--hud-line-strong);
+}
+.gauge-trend svg { stroke-width: 3; }
+.gauge-trend.up { color: var(--hud-up); }
+.gauge-trend.fast { color: var(--hud-low); }
+/* une jauge presque vide dit sa valeur, sans attendre le survol */
+.gauge-low {
+  position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 999px;
+  background: var(--hud-glass-strong); border: 1px solid rgba(242, 121, 91, 0.45); color: #ffc2b2;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+
+/* Détail au survol : valeur, tendance, prévision, et ce qui la fait remonter */
+.gauge-tip {
+  position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%); z-index: 30; box-sizing: border-box; width: 240px; padding: 10px 12px 11px;
+  border-radius: 12px; background: var(--hud-glass-strong); border: 1px solid var(--hud-line-strong); box-shadow: var(--hud-shadow), var(--hud-hi);
+  font-size: 12.5px; pointer-events: none; animation: hud-pop 0.14s ease-out both;
+}
+.gauge-tip::before {
+  content: ''; position: absolute; top: -6px; left: 50%; width: 10px; height: 10px; margin-left: -5px; transform: rotate(45deg);
+  background: #30231b; border-left: 1px solid var(--hud-line-strong); border-top: 1px solid var(--hud-line-strong);
+}
+.gauge-tip-head { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.gauge-tip-head b { font-weight: 600; }
+.gauge-tip-value { margin-left: auto; color: var(--c); font-weight: 700; font-variant-numeric: tabular-nums; }
+.gauge.ok .gauge-tip-value { color: var(--hud-ink); }
+.gauge-tip-bar { margin: 8px 0 9px; height: 4px; border-radius: 2px; background: rgba(255, 240, 215, 0.12); overflow: hidden; }
+.gauge-tip-bar span { display: block; height: 100%; border-radius: 2px; background: var(--c); }
+.gauge-tip-row { display: flex; align-items: center; gap: 7px; color: var(--hud-ink-2); line-height: 1.3; }
+.gauge-tip-row + .gauge-tip-row { margin-top: 5px; }
+.gauge-tip-row svg { flex: none; }
+.gauge-tip-row strong { color: var(--hud-ink); font-weight: 600; }
+.gauge-tip-row.up { color: var(--hud-up); }
+.gauge-tip-row.fast { color: #ffb4a2; }
+.gauge-tip-hint { padding-top: 6px; border-top: 1px solid rgba(255, 226, 186, 0.1); color: var(--hud-honey); }
+
+/* Horloge : soleil ou lune, l'heure, le jour ; un clic ouvre le réglage de l'heure */
+.hud-clock {
+  height: var(--hud-bar); display: flex; align-items: center; gap: 7px; padding: 0 13px 0 4px; border-radius: 999px; white-space: nowrap;
+  background: var(--hud-glass); border: 1px solid var(--hud-line); box-shadow: var(--hud-shadow), var(--hud-hi);
+  color: var(--hud-ink); font: inherit; cursor: pointer;
+}
+.hud-clock:hover { background: var(--hud-glass-strong); }
+.hud-clock b { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.hud-sky {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #7a4512;
+  background: radial-gradient(circle at 35% 30%, #ffe9b3, #f7c160 55%, #e59a3a);
+  box-shadow: inset 0 -2px 3px rgba(120, 60, 10, 0.25);
+}
+.hud-sky.night { color: #fbe7a8; background: radial-gradient(circle at 35% 30%, #8d8cd2, #4c4b93 60%, #2d2c5c); box-shadow: inset 0 -2px 3px rgba(0, 0, 20, 0.35); }
+.hud-paused { color: var(--hud-honey); }
+.hud-day { display: flex; align-items: center; gap: 6px; color: var(--hud-ink-2); font-size: 12.5px; }
+.hud-day::before { content: ''; width: 3px; height: 3px; border-radius: 50%; background: var(--hud-ink-3); }
+
+@media (max-width: 560px) {
+  /* téléphone : l'horloge en face du menu, les jauges dessous */
+  .hud-status { flex-direction: column-reverse; align-items: flex-end; gap: 8px; }
+  .hud-gauges .gauge:nth-last-child(-n + 2) .gauge-tip { left: auto; right: -4px; transform: none; animation-name: hud-rise; }
+  .hud-gauges .gauge:nth-last-child(-n + 2) .gauge-tip::before { left: auto; right: calc(var(--hud-ring) / 2 + 4px - 5px); margin-left: 0; }
 }
 
 /* Réglage de l'heure (menu) */
-.time-controls input[type='range'] { width: 100%; padding: 0; border: none; background: none; accent-color: #f0c25a; }
+.time-controls input[type='range'] { width: 100%; padding: 0; border: none; background: none; accent-color: var(--hud-honey); }
 .time-speeds { display: flex; gap: 6px; }
 .time-speeds button { flex: 1; }
-.time-speeds button.active { background: rgba(255, 196, 110, 0.3); border-color: rgba(255, 196, 110, 0.7); }
+.time-speeds button.active { background: rgba(245, 190, 91, 0.22); border-color: rgba(245, 190, 91, 0.6); color: #ffe2a8; }
