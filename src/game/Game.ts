@@ -568,7 +568,7 @@ export class Game {
   /** Les obstacles à contourner, sauf `skip`. */
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
-    for (const o of this.room.obstacles) nav.add(o.box, o.pos, o.yaw);
+    for (const o of this.room.obstacles) nav.add(o.box, o.pos, o.yaw, o.wall);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(it.box, it.object.position, it.object.rotation.y);
     return nav;
   }

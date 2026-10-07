@@ -163,7 +163,7 @@ export type Anchors = (id: string) => THREE.Vector3 | undefined;
 export class Room {
   readonly group = new THREE.Group();
   /** Morceaux de mur pleins (et meuble d'angle) que le perso contourne : boîte, position, rotation. */
-  readonly obstacles: Array<{ box: THREE.Box3; pos: THREE.Vector3; yaw: number }> = [];
+  readonly obstacles: Array<{ box: THREE.Box3; pos: THREE.Vector3; yaw: number; wall: boolean }> = [];
   private walls: Wall[] = [];
   private door: THREE.Group;
   private doorOpen = 0;
@@ -314,7 +314,7 @@ export class Room {
     corner.position.set(x0 + 0.3, 0, z0 + 0.3);
     corner.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
     this.group.add(corner);
-    this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.31, 0, -0.31), new THREE.Vector3(0.31, COUNTER_H, 0.31)), pos: corner.position.clone(), yaw: 0 });
+    this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.31, 0, -0.31), new THREE.Vector3(0.31, COUNTER_H, 0.31)), pos: corner.position.clone(), yaw: 0, wall: false });
 
     // tapis sous la table et sa chaise
     if (tableAt) this.group.add(box(2, 0.01, 2.1, toon(0xb04a3c), tableAt.x, 0.008, tableAt.z - 0.45, false), box(1.8, 0.012, 1.9, toon(0xd8b07a), tableAt.x, 0.009, tableAt.z - 0.45, false));
@@ -376,7 +376,7 @@ export class Room {
       const len = e - s;
       const half = alongX ? new THREE.Vector3(len / 2, WALL_H / 2, WALL_T / 2) : new THREE.Vector3(WALL_T / 2, WALL_H / 2, len / 2);
       const pos = alongX ? new THREE.Vector3((s + e) / 2, 0, c) : new THREE.Vector3(c, 0, (s + e) / 2);
-      this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-half.x, 0, -half.z), new THREE.Vector3(half.x, WALL_H, half.z)), pos, yaw: 0 });
+      this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-half.x, 0, -half.z), new THREE.Vector3(half.x, WALL_H, half.z)), pos, yaw: 0, wall: true });
     }
     low.visible = false;
     this.group.add(full, low);
