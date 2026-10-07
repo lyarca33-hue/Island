@@ -27,7 +27,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
-  const [can, setCan] = useState<HandActions>({ drink: false, eat: false, throw: false, moving: false, read: false, reading: false });
+  const [can, setCan] = useState<HandActions>({ drink: false, eat: false, throw: false, moving: false, read: false, reading: false, seated: false });
   const [notice, setNotice] = useState<string | null>(null);
   /** Objet sous la souris : sa jauge de durabilité. */
   const [hover, setHover] = useState<{ name: string; grade: string; condition: number; x: number; y: number } | null>(null);
@@ -126,11 +126,23 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
               <b>Lancer (T)</b>
             </button>
           )}
+          {can.seated && (
+            <button onClick={() => game.current?.standUp()}>
+              <b>Se lever (C)</b>
+            </button>
+          )}
           {(can.read || can.reading) && (
             <button onClick={() => (can.reading ? game.current?.stopReading() : game.current?.read())}>
               <b>{can.reading ? 'Fermer le livre (L)' : 'Lire (L)'}</b>
             </button>
           )}
+        </div>
+      )}
+      {!held && can.seated && (
+        <div className="hud-held">
+          <button onClick={() => game.current?.standUp()}>
+            Assis · <b>Se lever (C)</b>
+          </button>
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}

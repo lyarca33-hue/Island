@@ -95,17 +95,21 @@ export async function claudePageChat(): Promise<Chat | null> {
 const SYSTEM = `Tu joues le personnage du joueur dans un petit monde 3D de jeu de rôle. Le joueur te donne un ordre ; tu le réalises en enchaînant les tâches du jeu, une par tour.
 
 Tâches possibles (réponds avec l'une d'elles) :
-- {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable. Le perso a deux mains : un objet par main (ex. la tasse et un livre) ; un livre s'ajoute à la pile de livres tenue (une pile ou une caisse prend les deux mains) ; si les mains sont prises, il pose d'abord ce qu'il faut
+- {"tache": "prendre", "objet": "<ref>"} : aller prendre un objet portable. Le perso a deux mains : un objet par main (ex. la tasse et un livre) ; un livre s'ajoute à la pile de livres tenue (une pile, une caisse ou une chaise prend les deux mains) ; si les mains sont prises, il pose d'abord ce qu'il faut
 - {"tache": "poser", "objet": "<ref>", "sur": "<ref>"} : poser un objet sur un autre objet ou un meuble (« objet » et « sur » sont facultatifs : sans « objet », ce qu'on tient ; sans « sur », devant soi). Si l'objet n'est pas en main, il est pris d'abord
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
 - {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
-- {"tache": "boire", "objet": "<ref>"} : boire une gorgée (« objet » facultatif : la bouteille d'eau, la tasse… ; sans objet, la tasse, avec un café fait d'abord si elle est vide)
+- {"tache": "boire", "objet": "<ref>", "liquide": "eau"} : boire une gorgée (« objet » facultatif : une bouteille d'eau du frigo, la tasse… ; sans objet, la tasse ; « liquide » facultatif, "eau" ou "café" : si la tasse est vide, elle est d'abord remplie, de café par défaut). Boire fait baisser la soif
+- {"tache": "eau"} : remplir la tasse d'eau à l'évier (prend la tasse si besoin)
+- {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier, pomme ou sandwich (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "mettre", "objet": "<ref>", "dans": "<ref du frigo>"} : ranger dans le frigo une bouteille, une pomme ou un sandwich (« objet » facultatif : ce qu'on tient)
 - {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte du frigo
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
+- {"tache": "asseoir", "objet": "<ref>"} : s'asseoir sur un siège (sorte « siège », ex. la chaise ; « objet » facultatif : le plus proche). Assis, le perso peut boire, lire, parler ; il se lève tout seul pour marcher ou prendre un objet
+- {"tache": "lever"} : se lever quand on est assis
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
 - {"tache": "manque", "action": "<verbe court, ex. danser>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
@@ -113,7 +117,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
 Pour prendre plusieurs livres, enchaîne plusieurs « prendre » (6 livres au plus en pile).
 Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
-Si l'ordre demande une action que les tâches ne permettent pas (danser, s'asseoir, cuisiner…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
+Si l'ordre demande une action que les tâches ne permettent pas (danser, dormir, cuisiner…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour. Une seule tâche par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
 
@@ -154,13 +158,17 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'aller': return s('objet') ? { kind: 'aller', ref: s('objet') } : null;
     case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
     case 'cafe': return { kind: 'cafe' };
-    case 'boire': return { kind: 'boire', ref: s('objet') || undefined };
+    case 'boire': return { kind: 'boire', ref: s('objet') || undefined, liquide: s('liquide') === 'eau' ? 'eau' : s('liquide') === 'café' || s('liquide') === 'cafe' ? 'café' : undefined };
+    case 'eau': return { kind: 'eau' };
+    case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'mettre': return s('dans') ? { kind: 'mettre', ref: s('objet') || undefined, dans: s('dans') } : null;
     case 'ouvrir': return s('objet') ? { kind: 'ouvrir', ref: s('objet') } : null;
     case 'fermer': return s('objet') ? { kind: 'fermer', ref: s('objet') } : null;
     case 'lire': return { kind: 'lire', ref: s('objet') || undefined };
     case 'arreter_lire': return { kind: 'arreter_lire' };
+    case 'asseoir': return { kind: 'asseoir', ref: s('objet') || undefined };
+    case 'lever': return { kind: 'lever' };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
     case 'manque': return s('action') || s('raison') ? 'manque' : null;

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { clearMissing, groupMissing, KIND_LABEL, missingList, missingReport, onMissingChange } from '../orders/missing';
+import { clearMissing, groupMissing, KIND_LABEL, missingList, missingReport, noteKnownMissing, onMissingChange } from '../orders/missing';
+
+noteKnownMissing();
 
 /** Nombre de manques notés, tenu à jour (titre de la section du menu). */
 export function useMissingCount(): number {

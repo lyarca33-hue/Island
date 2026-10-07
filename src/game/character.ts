@@ -33,6 +33,15 @@ const PALETTE: Record<string, THREE.ColorRepresentation> = {
 
 type Gait = 'idle' | 'walk' | 'run';
 
+/** Clips pour s'asseoir (Quaternius, voir creator/source.ts). */
+const SIT = { enter: 'Sitting_Enter', idle: 'Sitting_Idle_Loop', talk: 'Sitting_Talking_Loop', exit: 'Sitting_Exit' };
+/** Le bassin finit un peu en avant du milieu de l'assise (m). */
+const SIT_HIPS_FORWARD = 0.03;
+/** Hauteur de l'assise dans le clip, en part de la hauteur du bassin assis. */
+const SIT_CONTACT = 0.82;
+/** Devant le siège : rayon du perso et un peu de marge (m). */
+const SIT_ROOM = 0.27;
+
 const SIDES_: Side[] = ['right', 'left'];
 /** Vitesse en poussant un gros meuble (m/s). */
 const PUSH_SPEED = 0.9;
@@ -67,6 +76,13 @@ export class Character {
   private pushing: { move(step: THREE.Vector3): boolean } | null = null;
   /** Agripper toujours voulu (faux si lâché avant d'avoir posé les mains). */
   private pushWanted = false;
+  /** Mains sous le robinet (en train de se laver) : le perso reste sur place. */
+  washing = false;
+  /**
+   * Assis (perso du créateur) : on s'assoit (`enter`), on reste assis (`sit`), on se relève
+   * (`exit`). `from` : où l'on était avant (hors de la chaise), `at` / `y` : place et hauteur assis.
+   */
+  private seat: { phase: 'enter' | 'sit' | 'exit'; t: number; from: THREE.Vector3; at: THREE.Vector3; y: number; yaw: number; up?: () => void; talk: number } | null = null;
   /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
   private approach: { face: THREE.Vector3; then: () => void } | null = null;
 
@@ -316,6 +332,29 @@ export class Character {
     return true;
   }
 
+  /**
+   * Va se placer en `stand` face à l'évier, met les mains sous le robinet aux points `at()` ;
+   * `face` : fait aussi sa toilette (de l'eau au visage). `onReady` une fois les mains sous l'eau.
+   * Le perso ne bouge plus jusqu'à stopWash().
+   */
+  startWash(stand: THREE.Vector3, face: THREE.Vector3, at: () => Record<Side, THREE.Vector3>, toilette: boolean, onReady: () => void, running = false): boolean {
+    const c = this.carries;
+    if (!c || c.right.held || c.left.held || this.busy || this.bracing) return false;
+    this.approachThen(stand, face, () => {
+      if (c.right.brace(at, onReady, 'wash', toilette)) this.washing = true;
+    }, running);
+    return true;
+  }
+
+  /** Retire les mains de sous le robinet ; `onDone` une fois les bras revenus. */
+  stopWash(onDone?: () => void): boolean {
+    if (!this.carries || !this.washing) return false;
+    return this.carries.right.unbrace(() => {
+      this.washing = false;
+      onDone?.();
+    });
+  }
+
   /** Lâche le meuble (ou renonce à l'agripper) ; `onDone` une fois les bras revenus. */
   stopPush(onDone?: () => void): boolean {
     if (!this.carries) return false;
@@ -360,7 +399,7 @@ export class Character {
   }
 
   get idle(): boolean {
-    return !this.target && !this.approach && !this.busy && this.move.lengthSq() === 0;
+    return !this.target && !this.approach && !this.busy && !this.washing && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
   }
 
   update(dt: number, bounds: number): void {
@@ -381,9 +420,14 @@ export class Character {
       this.puppet?.update(dt);
       return;
     }
+    if (this.seat) {
+      this.updateSeat(dt);
+      this.puppet?.update(dt);
+      return;
+    }
     const dir = new THREE.Vector3();
-    if (this.busy) {
-      // pendant une saisie ou une dépose, le perso reste sur place
+    if (this.busy || this.washing) {
+      // pendant une saisie, une dépose ou quand il se lave, le perso reste sur place
     } else if (this.move.lengthSq() > 0) dir.copy(this.move).normalize();
     else if (this.target) {
       dir.subVectors(this.target, this.root.position).setY(0);
@@ -425,6 +469,114 @@ export class Character {
     this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
     this.mixer?.update(dt);
     this.puppet?.update(dt);
+  }
+
+  /** Peut s'asseoir (perso du créateur, clips pour s'asseoir chargés). */
+  get canSit(): boolean {
+    return !!this.puppet && this.puppet.clipDuration(SIT.enter) > 0;
+  }
+
+  /** Assis (ou en train de s'asseoir / se relever). */
+  get seated(): boolean {
+    return !!this.seat;
+  }
+
+  /**
+   * Va s'asseoir sur un siège : `seat` est le milieu de l'assise (au sol), `forward` l'avant du
+   * siège, `height` la hauteur de l'assise, `depth` sa profondeur. Rend « place » s'il n'y a pas
+   * la place de se mettre devant. Le perso se place devant, dos au siège, et s'assoit
+   * (le clip le fait reculer et descendre : on le place pour que le bassin finisse sur l'assise).
+   */
+  sitOn(seat: THREE.Vector3, forward: THREE.Vector3, height: number, depth: number, onSeated?: () => void, running = false): 'ok' | 'place' | 'non' {
+    const motion = this.puppet?.hipsMotion(SIT.enter);
+    if (!this.canSit || !motion || this.busy) return 'non';
+    const fwd = forward.clone().setY(0).normalize();
+    const yaw = Math.atan2(fwd.x, fwd.z);
+    // déplacement du bassin pendant le clip, tourné comme le perso une fois en place
+    const shift = motion.shift.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).setY(0);
+    const at = seat.clone().setY(0).addScaledVector(fwd, SIT_HIPS_FORWARD).sub(shift);
+    // bassin assis : à une hauteur d'assise du clip au-dessus du siège
+    const y = height - motion.endY * SIT_CONTACT;
+    // on arrive devant le siège (hors de son rectangle de contournement), il faut de la place
+    const stand = seat.clone().setY(0).addScaledVector(fwd, depth / 2 + SIT_ROOM);
+    if (this.nav?.blocked(stand)) return 'place';
+    this.approachThen(stand, stand.clone().add(fwd), () => {
+      this.seat = { phase: 'enter', t: 0, from: this.root.position.clone(), at, y, yaw, talk: 0 };
+      this.setGait('idle');
+      this.puppet!.play(SIT.enter, 0.2, true);
+      this.onSeated = onSeated ?? null;
+    }, running);
+    return 'ok';
+  }
+
+  private onSeated: (() => void) | null = null;
+
+  /** Se relève (puis `then`) ; faux si pas assis. */
+  standUp(then?: () => void): boolean {
+    const s = this.seat;
+    if (!s) return false;
+    s.up = then;
+    if (s.phase === 'sit') this.startExit();
+    return true;
+  }
+
+  /** Parle (assis : gestes de la conversation pendant `seconds`). */
+  talk(seconds: number): void {
+    if (this.seat?.phase !== 'sit') return;
+    if (this.seat.talk <= 0) this.puppet?.play(SIT.talk, 0.3);
+    this.seat.talk = seconds;
+  }
+
+  private startExit(): void {
+    const s = this.seat!;
+    s.phase = 'exit';
+    s.t = 0;
+    this.puppet?.play(SIT.exit, 0.2, true);
+  }
+
+  private updateSeat(dt: number): void {
+    const s = this.seat!;
+    s.t += dt;
+    const pos = this.root.position;
+    const ease = (x: number) => x * x * (3 - 2 * x);
+    const span = (a: number, b: number, d: number) => ease(THREE.MathUtils.clamp((s.t / d - a) / (b - a), 0, 1));
+    if (s.phase === 'enter') {
+      const d = this.puppet!.clipDuration(SIT.enter);
+      // on recule jusqu'à sa place pendant qu'on plie les genoux, puis on descend sur l'assise
+      pos.lerpVectors(s.from, s.at, span(0, 0.5, d));
+      pos.y = s.y * span(0.4, 1, d);
+      let delta = s.yaw - this.heading;
+      delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+      this.heading += delta * Math.min(1, dt * TURN_RATE * 0.6);
+      this.root.rotation.y = this.heading;
+      if (s.t >= d) {
+        s.phase = 'sit';
+        s.t = 0;
+        this.puppet!.play(SIT.idle, 0.3);
+        const cb = this.onSeated;
+        this.onSeated = null;
+        cb?.();
+        if (s.up) this.startExit();
+      }
+    } else if (s.phase === 'sit') {
+      if (s.talk > 0) {
+        s.talk -= dt;
+        if (s.talk <= 0) this.puppet!.play(SIT.idle, 0.4);
+      }
+      // une envie de bouger (touches, clic, objet à prendre) : on se relève d'abord
+      if (this.move.lengthSq() > 0 || this.target || this.approach) this.startExit();
+    } else {
+      const d = this.puppet!.clipDuration(SIT.exit);
+      pos.y = s.y * (1 - span(0, 0.6, d));
+      pos.lerpVectors(s.at, s.from, span(0.4, 1, d)).setY(pos.y);
+      if (s.t >= d) {
+        pos.copy(s.from).setY(0);
+        this.seat = null;
+        this.gait = 'idle';
+        this.puppet!.play('idle', 0.25);
+        s.up?.();
+      }
+    }
   }
 
   /** Expression du visage (perso du créateur seulement) : neutre, sourire, triste... */

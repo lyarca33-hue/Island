@@ -13,7 +13,7 @@ import { applySky, GameClock } from './clock';
 import { createGround, GROUND_HALF } from './ground';
 import { breakChance, Debris } from './items/breakage';
 import { gradeName } from './items/durability';
-import { LAY_FLAT, WorldItem } from './items/carry';
+import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
@@ -44,6 +44,13 @@ const WATER_EXTRA = 15;
 const DOOR_TIME = 0.6;
 const DOOR_AUTOCLOSE = 1.8;
 
+/**
+ * Se laver à l'évier : durée (s, mains sous l'eau) et hygiène rendue. Les mains : un petit plus ;
+ * la toilette au lavabo (visage, mains, trois tours) : un vrai regain, sans valoir une douche.
+ */
+const WASH_HANDS = { seconds: 3, hygiene: 12 };
+const WASH_FACE = { seconds: 3 * SPLASH_CYCLE, hygiene: 40 };
+
 /** Objets de test posés autour du point de départ : [id, x, y, z, rotation (rad)]. */
 const START_ITEMS: Array<[string, number, number, number, number]> = [
   // table côté caméra : le perso lui fait face en prenant la tasse ou la lettre
@@ -51,8 +58,12 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['tasse', 1.07, TABLE_H, 1.28, 0.6],
   ['lettre', 1.34, TABLE_H, 1.05, Math.PI / 3],
   ['caisse', 0.6, 0, -1.9, 0.2],
+  // près de la bibliothèque, tournée vers la pièce : le coin lecture
+  ['chaise', -0.71, 0, -1.48, Math.PI / 4],
   ['bibliotheque', -1.7, 0, -1.2, Math.PI / 4],
   ['machine-a-cafe', 2.1, 0, -0.8, -Math.PI / 4],
+  // l'évier à côté de la machine à café, dos alignés : un coin cuisine
+  ['evier', 2.56, 0, -0.24, -Math.PI / 4],
   // à côté de la machine à café, la porte vers la pièce
   ['frigo', 2.75, 0, -1.75, Math.PI / 4 - 0.45],
 ];
@@ -78,6 +89,17 @@ const WEAR_GRAB = 0.3;
 const WEAR_BREW = { machine: 1.5, cup: 0.5 };
 /** Usure de la porte (frigo) à chaque ouverture. */
 const WEAR_DOOR = 0.4;
+/** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
+const WEAR_TAP = 0.4;
+
+/** « le café », « l'eau » ; « de café », « d'eau » ; « du café », « de l'eau ». */
+const elides = (w: string) => /^[aeiouyéèêh]/i.test(w);
+const theLiquid = (w: string) => (elides(w) ? `l’${w}` : `le ${w}`);
+const ofLiquid = (w: string) => (elides(w) ? `d’${w}` : `de ${w}`);
+const someLiquid = (w: string) => (elides(w) ? `de l’${w}` : `du ${w}`);
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+/** Usure d'un siège chaque fois qu'on s'y assoit. */
+const WEAR_SIT = 0.5;
 
 /** Livres de départ : rangés dans la bibliothèque (place) ou posés à plat ([x, y, z, rotation]). */
 const START_BOOKS: Array<[string, number | [number, number, number, number]]> = [
@@ -98,8 +120,8 @@ export interface WorldObject {
   portable: boolean;
   /** Se porte à deux mains (caisse). */
   deuxMains?: boolean;
-  /** Meuble de rangement, frigo, machine (à café), récipient (tasse, bouteille) ou nourriture. */
-  sorte?: 'rangement' | 'frigo' | 'machine' | 'récipient' | 'nourriture';
+  /** Meuble de rangement, frigo, machine (à café), évier (eau, se laver), récipient (tasse, bouteille), nourriture ou siège (chaise). */
+  sorte?: 'rangement' | 'frigo' | 'machine' | 'évier' | 'récipient' | 'nourriture' | 'siège';
   ou: string;
   /** Grade d'usure et durabilité restante (« usé (52 %) »). */
   etat: string;
@@ -107,7 +129,7 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme']);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme']);
 
 /** Pesanteur des objets lancés (m/s²). */
 const GRAVITY = 9.8;
@@ -136,6 +158,8 @@ export interface HandActions {
   moving: boolean;
   read: boolean;
   reading: boolean;
+  /** Assis : on peut se lever. */
+  seated: boolean;
 }
 
 export class Game {
@@ -177,6 +201,8 @@ export class Game {
   private riders: Array<{ base: WorldItem; item: WorldItem; rel: THREE.Matrix4 }> = [];
   /** Objets tenus à l'image précédente (les objets posés dessus suivent jusqu'à la dépose). */
   private prevHeld: WorldItem[] = [];
+  /** Obstacles pris en compte par les chemins (voir updateNav). */
+  private navKey = '';
   /** Gros meuble en train d'être déplacé, et ce qui est posé ou rangé dedans (suit le meuble). */
   private moving: { item: WorldItem; riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> } | null = null;
   /** Objets lancés en vol, et éclats des objets brisés. */
@@ -188,6 +214,8 @@ export class Game {
   private doors = new Map<WorldItem, { open: number; target: 0 | 1; then: (() => void) | null }>();
   /** Part de chaque aliment tenu à l'image précédente : ce qui a été mangé depuis. */
   private lastBite = new Map<WorldItem, number>();
+  /** En train de se laver à l'évier : temps écoulé, durée, hygiène rendue en tout. */
+  private washing: { sink: WorldItem; t: number; seconds: number; hygiene: number; face: boolean } | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
   /** Objet sous la souris (nom, grade, durabilité de 0 à 1, position à l'écran), ou null. */
@@ -331,6 +359,8 @@ export class Game {
     const held = name ? this.character.heldItems.find((i) => i.name === name) : this.character.held;
     if (!held) return false;
     if (this.closeBookThen(() => this.drop(name))) return true;
+    // assis : on se lève d'abord pour poser
+    if (this.character.seated) return this.character.standUp(() => this.drop(name));
     const spot = this.character.dropSpot(held);
     if (!spot) return false;
     this.raycaster.set(new THREE.Vector3(spot.x, 3, spot.z), new THREE.Vector3(0, -1, 0));
@@ -384,18 +414,37 @@ export class Game {
     this.bubble.hidden = false;
     this.bubbleUntil = performance.now() + 2500 + text.length * 70;
     this.placeBubble();
+    this.character.talk((2500 + text.length * 70) / 1000);
   }
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    return this.character.idle && !this.brew && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.brew && !this.washing && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
-  /** Les meubles (objets non portables) à contourner, sauf `skip`. */
+  /** Les obstacles à contourner, sauf `skip`. */
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
-    for (const it of this.items) if (!it.def.portable && it !== skip) nav.add(it.box, it.object.position, it.object.rotation.y);
+    for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(it.box, it.object.position, it.object.rotation.y);
     return nav;
+  }
+
+  /** Obstacle : un meuble, ou un gros objet (porté à deux mains : chaise, caisse) posé au sol. */
+  private isObstacle(it: WorldItem): boolean {
+    if (!it.def.portable) return true;
+    return isTwoHanded(it.grip) && it.object.position.y < 0.05 && !this.character.carried.includes(it) && !this.flying.some((f) => f.item === it);
+  }
+
+  /** Recalcule les chemins quand un obstacle apparaît, disparaît ou bouge (gros objet pris ou posé). */
+  private updateNav(): void {
+    if (this.moving) return;
+    const key = this.items
+      .filter((it) => this.isObstacle(it))
+      .map((it) => `${it.object.id}:${it.object.position.x.toFixed(2)},${it.object.position.z.toFixed(2)}`)
+      .join('|');
+    if (key === this.navKey) return;
+    this.navKey = key;
+    this.character.nav = this.buildNav();
   }
 
   /**
@@ -444,7 +493,7 @@ export class Game {
       return false;
     }
     if (this.brew?.machine === item) {
-      this.onNotice?.(`Le ${item.def.pour!.liquid} coule encore.`);
+      this.onNotice?.(`${cap(theLiquid(item.def.pour!.liquid))} coule encore.`);
       return false;
     }
     // on referme la porte avant de pousser
@@ -635,7 +684,7 @@ export class Game {
     }
     item.object.removeFromParent();
     for (const it of above) this.flying.push({ item: it, vel: new THREE.Vector3(), spin: new THREE.Vector3(), bounced: false });
-    if (!item.def.portable) this.character.nav = this.buildNav();
+    if (this.isObstacle(item)) this.character.nav = this.buildNav();
     const name = `${item.name[0].toUpperCase()}${item.name.slice(1)}`;
     const e = FEMININE.has(item.name) ? 'e' : '';
     const broke = item.def.breakWord ?? 'brisé';
@@ -744,19 +793,21 @@ export class Game {
         const under = this.items.find((o) => o !== item && !carried.includes(o) && o.object.position.y < item.object.position.y && this.isAbove(item, o));
         ou = under ? `posé sur ${this.ref(under)}` : 'posé en hauteur';
       }
-      if (item === this.brew?.cup) ou += ' (le café coule dedans)';
+      if (item === this.brew?.cup) ou += ` (${theLiquid(this.brew.machine.def.pour!.liquid)} coule dedans)`;
       const door = this.doors.get(item);
       if (door) ou += door.target ? ', porte ouverte' : ', porte fermée';
       if (item.def.food && item.portion < 1) ou += `, entamé${FEMININE.has(item.name) ? 'e' : ''}`;
-      if (item.contents) ou += `, contient ${/^[aeiouéè]/.test(item.contents) ? "de l'" : 'du '}${item.contents}`;
+      if (item.contents) ou += `, contient ${someLiquid(item.contents)}`;
       else if (item.def.startFull) ou += ', vide';
-      const sorte: WorldObject['sorte'] = item.def.door ? 'frigo' : item.def.slots ? 'rangement' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : undefined;
+      const sorte: WorldObject['sorte'] = item.def.door ? 'frigo' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : undefined;
+      if (item === this.sitting) ou += ', le perso est assis dessus';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
       return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
     });
+    const perso = this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)';
     return {
-      perso: this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)',
+      perso: this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
       mains: hands.loads.map((l) => l.map((i) => this.ref(i))),
       mainsLibres: hands.free,
@@ -797,6 +848,53 @@ export class Game {
     }
     this.character.approachThen(this.character.standFor(item), item.object.position, () => {});
     return true;
+  }
+
+  /** Siège où le perso est assis (ou s'assoit). */
+  private sitting: WorldItem | null = null;
+
+  /**
+   * S'asseoir sur le siège `ref` (sinon le plus proche) : le perso y va, se tourne dos au
+   * dossier et s'assoit. Les objets tenus d'une main restent en main.
+   */
+  sit(ref?: string, running = false): boolean {
+    const c = this.character;
+    const p = c.position;
+    const seat = ref
+      ? this.byRef(ref)
+      : this.items.filter((i) => i.def.seat && !c.carried.includes(i)).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!seat) return fail(ref ? `Aucun objet « ${ref} ».` : 'Aucun siège où s’asseoir.');
+    const name = `${FEMININE.has(seat.name) ? 'la' : 'le'} ${seat.name}`;
+    if (!seat.def.seat) return fail(`On ne s’assoit pas sur ${name}.`);
+    if (!c.canSit) return fail('Crée un perso pour pouvoir t’asseoir.');
+    if (seat === this.sitting) return true;
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (c.carried.includes(seat)) return fail(`Pose d’abord ${name}.`);
+    if (c.hands.loads.some((l) => l.length > 1 || isTwoHanded(l[0].grip))) return fail('Pose d’abord ce que tu portes à deux mains.');
+    if (c.reading) return fail('Ferme d’abord le livre.');
+    // debout, au sol, et rien dessus
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(seat.object.quaternion);
+    if (seat.object.position.y > 0.05 || up.y < 0.95) return fail(`${name[0].toUpperCase()}${name.slice(1)} n’est pas debout par terre.`);
+    const on = this.itemsOn(seat);
+    if (on.length) return fail(`Il y a ${on.map((i) => `${FEMININE.has(i.name) ? 'une' : 'un'} ${i.name}`).join(' et ')} sur ${name}.`);
+    if (c.seated) return c.standUp(() => this.sit(this.ref(seat), running));
+    const o = seat.object;
+    o.updateMatrixWorld(true);
+    const center = seat.box.getCenter(new THREE.Vector3()).setY(0).applyMatrix4(o.matrixWorld).setY(0);
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(o.quaternion);
+    const r = c.sitOn(center, forward, seat.def.seat, seat.size.z, () => this.wearItem(seat, WEAR_SIT), running);
+    if (r === 'place') return fail(`Pas assez de place devant ${name} pour s’asseoir.`);
+    if (r === 'ok') this.sitting = seat;
+    return r === 'ok';
+  }
+
+  /** Se lever (faux si le perso n'est pas assis). */
+  standUp(): boolean {
+    return this.character.standUp();
   }
 
   /**
@@ -874,7 +972,7 @@ export class Game {
   }
 
   /** Où se tenir devant un meuble (frigo, bibliothèque), à `gap` m de sa face avant. */
-  private frontOf(item: WorldItem, gap: number): THREE.Vector3 {
+  private standBefore(item: WorldItem, gap: number): THREE.Vector3 {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
     return item.object.position.clone().addScaledVector(fwd, item.box.max.z + gap).setY(0);
   }
@@ -890,7 +988,7 @@ export class Game {
       this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
       return false;
     }
-    this.character.approachThen(this.frontOf(item, 0.45), item.object.position, () => {
+    this.character.approachThen(this.standBefore(item, 0.45), item.object.position, () => {
       d.target = 1;
       d.then = then;
       this.wearItem(item, WEAR_DOOR);
@@ -900,6 +998,8 @@ export class Game {
 
   /** Portes qui s'ouvrent ou se ferment ; celle du frigo se referme quand le perso s'éloigne. */
   private tickDoors(dt: number): void {
+    // la toute première image peut avoir un dt négatif (horloge de la page) : la porte bougerait seule
+    dt = Math.max(0, dt);
     const p = this.character.position;
     for (const [item, d] of this.doors) {
       if (d.target === 1 && !d.then && this.character.idle && p0(item.object.position).distanceTo(p0(p)) > DOOR_AUTOCLOSE) d.target = 0;
@@ -934,11 +1034,94 @@ export class Game {
 
   /** Se fait un café à la machine la plus proche (il faut tenir la tasse). */
   makeCoffee(running = false): boolean {
-    const p = this.character.position;
-    const machine = this.items
-      .filter((i) => i.def.pour)
-      .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    const machine = this.nearest((i) => i.def.pour?.liquid === 'café');
+    if (!machine) this.onNotice?.('Il n’y a pas de machine à café.');
     return machine ? this.pourAt(machine, running) : false;
+  }
+
+  /** Remplit d'eau la tasse tenue à l'évier le plus proche (ce qu'elle contenait est vidé dans l'évier). */
+  fillWater(running = false): boolean {
+    const sink = this.nearest((i) => i.def.pour?.liquid === 'eau');
+    if (!sink) this.onNotice?.('Il n’y a pas d’évier.');
+    return sink ? this.pourAt(sink, running) : false;
+  }
+
+  /** Se lave les mains à l'évier le plus proche (il faut les mains libres). */
+  washHands(running = false): boolean {
+    return this.washAt(this.nearest((i) => !!i.def.wash), false, running);
+  }
+
+  /** Fait sa toilette à l'évier : de l'eau sur les mains et le visage (il faut les mains libres). */
+  wash(running = false): boolean {
+    return this.washAt(this.nearest((i) => !!i.def.wash), true, running);
+  }
+
+  /** L'objet le plus proche du perso qui vérifie `ok`. */
+  private nearest(ok: (i: WorldItem) => boolean): WorldItem | undefined {
+    const p = this.character.position;
+    return this.items.filter(ok).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+  }
+
+  /** Où se tenir devant un meuble (machine, évier) pour s'en servir. */
+  private frontOf(item: WorldItem): THREE.Vector3 {
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
+    // contre l'évier pour atteindre le robinet (le perso se penche un peu)
+    return item.object.position.clone().addScaledVector(fwd, item.box.max.z + (item.def.wash ? 0.22 : 0.26));
+  }
+
+  /**
+   * Va à l'évier et met les mains sous le robinet : l'eau coule, les mains se frottent (et
+   * montent au visage pour la toilette) ; l'hygiène remonte pendant ce temps (tickWash).
+   */
+  private washAt(sink: WorldItem | undefined, face: boolean, running: boolean): boolean {
+    const c = this.character;
+    const held = c.heldItems;
+    if (!sink) this.onNotice?.('Il n’y a pas d’évier.');
+    else if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir te laver.');
+    else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    else if (this.washing) this.onNotice?.('Tu te laves déjà.');
+    else if (this.brew?.machine === sink) this.onNotice?.(`${cap(theLiquid(sink.def.pour!.liquid))} coule déjà.`);
+    else if (held.length) this.onNotice?.(`Pose d’abord ce que tu tiens (${held.map((h) => h.name).join(' et ')}) pour te laver.`);
+    else if (c.busy || c.bracing) return false;
+    else {
+      const o = sink.object;
+      const mid = new THREE.Vector3(...sink.def.wash!.hands);
+      const at = () => {
+        o.updateMatrixWorld(true);
+        // mains de part et d'autre du filet d'eau ; la droite du perso est du côté -X de l'évier
+        return { right: mid.clone().setX(mid.x - 0.05).applyMatrix4(o.matrixWorld), left: mid.clone().setX(mid.x + 0.05).applyMatrix4(o.matrixWorld) };
+      };
+      const how = face ? WASH_FACE : WASH_HANDS;
+      return c.startWash(this.frontOf(sink), o.position, at, face, () => {
+        this.washing = { sink, t: 0, seconds: how.seconds, hygiene: how.hygiene, face };
+      }, running);
+    }
+    return false;
+  }
+
+  /** L'eau coule sur les mains ; l'hygiène remonte peu à peu ; à la fin, le perso se redresse. */
+  private tickWash(dt: number): void {
+    const w = this.washing;
+    if (!w) return;
+    const jet = w.sink.part('jet');
+    const before = Math.min(1, w.t / w.seconds);
+    w.t += dt;
+    const done = Math.min(1, w.t / w.seconds);
+    this.needs.restore('hygiene', (done - before) * w.hygiene);
+    if (jet) {
+      // l'eau tombe du robinet jusqu'aux mains
+      jet.userData.top ??= jet.position.y;
+      const top: number = jet.userData.top;
+      const len = Math.max(0.001, top - w.sink.def.wash!.hands[1] - 0.02);
+      jet.visible = done < 1;
+      jet.scale.y = len;
+      jet.position.y = top - len / 2;
+    }
+    if (done < 1) return;
+    this.washing = null;
+    this.wearItem(w.sink, WEAR_TAP);
+    this.character.stopWash();
+    this.onNotice?.(w.face ? 'Toilette faite : visage et mains propres.' : 'Mains lavées.');
   }
 
   /**
@@ -948,20 +1131,28 @@ export class Game {
   private pourAt(machine: WorldItem, running: boolean): boolean {
     const pour = machine.def.pour!;
     const cup = this.character.heldItems.find((i) => i.name === pour.fills);
-    if (this.brew) this.onNotice?.(`Le ${pour.liquid} coule déjà.`);
-    else if (!cup) this.onNotice?.(`Prends la ${pour.fills} pour te faire un ${pour.liquid}.`);
-    else if (cup.level > 0.99) this.onNotice?.(`La ${cup.name} est déjà pleine.`);
+    // autre chose dedans : vidé dans l'évier, sinon il faut d'abord le boire
+    const other = cup?.contents && cup.contents !== pour.liquid ? cup.contents : null;
+    if (this.brew) this.onNotice?.(`${cap(theLiquid(this.brew.machine.def.pour!.liquid))} coule déjà.`);
+    else if (this.washing) this.onNotice?.('Tu te laves.');
+    else if (!cup) this.onNotice?.(`Prends la ${pour.fills} pour la remplir ${ofLiquid(pour.liquid)}.`);
+    else if (other && !pour.drain) this.onNotice?.(`La ${cup.name} contient encore ${someLiquid(other)} : bois-la ou vide-la à l’évier d’abord.`);
+    else if (!other && cup.level > 0.99) this.onNotice?.(`La ${cup.name} est déjà pleine.`);
     else if (this.closeBookThen(() => this.pourAt(machine, running))) return true;
     else {
-      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(machine.object.quaternion);
-      const stand = machine.object.position.clone().addScaledVector(fwd, 0.47);
-      this.character.approachThen(stand, machine.object.position, () => {
+      this.character.approachThen(this.frontOf(machine), machine.object.position, () => {
         machine.object.updateMatrixWorld(true);
         const spot = new THREE.Vector3(...pour.at).applyMatrix4(machine.object.matrixWorld);
         // la tasse sous le bec, l'anse vers le perso
         this.character.drop(spot, machine.object.rotation.y, () => {
+          if (other) {
+            cup.setLevel(0);
+            cup.contents = null;
+            this.onNotice?.(`${cap(theLiquid(other))} est vidé${elides(other) ? 'e' : ''} dans l’${machine.name}.`);
+          }
+          cup.setLiquidColor(pour.color);
           this.brew = { machine, cup, t: 0 };
-          this.wearItem(machine, WEAR_BREW.machine);
+          this.wearItem(machine, machine.def.wash ? WEAR_TAP : WEAR_BREW.machine);
           this.wearItem(cup, WEAR_BREW.cup);
         }, true, cup);
       }, running);
@@ -998,7 +1189,7 @@ export class Game {
     if (jet) jet.visible = false;
     this.brew = null;
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(b.machine.object.quaternion);
-    const stand = b.machine.object.position.clone().addScaledVector(fwd, 0.47);
+    const stand = this.frontOf(b.machine);
     if (this.character.freeHand(b.cup) && this.character.position.distanceTo(stand) < 0.8) this.character.pickUp(b.cup, false, fwd);
   }
 
@@ -1013,6 +1204,7 @@ export class Game {
     const door = this.doors.get(item);
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
     // frigo : on y range ce qu'on tient ; mains vides, on l'ouvre (clic sur le côté : on le pousse)
     else if (door && held.length) return this.storeIn(item, running);
     else if (door && !opts.body) {
@@ -1021,9 +1213,11 @@ export class Game {
     }
     // mains vides : un gros meuble s'agrippe pour le déplacer
     else if (item.def.movable && !held.length) return this.grabFurniture(item, running);
+    // évier : la tasse en main se remplit d'eau, sinon on se lave les mains
+    else if (item.def.wash && !held.some((h) => h.name === item.def.pour?.fills)) return this.washAt(item, false, running);
     else if (item.def.pour) return this.pourAt(item, running);
     else if (this.flying.some((f) => f.item === item)) return false;
-    else if (item === this.brew?.cup) this.onNotice?.(`Le ${this.brew.machine.def.pour!.liquid} coule encore.`);
+    else if (item === this.brew?.cup) this.onNotice?.(`${cap(theLiquid(this.brew.machine.def.pour!.liquid))} coule encore.`);
     else if (item.def.slots && held.length) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
     else if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
@@ -1098,7 +1292,7 @@ export class Game {
       return false;
     }
     if (this.doors.has(shelf)) return this.withDoorOpen(shelf, () => this.storeNext(shelf, first, !only), running);
-    this.character.approachThen(this.frontOf(shelf, 0.4), shelf.object.position, () => this.storeNext(shelf, first, !only), running);
+    this.character.approachThen(this.standBefore(shelf, 0.4), shelf.object.position, () => this.storeNext(shelf, first, !only), running);
     return true;
   }
 
@@ -1152,6 +1346,10 @@ export class Game {
       // M : la lettre, quelle que soit la disposition du clavier (AZERTY ou QWERTY)
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
       if (e.code === 'KeyT' && !e.repeat) this.throwItem();
+      if (e.code === 'KeyC' && !e.repeat) {
+        if (this.character.seated) this.standUp();
+        else this.sit();
+      }
       if (e.code === 'KeyL' && !e.repeat) {
         if (this.character.reading) this.stopReading();
         else this.read();
@@ -1212,7 +1410,9 @@ export class Game {
         if (it === base || out.some((r) => r.item === it)) continue;
         const b = new THREE.Box3().setFromObject(it.object);
         const c = b.getCenter(new THREE.Vector3());
-        if (Math.abs(b.min.y - box.max.y) > 0.03 || c.x < box.min.x || c.x > box.max.x || c.z < box.min.z || c.z > box.max.z) continue;
+        if (c.x < box.min.x || c.x > box.max.x || c.z < box.min.z || c.z > box.max.z) continue;
+        // posé sur le dessus, ou sur une surface plus basse (l'assise d'une chaise, sous le dossier)
+        if (Math.abs(b.min.y - box.max.y) > 0.03 && !this.restsOn(c.setY(b.min.y), under)) continue;
         it.object.updateMatrixWorld(true);
         out.push({ item: it, rel: inv.clone().multiply(it.object.matrixWorld) });
         stack.push(it);
@@ -1221,12 +1421,20 @@ export class Game {
     return out;
   }
 
+  /** Le point `base` (dessous d'un objet) repose-t-il sur une surface de `under` ? */
+  private restsOn(base: THREE.Vector3, under: WorldItem): boolean {
+    this.raycaster.set(base.clone().setY(base.y + 0.02), new THREE.Vector3(0, -1, 0));
+    const hit = this.raycaster.intersectObject(under.object, true)[0];
+    return !!hit && hit.distance < 0.05;
+  }
+
   /** E : reposer l'objet tenu, sinon prendre l'objet portable le plus proche (à 1,5 m). */
   private useKey(): void {
     if (this.moving) {
       this.release();
       return;
     }
+    if (this.washing || this.character.washing) return;
     if (this.character.held) {
       this.drop();
       return;
@@ -1306,9 +1514,11 @@ export class Game {
     }
     this.riders = this.riders.filter((r) => held.includes(r.base));
     this.prevHeld = held;
+    this.updateNav();
     this.tickBrew(dt);
     this.tickDoors(dt);
     this.tickEating();
+    this.tickWash(dt);
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));
     this.tickNeeds(dt);
@@ -1319,10 +1529,11 @@ export class Game {
     const grade = (i: WorldItem) => gradeName(i.condition, FEMININE.has(i.name));
     const names = held.map((h) => {
       // « tasse de café », « bouteille d'eau » (l'eau est déjà dans le nom), « bouteille d'eau vide »
-      const n = h.contents ? (h.name.includes(h.contents) ? h.name : `${h.name} de ${h.contents}`) : h.def.startFull ? `${h.name} vide` : h.name;
+      const n = h.contents ? (h.name.includes(h.contents) ? h.name : `${h.name} ${ofLiquid(h.contents)}`) : h.def.startFull ? `${h.name} vide` : h.name;
       const count = c.handOf(h)?.carried.length ?? 1;
       return count > 1 ? `${n} ×${count}` : `${n}, ${grade(h)}`;
     });
+    if (this.sitting && !c.seated && (c.idle || c.washing)) this.sitting = null;
     const label = this.moving ? `${this.moving.item.name}, ${grade(this.moving.item)}` : names.length ? names.join(' et ') : null;
     const bookHand = book ? c.handOf(book) : null;
     const last = c.held;
@@ -1333,6 +1544,7 @@ export class Game {
       moving: !!this.moving,
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
       reading: !!c.reading,
+      seated: !!this.sitting,
     };
     const key = JSON.stringify(can);
     if (label !== this.heldLabel || key !== this.actionsKey) {
@@ -1352,7 +1564,7 @@ export class Game {
   private tickNeeds(dt: number): void {
     const hours = this.clock.tick(dt);
     const before = this.needs.health;
-    this.needs.tick(hours, this.character.moveGait, this.clock.isNight);
+    this.needs.tick(hours, this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
     // prévenir le joueur quand la santé passe sous un seuil
     const after = this.needs.health;
     if (before > 0 && after <= 0) this.onNotice?.('Santé à zéro : le perso est à bout de forces.');

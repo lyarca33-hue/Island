@@ -16,21 +16,32 @@ export type Intent =
   /** Mettre l'objet `ref` (ou ce qu'on tient) dans le frigo `dans`. */
   | { kind: 'mettre'; ref?: string; dans: string }
   | { kind: 'cafe' }
-  /** Boire dans le récipient `ref` (bouteille d'eau), sinon dans ce qu'on tient, sinon un café. */
-  | { kind: 'boire'; ref?: string }
+  /**
+   * Boire dans le récipient `ref` (bouteille d'eau), sinon dans ce qu'on tient, sinon dans la
+   * tasse ; vide, la tasse est d'abord remplie de `liquide` (café par défaut).
+   */
+  | { kind: 'boire'; ref?: string; liquide?: 'eau' | 'café' }
   /** Manger l'aliment `ref` en entier (sinon celui qu'on tient, sinon le plus proche). */
   | { kind: 'manger'; ref?: string }
   | { kind: 'ouvrir'; ref: string }
   | { kind: 'fermer'; ref: string }
+  /** Remplir la tasse d'eau à l'évier. */
+  | { kind: 'eau' }
+  /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
+  | { kind: 'laver'; visage: boolean }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
-  | { kind: 'dire'; texte: string };
+  | { kind: 'dire'; texte: string }
+  /** S'asseoir sur le siège `ref` (sinon le plus proche). */
+  | { kind: 'asseoir'; ref?: string }
+  | { kind: 'lever' };
 
 /** La tâche en quelques mots (« prendre tasse »), pour le journal des manques. */
 export function intentLabel(i: Intent): string {
   const what = 'ref' in i ? i.ref : 'refs' in i ? (i.refs.length ? i.refs.join(', ') : 'livres') : '';
   const sur = i.kind === 'poser' && i.sur ? ` sur ${i.sur}` : '';
+  if (i.kind === 'laver') return i.visage ? 'se laver' : 'se laver les mains';
   return `${i.kind.replace('_', ' ')}${what ? ` ${what}` : ''}${sur}`;
 }
 
@@ -169,14 +180,17 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const full = (o: WorldObject) => o.ou.includes('contient');
       const drinks = w.objets.filter((o) => o.sorte === 'récipient');
       // le récipient demandé, sinon un récipient plein qu'on tient, sinon la tasse (café)
-      const cup = intent.ref ? drinks.find((o) => o.ref === intent.ref) : (drinks.find((o) => w.enMain.includes(o.ref) && full(o)) ?? drinks.find((o) => o.nom === 'tasse'));
+      const cup = intent.ref ? drinks.find((o) => o.ref === intent.ref) : ((!intent.liquide ? drinks.find((o) => w.enMain.includes(o.ref) && full(o)) : undefined) ?? drinks.find((o) => o.nom === 'tasse'));
       if (!cup) throw new Failed('Il n’y a rien à boire.');
       await take(game, act, cup.ref);
-      if (!full(world(game).objets.find((o) => o.ref === cup.ref)!)) {
-        // tasse vide : on se fait d'abord un café ; une bouteille vide, c'est fini
-        if (cup.nom !== 'tasse') throw new Failed(`${cup.nom} est vide.`);
-        await act('cafe');
+      const ou = world(game).objets.find((o) => o.ref === cup.ref)!.ou;
+      if (cup.nom !== 'tasse') {
+        // une bouteille vide, c'est fini
+        if (!ou.includes('contient')) throw new Failed(`${cup.nom} est vide.`);
       }
+      // tasse vide : on la remplit d'abord (café par défaut) ; « bois de l'eau » avec du café dedans : on la remplit d'eau
+      else if (intent.liquide === 'eau' && !ou.includes('contient de l’eau')) await act('eau');
+      else if (!ou.includes('contient')) await act(intent.liquide === 'eau' ? 'eau' : 'cafe');
       return act('boire');
     }
     case 'manger': {
@@ -199,6 +213,16 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act('ouvrir', { objet: intent.ref });
     case 'fermer':
       return act('fermer', { objet: intent.ref });
+    case 'eau': {
+      const cup = world(game).objets.find((o) => o.nom === 'tasse');
+      if (!cup) throw new Failed('Il n’y a pas de tasse.');
+      await take(game, act, cup.ref);
+      return act('eau');
+    }
+    case 'laver':
+      // les mains doivent être libres
+      await freeHands(game, act);
+      return act(intent.visage ? 'se_laver' : 'laver_mains');
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;
@@ -213,6 +237,18 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await take(game, act, book.ref);
       return act('lire');
     }
+    case 'asseoir': {
+      const seat = intent.ref ?? world(game).objets.filter((o) => o.sorte === 'siège' && !world(game).enMain.includes(o.ref)).sort((a, b) => a.distance - b.distance)[0]?.ref;
+      if (!seat) throw new Failed('Il n’y a pas de siège.');
+      // ce qu'on porte à deux mains (caisse, pile, la chaise elle-même) se pose d'abord
+      const w = world(game);
+      const big = w.mains.find((l) => l.length > 1 || w.objets.find((o) => o.ref === l[0])?.deuxMains);
+      if (big) await dropLoad(act, big);
+      return act('asseoir', { siege: seat });
+    }
+    case 'lever':
+      if (!world(game).perso.includes('assis')) return;
+      return act('lever');
     case 'arreter_lire':
       if (!world(game).lit) return;
       return act('arreter_lire');

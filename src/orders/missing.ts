@@ -72,6 +72,38 @@ export function clearMissing(): void {
   write([]);
 }
 
+/**
+ * Manques connus, notés en ajoutant un objet (version simple faite, le reste à faire) : ajoutés
+ * une seule fois au journal de chaque navigateur, même s'il a été vidé depuis.
+ */
+const KNOWN: Array<{ id: string } & Omit<Missing, 'at'>> = [
+  { id: 'evier-robinet', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'ouvrir le robinet', detail: 'L’eau coule toute seule quand les mains ou la tasse arrivent sous le robinet : pas encore de geste pour tourner la manette.' },
+  { id: 'evier-boire', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'boire au robinet', detail: 'On boit l’eau de l’évier seulement avec la tasse : pas de geste pour boire dans ses mains ou au robinet.' },
+  { id: 'evier-vaisselle', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'laver la tasse', detail: 'Pas encore de vaisselle : la tasse ne se lave pas (son usure ne baisse pas avec ça non plus).' },
+  { id: 'evier-vider', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'vider la tasse', detail: 'La tasse se vide dans l’évier seulement quand on la remplit d’eau : pas de geste pour la vider seule.' },
+  { id: 'evier-douche', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'se laver entièrement', detail: 'À l’évier, la toilette est faite d’eau sur les mains et le visage (hygiène +40) : pas de douche ni de bain, ni de geste de toilette du corps.' },
+];
+const KNOWN_KEY = 'rp-island.manques.connus';
+
+/** Ajoute au journal les manques connus pas encore notés dans ce navigateur. */
+export function noteKnownMissing(): void {
+  let seen: string[] = [];
+  try {
+    seen = JSON.parse(localStorage.getItem(KNOWN_KEY) ?? '[]');
+  } catch {
+    // stockage indisponible : on les ajoute pour cette session
+  }
+  const fresh = KNOWN.filter((k) => !seen.includes(k.id));
+  if (!fresh.length) return;
+  const at = new Date().toISOString();
+  write([...read(), ...fresh.map(({ id: _, ...m }) => ({ ...m, at }))].slice(-MAX));
+  try {
+    localStorage.setItem(KNOWN_KEY, JSON.stringify([...seen, ...fresh.map((k) => k.id)]));
+  } catch {
+    // tant pis
+  }
+}
+
 /** Prévient quand le journal change ; rend la fonction pour se désabonner. */
 export function onMissingChange(f: () => void): () => void {
   listeners.add(f);

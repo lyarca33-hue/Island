@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 
-export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack' | 'read' | 'push';
+export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack' | 'read' | 'push' | 'wash';
 
 export interface HandSpec {
   /** Où va la main, depuis l'épaule (longueurs de bras, repère du buste). */
@@ -118,6 +118,16 @@ export const GRIPS: Record<GripType, GripSpec> = {
     label: 'contre un meuble',
     right: { reach: [0, -0.3, 0.7], pole: [-0.7, -0.7, -0.2], fingers: [0.25, 1, 0.1], palm: [0, 0, 1], curl: 10, thumb: 15 },
     left: { reach: [0, -0.3, 0.7], pole: [0.7, -0.7, -0.2], fingers: [-0.25, 1, 0.1], palm: [0, 0, 1], curl: 10, thumb: 15 },
+    up: [0, 1, 0],
+    forward: [0, 0, 1],
+    hold: [-0.05, -0.02, 0],
+  },
+  // mains sous le robinet (se laver) : paumes vers le bas et l'une vers l'autre, doigts vers
+  // l'avant ; les mains vont aux points donnés (voir Carry.brace), qui bougent pour les frotter
+  wash: {
+    label: 'sous le robinet',
+    right: { reach: [0.1, -0.5, 0.6], pole: [-0.7, -0.7, -0.2], fingers: [0.35, -0.35, 1], palm: [0.7, -0.7, 0], curl: 12, thumb: 10 },
+    left: { reach: [-0.1, -0.5, 0.6], pole: [0.7, -0.7, -0.2], fingers: [-0.35, -0.35, 1], palm: [-0.7, -0.7, 0], curl: 12, thumb: 10 },
     up: [0, 1, 0],
     forward: [0, 0, 1],
     hold: [-0.05, -0.02, 0],
