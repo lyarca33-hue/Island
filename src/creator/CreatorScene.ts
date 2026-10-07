@@ -4,7 +4,7 @@
  * cadrage « corps entier » ou « visage ».
  */
 import * as THREE from 'three';
-import { lightAllPasses, PostFx } from '../game/postfx';
+import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS } from '../game/postfx';
 import { createToonMaterial } from '../game/toon';
 import { Puppet } from './puppet';
 import type { Recipe } from './recipe';
@@ -33,8 +33,8 @@ export class CreatorScene {
 
   constructor(container: HTMLElement) {
     this.container = container;
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -130,10 +130,9 @@ export class CreatorScene {
 
   private resize(): void {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
-    this.renderer.setSize(w, h, false);
-    this.renderer.domElement.style.width = '100%';
-    this.renderer.domElement.style.height = '100%';
-    this.post.setSize(w, h, this.renderer.getPixelRatio());
+    // un seul perso à l'écran : au moins la qualité normale
+    fitRenderer(this.renderer, w, h, Math.max(QUALITY_PIXELS[loadQuality()], QUALITY_PIXELS.normale));
+    this.post.setSize(w, h);
   }
 
   private frame = (now: number): void => {
@@ -179,6 +178,8 @@ export class CreatorScene {
     this.puppet?.dispose();
     this.post.dispose();
     this.renderer.dispose();
+    // libère tout de suite la mémoire du GPU (textures, cartes d'ombre) : le jeu va en recréer
+    this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
   }
 }

@@ -22,6 +22,7 @@
  * précédent ; leurs places viennent de leurs boîtes (placeRuns), pas de coordonnées à la main.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from './toon';
 import { lightAllPasses } from './postfx';
 import { SUNRISE, SUNSET } from './clock';
@@ -298,8 +299,13 @@ export class Room {
   private lamps: THREE.PointLight[] = [];
   /** Lumières qui entrent par les fenêtres. */
   private winLights: THREE.SpotLight[] = [];
-  /** Les lumières de la pièce font-elles des ombres (perso dans la pièce) ? */
+  /** Les lumières de la pièce font-elles des ombres (dernière pièce où était le perso) ? */
   private shadowsOn = true;
+  /**
+   * Lumières de la pièce dont la carte d'ombre sert en ce moment (allumées, avec ombre) : Game les
+   * recalcule à son rythme (shadow.autoUpdate reste false).
+   */
+  readonly liveShadows: Array<THREE.PointLight | THREE.SpotLight> = [];
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
   private roofBox = new THREE.Box3();
@@ -363,6 +369,28 @@ export class Room {
     const swAt = this.wallFrame(spec.lightSwitch.wall, spec.lightSwitch.u, SWITCH_Y);
     swAt.add(sw);
     this.wallGroup(spec.lightSwitch.wall).add(swAt);
+    this.mergeGhosts();
+  }
+
+  /**
+   * Les morceaux « ombre seule » fixes (murs gardés en coupe, cadres des fenêtres, toit) en un seul
+   * maillage : un dessin par carte d'ombre au lieu d'une centaine. Le battant de porte, qui tourne,
+   * reste à part (dans son groupe).
+   */
+  private mergeGhosts(): void {
+    const ghosts = this.group.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh && o.material === this.shadowMat);
+    if (ghosts.length < 2) return;
+    const geo = mergeGeometries(ghosts.map((g) => {
+      g.updateMatrix();
+      return g.geometry.clone().applyMatrix4(g.matrix);
+    }), false);
+    if (!geo) return;
+    const one = new THREE.Mesh(geo, this.shadowMat);
+    one.name = 'ombres-murs';
+    one.castShadow = true;
+    one.receiveShadow = false;
+    for (const g of ghosts) g.removeFromParent();
+    this.group.add(one);
   }
 
   /** Le point (x, z) est-il dans la pièce (agrandie de `margin` m de chaque côté) ? */
@@ -610,7 +638,8 @@ export class Room {
     else this.lampK = Math.abs(auto - this.lampK) < SWITCH_FADE * dt ? auto : this.lampK + Math.sign(auto - this.lampK) * SWITCH_FADE * dt;
     const k = this.lampK;
     // lampe éteinte : sa carte d'ombre n'est plus recalculée
-    for (const l of this.lamps) l.shadow.autoUpdate = k > 0.001;
+    this.liveShadows.length = 0;
+    if (this.shadowsOn && k > 0.001) this.liveShadows.push(...this.lamps);
     this.rocker.rotation.z = this.lightsOn ? 0.25 : -0.25;
     for (const l of this.lamps) l.intensity = LAMP_I * k;
     // ampoule éteinte grise, allumée au-dessus de 1 : le bloom la fait briller
@@ -625,7 +654,7 @@ export class Room {
     for (const l of this.winLights) {
       l.color.copy(WIN_DAY).lerp(WIN_WARM, warm).lerp(WIN_MOON, 1 - day);
       l.intensity = day * WIN_I + night * WIN_MOON_I;
-      l.shadow.autoUpdate = l.intensity > 0.01;
+      if (this.shadowsOn && l.intensity > 0.01) this.liveShadows.push(l);
     }
   }
 
@@ -650,6 +679,8 @@ export class Room {
       const u = (u0 + u1) / 2, len = u1 - u0;
       const m = alongX ? box(len, y1 - y0, t, mat, u, (y0 + y1) / 2, c + off) : box(t, y1 - y0, len, mat, c + off, (y0 + y1) / 2, u);
       to.add(m);
+      // l'ombre du mur (plein ou abaissé) est faite par son double « ombre seule », plein, ci-dessous
+      if (to === full || to === low) m.castShadow = false;
       // le mur haut garde son ombre même abaissé en coupe : le soleil ne rentre pas par là
       if (to === full) {
         const ghost = new THREE.Mesh(m.geometry, this.shadowMat);
@@ -743,7 +774,7 @@ export class Room {
    * du perso ; relevés quand il sort, sauf un mur qui le cacherait. Portes qui s'ouvrent devant le
    * perso, décor animé, lampes et vitres selon l'heure.
    */
-  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3, active: Rect | null): void {
+  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3, active: Rect | null, shadowRoom: boolean): void {
     const indoors = active !== null;
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
     // bord de la pièce du perso le plus proche de la caméra (mesuré le long de la vue)
@@ -754,18 +785,21 @@ export class Room {
     // perso hors de cette pièce : rayons du perso (jambes, buste, tête) vers la caméra
     const here = this.contains(player);
     const rays = here ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
-    // seules les lampes et les fenêtres de la pièce où est le perso font des ombres : chaque ombre
-    // prend une texture au shader, et beaucoup de cartes graphiques n'en ont que 16 (au-delà, les
-    // matériaux ne s'affichent plus du tout)
-    if (here !== this.shadowsOn) {
-      this.shadowsOn = here;
+    // seules les lampes et les fenêtres d'UNE pièce font des ombres (`shadowRoom` : celle où est le
+    // perso, gardée dehors et dans les passages) : chaque ombre prend une texture au shader, et
+    // beaucoup de cartes graphiques n'en ont que 16 (au-delà, les matériaux ne s'affichent plus du
+    // tout). Le NOMBRE de lumières à ombre ne change donc jamais (la pièce qui les perd et celle qui
+    // les prend changent dans la même image) : sinon three recompile tous les matériaux, une
+    // saccade à chaque sortie.
+    if (shadowRoom !== this.shadowsOn) {
+      this.shadowsOn = shadowRoom;
       for (const l of [...this.lamps, ...this.winLights]) {
-        l.castShadow = here;
+        l.castShadow = shadowRoom;
         l.shadow.needsUpdate = true;
       }
       // une fenêtre sans ombre perd aussi sa forme de carreaux : les matériaux des persos (MToon)
       // ne s'affichent plus si des projecteurs ont une forme sans avoir d'ombre
-      for (const l of this.winLights) l.map = here ? windowCookie() : null;
+      for (const l of this.winLights) l.map = shadowRoom ? windowCookie() : null;
     }
     const hides = (w: Wall) => rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
     for (const w of this.walls) {

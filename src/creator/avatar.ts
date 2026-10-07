@@ -9,6 +9,7 @@
  */
 import type { VRM, VRMExpressionManager, VRMSpringBoneManager } from '@pixiv/three-vrm';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYER_CHARACTER } from '../game/postfx';
 import type { Body, Recipe } from './recipe';
 import { loadVrm } from './vrm';
@@ -124,6 +125,95 @@ function fitHair(base: VRM, hair: THREE.SkinnedMesh[], from: THREE.Box3, to: THR
   }
   // les mèches (et leurs ressorts) suivent le même calage
   for (const c of [...head.children]) if (c.name.startsWith('HairJoint')) fit.add(c);
+}
+
+/** Mêmes os, dans le même ordre, et même matrice de liaison : géométries fusionnables. */
+function sameBinding(a: THREE.SkinnedMesh, b: THREE.SkinnedMesh): boolean {
+  const ba = a.skeleton.bones, bb = b.skeleton.bones;
+  return ba.length === bb.length && ba.every((bone, i) => bone === bb[i]) && a.bindMatrix.equals(b.bindMatrix);
+}
+
+/** Un groupe par matériau, couvrant toute la géométrie (contour MToon : 2 matériaux, 2 groupes). */
+function fullGroups(m: THREE.SkinnedMesh): boolean {
+  if (!Array.isArray(m.material)) return true;
+  const n = m.geometry.index?.count ?? 0;
+  return m.geometry.groups.length === m.material.length && m.geometry.groups.every((g, i) => g.start === 0 && g.count >= n && g.materialIndex === i);
+}
+
+/**
+ * Fusionne les maillages d'un VRM qui partagent os et matériaux (les mèches de cheveux : jusqu'à
+ * 73 maillages pour 4 matériaux) : chaque maillage est dessiné à l'écran et dans chaque carte
+ * d'ombre, un par un. Pas les maillages à expressions (morph targets) ni transparents (ordre de tri).
+ */
+function mergeSkinned(root: THREE.Object3D): void {
+  const groups = new Map<THREE.Object3D, THREE.SkinnedMesh[][]>();
+  root.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isSkinnedMesh || !m.parent || !m.geometry.index || Object.keys(m.geometry.morphAttributes).length) return;
+    const mats = materialsOf(m);
+    if (mats.some((mat) => mat.transparent) || !fullGroups(m)) return;
+    const lists = groups.get(m.parent) ?? groups.set(m.parent, []).get(m.parent)!;
+    const key = (x: THREE.SkinnedMesh) => materialsOf(x).map((mat) => mat.uuid).join('|') + '#' + Object.keys(x.geometry.attributes).sort().join(',');
+    const list = lists.find((l) => key(l[0]) === key(m) && sameBinding(l[0], m) && l[0].renderOrder === m.renderOrder && l[0].matrix.equals(m.matrix));
+    if (list) list.push(m);
+    else lists.push([m]);
+  });
+  for (const lists of groups.values()) {
+    for (const list of lists) {
+      if (list.length < 2) continue;
+      const a = list[0];
+      const geo = mergeGeometries(list.map((m) => {
+        const g = m.geometry.clone();
+        g.clearGroups();
+        return g;
+      }), false);
+      if (!geo) continue;
+      const mats = materialsOf(a);
+      if (mats.length > 1) for (let i = 0; i < mats.length; i++) geo.addGroup(0, geo.index!.count, i);
+      const merged = new THREE.SkinnedMesh(geo, a.material);
+      merged.name = a.name;
+      merged.position.copy(a.position);
+      merged.quaternion.copy(a.quaternion);
+      merged.scale.copy(a.scale);
+      merged.bind(a.skeleton, a.bindMatrix);
+      merged.castShadow = a.castShadow;
+      merged.receiveShadow = a.receiveShadow;
+      merged.frustumCulled = a.frustumCulled;
+      merged.layers.mask = a.layers.mask;
+      merged.renderOrder = a.renderOrder;
+      a.parent!.add(merged);
+      for (const m of list) {
+        m.removeFromParent();
+        m.geometry.dispose();
+      }
+    }
+  }
+}
+
+/**
+ * Une seule sphère englobante, large, pour tous les maillages du perso : il est éliminé d'une
+ * carte d'ombre (face de lampe, cône de fenêtre) qui ne le voit pas, en entier ou pas du tout.
+ * Calculée en pose de repos, agrandie pour les poses (assis, couché, bras tendus).
+ */
+function cullAsOne(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true);
+  const skinned: THREE.SkinnedMesh[] = [];
+  root.traverse((o) => {
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned.push(o as THREE.SkinnedMesh);
+  });
+  const all = new THREE.Sphere();
+  for (const m of skinned) {
+    m.computeBoundingSphere();
+    const s = m.boundingSphere!.clone().applyMatrix4(m.matrixWorld);
+    if (all.isEmpty()) all.copy(s);
+    else all.union(s);
+  }
+  if (all.isEmpty()) return;
+  all.radius += 0.6;
+  for (const m of skinned) {
+    m.boundingSphere = all.clone().applyMatrix4(m.matrixWorld.clone().invert());
+    m.frustumCulled = true;
+  }
 }
 
 function isInside(o: THREE.Object3D, roots: Set<THREE.Object3D>): boolean {
@@ -284,12 +374,14 @@ export class Avatar {
       if (!m.isMesh) return;
       m.castShadow = true;
       m.receiveShadow = true;
-      m.frustumCulled = false; // animé hors de sa boîte de repos
+      m.frustumCulled = false; // animé hors de sa boîte de repos (sphère large posée par cullAsOne)
       m.layers.enable(LAYER_CHARACTER);
       for (const mat of materialsOf(m)) matte(mat);
     });
     this.root.add(base.scene);
     this.measureRest();
+    mergeSkinned(base.scene);
+    cullAsOne(base.scene);
     base.springBoneManager?.setInitState();
     this.hairSprings?.setInitState();
   }

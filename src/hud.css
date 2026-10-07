@@ -205,3 +205,13 @@
 .feedback textarea::placeholder { color: rgba(253, 246, 227, 0.5); }
 .feedback small { opacity: 0.6; line-height: 1.35; }
 .feedback .missing-actions button:disabled { opacity: 0.45; cursor: default; }
+.menu-form .menu-check { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
+.menu-form .menu-check input { width: auto; margin: 0; accent-color: #f0c25a; }
+.hud-fps {
+  position: absolute; top: 54px; left: 16px; pointer-events: none;
+  padding: 3px 8px; border-radius: 8px; font: 12px/1.4 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+  color: #fff6e6; background: rgba(20, 24, 40, 0.7);
+}
+.hud-fps.ok b { color: #8fdc8a; }
+.hud-fps.mid b { color: #f0c25a; }
+.hud-fps.low b { color: #ff7b6b; }

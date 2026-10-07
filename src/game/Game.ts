@@ -24,7 +24,7 @@ import { Needs } from './needs';
 import { placeRuns, Room, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { CHANNELS, Tv } from './tv';
-import { lightAllPasses, PostFx } from './postfx';
+import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, type Quality } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
 const UP = new THREE.Vector3(0, 1, 0);
@@ -346,6 +346,15 @@ export interface HandActions {
   sleeping: boolean;
 }
 
+const SHADOW_TMP = new THREE.Vector3();
+const SLOT_TMP = new THREE.Vector3();
+const ON_INV = new THREE.Matrix4();
+const ON_BOX = new THREE.Box3();
+const ON_TMP = new THREE.Vector3();
+const ON_POS = new THREE.Vector3();
+/** Rayon (m) sous lequel une pièce d'objet ne fait pas d'ombre. */
+const SMALL_CASTER = 0.035;
+
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -377,6 +386,10 @@ export class Game {
   private shift = false;
   private raf = 0;
   private last = performance.now();
+  private qualityLevel: Quality = loadQuality();
+  /** Compteur d'images : images et temps cumulés depuis le dernier relevé, et dernier relevé. */
+  private fpsAcc = { frames: 0, since: performance.now() };
+  private fpsNow = { fps: 0, ms: 0 };
   private resizeObs: ResizeObserver;
   private raycaster = new THREE.Raycaster();
   private disposers: Array<() => void> = [];
@@ -466,8 +479,8 @@ export class Game {
   constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
     this.recipe = recipe;
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -621,6 +634,18 @@ export class Game {
     }
 
     for (const item of this.items) item.setCondition(START_WEAR[item.def.id] ?? 1);
+    // petites pièces (boutons, repères, chapeaux de brûleur…) sans ombre : quelques texels effacés
+    // par le flou de l'ombre, mais un dessin de plus dans chaque carte d'ombre (six par lampe)
+    const sphere = new THREE.Sphere();
+    for (const item of this.items) {
+      item.object.updateMatrixWorld(true);
+      item.object.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.castShadow) return;
+        if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+        if (sphere.copy(m.geometry.boundingSphere!).applyMatrix4(m.matrixWorld).radius < SMALL_CASTER) m.castShadow = false;
+      });
+    }
 
     this.motes = createMotes();
     this.scene.add(this.motes.points);
@@ -636,6 +661,20 @@ export class Game {
 
     this.post = new PostFx(this.renderer, this.scene, this.camera);
     this.resizeObs = new ResizeObserver(() => this.resize());
+    // fenêtre passée d'un écran Retina à un écran externe (ou zoom du navigateur) : le
+    // ResizeObserver ne le voit pas, mais le plafond de pixels en dépend
+    let dprQuery: MediaQueryList | null = null;
+    const watchDpr = () => {
+      dprQuery?.removeEventListener('change', onDpr);
+      dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      dprQuery.addEventListener('change', onDpr);
+    };
+    const onDpr = () => {
+      this.resize();
+      watchDpr();
+    };
+    watchDpr();
+    this.disposers.push(() => dprQuery?.removeEventListener('change', onDpr));
     this.resizeObs.observe(container);
     this.resize();
     this.bindInput();
@@ -645,6 +684,19 @@ export class Game {
   async start(): Promise<void> {
     this.raf = requestAnimationFrame(this.frame);
     await this.character.load(this.recipe);
+    if (this.disposed) return;
+    // derrière l'écran de chargement : une image avec le perso (lumières et ombres en place), puis
+    // tous les shaders compilés d'avance, y compris ceux des ombres du perso (redessiné dans
+    // chaque carte) que la précompilation ne voit pas
+    const frame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+    await frame();
+    this.scene.traverse((o) => {
+      const l = o as THREE.PointLight;
+      if (l.isLight && l.castShadow) l.shadow.needsUpdate = true;
+    });
+    await this.post.precompile();
+    await frame();
+    await frame();
   }
 
   /** Quart de tour de caméra (+1 ou -1). */
@@ -1062,12 +1114,18 @@ export class Game {
   /** Objets posés sur `base` ou rangés dedans (pas ceux qu'on tient). */
   private itemsOn(base: WorldItem): WorldItem[] {
     const o = base.object;
-    o.updateMatrixWorld(true);
+    o.updateWorldMatrix(true, false);
+    const toLocal = ON_INV.copy(o.matrixWorld).invert();
     const b = base.box;
     const carried = this.character.carried;
+    // au-delà de cette distance, un objet ne peut pas être dessus : on évite de mesurer sa boîte
+    const reach = (box: THREE.Box3) => Math.hypot(Math.max(-box.min.x, box.max.x), Math.max(-box.min.y, box.max.y), Math.max(-box.min.z, box.max.z));
+    const far = reach(b) + 0.6;
+    const at = ON_POS.setFromMatrixPosition(o.matrixWorld);
     return this.items.filter((it) => {
       if (it === base || carried.includes(it) || this.flying.some((f) => f.item === it)) return false;
-      const q = o.worldToLocal(new THREE.Box3().setFromObject(it.object).getCenter(new THREE.Vector3()));
+      if (it.object.position.distanceTo(at) > far + reach(it.box) * 1.1 + 0.3) return false;
+      const q = ON_BOX.setFromObject(it.object).getCenter(ON_TMP).applyMatrix4(toLocal);
       return q.x > b.min.x && q.x < b.max.x && q.z > b.min.z && q.z < b.max.z && q.y > b.min.y + 0.02 && q.y < b.max.y + 0.6;
     });
   }
@@ -1345,12 +1403,15 @@ export class Game {
     const def = item.def.lamp!;
     const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 2));
     light.position.y = def.y;
-    light.castShadow = false;
+    // ombre gardée même éteinte (une lumière éteinte ne lit pas sa carte) : allumer ou éteindre ne
+    // change pas le nombre de lumières à ombre, donc ne recompile aucun matériau (voir scheduleShadows)
+    light.castShadow = true;
     light.shadow.mapSize.set(256, 256);
     light.shadow.camera.near = 0.05;
     light.shadow.camera.far = def.range;
     light.shadow.bias = -0.003;
     light.shadow.autoUpdate = false;
+    light.shadow.needsUpdate = true;
     item.object.add(light);
     const part = (name: string) => {
       const m = item.object.getObjectByName(name);
@@ -1364,9 +1425,6 @@ export class Game {
     if (!lamp) return;
     lamp.on = on;
     lamp.light.intensity = on ? item.def.lamp!.intensity : 0;
-    // ombres seulement allumée : une ombre de plus prend une texture à tous les matériaux
-    lamp.light.castShadow = on;
-    lamp.light.shadow.autoUpdate = on;
     lamp.light.shadow.needsUpdate = on;
     // ampoule allumée au-dessus de 1 : le bloom la fait briller ; abat-jour éclairé par-dessous
     lamp.bulb?.color.setRGB(on ? 2.6 : 0.23, on ? 2.1 : 0.2, on ? 1.3 : 0.17);
@@ -4182,7 +4240,8 @@ export class Game {
 
   /** Place n° `i` d'un meuble de rangement : base de l'objet et orientation (debout, face à l'avant). */
   private slot(shelf: WorldItem, i: number): { pos: THREE.Vector3; rot: THREE.Quaternion } {
-    shelf.object.updateMatrixWorld(true);
+    // le meuble seul (et ses parents) : pas tout son contenu, recalculé au rendu de toute façon
+    shelf.object.updateWorldMatrix(true, false);
     // la place d'un tiroir sort avec lui
     const [x, y, z] = shelf.def.slots![i];
     const out = shelf.def.drawer ? this.openness(shelf) * shelf.def.drawer : 0;
@@ -4214,10 +4273,16 @@ export class Game {
 
   /** Meuble où l'objet est rangé (et l'avant du meuble), ou null. */
   private shelfOf(item: WorldItem): { shelf: WorldItem; forward: THREE.Vector3 } | null {
+    // appelé souvent (à chaque image pour la vaisselle mouillée, au survol, pendant les ordres) :
+    // même calcul que slot(), sans allocation par place
+    const at = item.object.position;
     for (const shelf of this.items) {
-      if (!shelf.def.slots) continue;
-      for (let i = 0; i < shelf.def.slots.length; i++) {
-        if (this.slot(shelf, i).pos.distanceTo(item.object.position) < 0.02) {
+      const slots = shelf.def.slots;
+      if (!slots) continue;
+      shelf.object.updateWorldMatrix(true, false);
+      const out = shelf.def.drawer ? this.openness(shelf) * shelf.def.drawer : 0;
+      for (const [x, y, z] of slots) {
+        if (SLOT_TMP.set(x, y, z + out).applyMatrix4(shelf.object.matrixWorld).distanceTo(at) < 0.02) {
           return { shelf, forward: new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion) };
         }
       }
@@ -4284,10 +4349,25 @@ export class Game {
 
   private resize(): void {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
-    this.renderer.setSize(w, h, false);
-    this.renderer.domElement.style.width = '100%';
-    this.renderer.domElement.style.height = '100%';
-    this.post.setSize(w, h, this.renderer.getPixelRatio());
+    fitRenderer(this.renderer, w, h, QUALITY_PIXELS[this.qualityLevel]);
+    this.post.setSize(w, h);
+  }
+
+  /** Qualité d'image (plafond de pixels de l'image 3D), mémorisée pour les prochaines parties. */
+  get quality(): Quality {
+    return this.qualityLevel;
+  }
+
+  set quality(q: Quality) {
+    this.qualityLevel = q;
+    saveQuality(q);
+    this.resize();
+  }
+
+  /** Images par seconde et durée moyenne d'une image (ms), sur la dernière demi-seconde. */
+  get fps(): { fps: number; ms: number; pixels: number } {
+    const s = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    return { ...this.fpsNow, pixels: s.x * s.y };
   }
 
   private bindInput(): void {
@@ -4743,6 +4823,13 @@ export class Game {
     this.raf = requestAnimationFrame(this.frame);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    const acc = this.fpsAcc;
+    acc.frames++;
+    if (now - acc.since >= 500) {
+      this.fpsNow = { fps: (acc.frames * 1000) / (now - acc.since), ms: (now - acc.since) / acc.frames };
+      acc.frames = 0;
+      acc.since = now;
+    }
     this.character.setMoveInput(this.keyboardDir(), this.shift);
     // R : pivoter le meuble vers la droite, F : vers la gauche
     this.character.setTurnInput((this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
@@ -4806,12 +4893,62 @@ export class Game {
     const inRoom = this.rooms.find((r) => r.contains(c.position));
     if (inRoom) this.activeRoom = inRoom;
     else if (this.activeRoom && !this.activeRoom.contains(c.position, 2 * WALL_T + 0.15)) this.activeRoom = null;
-    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, toCamera, this.activeRoom?.rect ?? null);
+    // les ombres des lampes et fenêtres restent à la dernière pièce occupée (dehors aussi)
+    this.shadowRoom = this.activeRoom ?? this.shadowRoom ?? this.rooms[0] ?? null;
+    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, toCamera, this.activeRoom?.rect ?? null, r === this.shadowRoom);
     for (const tv of this.tvs.values()) tv.tick(dt);
     this.placeBubble();
     this.motes.update(now / 1000, this.character.position);
+    this.scheduleShadows();
     this.post.render();
   };
+
+  /** Pièce dont les lampes et les fenêtres font des ombres : celle du perso, gardée dehors. */
+  private shadowRoom: Room | null = null;
+  private shadowFrame = 0;
+
+  /**
+   * Cartes d'ombre recalculées à tour de rôle plutôt que toutes à chaque image : chacune redessine
+   * tous les objets à sa portée (six fois pour une lampe), c'est le plus gros du travail d'une
+   * image. Dedans : lampes une image sur deux, fenêtres l'autre, soleil une sur trois (le toit et
+   * les murs l'arrêtent, il n'entre que par les fenêtres). Dehors : soleil à chaque image, lampes et
+   * fenêtres de la maison une sur huit (le perso n'y passe plus que de loin).
+   */
+  private scheduleShadows(): void {
+    const f = ++this.shadowFrame;
+    const inside = this.activeRoom !== null;
+    this.sun.shadow.autoUpdate = false;
+    if (!inside || f % 3 === 0) this.sun.shadow.needsUpdate = true;
+    for (const r of this.rooms) {
+      for (const l of r.liveShadows) {
+        const turn = inside ? f % 2 === ((l as THREE.PointLight).isPointLight ? 0 : 1) : f % 8 === 0;
+        if (turn) l.shadow.needsUpdate = true;
+      }
+    }
+    for (const [item, lamp] of this.lamps) {
+      // lampe cassée ou jetée : sa lumière reste dans la scène, éteinte (le nombre de lumières
+      // ne doit pas changer, voir addLampLight)
+      if (!item.object.parent && lamp.light.parent === item.object) {
+        this.setLamp(item, false);
+        this.scene.attach(lamp.light);
+      }
+      if (!lamp.on) continue;
+      const near = !!this.activeRoom?.contains(lamp.light.getWorldPosition(SHADOW_TMP));
+      if (near ? f % 2 === 0 : f % 8 === 0) lamp.light.shadow.needsUpdate = true;
+    }
+  }
+
+  private prepareCheck = { at: -Infinity, can: false };
+
+  /**
+   * Un plat peut-il être préparé (bouton de l'interface) : revérifié au plus toutes les 150 ms, la
+   * recherche des ingrédients posés mesure tous les objets. La touche G revérifie elle-même.
+   */
+  private canPrepare(): boolean {
+    const now = performance.now();
+    if (now - this.prepareCheck.at > 150) this.prepareCheck = { at: now, can: !!this.dishPlan() };
+    return this.prepareCheck.can;
+  }
 
   /** Ce qu'on peut faire avec ce qu'on tient (boutons de l'interface, menu au clic droit). */
   private handActions(): HandActions {
@@ -4826,7 +4963,7 @@ export class Game {
       serve: held.some((h) => !!h.def.food) && this.items.some((i) => i.def.plate && !c.carried.includes(i) && !i.dirty && !this.foodOn(i)),
       dishes: held.some((h) => h.def.dish && h.dirty),
       cut: held.some((h) => !!h.def.cut && h.portion === 1),
-      prepare: !!this.dishPlan(),
+      prepare: this.canPrepare(),
       throw: !!last && !!c.handOf(last)?.canThrow,
       moving: !!this.moving,
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
@@ -4919,13 +5056,19 @@ export class Game {
     this.post.setDof({ focus: CAM_DIST, range: 2.2 / this.zoom, falloff: 6 / this.zoom, strength: 1 });
   }
 
+  private disposed = false;
+
   dispose(): void {
+    this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.character.dispose();
     this.resizeObs.disconnect();
     for (const d of this.disposers) d();
     this.post.dispose();
     this.renderer.dispose();
+    // libère tout de suite la mémoire du GPU (textures, cartes d'ombre) : utile en passant au
+    // créateur, qui a son propre rendu
+    this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
     this.bubble.remove();
   }

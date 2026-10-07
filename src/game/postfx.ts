@@ -24,6 +24,45 @@ export function lightAllPasses<T extends THREE.Light>(light: T): T {
   return light;
 }
 
+/**
+ * Plafond de pixels de l'image 3D par réglage de qualité. Sur un écran Retina (ratio 2), tout
+ * rendre à la résolution native multiplie par 4 le travail du GPU pour un gain peu visible avec
+ * les contours encrés : au-delà du plafond, le navigateur agrandit l'image.
+ */
+export const QUALITY_PIXELS = { basse: 0.9e6, normale: 2.1e6, haute: 4.2e6 } as const;
+export type Quality = keyof typeof QUALITY_PIXELS;
+
+const QUALITY_KEY = 'rp-island-qualite';
+
+/** Réglage de qualité mémorisé (normale par défaut). */
+export function loadQuality(): Quality {
+  try {
+    const q = localStorage.getItem(QUALITY_KEY);
+    if (q && q in QUALITY_PIXELS) return q as Quality;
+  } catch {
+    // stockage indisponible (navigation privée) : réglage par défaut
+  }
+  return 'normale';
+}
+
+export function saveQuality(q: Quality): void {
+  try {
+    localStorage.setItem(QUALITY_KEY, q);
+  } catch {
+    // tant pis : le réglage vaut pour cette partie
+  }
+}
+
+/** Règle le tampon de dessin du canevas pour une vue de `w` x `h` px CSS, sous `maxPixels`. */
+export function fitRenderer(renderer: THREE.WebGLRenderer, w: number, h: number, maxPixels: number): void {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // jamais plus fin que l'écran, ni plus grossier que la moitié de ses pixels CSS
+  const ratio = Math.max(0.5, Math.min(dpr, Math.sqrt(maxPixels / (w * h))));
+  renderer.setDrawingBufferSize(w, h, ratio);
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+}
+
 const VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
 /** Flou gaussien séparable à 9 prises (pas = `dir`, en texels de la cible lue). */
@@ -75,8 +114,11 @@ export class PostFx {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
-    const opts = { type: THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace };
-    this.sceneRT = new THREE.WebGLRenderTarget(1, 1, { ...opts, samples: 4, depthTexture: new THREE.DepthTexture(1, 1) });
+    // cibles des flous sans tampon de profondeur : seuls des quads plein écran y sont dessinés
+    const opts = { type: THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace, depthBuffer: false };
+    // pas de MSAA : les contours encrés viennent de la profondeur (non lissée de toute façon), et sur
+    // un GPU intégré une cible HalfFloat multi-échantillons coûte très cher en mémoire et en débit
+    this.sceneRT = new THREE.WebGLRenderTarget(1, 1, { ...opts, depthBuffer: true, samples: 0, depthTexture: new THREE.DepthTexture(1, 1) });
     this.brightRT = new THREE.WebGLRenderTarget(1, 1, opts);
     this.blurRT = new THREE.WebGLRenderTarget(1, 1, opts);
     this.dofA = new THREE.WebGLRenderTarget(1, 1, opts);
@@ -123,26 +165,30 @@ export class PostFx {
         uniform vec3 lift; uniform vec3 gain; uniform float saturation; varying vec2 vUv;
         // caméra orthographique : profondeur linéaire
         float lin(float raw){ return near + raw * range; }
-        float d(vec2 o){ return lin(texture2D(tDepth, vUv + o * texel).r); }
-        // 1 si le pixel montre un perso : sa profondeur seule égale celle de la scène (pas masqué par un décor)
-        float ch(vec2 o){
-          vec2 uv = vUv + o * texel;
-          float cd = texture2D(tCharDepth, uv).r;
-          return step(cd, 0.9999) * step(abs(lin(cd) - lin(texture2D(tDepth, uv).r)), 0.02);
+        float raw(vec2 o){ return texture2D(tDepth, vUv + o * texel).r; }
+        // 1 si le pixel montre un perso : sa profondeur seule égale celle de la scène (pas masqué par un
+        // décor) ; textureLod car appelé dans une branche (pas de dérivées implicites)
+        float ch(vec2 o, float sceneRaw){
+          float cd = textureLod(tCharDepth, vUv + o * texel, 0.0).r;
+          return step(cd, 0.9999) * step(abs(lin(cd) - lin(sceneRaw)), 0.02);
         }
         vec3 toSrgb(vec3 c){ c = max(c, 0.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
         void main(){
-          float c0 = d(vec2(0.0));
+          // profondeur du pixel et de ses 4 voisins, lue une seule fois
+          float r0 = raw(vec2(0.0)), rxp = raw(vec2(1.0,0.0)), rxm = raw(vec2(-1.0,0.0)), ryp = raw(vec2(0.0,1.0)), rym = raw(vec2(0.0,-1.0));
+          float c0 = lin(r0);
           // flou de profondeur : nul autour du point net, maximal au-delà de range + falloff
           float coc = smoothstep(focusRange, focusRange + focusFalloff, abs(c0 - focus)) * dofStrength;
-          vec3 c = mix(texture2D(tScene, vUv).rgb, texture2D(tDof, vUv).rgb, coc);
+          vec3 c = texture2D(tScene, vUv).rgb;
+          if (coc > 0.0) c = mix(c, textureLod(tDof, vUv, 0.0).rgb, coc);
           // contours : dérivée SECONDE de la profondeur, nulle sur toute surface plane (sol vu en
           // biais), forte seulement sur les vraies arêtes et silhouettes
-          float lx = abs(d(vec2(1.0,0.0)) + d(vec2(-1.0,0.0)) - 2.0 * c0);
-          float ly = abs(d(vec2(0.0,1.0)) + d(vec2(0.0,-1.0)) - 2.0 * c0);
+          float lx = abs(lin(rxp) + lin(rxm) - 2.0 * c0);
+          float ly = abs(lin(ryp) + lin(rym) - 2.0 * c0);
           float e = max(lx, ly);
-          // persos : arêtes intérieures ignorées, seule la silhouette reste encrée
-          e *= 1.0 - ch(vec2(0.0)) * ch(vec2(1.0,0.0)) * ch(vec2(-1.0,0.0)) * ch(vec2(0.0,1.0)) * ch(vec2(0.0,-1.0));
+          // persos : arêtes intérieures ignorées, seule la silhouette reste encrée (le masque ne sert
+          // qu'au-dessus du seuil d'encre : calculé seulement là)
+          if (e > 0.16) e *= 1.0 - ch(vec2(0.0), r0) * ch(vec2(1.0,0.0), rxp) * ch(vec2(-1.0,0.0), rxm) * ch(vec2(0.0,1.0), ryp) * ch(vec2(0.0,-1.0), rym);
           // pas de trait net dans les zones floues
           c = mix(c, vec3(0.02, 0.018, 0.035), smoothstep(0.16, 0.4, e) * ink * (1.0 - coc));
           c += texture2D(tBloom, vUv).rgb * bloom;
@@ -175,8 +221,13 @@ export class PostFx {
     u.saturation.value = saturation;
   }
 
-  setSize(w: number, h: number, pixelRatio: number): void {
-    const pw = Math.max(1, Math.round(w * pixelRatio)), ph = Math.max(1, Math.round(h * pixelRatio));
+  /**
+   * Taille de la vue en pixels CSS : les cibles suivent le tampon de dessin du canevas (réglé par
+   * fitRenderer), au pixel près pour que la passe finale ne rééchantillonne pas l'image.
+   */
+  setSize(w: number, h: number): void {
+    const buf = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const pw = Math.max(1, buf.x), ph = Math.max(1, buf.y);
     this.pw = pw;
     this.ph = ph;
     this.sceneRT.setSize(pw, ph);
@@ -192,9 +243,13 @@ export class PostFx {
   }
 
   private pass(mat: THREE.Material, target: THREE.WebGLRenderTarget | null): void {
+    const r = this.renderer, clear = r.autoClear;
     this.quad.material = mat;
-    this.renderer.setRenderTarget(target);
-    this.renderer.render(this.quadScene, this.quadCam);
+    r.setRenderTarget(target);
+    // le quad recouvre toute la cible : inutile de l'effacer avant
+    r.autoClear = false;
+    r.render(this.quadScene, this.quadCam);
+    r.autoClear = clear;
   }
 
   /** Flou séparable de `a` (résultat dans `a`, `b` sert d'intermédiaire). */
@@ -219,13 +274,30 @@ export class PostFx {
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
     this.pass(this.brightMat, this.brightRT);
     this.blur(this.brightRT, this.blurRT, 1);
-    // flou de profondeur : image réduite de moitié, floutée deux fois (rayon croissant)
-    this.copyMat.uniforms.tSrc.value = this.sceneRT.texture;
-    this.pass(this.copyMat, this.dofA);
-    this.blur(this.dofA, this.dofB, 1);
-    this.blur(this.dofA, this.dofB, 2);
+    // flou de profondeur : image réduite de moitié, floutée deux fois (rayon croissant) ; rien à
+    // faire sans flou (créateur)
+    if (u.dofStrength.value > 0) {
+      this.copyMat.uniforms.tSrc.value = this.sceneRT.texture;
+      this.pass(this.copyMat, this.dofA);
+      this.blur(this.dofA, this.dofB, 1);
+      this.blur(this.dofA, this.dofB, 2);
+    }
     this.renderCharacterDepth();
     this.pass(this.finalMat, null);
+  }
+
+  /**
+   * Compile d'avance les shaders de toute la scène (objets cachés compris), sans attendre leur
+   * premier affichage : sinon chaque nouveau matériau à l'écran fige le jeu le temps de sa
+   * compilation. Avec KHR_parallel_shader_compile, le pilote compile en parallèle.
+   */
+  async precompile(): Promise<void> {
+    const r = this.renderer, prev = r.getRenderTarget();
+    // même cible que le vrai rendu : l'espace de couleur de sortie fait partie de la clé du shader
+    r.setRenderTarget(this.sceneRT);
+    const ready = r.compileAsync(this.scene, this.camera);
+    r.setRenderTarget(prev);
+    await ready;
   }
 
   /** Profondeur des seuls maillages de persos (calque LAYER_CHARACTER). */
@@ -236,13 +308,20 @@ export class PostFx {
     scene.overrideMaterial = this.charMat;
     cam.layers.set(LAYER_CHARACTER);
     r.setRenderTarget(this.charRT);
-    r.clear();
     scene.matrixWorldAutoUpdate = false; // positions déjà calculées par le rendu principal
-    r.render(scene, cam);
-    scene.matrixWorldAutoUpdate = true;
-    scene.overrideMaterial = null;
-    scene.background = bg;
-    cam.layers.mask = layers;
+    // les cartes d'ombre sont déjà faites par le rendu principal : sans ça, three les efface et y
+    // redessine le perso seul (les lumières sont aussi sur ce calque, voir lightAllPasses)
+    const shadows = r.shadowMap, autoShadows = shadows.autoUpdate;
+    shadows.autoUpdate = false;
+    try {
+      r.render(scene, cam);
+    } finally {
+      shadows.autoUpdate = autoShadows;
+      scene.matrixWorldAutoUpdate = true;
+      scene.overrideMaterial = null;
+      scene.background = bg;
+      cam.layers.mask = layers;
+    }
   }
 
   /** Taille de l'image de scène en pixels (pour les captures). */

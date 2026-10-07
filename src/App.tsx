@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
 import { defaultRecipe, type Recipe } from './creator/recipe';
+import { loadAnimationSource, loadSitAnimations } from './creator/source';
+import { prefetchModel } from './creator/vrm';
 import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
 import { ContextMenu } from './ui/ContextMenu';
+import { DisplayControls, FpsCounter, useFpsShown } from './ui/DisplaySettings';
 import { FeedbackPanel } from './ui/FeedbackPanel';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
@@ -37,13 +40,13 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   /** Objet sous la souris : sa jauge de durabilité. */
   const [drag, setDrag] = useState<{ name: string; over: string | null; x: number; y: number } | null>(null);
-  const [hover, setHover] = useState<{ name: string; grade: string; condition: number; state: string; x: number; y: number } | null>(null);
   /** Menu au clic droit ouvert. */
   const [ctx, setCtx] = useState<Menu3D | null>(null);
   /** Meuble dont la fenêtre d'inventaire est ouverte. */
   const [inv, setInv] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const missing = useMissingCount();
+  const [fpsShown, setFpsShown] = useFpsShown();
   /** Fenêtre « Signaler » ouverte, avec son texte de départ. */
   const [report, setReport] = useState<string | null>(null);
   /** Partie du menu dépliée. */
@@ -52,6 +55,10 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
 
   useEffect(() => {
     if (!host.current) return;
+    // téléchargements lancés avant de construire la maison, qui occupe le processeur un moment
+    for (const id of new Set([recipe.outfit, recipe.face, recipe.hair])) prefetchModel(id);
+    void loadAnimationSource().catch(() => {});
+    void loadSitAnimations().catch(() => {});
     const g = new Game(host.current, recipe);
     game.current = g;
     setReady(g);
@@ -60,12 +67,11 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       setHeld(name);
       setCan(actions);
     };
-    g.onHover = setHover;
     g.onInventory = setInv;
     g.onDrag = setDrag;
     g.onMenu = (m) => {
       setCtx(m);
-      if (m) setHover(null);
+      if (m) g.onHover?.(null);
     };
     let timer = 0;
     g.onNotice = (text) => {
@@ -102,6 +108,9 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         <MenuSection title="Heure" open={section === 'heure'} onToggle={fold('heure')}>
           <TimeControls game={ready} />
         </MenuSection>
+        <MenuSection title="Affichage" open={section === 'affichage'} onToggle={fold('affichage')}>
+          <DisplayControls game={ready} fps={fpsShown} onFps={setFpsShown} />
+        </MenuSection>
         <MenuSection title={`Manques${missing ? ` (${missing})` : ''}`} open={section === 'manques'} onToggle={fold('manques')}>
           <MissingPanel
             onReport={(text) => {
@@ -123,6 +132,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         <button onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite">⟳</button>
       </div>
       <NeedsHud game={ready} />
+      {fpsShown && <FpsCounter game={ready} />}
       {held && (
         <div className="hud-held">
           <button onClick={() => game.current?.drop()}>
@@ -214,17 +224,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
           {drag.over && <span> → {drag.over}</span>}
         </div>
       )}
-      {hover && !ctx && !drag && (
-        <div className="hud-wear" style={{ left: hover.x, top: hover.y }}>
-          <div>
-            {hover.name} · <b>{hover.grade}</b>
-          </div>
-          {hover.state && <div className="hud-wear-state">{hover.state}</div>}
-          <div className="hud-wear-bar">
-            <span style={{ width: `${Math.round(hover.condition * 100)}%`, background: `hsl(${Math.round(hover.condition * 110)}, 65%, 50%)` }} />
-          </div>
-        </div>
-      )}
+      <HoverTip game={ready} hidden={!!ctx || !!drag} />
       <ChatBar
         game={ready}
         onNeedSettings={() => {
@@ -233,6 +233,35 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         }}
       />
       {(loading || error) && <div className="hud-loading">{error ?? 'Chargement…'}</div>}
+    </div>
+  );
+}
+
+type HoverInfo = { name: string; grade: string; condition: number; state: string; x: number; y: number };
+
+/**
+ * Jauge d'usure de l'objet sous la souris. Composant à part : elle suit la souris, et un état
+ * dans World re-rendrait toute l'interface à chaque mouvement.
+ */
+function HoverTip({ game, hidden }: { game: Game | null; hidden: boolean }) {
+  const [hover, setHover] = useState<HoverInfo | null>(null);
+  useEffect(() => {
+    if (!game) return;
+    game.onHover = setHover;
+    return () => {
+      game.onHover = null;
+    };
+  }, [game]);
+  if (!hover || hidden) return null;
+  return (
+    <div className="hud-wear" style={{ left: hover.x, top: hover.y }}>
+      <div>
+        {hover.name} · <b>{hover.grade}</b>
+      </div>
+      {hover.state && <div className="hud-wear-state">{hover.state}</div>}
+      <div className="hud-wear-bar">
+        <span style={{ width: `${Math.round(hover.condition * 100)}%`, background: `hsl(${Math.round(hover.condition * 110)}, 65%, 50%)` }} />
+      </div>
     </div>
   );
 }
