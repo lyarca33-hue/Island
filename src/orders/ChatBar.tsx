@@ -8,7 +8,7 @@ import { intentLabel, runIntents, type Step } from './tasks';
 
 type Mode = 'parole' | 'action';
 
-const STEP_LABEL: Record<string, string> = { prendre: 'Prend', ranger: 'Range dans', poser: 'Pose', aller: 'Va vers', cafe: 'Fait un café', boire: 'Boit', dire: 'Dit', lire: 'Lit', arreter_lire: 'Ferme le livre', allumer: 'Allume', eteindre: 'Éteint', mettre_sur_feu: 'Met sur le feu', mettre_dans: 'Met dans', attendre_cuisson: 'Attend la cuisson de' };
+const STEP_LABEL: Record<string, string> = { prendre: 'Prend', ranger: 'Range dans', poser: 'Pose', aller: 'Va vers', cafe: 'Fait un café', boire: 'Boit', manger: 'Mange', couper: 'Coupe', dire: 'Dit', lire: 'Lit', arreter_lire: 'Ferme le livre', allumer: 'Allume', eteindre: 'Éteint', mettre_sur_feu: 'Met sur le feu', mettre_dans: 'Met dans', attendre_cuisson: 'Attend la cuisson de' };
 
 function stepText(s: Step | null): string {
   if (!s) return 'Réfléchit…';
