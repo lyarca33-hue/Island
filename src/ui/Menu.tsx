@@ -40,6 +40,7 @@ export function MenuSection({ title, open, onToggle, children }: { title: string
 
 /** Raccourcis clavier du jeu (ce qu'un clic fait n'est pas listé). */
 export const SHORTCUTS: Array<[string, string]> = [
+  ['Clic droit', 'Tous les gestes possibles sur un objet'],
   ['ZQSD / ↑↓←→', 'Marcher'],
   ['Maj', 'Courir'],
   ['E', 'Poser / lâcher'],

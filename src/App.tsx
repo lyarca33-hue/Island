@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
 import { defaultRecipe, type Recipe } from './creator/recipe';
-import { Game, type HandActions } from './game/Game';
+import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
+import { ContextMenu } from './ui/ContextMenu';
 import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
@@ -33,7 +34,9 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, seated: false });
   const [notice, setNotice] = useState<string | null>(null);
   /** Objet sous la souris : sa jauge de durabilité. */
-  const [hover, setHover] = useState<{ name: string; grade: string; condition: number; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState<{ name: string; grade: string; condition: number; state: string; x: number; y: number } | null>(null);
+  /** Menu au clic droit ouvert. */
+  const [ctx, setCtx] = useState<Menu3D | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const missing = useMissingCount();
   /** Partie du menu dépliée. */
@@ -51,6 +54,10 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       setCan(actions);
     };
     g.onHover = setHover;
+    g.onMenu = (m) => {
+      setCtx(m);
+      if (m) setHover(null);
+    };
     let timer = 0;
     g.onNotice = (text) => {
       setNotice(text);
@@ -176,11 +183,13 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
-      {hover && (
+      {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
+      {hover && !ctx && (
         <div className="hud-wear" style={{ left: hover.x, top: hover.y }}>
           <div>
             {hover.name} · <b>{hover.grade}</b>
           </div>
+          {hover.state && <div className="hud-wear-state">{hover.state}</div>}
           <div className="hud-wear-bar">
             <span style={{ width: `${Math.round(hover.condition * 100)}%`, background: `hsl(${Math.round(hover.condition * 110)}, 65%, 50%)` }} />
           </div>

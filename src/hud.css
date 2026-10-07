@@ -139,3 +139,19 @@
   border: 7px solid transparent; border-bottom: 0; border-top-color: #fdf6e3;
 }
 .speech-bubble[hidden] { display: none; }
+
+/* Menu rond au clic droit */
+.ctx-backdrop { position: absolute; inset: 0; z-index: 20; }
+.ctx-menu { position: absolute; width: 0; height: 0; }
+.ctx-title {
+  position: absolute; transform: translate(-50%, -50%); padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  background: rgba(20, 24, 40, 0.85); border: 1px solid rgba(255, 240, 210, 0.35); font-size: 12px; opacity: 0.9; pointer-events: none;
+}
+.ctx-entry {
+  position: absolute; transform: translate(var(--ax, -50%), -50%); padding: 7px 12px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid rgba(255, 240, 210, 0.5); background: rgba(20, 24, 40, 0.88); color: #fdf6e3; font: inherit; font-size: 14px;
+  cursor: pointer; animation: ctx-in 140ms ease-out both;
+}
+.ctx-entry:hover, .ctx-entry:focus-visible { background: rgba(70, 60, 30, 0.95); border-color: #ffd98a; outline: none; }
+@keyframes ctx-in { from { opacity: 0; transform: translate(var(--ax, -50%), -50%) scale(0.6); } to { opacity: 1; transform: translate(var(--ax, -50%), -50%) scale(1); } }
+.hud-wear-state { margin-top: 2px; font-size: 12px; opacity: 0.85; }

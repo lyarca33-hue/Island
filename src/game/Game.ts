@@ -207,6 +207,8 @@ const agree = (name: string) => `${FEMININE.has(name) ? 'e' : ''}${PLURAL.has(na
 const theName = (name: string) => `${PLURAL.has(name) ? 'Les' : FEMININE.has(name) ? 'La' : 'Le'} ${name}`;
 /** « le steak », « la poêle », « l’évier ». */
 const the = (name: string) => (elides(name) ? `l’${name}` : FEMININE.has(name) ? `la ${name}` : `le ${name}`);
+/** « au frigo », « à la table », « à l’évier », « aux quartiers de pomme ». */
+const toThe = (name: string) => (PLURAL.has(name) ? `aux ${name}` : elides(name) ? `à l’${name}` : FEMININE.has(name) ? `à la ${name}` : `au ${name}`);
 
 /** Pesanteur des objets lancés (m/s²). */
 const GRAVITY = 9.8;
@@ -222,6 +224,20 @@ interface Flying {
   spin: THREE.Vector3;
   /** Déjà rebondi une fois (le premier choc seul peut le casser). */
   bounced: boolean;
+}
+
+/** Un geste du menu au clic droit : son nom et ce qu'il lance (faux si rien ne se lance). */
+export interface MenuEntry {
+  label: string;
+  run: () => boolean;
+}
+
+/** Menu au clic droit : où l'ouvrir (px, dans la vue), sur quoi, et les gestes possibles. */
+export interface ContextMenu {
+  x: number;
+  y: number;
+  title: string;
+  entries: MenuEntry[];
 }
 
 /** Ce qu'on peut faire avec ce qu'on tient (boutons de l'interface). */
@@ -321,7 +337,9 @@ export class Game {
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
   /** Objet sous la souris (nom, grade, durabilité de 0 à 1, position à l'écran), ou null. */
-  onHover: ((info: { name: string; grade: string; condition: number; x: number; y: number } | null) => void) | null = null;
+  onHover: ((info: { name: string; grade: string; condition: number; state: string; x: number; y: number } | null) => void) | null = null;
+  /** Menu au clic droit à ouvrir (null : le fermer). */
+  onMenu: ((menu: ContextMenu | null) => void) | null = null;
   /** Petit message à afficher (ex. objet non portable). */
   onNotice: ((text: string) => void) | null = null;
   /** Bulle de parole au-dessus du perso, et quand elle disparaît (ms, horloge de la page). */
@@ -2493,10 +2511,6 @@ export class Game {
   private tryPickUp(item: WorldItem, running: boolean, opts: { body?: boolean; button?: number } = {}): boolean {
     const c = this.character;
     const held = c.heldItems;
-    const sameStack = held.find((h) => item.def.stack && h.def.stack === item.def.stack);
-    // un livre rangé se prend par l'avant du meuble
-    const stored = this.shelfOf(item);
-    const from = stored?.forward;
     const door = this.doors.get(item);
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
@@ -2535,10 +2549,22 @@ export class Game {
     else if (item.def.plate && held.some((h) => h.def.food)) return this.serveOn(item, held.find((h) => h.def.food)!, running);
     else if (item.def.slots && held.length) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
-    else if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
-    else if (this.closeBookThen(() => this.tryPickUp(item, running))) return true;
+    else return this.take(item, running);
+    return false;
+  }
+
+  /** Prendre l'objet en main, sans s'en servir (menu au clic droit : « Prendre »). */
+  private take(item: WorldItem, running: boolean): boolean {
+    const c = this.character;
+    const held = c.heldItems;
+    const sameStack = held.find((h) => item.def.stack && h.def.stack === item.def.stack);
+    // un livre rangé se prend par l'avant du meuble
+    const stored = this.shelfOf(item);
+    const from = stored?.forward;
+    if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
+    else if (this.closeBookThen(() => this.take(item, running))) return true;
     // dans le frigo fermé : on ouvre d'abord
-    else if (stored && this.doors.get(stored.shelf)?.target === 0 && (c.stackHand(item) || c.freeHand(item))) return this.withDoorOpen(stored.shelf, () => this.tryPickUp(item, running), running);
+    else if (stored && this.doors.get(stored.shelf)?.target === 0 && (c.stackHand(item) || c.freeHand(item))) return this.withDoorOpen(stored.shelf, () => this.take(item, running), running);
     // un livre de plus sur la pile tenue (l'autre main libre), sinon dans l'autre main
     else if (c.stackHand(item)) return c.collect(item, running, from);
     else if (c.freeHand(item)) return c.pickUp(item, running, from);
@@ -2699,11 +2725,24 @@ export class Game {
         return;
       }
       const r = el.getBoundingClientRect();
-      this.onHover?.({ name: item.name, grade: gradeName(item.condition, FEMININE.has(item.name)), condition: item.condition, x: e.clientX - r.left, y: e.clientY - r.top });
+      this.onHover?.({ name: item.name, grade: gradeName(item.condition, FEMININE.has(item.name)), condition: item.condition, state: this.stateOf(item), x: e.clientX - r.left, y: e.clientY - r.top });
     });
     on(el, 'pointerleave', () => this.onHover?.(null));
+    on(el, 'contextmenu', (e) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const item = this.hitAt(e.clientX, e.clientY)?.item ?? null;
+      const entries = this.menuFor(item);
+      if (!entries.length) {
+        this.onMenu?.(null);
+        return;
+      }
+      const title = item ? item.name : this.heldLabel ?? 'Le perso';
+      this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title, entries });
+    });
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
+      this.onMenu?.(null);
       const hit = this.hitAt(e.clientX, e.clientY);
       if (hit) {
         // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser
@@ -2756,6 +2795,121 @@ export class Game {
     this.raycaster.set(base.clone().setY(base.y + 0.02), new THREE.Vector3(0, -1, 0));
     const hit = this.raycaster.intersectObject(under.object, true)[0];
     return !!hit && hit.distance < 0.05;
+  }
+
+  /**
+   * Gestes possibles sur l'objet visé (clic droit), ou avec ce qu'on tient (clic droit sur le sol
+   * ou sur le perso). Chaque geste reprend une action existante ; le clic gauche garde le geste
+   * le plus courant.
+   */
+  menuFor(item: WorldItem | null): MenuEntry[] {
+    const c = this.character;
+    const held = c.heldItems;
+    const out: MenuEntry[] = [];
+    const add = (label: string, run: () => boolean) => out.push({ label, run });
+    if (!c.canCarry) return out;
+    if (this.moving) {
+      add(`Lâcher : ${this.moving.item.name}`, () => this.release());
+      return out;
+    }
+    if (!item) {
+      const can = this.handActions();
+      if (can.drink) add('Boire', () => this.drink());
+      if (can.eat) add('Manger', () => this.eat());
+      if (can.serve) add('Servir dans l’assiette', () => this.serve());
+      if (can.cut) add('Couper', () => this.cut());
+      if (can.prepare) add('Préparer le plat', () => this.prepare());
+      if (can.dishes) add('Faire la vaisselle', () => this.washDishes());
+      if (can.read) add('Lire', () => this.read());
+      if (can.reading) add('Fermer le livre', () => this.stopReading());
+      if (can.throw) add(`Lancer : ${c.held!.name}`, () => this.throwItem());
+      if (held.length && this.items.some((i) => i.def.bin)) add(`Jeter : ${c.held!.name}`, () => this.throwAway());
+      for (const h of new Set(held.map((i) => i.name))) add(`Poser : ${h}`, () => this.drop(h));
+      if (can.seated) add('Se lever', () => this.standUp());
+      return out;
+    }
+    const ref = this.ref(item);
+    const door = this.doors.get(item);
+    const heat = this.heaters.get(item);
+    // porte, tiroir, couvercle
+    if (door) {
+      const part = item.def.drawer ? 'le tiroir' : item.def.bin ? 'le couvercle' : 'la porte';
+      if (door.target || door.open > 0) add(`Fermer ${part}`, () => this.closeDoor(ref));
+      else add(`Ouvrir ${part}`, () => this.openDoor(ref));
+    }
+    // ranger ce qu'on tient
+    if (item.def.slots && held.some((h) => this.fits(item, h))) add('Ranger ici ce que je tiens', () => this.storeIn(item, false));
+    // gazinière, bouilloire, machine à café : poser l'ustensile, allumer, éteindre
+    const pan = held.find((h) => h.def.cookware);
+    if (heat && pan && !item.def.pour) add(`Poser ${the(pan.name)} sur le feu`, () => this.putOnStove(item, pan, false));
+    if (heat && !item.def.pour) {
+      if (heat.on.some(Boolean)) add('Éteindre', () => this.switchOff(ref));
+      else add('Allumer', () => this.switchOn(ref));
+    }
+    // four, micro-ondes, lave-vaisselle
+    if (item.def.heats || item.def.washes) {
+      if (this.appliances.has(item)) add('Arrêter', () => this.stopAppliance(ref));
+      else add(item.def.washes ? 'Lancer un lavage' : 'Mettre en marche', () => this.startAppliance(ref));
+    }
+    // poubelle
+    if (item.def.bin && held.length) add(`Jeter : ${c.held!.name}`, () => this.throwInto(item, c.held!, false));
+    if (item.def.bin && this.binFill.get(item)) add('Vider la poubelle', () => this.emptyBin(ref));
+    // évier
+    if (item.def.wash?.dishes && held.some((h) => h.def.dish && h.dirty)) add('Faire la vaisselle', () => this.washDishesAt(item, false));
+    // machine qui remplit (café, thé, eau du robinet)
+    const cup = item.def.pour && held.find((h) => item.def.pour!.fills.includes(h.name));
+    if (cup) {
+      const liquid = item.def.pour!.liquid;
+      add(liquid === 'eau' ? `Remplir ${the(cup.name)} d’eau` : `Faire un ${liquid}`, () => this.pourAt(item, false));
+    }
+    if (item.def.wash && !held.length) {
+      add('Se laver les mains', () => this.washAt(item, false, false));
+      add('Faire sa toilette', () => this.washAt(item, true, false));
+    }
+    // ustensile : y mettre l'ingrédient tenu
+    const food = item.def.cookware && held.find((h) => this.cookFits(item, h));
+    if (food) add(`Mettre ${the(food.name)} dedans`, () => this.putIn(item, food, false));
+    // planche, assiette : couper, servir, préparer
+    const board = item.def.board ? item : this.boardOn(item);
+    if (board && held.some((h) => h.def.cut && h.portion === 1)) add('Couper ici', () => this.cutOn(board, false));
+    if ((item.def.board || item.def.plate) && this.dishPlan(undefined, item)) add('Préparer le plat ici', () => this.prepare(undefined, ref));
+    const dish = item.def.plate && held.find((h) => h.def.food);
+    if (dish && !item.dirty && !this.foodOn(item)) add(`Servir ${the(dish.name)} ici`, () => this.serveOn(item, dish, false));
+    if (item.def.plate && this.foodOn(item)) add('S’attabler', () => this.sitAtTable(ref));
+    // siège
+    if (item.def.seat && item !== this.sitting) add('S’asseoir', () => this.sit(ref));
+    if (item === this.sitting) add('Se lever', () => this.standUp());
+    // prendre (sans s'en servir), déplacer un meuble
+    if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
+    if (item.def.movable && !held.length) add(`Déplacer ${the(item.name)}`, () => this.grabFurniture(item, false));
+    add(`Aller ${toThe(item.name)}`, () => this.walkTo(ref));
+    return out;
+  }
+
+  /** État visible d'un objet pour l'infobulle : « cuit », « sale », « plein de café », « en marche »… */
+  private stateOf(item: WorldItem): string {
+    const words: string[] = [];
+    const a = agree(item.name);
+    const cuisson = doneness(item.def, item.cooking);
+    if (cuisson) words.push(donenessWord(cuisson, FEMININE.has(item.name)) + (PLURAL.has(item.name) ? 's' : ''));
+    if (item.def.food && item.portion < 1) words.push(`entamé${a}`);
+    if (item.contents) words.push(item.level >= 0.95 ? `plein${FEMININE.has(item.name) ? 'e' : ''} ${ofLiquid(item.contents)}` : `un reste ${ofLiquid(item.contents)}`);
+    else if (item.def.fill && !item.def.pour) words.push(`vide${PLURAL.has(item.name) ? 's' : ''}`);
+    if (item.def.cookware) {
+      const inside = this.inPan(item);
+      if (inside.length) words.push(`contient ${inside.map((i) => i.name).join(', ')}`);
+    }
+    if (item.dirty) words.push(`sale${PLURAL.has(item.name) ? 's' : ''}`);
+    const door = this.doors.get(item);
+    if (door?.target) words.push(`${item.def.drawer ? 'tiroir' : item.def.bin ? 'couvercle' : 'porte'} ouvert${item.def.drawer || item.def.bin ? '' : 'e'}`);
+    if (this.appliances.has(item)) words.push('en marche');
+    if (this.heaters.get(item)?.on.some(Boolean)) words.push(`allumé${a}`);
+    if (item.def.bin) {
+      const n = this.binFill.get(item) ?? 0;
+      words.push(n >= item.def.bin ? 'pleine' : n ? `${n} déchet${n > 1 ? 's' : ''}` : 'vide');
+    }
+    if (this.shelfOf(item)?.shelf.def.cold) words.push('au frais');
+    return words.join(' · ');
   }
 
   /** E : reposer l'objet tenu, sinon prendre l'objet portable le plus proche (à 1,5 m). */
@@ -2878,21 +3032,7 @@ export class Game {
     });
     if (this.sitting && !c.seated && (c.idle || c.washing)) this.sitting = null;
     const label = this.moving ? `${this.moving.item.name}, ${grade(this.moving.item)}` : names.length ? names.join(' et ') : null;
-    const bookHand = book ? c.handOf(book) : null;
-    const last = c.held;
-    const can: HandActions = {
-      drink: held.some((h) => !!h.contents && !h.def.cookware),
-      eat: held.some((h) => !!h.def.food) || (held.some((h) => !!h.def.utensil) && !!this.tablePlate()),
-      serve: held.some((h) => !!h.def.food) && this.items.some((i) => i.def.plate && !c.carried.includes(i) && !i.dirty && !this.foodOn(i)),
-      dishes: held.some((h) => h.def.dish && h.dirty),
-      cut: held.some((h) => !!h.def.cut && h.portion === 1),
-      prepare: !!this.dishPlan(),
-      throw: !!last && !!c.handOf(last)?.canThrow,
-      moving: !!this.moving,
-      read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
-      reading: !!c.reading,
-      seated: !!this.sitting,
-    };
+    const can = this.handActions();
     const key = JSON.stringify(can);
     if (label !== this.heldLabel || key !== this.actionsKey) {
       this.heldLabel = label;
@@ -2907,6 +3047,28 @@ export class Game {
     this.motes.update(now / 1000, this.character.position);
     this.post.render();
   };
+
+  /** Ce qu'on peut faire avec ce qu'on tient (boutons de l'interface, menu au clic droit). */
+  private handActions(): HandActions {
+    const c = this.character;
+    const held = c.heldItems;
+    const book = held.find((h) => h.def.buildOpen);
+    const bookHand = book ? c.handOf(book) : null;
+    const last = c.held;
+    return {
+      drink: held.some((h) => !!h.contents && !h.def.cookware),
+      eat: held.some((h) => !!h.def.food) || (held.some((h) => !!h.def.utensil) && !!this.tablePlate()),
+      serve: held.some((h) => !!h.def.food) && this.items.some((i) => i.def.plate && !c.carried.includes(i) && !i.dirty && !this.foodOn(i)),
+      dishes: held.some((h) => h.def.dish && h.dirty),
+      cut: held.some((h) => !!h.def.cut && h.portion === 1),
+      prepare: !!this.dishPlan(),
+      throw: !!last && !!c.handOf(last)?.canThrow,
+      moving: !!this.moving,
+      read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
+      reading: !!c.reading,
+      seated: !!this.sitting,
+    };
+  }
 
   /** Le temps passe : les besoins baissent ; boire (café) remonte la soif et réveille un peu. */
   private tickNeeds(dt: number): void {
