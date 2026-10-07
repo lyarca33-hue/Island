@@ -177,7 +177,10 @@ pleine laisse une flaque. Sinon il rebondit et se pose (un livre à plat).
 Déplacer un gros meuble (fiche `movable` : table, bibliothèque, machine à café) : mains vides,
 clic sur le meuble. Le perso se place contre le côté le plus proche et pose les mains dessus ;
 Z Q S D le poussent ou le tirent (ce qui est posé ou rangé dedans suit), il bute sur les autres
-meubles. E le lâche.
+meubles. R et F le font pivoter sur lui-même (R vers la droite, F vers la gauche) : le perso
+tourne autour en gardant les mains dessus, et ce qui est posé dessus ou rangé dedans tourne avec.
+Il bute aussi sur les autres meubles en pivotant. Console : `game.turnMoving(90)` (degrés, négatif
+vers la gauche). E le lâche.
 
 Durabilité : chaque objet a une jauge (fiche `durability`, en points : tasse 40, lettre 30,
 livre 100, caisse 150, machine 250, évier 300, table 300, bibliothèque 400). Elle baisse à l'usage (prendre

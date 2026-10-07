@@ -106,7 +106,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
           <button onClick={() => game.current?.drop()}>
             {can.moving ? (
               <>
-                Déplace : {held} (Z Q S D) · <b>Lâcher (E)</b>
+                Déplace : {held} (Z Q S D) · Pivoter (R / F) · <b>Lâcher (E)</b>
               </>
             ) : (
               <>
