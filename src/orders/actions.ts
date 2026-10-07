@@ -99,6 +99,37 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.fillWater(),
   },
   {
+    name: 'allumer',
+    description: 'Allumer un appareil : la gazinière (les feux où une poêle ou une casserole est posée) ou la machine à café.',
+    params: { objet: 'ref de l’appareil' },
+    // `ustensile` (facultatif) : seulement le feu sous lui
+    run: (g, a) => g.switchOn(a.objet, false, a.ustensile),
+  },
+  {
+    name: 'eteindre',
+    description: 'Éteindre un appareil (tous les feux de la gazinière, la machine à café).',
+    params: { objet: 'ref de l’appareil' },
+    run: (g, a) => g.switchOff(a.objet, false, a.ustensile),
+  },
+  {
+    name: 'mettre_sur_feu',
+    description: 'Poser la poêle ou la casserole tenue sur un feu libre de la gazinière.',
+    params: { objet: 'ref de la gazinière' },
+    run: (g, a) => g.putOnFire(a.objet),
+  },
+  {
+    name: 'mettre_dans',
+    description: 'Mettre l’ingrédient tenu dans un ustensile posé : le steak dans la poêle, la pomme de terre dans la casserole.',
+    params: { ustensile: 'ref de l’ustensile' },
+    run: (g, a) => g.putInPan(a.ustensile),
+  },
+  {
+    name: 'attendre_cuisson',
+    description: 'Attendre qu’un ingrédient sur le feu allumé soit cuit.',
+    params: { objet: 'ref de l’ingrédient' },
+    run: (g, a) => g.waitCooked(a.objet),
+  },
+  {
     name: 'laver_mains',
     description: 'Se laver les mains à l’évier (les mains doivent être libres).',
     params: {},

@@ -16,6 +16,7 @@ import { gradeName } from './items/durability';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
+import { doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { createMotes } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
@@ -69,6 +70,14 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['frigo', 2.75, 0, -1.75, Math.PI / 4 - 0.45],
   // de l'autre côté de l'évier, dans son alignement : de quoi couper
   ['plan-de-travail', 3.17, 0, 0.37, -Math.PI / 4],
+  // après le plan de travail, dans le même alignement, dos alignés
+  ['gaziniere', 3.69, 0, 0.94, -Math.PI / 4],
+];
+
+/** Ustensiles posés au départ sur un feu : [id, appareil, n° du feu]. */
+const START_ON_STOVE: Array<[string, string, number]> = [
+  ['poele', 'gaziniere', 0],
+  ['casserole', 'gaziniere', 3],
 ];
 
 /**
@@ -89,6 +98,10 @@ const START_STORED: Array<[string, string, number]> = [
   ['pomme', 'frigo', 5],
   ['pomme', 'frigo', 6],
   ['sandwich', 'frigo', 1],
+  ['steak', 'frigo', 0],
+  ['steak', 'frigo', 3],
+  ['pomme-de-terre', 'frigo', 10],
+  ['pomme-de-terre', 'frigo', 11],
   ['tomate', 'frigo', 2],
   ['carotte', 'frigo', 4],
   ['concombre', 'frigo', 7],
@@ -108,6 +121,13 @@ const WEAR_BREW = { machine: 1.5, cup: 0.5 };
 const WEAR_DOOR = 0.4;
 /** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
 const WEAR_TAP = 0.4;
+/** Usure d'un appareil (bouton du feu, de la machine) à chaque allumage, et de l'ustensile à chaque plat cuit. */
+const WEAR_KNOB = 0.3;
+const WEAR_COOK = 0.5;
+/** Eau de la casserole qui bout : secondes pour qu'une casserole pleine s'évapore. */
+const BOIL_AWAY = 70;
+/** Écart (m) entre un ustensile et le feu pour qu'il soit dessus. */
+const ON_SPOT = 0.07;
 /** Usure à chaque aliment coupé : le couteau (il s'émousse) et la planche. */
 const WEAR_CUT = { knife: 1, board: 0.6 };
 /** Distance de la face avant du meuble où se tenir pour couper sur la planche (m). */
@@ -142,10 +162,13 @@ export interface WorldObject {
   /** Se porte à deux mains (caisse). */
   deuxMains?: boolean;
   /**
-   * Meuble de rangement, frigo, machine (à café), évier (eau, se laver), récipient (tasse,
-   * bouteille), nourriture, siège (chaise), planche (à découper) ou couteau.
+   * Meuble de rangement, frigo, machine (à café), évier (eau, se laver), gazinière, ustensile
+   * (poêle, casserole), récipient (tasse, bouteille), nourriture, siège (chaise), planche (à
+   * découper) ou couteau.
    */
-  sorte?: 'rangement' | 'frigo' | 'machine' | 'évier' | 'récipient' | 'nourriture' | 'siège' | 'planche' | 'couteau';
+  sorte?: 'rangement' | 'frigo' | 'machine' | 'évier' | 'gazinière' | 'ustensile' | 'récipient' | 'nourriture' | 'siège' | 'planche' | 'couteau';
+  /** Ingrédient : cru, cuit ou brûlé. */
+  cuisson?: 'cru' | 'cuit' | 'brûlé';
   /** Aliment entier qui se coupe en morceaux sur la planche (pomme, pain, légumes). */
   coupable?: boolean;
   ou: string;
@@ -155,12 +178,14 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre']);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre']);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre']);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
 const agree = (name: string) => `${FEMININE.has(name) ? 'e' : ''}${PLURAL.has(name) ? 's' : ''}`;
 const theName = (name: string) => `${PLURAL.has(name) ? 'Les' : FEMININE.has(name) ? 'La' : 'Le'} ${name}`;
+/** « le steak », « la poêle », « l’évier ». */
+const the = (name: string) => (elides(name) ? `l’${name}` : FEMININE.has(name) ? `la ${name}` : `le ${name}`);
 
 /** Pesanteur des objets lancés (m/s²). */
 const GRAVITY = 9.8;
@@ -249,6 +274,12 @@ export class Game {
   private lastBite = new Map<WorldItem, number>();
   /** En train de se laver à l'évier : temps écoulé, durée, hygiène rendue en tout. */
   private washing: { sink: WorldItem; t: number; seconds: number; hygiene: number; face: boolean } | null = null;
+  /** Appareils qui chauffent (gazinière, machine à café) : feux allumés, chaleur de chaque feu (0 à 1), temps allumé sans servir (s). */
+  private heaters = new Map<WorldItem, { on: boolean[]; warm: number[]; unused: number }>();
+  /** Fumée (ça brûle) et vapeur (l'eau bout) au-dessus des ustensiles. */
+  private puffs = new Puffs();
+  /** Ingrédient dont on attend la cuisson (ordre « cuire »). */
+  private cookWait: WorldItem | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
   /** Objet sous la souris (nom, grade, durabilité de 0 à 1, position à l'écran), ou null. */
@@ -322,6 +353,17 @@ export class Game {
     // les meubles (objets non portables) se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door) this.doors.set(item, { open: 0, target: 0, then: null });
+    for (const item of this.items) {
+      const n = item.def.heat?.spots.length ?? 0;
+      if (n) this.heaters.set(item, { on: Array(n).fill(false), warm: Array(n).fill(0), unused: 0 });
+    }
+    for (const [id, stove, i] of START_ON_STOVE) {
+      const where = this.items.find((it) => it.def.id === stove);
+      if (!where) continue;
+      const it = add(id);
+      it.object.position.copy(this.spotWorld(where, i));
+      it.object.rotation.y = where.object.rotation.y;
+    }
     for (const [id, holder, i] of START_STORED) {
       const where = this.items.find((it) => it.def.id === holder);
       if (!where) continue;
@@ -358,6 +400,7 @@ export class Game {
 
     this.motes = createMotes();
     this.scene.add(this.motes.points);
+    this.scene.add(this.puffs.group);
 
     this.bubble = document.createElement('div');
     this.bubble.className = 'speech-bubble';
@@ -463,7 +506,7 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    return this.character.idle && !this.brew && !this.washing && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.brew && !this.washing && !this.cookWait && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
@@ -768,6 +811,7 @@ export class Game {
     const broke = item.def.breakWord ?? 'brisé';
     const se = PLURAL.has(item.name) ? 'se sont' : 's\'est';
     this.doors.delete(item);
+    this.heaters.delete(item);
     this.onNotice?.(note ?? (worn ? `${name}, trop usé${e}, ${se} ${broke}${e} !` : `${name} ${se} ${broke}${e} !`));
   }
 
@@ -865,8 +909,10 @@ export class Game {
     const objets = this.items.map((item) => {
       let ou = 'au sol';
       const shelf = this.shelfOf(item);
+      const pan = item.def.cook && !carried.includes(item) ? this.panOf(item) : undefined;
       if (carried.includes(item)) ou = 'en main';
       else if (shelf) ou = `rangé dans ${this.ref(shelf.shelf)}`;
+      else if (pan) ou = `dans ${this.ref(pan)}`;
       else if (item.object.position.y > 0.05) {
         const under = this.items.find((o) => o !== item && !carried.includes(o) && o.object.position.y < item.object.position.y && this.isAbove(item, o));
         ou = under ? `posé sur ${this.ref(under)}` : 'posé en hauteur';
@@ -876,13 +922,24 @@ export class Game {
       if (door) ou += door.target ? ', porte ouverte' : ', porte fermée';
       if (item.def.food && item.portion < 1) ou += `, entamé${agree(item.name)}`;
       if (item.contents) ou += `, contient ${someLiquid(item.contents)}`;
-      else if (item.def.startFull) ou += ', vide';
-      const sorte: WorldObject['sorte'] = item.def.door ? 'frigo' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : item.def.board ? 'planche' : item.def.knife ? 'couteau' : undefined;
+      else if (item.def.startFull || (item.def.cookware && !this.inPan(item).length)) ou += ', vide';
+      const heat = this.heaters.get(item);
+      if (heat) {
+        const fem = FEMININE.has(item.name);
+        const lit = heat.on.filter(Boolean).length;
+        if (heat.on.length > 1) ou += lit ? `, ${lit} feu${lit > 1 ? 'x' : ''} allumé${lit > 1 ? 's' : ''}` : ', feux éteints';
+        else ou += lit ? (heat.warm[0] < 1 ? `, allumé${fem ? 'e' : ''} (chauffe)` : `, allumé${fem ? 'e' : ''}`) : `, éteint${fem ? 'e' : ''}`;
+      }
+      const stove = item.def.cookware ? this.stoveUnder(item) : null;
+      if (stove) ou += this.heaters.get(stove.heater)!.on[stove.i] ? ', sur le feu allumé' : ', sur un feu éteint';
+      const cuisson = doneness(item.def, item.cooking) ?? undefined;
+      if (cuisson) ou += `, ${donenessWord(cuisson, FEMININE.has(item.name))}`;
+      const sorte: WorldObject['sorte'] = item.def.door ? 'frigo' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.heat ? 'gazinière' : item.def.cookware ? 'ustensile' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : item.def.board ? 'planche' : item.def.knife ? 'couteau' : undefined;
       if (item === this.sitting) ou += ', le perso est assis dessus';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
       const coupable = (!!item.def.cut && item.portion === 1) || undefined;
-      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, coupable, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
+      return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, cuisson, coupable, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
     });
     const perso = this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)';
     return {
@@ -1000,7 +1057,8 @@ export class Game {
   /** Boit une gorgée de ce que contient l'objet tenu (tasse de café, bouteille d'eau). */
   drink(): boolean {
     const c = this.character;
-    const containers = c.heldItems.filter((i) => i.def.fill);
+    // on ne boit pas dans la casserole
+    const containers = c.heldItems.filter((i) => i.def.fill && !i.def.cookware);
     const cup = containers.find((i) => i.contents) ?? containers[0];
     if (!cup) this.onNotice?.('Prends une tasse ou une bouteille pour boire.');
     else if (!cup.contents) this.onNotice?.(`${FEMININE.has(cup.name) ? 'La' : 'Le'} ${cup.name} est vide.`);
@@ -1013,7 +1071,9 @@ export class Game {
   eat(): boolean {
     const c = this.character;
     const food = c.heldItems.find((i) => i.def.food);
+    const fem = !!food && FEMININE.has(food.name);
     if (!food) this.onNotice?.('Prends quelque chose à manger (il y en a dans le frigo).');
+    else if (doneness(food.def, food.cooking) === 'cru') this.onNotice?.(`${cap(the(food.name))} est cru${fem ? 'e' : ''} : fais-${fem ? 'la' : 'le'} cuire d’abord (poêle ou casserole sur la gazinière).`);
     else if (this.closeBookThen(() => this.eat())) return true;
     else return !!c.handOf(food)?.eat();
     return false;
@@ -1100,7 +1160,10 @@ export class Game {
       const food = item.def.food;
       if (!food) continue;
       const before = this.lastBite.get(item) ?? item.portion;
-      if (before > item.portion) this.needs.restore('faim', (before - item.portion) * food.hunger);
+      // brûlé, ça ne nourrit presque plus
+      const done = doneness(item.def, item.cooking);
+      if (before > item.portion) this.needs.restore('faim', (before - item.portion) * food.hunger * (done ? DONENESS_HUNGER[done] : 1));
+      if (before === 1 && item.portion < 1 && done === 'brûlé') this.onNotice?.('Beurk, c’est brûlé…');
       this.lastBite.set(item, item.portion);
       if (item.portion > 0 || !c.loseItem(item)) continue;
       this.lastBite.delete(item);
@@ -1278,8 +1341,9 @@ export class Game {
   /** Où se tenir devant un meuble (machine, évier) pour s'en servir. */
   private frontOf(item: WorldItem): THREE.Vector3 {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
-    // contre l'évier pour atteindre le robinet (le perso se penche un peu)
-    return item.object.position.clone().addScaledVector(fwd, item.box.max.z + (item.def.wash ? 0.22 : 0.26));
+    // contre l'évier pour atteindre le robinet, contre la gazinière pour atteindre les feux du fond (le perso se penche un peu)
+    const gap = item.def.wash ? 0.22 : item.def.heat && !item.def.pour ? 0.16 : 0.26;
+    return item.object.position.clone().addScaledVector(fwd, item.box.max.z + gap);
   }
 
   /**
@@ -1343,14 +1407,16 @@ export class Game {
    */
   private pourAt(machine: WorldItem, running: boolean): boolean {
     const pour = machine.def.pour!;
-    const cup = this.character.heldItems.find((i) => i.name === pour.fills);
+    // le dernier pris d'abord (la casserole qu'on vient de prendre plutôt que la tasse)
+    const c = this.character;
+    const cup = [c.held, ...c.heldItems].find((i): i is WorldItem => !!i && pour.fills.includes(i.name));
     // autre chose dedans : vidé dans l'évier, sinon il faut d'abord le boire
     const other = cup?.contents && cup.contents !== pour.liquid ? cup.contents : null;
     if (this.brew) this.onNotice?.(`${cap(theLiquid(this.brew.machine.def.pour!.liquid))} coule déjà.`);
     else if (this.washing) this.onNotice?.('Tu te laves.');
-    else if (!cup) this.onNotice?.(`Prends la ${pour.fills} pour la remplir ${ofLiquid(pour.liquid)}.`);
-    else if (other && !pour.drain) this.onNotice?.(`La ${cup.name} contient encore ${someLiquid(other)} : bois-la ou vide-la à l’évier d’abord.`);
-    else if (!other && cup.level > 0.99) this.onNotice?.(`La ${cup.name} est déjà pleine.`);
+    else if (!cup) this.onNotice?.(`Prends ${the(pour.fills[0])} pour la remplir ${ofLiquid(pour.liquid)}.`);
+    else if (other && !pour.drain) this.onNotice?.(`${cap(the(cup.name))} contient encore ${someLiquid(other)} : bois-la ou vide-la à l’évier d’abord.`);
+    else if (!other && cup.level > 0.99) this.onNotice?.(`${cap(the(cup.name))} est déjà pleine.`);
     else if (this.closeBookThen(() => this.pourAt(machine, running))) return true;
     else {
       this.character.approachThen(this.frontOf(machine), machine.object.position, () => {
@@ -1365,6 +1431,13 @@ export class Game {
           }
           cup.setLiquidColor(pour.color);
           this.brew = { machine, cup, t: 0 };
+          // machine éteinte : on l'allume, le café coulera une fois qu'elle aura chauffé
+          const heat = this.heaters.get(machine);
+          if (heat && !heat.on[0]) {
+            heat.on[0] = true;
+            this.wearItem(machine, WEAR_KNOB);
+            this.onNotice?.(`${cap(the(machine.name))} chauffe…`);
+          }
           this.wearItem(machine, machine.def.wash ? WEAR_TAP : WEAR_BREW.machine);
           this.wearItem(cup, WEAR_BREW.cup);
         }, true, cup);
@@ -1380,6 +1453,9 @@ export class Game {
     if (!b) return;
     const pour = b.machine.def.pour!;
     const T = pour.seconds;
+    // une machine qui chauffe (voir tickHeat) : le café attend qu'elle soit chaude
+    const heat = this.heaters.get(b.machine);
+    if (heat && heat.warm[0] < 1) return;
     b.t += dt;
     const jet = b.machine.part('jet');
     if (jet) {
@@ -1406,8 +1482,336 @@ export class Game {
     if (this.character.freeHand(b.cup) && this.character.position.distanceTo(stand) < 0.8) this.character.pickUp(b.cup, false, fwd);
   }
 
+  /** Feu n° `i` de l'appareil : où se pose la base de l'ustensile (monde). */
+  private spotWorld(heater: WorldItem, i: number): THREE.Vector3 {
+    heater.object.updateMatrixWorld(true);
+    return new THREE.Vector3(...heater.def.heat!.spots[i]).applyMatrix4(heater.object.matrixWorld);
+  }
+
+  /** Ce qui est posé sur le feu n° `i` : l'ustensile (ou n'importe quel objet si `any`). */
+  private onSpot(heater: WorldItem, i: number, any = false): WorldItem | undefined {
+    const at = this.spotWorld(heater, i);
+    const carried = this.character.carried;
+    return this.items.find((it) => it !== heater && (any || it.def.cookware) && !carried.includes(it) && !this.flying.some((f) => f.item === it)
+      && Math.hypot(it.object.position.x - at.x, it.object.position.z - at.z) < ON_SPOT && Math.abs(it.object.position.y - at.y) < 0.04);
+  }
+
+  /** Gazinière sur laquelle l'ustensile est posé, et le n° du feu. */
+  private stoveUnder(pan: WorldItem): { heater: WorldItem; i: number } | null {
+    for (const [heater, h] of this.heaters) {
+      if (heater.def.pour) continue;
+      for (let i = 0; i < h.on.length; i++) if (this.onSpot(heater, i) === pan) return { heater, i };
+    }
+    return null;
+  }
+
+  /** Ingrédients posés dans l'ustensile. */
+  private inPan(pan: WorldItem): WorldItem[] {
+    pan.object.updateMatrixWorld(true);
+    const carried = this.character.carried;
+    // le récipient : un cylindre autour de l'origine, de rayon la demi-largeur (le manche est vers +Z)
+    const r = pan.box.max.x;
+    const q = new THREE.Vector3();
+    return this.items.filter((it) => {
+      if (!it.def.cook || carried.includes(it) || this.flying.some((f) => f.item === it)) return false;
+      pan.object.worldToLocal(q.copy(it.object.position));
+      return Math.hypot(q.x, q.z) < r && q.y > -0.01 && q.y < pan.box.max.y;
+    });
+  }
+
+  /** Ustensile où l'ingrédient est posé. */
+  private panOf(food: WorldItem): WorldItem | undefined {
+    return this.items.find((p) => p.def.cookware && this.inPan(p).includes(food));
+  }
+
+  /** L'ustensile reçoit-il cet ingrédient (le steak dans la poêle, la pomme de terre dans la casserole) ? */
+  private cookFits(pan: WorldItem, food: WorldItem): boolean {
+    return !!pan.def.cookware?.holds.includes(food.name);
+  }
+
+  /** Première place libre dans l'ustensile (-1 s'il est plein). */
+  private freePlace(pan: WorldItem): number {
+    pan.object.updateMatrixWorld(true);
+    const carried = this.character.carried;
+    return pan.def.cookware!.places.findIndex((p) => {
+      const at = new THREE.Vector3(...p).applyMatrix4(pan.object.matrixWorld);
+      return !this.items.some((it) => it !== pan && !carried.includes(it) && it.object.position.distanceTo(at) < 0.03);
+    });
+  }
+
+  /** Clic sur la gazinière : y poser l'ustensile tenu, mettre l'ingrédient tenu dans un ustensile posé dessus, sinon allumer ou éteindre. */
+  private useStove(stove: WorldItem, running: boolean): boolean {
+    const held = this.character.heldItems;
+    const pan = held.find((h) => h.def.cookware);
+    if (pan) return this.putOnStove(stove, pan, running);
+    const food = held.find((h) => h.def.cook);
+    const target = food && this.heaters.get(stove)!.on
+      .map((_, i) => this.onSpot(stove, i))
+      .find((p): p is WorldItem => !!p && this.cookFits(p, food) && this.freePlace(p) >= 0);
+    if (food && target) return this.putIn(target, food, running);
+    return this.toggleHeat(stove, running);
+  }
+
+  /** Pose l'ustensile tenu sur un feu libre de la gazinière (ceux de devant d'abord). */
+  private putOnStove(stove: WorldItem, pan: WorldItem, running: boolean): boolean {
+    const free = () => this.heaters.get(stove)!.on.map((_, i) => i).find((i) => !this.onSpot(stove, i, true));
+    if (free() === undefined) {
+      this.onNotice?.('Tous les feux sont pris.');
+      return false;
+    }
+    if (this.closeBookThen(() => this.putOnStove(stove, pan, running))) return true;
+    this.character.approachThen(this.frontOf(stove), stove.object.position, () => {
+      const i = free();
+      if (i === undefined || !this.character.carried.includes(pan)) return;
+      // le manche vers le perso
+      this.character.drop(this.spotWorld(stove, i), stove.object.rotation.y, undefined, true, pan);
+    }, running);
+    return true;
+  }
+
+  /** Met l'ingrédient tenu dans l'ustensile (posé : sur le feu, la table…). */
+  private putIn(pan: WorldItem, food: WorldItem, running: boolean): boolean {
+    const fem = FEMININE.has(pan.name);
+    if (this.character.carried.includes(pan)) this.onNotice?.(`Pose d’abord ${the(pan.name)}, puis mets-y ${the(food.name)}.`);
+    else if (this.freePlace(pan) < 0) this.onNotice?.(`${cap(the(pan.name))} est plein${fem ? 'e' : ''}.`);
+    else if (this.closeBookThen(() => this.putIn(pan, food, running))) return true;
+    else {
+      const under = this.stoveUnder(pan);
+      const stand = under ? this.frontOf(under.heater) : this.character.standFor(pan);
+      this.character.approachThen(stand, pan.object.position, () => {
+        const j = this.freePlace(pan);
+        if (j < 0 || !this.character.carried.includes(food)) return;
+        pan.object.updateMatrixWorld(true);
+        const spot = new THREE.Vector3(...pan.def.cookware!.places[j]).applyMatrix4(pan.object.matrixWorld);
+        this.character.drop(spot, pan.object.rotation.y, undefined, true, food);
+      }, running);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Allume ou éteint l'appareil : le feu n° `burner`, sinon tout (éteint s'il y a un feu allumé ;
+   * sinon allume les feux où un ustensile est posé).
+   */
+  private toggleHeat(item: WorldItem, running: boolean, burner?: number): boolean {
+    const h = this.heaters.get(item);
+    if (!h) return false;
+    const on = burner !== undefined ? !h.on[burner] : !h.on.some(Boolean);
+    return this.setHeat(item, on, running, burner);
+  }
+
+  /** Le perso va devant l'appareil et tourne le bouton : allume (`on`) ou éteint le feu n° `burner`, ou tous. */
+  private setHeat(item: WorldItem, on: boolean, running: boolean, burner?: number): boolean {
+    const h = this.heaters.get(item)!;
+    const fem = FEMININE.has(item.name);
+    const stove = h.on.length > 1;
+    // sans n° : allumer les feux qui ont un ustensile (de préférence garni : eau ou ingrédient), éteindre tout
+    const pans = h.on.map((_, i) => i).filter((i) => this.onSpot(item, i));
+    const full = pans.filter((i) => {
+      const pan = this.onSpot(item, i)!;
+      return !!pan.contents || this.inPan(pan).length > 0;
+    });
+    const which = burner !== undefined ? [burner] : on && stove ? (full.length ? full : pans) : h.on.map((_, i) => i);
+    if (!which.length) {
+      this.onNotice?.('Pose d’abord une poêle ou une casserole sur un feu.');
+      return false;
+    }
+    if (which.every((i) => h.on[i] === on)) return true;
+    if (this.moving) {
+      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+      return false;
+    }
+    this.character.approachThen(this.frontOf(item), item.object.position, () => {
+      for (const i of which) h.on[i] = on;
+      h.unused = 0;
+      this.wearItem(item, WEAR_KNOB);
+      const pan = which.length === 1 ? this.onSpot(item, which[0]) : undefined;
+      if (!stove) this.onNotice?.(on ? `${cap(the(item.name))} est allumé${fem ? 'e' : ''} : elle chauffe.` : `${cap(the(item.name))} est éteint${fem ? 'e' : ''}.`);
+      else if (on) this.onNotice?.(pan ? `Feu allumé sous ${the(pan.name)}.` : which.length > 1 ? 'Feux allumés.' : 'Feu allumé.');
+      else this.onNotice?.(h.on.some(Boolean) ? 'Feu éteint.' : `${cap(the(item.name))} est éteinte.`);
+    }, running);
+    return true;
+  }
+
+  /** L'appareil `ref`, sinon la gazinière la plus proche (sinon la machine). */
+  private heaterItem(ref?: string): WorldItem | null {
+    const item = ref ? this.byRef(ref) : (this.nearest((i) => this.heaters.has(i) && !i.def.pour) ?? this.nearest((i) => this.heaters.has(i)));
+    if (!item || !this.heaters.has(item)) {
+      this.onNotice?.(ref ? `Ça ne s’allume pas : ${ref}.` : 'Il n’y a pas de gazinière.');
+      return null;
+    }
+    return item;
+  }
+
+  /**
+   * Allume l'appareil `ref` (la gazinière la plus proche sans ref) : les feux où un ustensile garni
+   * est posé, ou seulement celui sous l'ustensile `pan`.
+   */
+  switchOn(ref?: string, running = false, pan?: string): boolean {
+    return this.switchTo(true, ref, running, pan);
+  }
+
+  /** Éteint l'appareil `ref` (la gazinière la plus proche sans ref) : tous ses feux, ou seulement celui sous l'ustensile `pan`. */
+  switchOff(ref?: string, running = false, pan?: string): boolean {
+    return this.switchTo(false, ref, running, pan);
+  }
+
+  private switchTo(on: boolean, ref?: string, running = false, pan?: string): boolean {
+    const item = this.heaterItem(ref);
+    if (!item) return false;
+    const under = pan ? this.byRef(pan) : undefined;
+    const spot = under && this.stoveUnder(under);
+    if (pan && spot?.heater !== item) {
+      this.onNotice?.(`${pan} n’est pas sur ${this.ref(item)}.`);
+      return false;
+    }
+    return this.setHeat(item, on, running, spot?.i);
+  }
+
+  /** Pose l'ustensile tenu sur la gazinière `ref` (la plus proche sans ref). */
+  putOnFire(ref?: string, running = false): boolean {
+    const stove = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.heat && !i.def.pour);
+    const pan = this.character.heldItems.find((h) => h.def.cookware);
+    if (!stove?.def.heat || stove.def.pour) this.onNotice?.(ref ? `On ne met rien sur le feu de : ${ref}.` : 'Il n’y a pas de gazinière.');
+    else if (!pan) this.onNotice?.('Prends une poêle ou une casserole pour la mettre sur le feu.');
+    else return this.putOnStove(stove, pan, running);
+    return false;
+  }
+
+  /** Met l'ingrédient tenu (qui y va) dans l'ustensile `ref`. */
+  putInPan(ref: string, running = false): boolean {
+    const pan = this.byRef(ref);
+    if (!pan?.def.cookware) {
+      this.onNotice?.(`Ce n’est pas un ustensile : ${ref}.`);
+      return false;
+    }
+    const food = this.character.heldItems.find((h) => this.cookFits(pan, h));
+    if (!food) {
+      this.onNotice?.(`Rien en main qui va dans ${the(pan.name)} (${pan.def.cookware.holds.join(', ')}).`);
+      return false;
+    }
+    return this.putIn(pan, food, running);
+  }
+
+  /** Attend que l'ingrédient `ref`, sur un feu allumé, soit cuit (vrai tout de suite s'il l'est déjà). */
+  waitCooked(ref: string): boolean {
+    const food = this.byRef(ref);
+    if (!food?.def.cook) {
+      this.onNotice?.(`On ne fait pas cuire : ${ref}.`);
+      return false;
+    }
+    if (doneness(food.def, food.cooking) !== 'cru') return true;
+    if (!this.heating(food)) {
+      this.onNotice?.(`${cap(the(food.name))} n’est pas sur un feu allumé.`);
+      return false;
+    }
+    this.cookWait = food;
+    return true;
+  }
+
+  /** L'ingrédient est-il dans un ustensile posé sur un feu allumé ? */
+  private heating(food: WorldItem): boolean {
+    const pan = this.panOf(food);
+    const under = pan && this.stoveUnder(pan);
+    return !!under && this.heaters.get(under.heater)!.on[under.i];
+  }
+
+  /**
+   * Pour l'ordre « cuire » : l'ustensile qui reçoit l'ingrédient `ref` (celui où il est déjà, sinon
+   * un déjà sur le feu, sinon le plus proche), s'il lui faut de l'eau, la gazinière, et où ils en sont.
+   */
+  cookPlan(ref: string): { ustensile: string; eau: boolean; gaziniere: string | null; surLeFeu: boolean; dedans: boolean } | null {
+    const food = this.byRef(ref);
+    if (!food?.def.cook) return null;
+    const p = this.character.position;
+    const pans = this.items.filter((i) => this.cookFits(i, food));
+    const inside = this.panOf(food);
+    const pan = (inside && this.cookFits(inside, food) ? inside : undefined)
+      ?? pans.find((i) => this.stoveUnder(i) && this.freePlace(i) >= 0)
+      ?? pans.sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    if (!pan) return null;
+    const under = this.stoveUnder(pan);
+    const stove = under?.heater ?? this.nearest((i) => !!i.def.heat && !i.def.pour);
+    return {
+      ustensile: this.ref(pan),
+      // la casserole se remplit d'eau à l'évier
+      eau: !!pan.def.fill && pan.contents !== 'eau',
+      gaziniere: stove ? this.ref(stove) : null,
+      surLeFeu: !!under,
+      dedans: inside === pan,
+    };
+  }
+
+  /**
+   * Appareils allumés : ils chauffent peu à peu (flammes, voyant) ; sur un feu chaud, l'ustensile
+   * cuit ce qu'il contient (heatPan). La machine à café se met en veille si on l'oublie.
+   */
+  private tickHeat(dt: number): void {
+    dt = Math.max(0, dt);
+    for (const [item, h] of this.heaters) {
+      const heat = item.def.heat!;
+      if (!heat.autoOff || !h.on.some(Boolean) || this.brew?.machine === item) h.unused = 0;
+      else if ((h.unused += dt) > heat.autoOff) {
+        h.on.fill(false);
+        h.unused = 0;
+        this.onNotice?.(`${cap(the(item.name))} s’est mise en veille.`);
+      }
+      h.on.forEach((on, i) => {
+        h.warm[i] = THREE.MathUtils.clamp(h.warm[i] + (on ? dt : -dt) / heat.warmup, 0, 1);
+        const lit = item.part(`${heat.lit}-${i}`);
+        if (lit) {
+          lit.visible = on;
+          // les flammes vacillent, et grandissent à mesure que le feu prend
+          if (on && heat.lit === 'flamme') lit.scale.set(1, (0.5 + 0.5 * h.warm[i]) * (0.85 + 0.3 * Math.random()), 1);
+        }
+        if (h.warm[i] <= 0 || heat.lit !== 'flamme') return;
+        const pan = this.onSpot(item, i);
+        if (pan) this.heatPan(pan, h.warm[i], dt);
+      });
+    }
+    const w = this.cookWait;
+    if (w && (!this.items.includes(w) || doneness(w.def, w.cooking) !== 'cru' || !this.heating(w))) this.cookWait = null;
+  }
+
+  /** Un ustensile sur le feu : l'eau bout et s'évapore, les ingrédients cuisent, puis brûlent (fumée). */
+  private heatPan(pan: WorldItem, warm: number, dt: number): void {
+    const o = pan.object;
+    const water = pan.contents === 'eau' && pan.level > 0;
+    if (water && warm > 0.6) {
+      this.puffs.emit(`vapeur-${o.id}`, o.position.clone().setY(o.position.y + pan.box.max.y), dt, 5 * warm, 0xffffff, 0.4);
+      pan.setLevel(pan.level - (dt * warm) / BOIL_AWAY);
+      if (pan.level <= 0) {
+        pan.contents = null;
+        this.onNotice?.(`L’eau de ${the(pan.name)} s’est évaporée !`);
+      }
+    }
+    for (const food of this.inPan(pan)) {
+      const before = food.cooking;
+      // dans l'eau, ça cuit sans jamais brûler
+      const t = water ? Math.min(before + dt * warm, Math.max(before, waterCap(food.def))) : before + dt * warm;
+      if (t === before) continue;
+      food.cooking = t;
+      showDoneness(food);
+      const name = cap(the(food.name));
+      const fem = FEMININE.has(food.name) ? 'e' : '';
+      const was = doneness(food.def, before), now = doneness(food.def, t);
+      const cap0 = waterCap(food.def);
+      if (now === 'cuit' && was === 'cru') {
+        this.onNotice?.(`${name} est cuit${fem}.`);
+        this.wearItem(pan, WEAR_COOK);
+      } else if (before < cap0 && t >= cap0) this.onNotice?.(`Ça sent le brûlé : retire ${the(food.name)} du feu !`);
+      else if (now === 'brûlé' && was !== 'brûlé') this.onNotice?.(`${name} a brûlé.`);
+      // ça fume dès que ça commence à brûler, de plus en plus
+      if (t > cap0) {
+        const at = food.object.position.clone().setY(food.object.position.y + 0.03);
+        this.puffs.emit(`fumee-${food.object.id}`, at, dt, (now === 'brûlé' ? 8 : 3) * warm, 0x3b3735, 0.55);
+      }
+    }
+  }
+
   /** Clic sur un objet : le prendre, l'ajouter à la pile tenue, ou y ranger ce qu'on tient. */
-  private tryPickUp(item: WorldItem, running: boolean, opts: { body?: boolean } = {}): boolean {
+  private tryPickUp(item: WorldItem, running: boolean, opts: { body?: boolean; button?: number } = {}): boolean {
     const c = this.character;
     const held = c.heldItems;
     const sameStack = held.find((h) => item.def.stack && h.def.stack === item.def.stack);
@@ -1418,6 +1822,10 @@ export class Game {
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
     else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
+    // bouton d'un appareil (un feu de la gazinière, la machine à café) : l'allumer ou l'éteindre
+    else if (opts.button !== undefined && item.def.heat) return this.toggleHeat(item, running, opts.button);
+    // gazinière : y poser l'ustensile tenu, mettre l'ingrédient dans l'ustensile qui est dessus, sinon allumer ou éteindre
+    else if (item.def.heat && !item.def.pour) return this.useStove(item, running);
     // frigo : on y range ce qu'on tient ; mains vides, on l'ouvre (clic sur le côté : on le pousse)
     else if (door && held.length) return this.storeIn(item, running);
     // porte ouverte (ou pas encore refermée) : tout clic sur le frigo la ferme, même là où la porte
@@ -1431,9 +1839,11 @@ export class Game {
     // mains vides : un gros meuble s'agrippe pour le déplacer
     else if (item.def.movable && !held.length) return this.grabFurniture(item, running);
     // évier : la tasse en main se remplit d'eau, sinon on se lave les mains
-    else if (item.def.wash && !held.some((h) => h.name === item.def.pour?.fills)) return this.washAt(item, false, running);
+    else if (item.def.wash && !held.some((h) => item.def.pour?.fills.includes(h.name))) return this.washAt(item, false, running);
     else if (item.def.pour) return this.pourAt(item, running);
     else if (this.flying.some((f) => f.item === item)) return false;
+    // un ingrédient en main, clic sur l'ustensile qui le reçoit : on l'y met
+    else if (item.def.cookware && held.some((h) => this.cookFits(item, h))) return this.putIn(item, held.find((h) => this.cookFits(item, h))!, running);
     else if (item === this.brew?.cup) this.onNotice?.(`${cap(theLiquid(this.brew.machine.def.pour!.liquid))} coule encore.`);
     else if (item.def.slots && held.length) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
@@ -1597,7 +2007,7 @@ export class Game {
       const hit = this.hitAt(e.clientX, e.clientY);
       if (hit) {
         // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser
-        this.tryPickUp(hit.item, e.shiftKey, { body: !!hit.item.def.door && !hit.door });
+        this.tryPickUp(hit.item, e.shiftKey, { body: !!hit.item.def.door && !hit.door, button: hit.button });
         return;
       }
       const p = this.groundPoint(e.clientX, e.clientY);
@@ -1629,6 +2039,8 @@ export class Game {
         const b = new THREE.Box3().setFromObject(it.object);
         const c = b.getCenter(new THREE.Vector3());
         if (c.x < box.min.x || c.x > box.max.x || c.z < box.min.z || c.z > box.max.z) continue;
+        // ce qui est dessous n'est pas posé dessus (la poêle sous le steak qu'on y prend)
+        if (b.min.y < box.min.y + 0.005) continue;
         // posé sur le dessus, ou sur une surface plus basse (l'assise d'une chaise, sous le dossier)
         if (Math.abs(b.min.y - box.max.y) > 0.03 && !this.restsOn(c.setY(b.min.y), under)) continue;
         it.object.updateMatrixWorld(true);
@@ -1676,18 +2088,21 @@ export class Game {
     return this.hitAt(cx, cy)?.item ?? null;
   }
 
-  /** Objet sous un pixel de l'écran, et si c'est sa porte qui est touchée. */
-  private hitAt(cx: number, cy: number): { item: WorldItem; door: boolean } | null {
+  /** Objet sous un pixel de l'écran, et si c'est sa porte ou l'un de ses boutons (n°) qui est touché. */
+  private hitAt(cx: number, cy: number): { item: WorldItem; door: boolean; button?: number } | null {
     this.aim(cx, cy);
     const carried = this.character.carried;
     const objects = this.items.filter((i) => !carried.includes(i)).map((i) => i.object);
     const hit = this.raycaster.intersectObjects(objects, true)[0];
     if (!hit) return null;
     let door = false;
+    let button: number | undefined;
     for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
       if (o.name === 'porte') door = true;
+      const knob = /^bouton-(\d+)$/.exec(o.name);
+      if (knob) button = +knob[1];
       const item = this.items.find((i) => i.object === o);
-      if (item) return { item, door };
+      if (item) return { item, door, button };
     }
     return null;
   }
@@ -1736,6 +2151,8 @@ export class Game {
     this.prevHeld = held;
     this.updateNav();
     this.tickBrew(dt);
+    this.tickHeat(dt);
+    this.puffs.update(Math.max(0, dt));
     this.tickDoors(dt);
     this.tickEating();
     this.tickWash(dt);
@@ -1749,7 +2166,8 @@ export class Game {
     const grade = (i: WorldItem) => gradeName(i.condition, FEMININE.has(i.name));
     const names = held.map((h) => {
       // « tasse de café », « bouteille d'eau » (l'eau est déjà dans le nom), « bouteille d'eau vide »
-      const n = h.contents ? (h.name.includes(h.contents) ? h.name : `${h.name} ${ofLiquid(h.contents)}`) : h.def.startFull ? `${h.name} vide` : h.name;
+      const done = doneness(h.def, h.cooking);
+      const n = h.contents ? (h.name.includes(h.contents) ? h.name : `${h.name} ${ofLiquid(h.contents)}`) : h.def.startFull ? `${h.name} vide` : done ? `${h.name} ${donenessWord(done, FEMININE.has(h.name))}` : h.name;
       const count = c.handOf(h)?.carried.length ?? 1;
       return count > 1 ? `${n} ×${count}` : `${n}, ${grade(h)}`;
     });
@@ -1758,7 +2176,7 @@ export class Game {
     const bookHand = book ? c.handOf(book) : null;
     const last = c.held;
     const can: HandActions = {
-      drink: held.some((h) => !!h.contents),
+      drink: held.some((h) => !!h.contents && !h.def.cookware),
       eat: held.some((h) => !!h.def.food),
       cut: held.some((h) => !!h.def.cut && h.portion === 1),
       throw: !!last && !!c.handOf(last)?.canThrow,
@@ -1792,7 +2210,7 @@ export class Game {
     else if (before >= 25 && after < 25) this.onNotice?.('Santé faible : un besoin est à zéro depuis trop longtemps.');
     // les récipients tenus (tasse, bouteille), dans l'une ou l'autre main
     const sips = new Map<WorldItem, { level: number; contents: string | null }>();
-    for (const held of this.character.heldItems.filter((i) => i.def.fill)) {
+    for (const held of this.character.heldItems.filter((i) => i.def.fill && !i.def.cookware)) {
       const last = this.lastSips.get(held);
       const drunk = last ? last.level - held.level : 0;
       if (drunk > 0) {

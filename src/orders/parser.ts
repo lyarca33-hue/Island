@@ -1,7 +1,7 @@
 /**
  * Ordres simples en français, compris sans IA : « prends la tasse », « range tous les livres »,
  * « va à la table puis pose la lettre », « fais-toi un café », « lis le livre rouge », « dis bonjour »,
- * « assieds-toi sur la chaise », « lève-toi ». Rend null dès
+ * « assieds-toi sur la chaise », « lève-toi », « fais cuire le steak », « éteins le feu ». Rend null dès
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
@@ -34,6 +34,9 @@ const VERBS: Record<string, string[]> = {
   laver: ['lave', 'laver', 'lavez', 'rince', 'rincer', 'debarbouille', 'debarbouiller'],
   asseoir: ['assieds', 'assied', 'assois', 'assoit', 'asseoir', 'assoir', 'assoie', 'rassieds', 'rassois'],
   lever: ['leve', 'lever', 'releve', 'relever', 'debout'],
+  cuire: ['cuis', 'cuire', 'cuisine', 'cuisiner', 'grille', 'griller'],
+  allumer: ['allume', 'allumer', 'rallume', 'rallumer'],
+  eteindre: ['eteins', 'eteint', 'eteindre', 'coupe', 'couper'],
   arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
 };
 const VERB_OF = new Map(Object.entries(VERBS).flatMap(([k, vs]) => vs.map((v) => [v, k] as const)));
@@ -62,6 +65,11 @@ const ALIASES: Record<string, string[]> = {
   'bouteille d eau': ['bouteille', 'bouteilles'],
   pomme: ['pomme', 'pommes', 'fruit', 'fruits'],
   sandwich: ['sandwich', 'sandwichs', 'sandwiches', 'casse'],
+  gaziniere: ['gaziniere', 'cuisiniere', 'feu', 'feux', 'gaz', 'plaque', 'plaques'],
+  poele: ['poele', 'poeles'],
+  casserole: ['casserole', 'casseroles'],
+  steak: ['steak', 'steaks', 'steack', 'viande', 'bifteck'],
+  'pomme de terre': ['patate', 'patates', 'terre'],
   'plan de travail': ['plan', 'comptoir', 'paillasse'],
   'planche a decouper': ['planche', 'planches'],
   couteau: ['couteau', 'couteaux'],
@@ -90,6 +98,8 @@ function findObjects(clause: string[], objets: WorldObject[]): { found: WorldObj
     const { kind, detail } = words(o);
     const i = clause.findIndex((w) => kind.includes(w));
     if (i < 0) return false;
+    // « pomme de terre » n'est pas une pomme
+    if (clause[i] === 'pomme' && clause[i + 1] === 'de' && clause[i + 2] === 'terre') return normalize(o.nom) === 'pomme de terre';
     // une couleur juste après le nom (« le livre rouge ») restreint aux livres de cette couleur
     const colour = clause[i + 1];
     if (colour && !STOP.has(colour) && !VERB_OF.has(colour) && !Object.values(ALIASES).flat().includes(colour)) return detail.includes(colour);
@@ -193,8 +203,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const target = where >= 0 ? findObjects(rest.slice(where + 1), world.objets).found.find((o) => o.ref !== item?.ref) : undefined;
       if (where >= 0 && !target) return null;
       if (target?.sorte === 'rangement' && (item?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: item ? [item.ref] : [], onlyHeld: !item }];
-      // « mets la pomme dans le frigo »
-      if (target?.sorte === 'frigo') return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
+      // « mets la pomme dans le frigo », « mets la poêle sur le feu », « mets le steak dans la poêle »
+      if (target?.sorte === 'frigo' || target?.sorte === 'ustensile' || target?.sorte === 'gazinière') return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
       return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
     case 'ranger': {
@@ -217,6 +227,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'cafe':
       // « fais ta toilette »
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
+      // « fais cuire le steak »
+      if (rest[0] === 'cuire') return parseClause('cuire', rest.slice(1), original, world);
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
     case 'boire': {
       // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »
@@ -271,6 +283,20 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'lever':
       return [{ kind: 'lever' }];
+    case 'cuire': {
+      // « cuis le steak », « fais cuire les pommes de terre », « cuisine » (un ingrédient cru)
+      const foods = found.filter((o) => o.cuisson);
+      if (found.some((o) => !o.cuisson && o.sorte !== 'ustensile' && o.sorte !== 'gazinière')) return null;
+      if (all && foods.length) return foods.filter((o) => o.cuisson === 'cru').map((o) => ({ kind: 'cuire', ref: o.ref }));
+      return [{ kind: 'cuire', ref: (foods.find((o) => o.cuisson === 'cru') ?? foods[0])?.ref }];
+    }
+    case 'allumer':
+    case 'eteindre': {
+      // « allume la gazinière », « éteins le feu », « allume la machine à café »
+      const target = found.find((o) => o.sorte === 'gazinière' || o.sorte === 'machine');
+      if (found.length && !target) return null;
+      return [{ kind: verb, ref: target?.ref }];
+    }
     case 'arreter':
       // « ferme le frigo »
       if (found[0]?.sorte === 'frigo') return [{ kind: 'fermer', ref: found[0].ref }];
