@@ -39,6 +39,23 @@ ouvre le créateur, et « Jouer » ramène sur la map.
   de mal, puis la faim, la fatigue, et un peu l'hygiène) et remonte doucement quand tous les
   besoins sont au-dessus de 30. Console : `game.needs.hurt(20)`, `game.needs.heal(20)`.
 
+### La cuisine
+
+Le perso est dans une cuisine (`src/game/room.ts`) : sol carrelé, quatre murs, une porte
+d'entrée qui s'ouvre toute seule quand il s'en approche (on peut sortir sur l'herbe), une
+fenêtre au-dessus de l'évier et une au-dessus de la table. Les murs tournés vers la caméra
+s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra.
+
+- Au fond : lave-vaisselle, évier, plan de travail (planche, couteau), gazinière (hotte
+  au-dessus), tiroir à couverts, frigo, puis la bibliothèque des livres de cuisine.
+- Le long du mur de la porte : machine à café, placard à vaisselle avec le micro-ondes dessus, four,
+  poubelle ; l'horloge au-dessus du coin café donne l'heure du jeu.
+- Au milieu : la table mise (assiette, couverts, tasse), sa chaise, sur un tapis.
+
+Les meubles sont rangés par rangées dos au mur (`RUNS`) : pour en ajouter un, l'ajouter dans la
+liste de son mur, les autres se décalent. Le perso contourne les murs ; un meuble poussé ou un
+objet lancé ne les traverse pas.
+
 ### Les ordres
 
 Les ordres simples sont compris directement par le jeu, sans IA (`src/orders/parser.ts`) :
@@ -108,6 +125,7 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/toon.ts` | Matériau cel shading (3 paliers nets + liseré de lumière) |
 | `src/game/character.ts` | Perso glTF au squelette Mixamo, animations repos / marche / course |
 | `src/game/ground.ts` | Sol d'herbe (texture peinte par programme) |
+| `src/game/room.ts` | La cuisine : carrelage, murs en coupe, porte, fenêtres, décor ; meubles rangés contre les murs |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
@@ -201,7 +219,7 @@ Boire : tasse de café en main, bouton « Boire » ou touche B. Le perso porte l
 l'incline et boit une gorgée ; le niveau baisse (environ trois gorgées). Vide, elle se remplit
 de nouveau à la machine.
 
-Évier (coin cuisine, à côté de la machine à café ; fixe, il ne se déplace pas) :
+Évier (sous la fenêtre du fond, entre le lave-vaisselle et le plan de travail ; fixe, il ne se déplace pas) :
 - tasse en main, clic sur l'évier : le perso pose la tasse au fond de la cuve sous le robinet,
   l'eau coule, il la reprend pleine (« tasse d'eau »). Ce qu'elle contenait (café) est vidé dans
   l'évier. Boire de l'eau fait baisser la soif comme le café, sans réveiller.

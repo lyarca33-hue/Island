@@ -59,7 +59,9 @@ Répondre à chacune, par écrit dans la PR, avant d'écrire du code.
 - S'il contient un liquide, il fait une flaque en cassant ou en tombant.
 
 **Monde**
-- Où le placer au départ (`START_ITEMS` dans `Game.ts`) ? Sur la table, au sol, dans un meuble ?
+- Où le placer au départ ? Un meuble ou un appareil contre un mur de la cuisine : dans une rangée
+  (`RUNS` dans `room.ts`, il se cale tout seul dos au mur) ; posé sur un meuble : `ON_TOP` ;
+  ailleurs (sur la table, au sol) : `START_ITEMS` dans `Game.ts` ; dans un meuble : `START_STORED`.
 - Ce qui est posé dessus doit-il le suivre quand on le soulève ou le pousse ? (c'est le cas
   par défaut)
 - Son nom est-il féminin ? (accord des messages : « La théière s'est brisée »)
@@ -109,7 +111,7 @@ Pour construire le modèle, utiliser les aides `mesh()` et `group()` du fichier 
 matériau toon par pièce et les ombres.
 
 **Autres endroits à toucher** selon l'objet :
-- `src/game/Game.ts` : `START_ITEMS` (placement), `FEMININE` (nom féminin), `START_WEAR`
+- `src/game/room.ts` : `RUNS` (meubles contre les murs) ; `src/game/Game.ts` : `START_ITEMS` (placement), `FEMININE` (nom féminin), `START_WEAR`
   (usure de départ, pour montrer les grades).
 - `src/orders/parser.ts` : `ALIASES` (synonymes, clé = nom sans accents, en minuscules).
 - Nouvelle action : `src/orders/actions.ts` (tâche), `parser.ts` (`VERBS`), le prompt de

@@ -20,6 +20,7 @@ import { doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap 
 import { createMotes } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
+import { ON_TOP, placeRuns, Room, RUNS } from './room';
 import { lightAllPasses, PostFx } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -66,40 +67,25 @@ const TABLE_MEAL = 1.25;
 /** Assis, distance (m, au sol) jusqu'où une assiette est à portée de fourchette. */
 const TABLE_REACH = 1.1;
 
-/** Objets de test posés autour du point de départ : [id, x, y, z, rotation (rad)]. */
+/**
+ * Objets posés au départ dans la pièce, hors des meubles rangés contre les murs (voir RUNS dans
+ * room.ts) : [id, x, y, z, rotation (rad)].
+ */
 const START_ITEMS: Array<[string, number, number, number, number]> = [
-  // table côté caméra : le perso lui fait face en prenant la tasse ou la lettre
-  ['table', 1.3, 0, 1.3, Math.PI / 4],
-  ['tasse', 0.94, TABLE_H, 1.45, 0.6],
-  ['lettre', 1.45, TABLE_H, 0.94, Math.PI / 3],
-  // un couvert mis côté chaise : l'assiette, la fourchette à gauche et le couteau à droite de qui s'assoit
-  // (assez écartés de l'assiette pour ne pas partir avec elle quand on la prend)
-  ['assiette', 1.215, TABLE_H, 1.215, 0],
-  ['fourchette', 1.304, TABLE_H, 0.992, -Math.PI / 4],
-  ['couteau-table', 0.992, TABLE_H, 1.304, -Math.PI / 4],
-  ['caisse', -0.6, 0, -2.4, 0.2],
+  // coin repas, côté caméra : la table, sa chaise au fond (on s'y assoit face à la caméra)
+  ['table', 1, 0, 1, 0],
+  ['chaise', 1, 0, -0.02, 0],
+  // le couvert devant la chaise : l'assiette, la fourchette à gauche et le couteau à droite de qui
+  // s'assoit (assez écartés de l'assiette pour ne pas partir avec elle quand on la prend)
+  ['assiette', 1, TABLE_H, 0.88, 0],
+  ['fourchette', 1.22, TABLE_H, 0.786, -Math.PI / 2],
+  ['couteau-table', 0.78, TABLE_H, 0.786, -Math.PI / 2],
+  ['tasse', 0.64, TABLE_H, 0.852, -0.19],
+  ['lettre', 1.36, TABLE_H, 0.852, 0.26],
   // près de la bibliothèque, tournée vers la pièce : le coin lecture
-  ['chaise', -0.71, 0, -1.48, Math.PI / 4],
-  ['bibliotheque', -1.7, 0, -1.2, Math.PI / 4],
-  ['machine-a-cafe', 2.1, 0, -0.8, -Math.PI / 4],
-  // l'évier à côté de la machine à café, dos alignés : un coin cuisine
-  ['evier', 2.56, 0, -0.24, -Math.PI / 4],
-  // à côté de la machine à café, la porte vers la pièce
-  ['frigo', 2.75, 0, -1.75, Math.PI / 4 - 0.45],
-  // de l'autre côté de la machine à café, alignés sur elle : placard (le micro-ondes dessus),
-  // four, lave-vaisselle, tiroir, puis la poubelle au bout
-  ['placard', 1.616, 0, -1.178, -Math.PI / 4],
-  ['micro-ondes', 1.616, 0.9, -1.178, -Math.PI / 4],
-  ['four', 1.174, 0, -1.599, -Math.PI / 4],
-  ['lave-vaisselle', 0.742, 0, -2.03, -Math.PI / 4],
-  ['tiroir', 0.357, 0, -2.437, -Math.PI / 4],
-  ['poubelle', 0.021, 0, -2.737, -Math.PI / 4],
-  // la chaise du repas, tournée vers la table (assez loin pour avoir la place de s'y asseoir)
-  ['chaise', 0.58, 0, 0.58, Math.PI / 4],
-  // de l'autre côté de l'évier, dans son alignement : de quoi couper
-  ['plan-de-travail', 3.17, 0, 0.37, -Math.PI / 4],
-  // après le plan de travail, dans le même alignement, dos alignés
-  ['gaziniere', 3.69, 0, 0.94, -Math.PI / 4],
+  ['chaise', 2.45, 0, -1.55, -0.5],
+  // la caisse rangée dans le coin, près de la fenêtre
+  ['caisse', 2.85, 0, 2.45, 0],
 ];
 
 /** Ustensiles posés au départ sur un feu : [id, appareil, n° du feu]. */
@@ -182,7 +168,7 @@ const START_BOOKS: Array<[string, number | [number, number, number, number]]> = 
   ['livre', [-1.3, 0, 0.9, 0.4]],
   // de quoi demander au perso de « ranger tous les livres »
   ['livre-vert', [0.2, 0, 2.1, 1.3]],
-  ['livre-ocre', [1.5, TABLE_H, 1.45, 2.2]],
+  ['livre-ocre', [1.04, TABLE_H, 1.25, 1.42]],
 ];
 
 /** Un objet de la pièce tel que les ordres le voient (voir Game.describe). */
@@ -272,6 +258,8 @@ export class Game {
   /** Niveau des récipients tenus à l'image précédente : ce qui a été bu depuis. */
   private lastSips = new Map<WorldItem, { level: number; contents: string | null }>();
   private ground: THREE.Mesh;
+  /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
+  private room: Room;
   private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3) => void };
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
@@ -401,7 +389,24 @@ export class Game {
         item.object.position.y += item.restLift(item.object.quaternion);
       }
     }
-    // les meubles (objets non portables) se contournent
+    // les meubles rangés contre les murs, et ce qui est posé dessus (micro-ondes sur le placard)
+    const runItems = RUNS.flatMap((r) => r.items.filter((id): id is string => typeof id === 'string').map(add));
+    const placed = new Set<WorldItem>();
+    placeRuns((id) => {
+      const it = runItems.find((i) => i.def.id === id && !placed.has(i));
+      if (it) placed.add(it);
+      return it;
+    });
+    for (const [id, under] of ON_TOP) {
+      const base = this.items.find((i) => i.def.id === under);
+      if (!base) continue;
+      const it = add(id);
+      it.object.position.copy(base.object.position).setY(base.box.max.y);
+      it.object.rotation.y = base.object.rotation.y;
+    }
+    this.room = new Room((id) => this.items.find((i) => i.def.id === id)?.object.position);
+    this.scene.add(this.room.group);
+    // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item) });
     for (const item of this.items) {
@@ -563,8 +568,14 @@ export class Game {
   /** Les obstacles à contourner, sauf `skip`. */
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
+    for (const o of this.room.obstacles) nav.add(o.box, o.pos, o.yaw);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(it.box, it.object.position, it.object.rotation.y);
     return nav;
+  }
+
+  /** Le rectangle au sol d'un meuble déplacé entre-t-il dans un mur ? */
+  private hitsWall(rect: ReturnType<typeof footprint>): boolean {
+    return this.room.obstacles.some((w) => overlaps(rect, footprint(w.box, w.pos, w.yaw)));
   }
 
   /** Obstacle : un meuble, ou un gros objet (porté à deux mains : chaise, caisse) posé au sol. */
@@ -697,7 +708,7 @@ export class Game {
       // le meuble à sa nouvelle place ne doit pas entrer dans un autre, ni le perso dans un meuble
       const next = o.position.clone().add(step);
       const rect = footprint(b, next, o.rotation.y);
-      const blocked = this.items.some((it) => it !== item && (!it.def.portable || isTwoHanded(it.grip)) && !riders.some((r) => r.item === it)
+      const blocked = this.hitsWall(rect) || this.items.some((it) => it !== item && (!it.def.portable || isTwoHanded(it.grip)) && !riders.some((r) => r.item === it)
         && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)));
       if (blocked || others.blocked(c.position.clone().add(step))) return false;
       o.position.copy(next);
@@ -716,7 +727,7 @@ export class Game {
       const yaw = o.rotation.y + angle;
       const next = o.position.clone().sub(pivot).applyAxisAngle(UP, angle).add(pivot);
       const rect = footprint(b, next, yaw);
-      const blocked = this.items.some((it) => it !== item && (!it.def.portable || isTwoHanded(it.grip)) && !riders.some((r) => r.item === it)
+      const blocked = this.hitsWall(rect) || this.items.some((it) => it !== item && (!it.def.portable || isTwoHanded(it.grip)) && !riders.some((r) => r.item === it)
         && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)));
       const stand = c.position.clone().sub(pivot).applyAxisAngle(UP, angle).add(pivot);
       const bound = GROUND_HALF - 14;
@@ -793,6 +804,7 @@ export class Game {
         const lim = GROUND_HALF - 14;
         o.position.x = THREE.MathUtils.clamp(o.position.x, -lim, lim);
         o.position.z = THREE.MathUtils.clamp(o.position.z, -lim, lim);
+        this.room.bounce(prev, o.position, f.vel);
         const surf = this.surfaceAt(o.position.x, o.position.z, f.item);
         const lift = f.item.restLift(o.quaternion);
         if (o.position.y - lift >= surf) continue;
@@ -2632,7 +2644,9 @@ export class Game {
   private groundPoint(cx: number, cy: number): THREE.Vector3 | null {
     this.aim(cx, cy);
     const hit = this.raycaster.intersectObject(this.ground, false)[0];
-    return hit ? hit.point : null;
+    if (!hit) return null;
+    // un clic sur un mur : au pied du mur, dans la pièce
+    return this.room.wallHit(this.raycaster, hit.distance) ?? hit.point;
   }
 
   /** Direction clavier dans le repère monde (relative à la caméra : « haut » = vers le fond). */
@@ -2720,6 +2734,7 @@ export class Game {
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);
     this.updateCamera(dt);
+    this.room.update(dt, this.yaw, c.position, this.clock.hour);
     this.placeBubble();
     this.motes.update(now / 1000, this.character.position);
     this.post.render();
