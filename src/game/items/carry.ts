@@ -97,9 +97,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'open' | 'read' | 'close';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, open: 0.7, read: 0, close: 0.6 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s). */
 const STACK_BLEND = 0.4;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -164,6 +164,20 @@ function sided(spec: GripSpec, side: Side): GripSpec {
   };
 }
 
+/**
+ * Lancer : la main part en arrière au-dessus de l'épaule, puis fouette vers l'avant ; l'objet
+ * part à THROW_RELEASE. Positions de la main depuis l'épaule (longueurs de bras, repère du buste,
+ * main droite) et direction du coude.
+ */
+const THROW_BACK = { reach: [-0.3, 0.35, -0.3] as [number, number, number], pole: [-1, -0.4, -0.2] as [number, number, number] };
+const THROW_FRONT = { reach: [0.05, 0.12, 0.85] as [number, number, number], pole: [-0.6, -0.6, -0.3] as [number, number, number] };
+const THROW_WIND = 0.42;
+const THROW_SWING = 0.56;
+const THROW_RELEASE = 0.5;
+/** Vitesse de l'objet lancé (m/s) : vers l'avant, et vers le haut. */
+const THROW_SPEED = 4.2;
+const THROW_LIFT = 2.4;
+
 /** Pencher la tête vers le livre pendant la lecture (rad). */
 const READ_NOD = THREE.MathUtils.degToRad(16);
 
@@ -195,6 +209,13 @@ export class Carry {
   private handRots: Partial<Record<Side, THREE.Quaternion>> = {};
   /** Pose de l'objet pendant l'ouverture / la fermeture du livre (fondu entre les deux prises). */
   private blendPose: { pos: THREE.Vector3; rot: THREE.Quaternion } | null = null;
+  /** Lancer : prise de l'objet lancé (il a quitté la main avant la fin du geste) et suite. */
+  private throwGrip: GripType = 'fist';
+  private onThrow: ((item: WorldItem, vel: THREE.Vector3) => void) | null = null;
+  /** Mains à plat contre un meuble (pousser) : points d'appui, en monde, recalculés à chaque image. */
+  private braceAt: (() => Record<Side, THREE.Vector3>) | null = null;
+  /** Main imposée par un geste (lancer) : position depuis l'épaule et coude. */
+  private swing: { reach: THREE.Vector3; pole: THREE.Vector3 } | null = null;
 
   /** `side` : la main qui tient l'objet (une prise à deux mains prend aussi l'autre). */
   constructor(rig: Rig, readonly side: Side = 'right') {
@@ -231,7 +252,30 @@ export class Carry {
 
   /** Vrai pendant une saisie, un ajout à la pile ou une dépose : le perso ne bouge pas. */
   get busy(): boolean {
-    return this.phase !== 'idle' && this.phase !== 'hold' && this.phase !== 'read';
+    return this.phase !== 'idle' && this.phase !== 'hold' && this.phase !== 'read' && this.phase !== 'push';
+  }
+
+  /** Mains contre un meuble (en train de l'agripper, de le pousser ou de le lâcher). */
+  get bracing(): boolean {
+    return this.phase === 'brace' || this.phase === 'push' || this.phase === 'unbrace';
+  }
+
+  /**
+   * Pose les deux mains à plat sur un meuble, aux points `at()` (monde) ; `onDone` une fois en
+   * appui. Les mains doivent être vides.
+   */
+  brace(at: () => Record<Side, THREE.Vector3>, onDone?: () => void): boolean {
+    if (this.item || this.phase !== 'idle') return false;
+    this.braceAt = at;
+    this.start('brace', onDone);
+    return true;
+  }
+
+  /** Lâche le meuble ; `onDone` une fois les bras revenus. */
+  unbrace(onDone?: () => void): boolean {
+    if (this.phase !== 'push') return false;
+    this.start('unbrace', onDone);
+    return true;
   }
 
   /** En train de lire (livre ouvert, ou qui s'ouvre / se ferme). */
@@ -241,12 +285,29 @@ export class Carry {
 
   /** L'objet tenu occupe-t-il les deux mains (caisse, pile, livre ouvert) ? */
   get bothHands(): boolean {
-    return !!this.item && (this.reading || isTwoHanded(this.grip));
+    return this.bracing || (!!this.item && (this.reading || isTwoHanded(this.grip)));
   }
 
   /** Prise utilisée : une pile se porte à plat, à deux mains. */
   private get grip(): GripType {
-    return this.stack.length ? 'stack' : this.item!.grip;
+    return this.stack.length ? 'stack' : (this.item?.grip ?? this.throwGrip);
+  }
+
+  /** L'objet tenu peut-il être lancé (à une main, pas une pile) ? */
+  get canThrow(): boolean {
+    return !!this.item && this.phase === 'hold' && !this.stack.length && !isTwoHanded(this.item.grip);
+  }
+
+  /**
+   * Lance l'objet tenu devant soi. `onRelease` reçoit l'objet et sa vitesse (monde) quand il
+   * quitte la main ; la main est alors libre (le bras finit son geste).
+   */
+  throw(onRelease: (item: WorldItem, vel: THREE.Vector3) => void): boolean {
+    if (!this.canThrow) return false;
+    this.throwGrip = this.item!.grip;
+    this.onThrow = onRelease;
+    this.start('throw');
+    return true;
   }
 
   /** Prise (main gauche : miroir). */
@@ -344,7 +405,7 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', open: 'read', close: 'hold' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
@@ -365,7 +426,8 @@ export class Carry {
       this.stack = [];
       this.item = null;
     }
-    if (n === 'hold' || n === 'idle') {
+    if (n === 'idle') this.braceAt = null;
+    if (n === 'hold' || n === 'idle' || n === 'push') {
       const cb = this.onDone;
       this.onDone = null;
       cb?.();
@@ -386,6 +448,11 @@ export class Carry {
       case 'open':
       case 'read':
       case 'close': return { w: 1, r: 0, c: 0 };
+      // le bras revient à la pose animée après le lancer
+      case 'brace': return { w: k, r: 0, c: 0 };
+      case 'push': return { w: 1, r: 0, c: 0 };
+      case 'unbrace': return { w: 1 - k, r: 0, c: 0 };
+      case 'throw': return { w: 1 - ease(THREE.MathUtils.clamp((this.t - THROW_SWING) / (DURATION.throw - THROW_SWING), 0, 1)), r: 0, c: 0 };
       case 'lower': return { w: 1, r: k, c: k };
       case 'release': return { w: 1 - k, r: 1, c: 1 - k };
       // on se penche un peu pour attraper / poser un livre sans lâcher la pile
@@ -397,12 +464,13 @@ export class Carry {
 
   apply(dt: number): void {
     this.advance(dt);
-    if (this.phase === 'idle' || !this.item) return;
+    if (this.phase === 'idle' || (!this.item && this.phase !== 'throw' && !this.bracing)) return;
     if (this.phase !== 'reach') for (const e of this.stack) e.age += dt;
     const { w, r, c } = this.weights();
     this.sip = this.phase === 'drink' ? this.sipAmount() : 0;
+    this.swing = this.phase === 'throw' ? this.throwSwing() : null;
     // gorgée : le niveau baisse quand la tasse est à la bouche
-    if (this.sip > 0.9 && this.item.contents) {
+    if (this.sip > 0.9 && this.item?.contents) {
       this.item.setLevel(this.item.level - SIP_RATE * dt);
       if (this.item.level <= 0) this.item.contents = null;
     }
@@ -433,10 +501,10 @@ export class Carry {
       const poseB = this.itemPose(b);
       for (const [n, q] of armA) n.quaternion.copy(q.slerp(n.quaternion, open));
       this.blendPose = { pos: poseA.pos.lerp(poseB.pos, open), rot: poseA.rot.slerp(poseB.rot, open) };
-      this.item.setOpen(open > 0.5);
+      this.item!.setOpen(open > 0.5);
       hands = [...SIDES];
     } else {
-      const spec = this.phase === 'read' ? GRIPS.read : this.spec();
+      const spec = this.bracing ? GRIPS.push : this.phase === 'read' ? GRIPS.read : this.spec();
       hands = this.pose(spec, r, scale);
     }
     // fondu entre la pose animée et la pose calculée
@@ -446,6 +514,34 @@ export class Carry {
       }
     }
     root.updateMatrixWorld(true);
+    if (this.phase === 'throw' && this.item && this.t >= THROW_RELEASE) this.release();
+  }
+
+  /** Position de la main pendant le lancer : en arrière, puis le fouetté vers l'avant. */
+  private throwSwing(): { reach: THREE.Vector3; pole: THREE.Vector3 } {
+    const hold = vec(this.spec().right.reach);
+    const holdPole = vec(this.spec().right.pole);
+    const back = vec(flip(THROW_BACK.reach, this.side)), backPole = vec(flip(THROW_BACK.pole, this.side));
+    const front = vec(flip(THROW_FRONT.reach, this.side)), frontPole = vec(flip(THROW_FRONT.pole, this.side));
+    const t = this.t;
+    if (t < THROW_WIND) {
+      const k = ease(t / THROW_WIND);
+      return { reach: hold.lerp(back, k), pole: holdPole.lerp(backPole, k) };
+    }
+    // le fouetté accélère
+    const k = Math.pow(Math.min(1, (t - THROW_WIND) / (THROW_SWING - THROW_WIND)), 2);
+    return { reach: back.lerp(front, k), pole: backPole.lerp(frontPole, k) };
+  }
+
+  /** L'objet quitte la main : vers l'avant du perso, en cloche. */
+  private release(): void {
+    const item = this.item!;
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chestRot).setY(0).normalize();
+    const vel = fwd.multiplyScalar(THROW_SPEED).setY(THROW_LIFT);
+    this.item = null;
+    const cb = this.onThrow;
+    this.onThrow = null;
+    cb?.(item, vel);
   }
 
   /** Place les bras pour la prise `spec` ; renvoie les mains utilisées. */
@@ -547,7 +643,9 @@ export class Carry {
     }
     // où va le centre de la paume
     let palmTarget: THREE.Vector3;
-    if (spec.left) {
+    if (this.braceAt && spec === GRIPS.push) {
+      palmTarget = this.braceAt()[side];
+    } else if (spec.left) {
       // les mains sur les flancs de l'objet : son axe qui va de gauche à droite une fois en main
       const inHands = gripRotation(spec);
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(inHands.clone().invert());
@@ -561,13 +659,14 @@ export class Carry {
       palmTarget = center.clone().addScaledVector(sideDir, half);
     } else {
       const shoulder = rig.worldPos(upper);
-      const hold = shoulder.add(vec(hand.reach).multiplyScalar(this.armLength(side)).applyQuaternion(this.chestRot));
+      const reach = this.swing && side === this.side ? this.swing.reach : vec(hand.reach);
+      const hold = shoulder.add(reach.clone().multiplyScalar(this.armLength(side)).applyQuaternion(this.chestRot));
       palmTarget = hold.lerp(this.target, r);
       if (sipping) palmTarget.lerp(this.mouthHold(scale, side), this.sip);
     }
     const offset = mirror(vec(spec.hold), side).multiplyScalar(scale).applyQuaternion(handRot);
     const wrist = palmTarget.clone().sub(offset);
-    const pole = vec(hand.pole).normalize();
+    const pole = (this.swing && side === this.side && !spec.left ? this.swing.pole.clone() : vec(hand.pole)).normalize();
     // gorgée : le coude descend sous la tasse
     if (sipping) pole.lerp(vec(flip(SIP_POLE, side)).normalize(), this.sip).normalize();
     pole.applyQuaternion(this.chestRot);

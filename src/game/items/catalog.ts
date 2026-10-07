@@ -21,6 +21,13 @@ export interface ItemDef {
    * centre de l'objet. Pour une prise à deux mains : centre de la prise.
    */
   gripPoint?: [number, number, number];
+  /**
+   * Fragilité, de 1 (se brise presque à coup sûr si on le lance) à 10 (ne casse jamais).
+   * Défaut : 5.
+   */
+  fragility?: number;
+  /** Gros meuble qu'on peut déplacer : le perso l'agrippe et le pousse au clavier. */
+  movable?: boolean;
   /** Objets d'une même sorte qui s'empilent (les livres) : on peut en porter plusieurs. */
   stack?: string;
   /** Se pose couché (un livre à plat sur sa couverture), sauf rangé debout dans un meuble. */
@@ -91,6 +98,7 @@ function book(id: string, color: THREE.ColorRepresentation): ItemDef {
     gripPoint: [-BOOK_T / 2, 0.13, 0],
     stack: 'livre',
     layFlat: true,
+    fragility: 8,
     buildOpen: () => {
       // deux moitiés en léger V autour du dos, pages crème côté lecteur
       const g = new THREE.Group();
@@ -125,6 +133,7 @@ export const ITEMS: ItemDef[] = [
     // tenue par l'anse
     gripPoint: [0, CUP_H * 0.55, CUP_R + 0.02],
     fill: [0.012, CUP_H - 0.012],
+    fragility: 2,
     build: () => {
       // ouverte en haut (on voit le café dedans), parois visibles des deux côtés
       const body = mesh(new THREE.CylinderGeometry(CUP_R, CUP_R * 0.85, CUP_H, 20, 1, true), 0xe9e2d0, 0, CUP_H / 2, 0);
@@ -141,6 +150,7 @@ export const ITEMS: ItemDef[] = [
     id: 'lettre',
     name: 'lettre',
     portable: true,
+    fragility: 10,
     // pas de prise indiquée : devinée (petite et fine → entre les doigts)
     gripPoint: [0, 0.015, -0.05],
     build: () => {
@@ -160,6 +170,7 @@ export const ITEMS: ItemDef[] = [
     portable: true,
     grip: 'twoHands',
     gripPoint: [0, 0.17, 0],
+    fragility: 5,
     build: () => {
       const s = 0.34;
       const box = mesh(new THREE.BoxGeometry(s, s, s), 0xa8743f, 0, s / 2, 0);
@@ -180,6 +191,7 @@ export const ITEMS: ItemDef[] = [
     id: 'bibliotheque',
     name: 'bibliothèque',
     portable: false,
+    movable: true,
     slots: SHELF_SLOTS,
     build: () => {
       const wood = 0x7a5232, dark = 0x5b3b22;
@@ -198,6 +210,7 @@ export const ITEMS: ItemDef[] = [
     id: 'machine-a-cafe',
     name: 'machine à café',
     portable: false,
+    movable: true,
     // la tasse se pose sur la grille, sous le bec, l'anse vers l'avant
     pour: { at: [0, COUNTER_H + 0.016, 0.1], fills: 'tasse', liquid: 'café', seconds: 2.6 },
     build: () => {
@@ -229,6 +242,7 @@ export const ITEMS: ItemDef[] = [
     id: 'table',
     name: 'table',
     portable: false,
+    movable: true,
     build: () => {
       const top = mesh(new THREE.BoxGeometry(1, 0.05, 0.6), 0x9b6a3c, 0, TABLE_H - 0.025, 0);
       const g = group(top);

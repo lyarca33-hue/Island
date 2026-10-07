@@ -34,6 +34,8 @@ const PALETTE: Record<string, THREE.ColorRepresentation> = {
 type Gait = 'idle' | 'walk' | 'run';
 
 const SIDES_: Side[] = ['right', 'left'];
+/** Vitesse en poussant un gros meuble (m/s). */
+const PUSH_SPEED = 0.9;
 
 export class Character {
   readonly root = new THREE.Group();
@@ -58,6 +60,13 @@ export class Character {
   private order: Side[] = [];
   /** Appelé quand la main se tend vers un objet (il est encore posé). */
   onGrab: ((item: WorldItem, hand: Carry) => void) | null = null;
+  /**
+   * Gros meuble agrippé : les touches le déplacent avec le perso ; `move` dit si le pas est
+   * possible (et déplace le meuble).
+   */
+  private pushing: { move(step: THREE.Vector3): boolean } | null = null;
+  /** Agripper toujours voulu (faux si lâché avant d'avoir posé les mains). */
+  private pushWanted = false;
   /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
   private approach: { face: THREE.Vector3; then: () => void } | null = null;
 
@@ -283,6 +292,55 @@ export class Character {
     }, upright);
   }
 
+  /** En train de déplacer un gros meuble (ou de l'agripper / le lâcher). */
+  get bracing(): boolean {
+    return !!this.carries?.right.bracing;
+  }
+
+  /**
+   * Va se placer en `stand`, face à `face`, pose les mains sur le meuble aux points `at()`, puis
+   * les touches le déplacent (`move`). Les mains doivent être vides.
+   */
+  startPush(stand: THREE.Vector3, face: THREE.Vector3, at: () => Record<Side, THREE.Vector3>, move: (step: THREE.Vector3) => boolean, running = false): boolean {
+    const c = this.carries;
+    if (!c || c.right.held || c.left.held || this.busy || this.bracing) return false;
+    this.pushWanted = true;
+    this.approachThen(stand, face, () => {
+      if (!this.pushWanted) return;
+      c.right.brace(at, () => {
+        // lâché pendant que les mains se posaient : on relâche tout de suite
+        if (this.pushWanted) this.pushing = { move };
+        else c.right.unbrace();
+      });
+    }, running);
+    return true;
+  }
+
+  /** Lâche le meuble (ou renonce à l'agripper) ; `onDone` une fois les bras revenus. */
+  stopPush(onDone?: () => void): boolean {
+    if (!this.carries) return false;
+    this.pushWanted = false;
+    if (!this.pushing) {
+      this.approach = null;
+      this.target = null;
+      this.path = [];
+      onDone?.();
+      return true;
+    }
+    this.pushing = null;
+    return this.carries.right.unbrace(onDone);
+  }
+
+  /** Lance l'objet tenu `item` (petit ou moyen, tenu d'une main) devant soi. */
+  throwItem(item: WorldItem, onRelease: (item: WorldItem, vel: THREE.Vector3) => void): boolean {
+    const hand = this.handOf(item);
+    if (!hand?.canThrow || this.busy) return false;
+    return hand.throw((it, vel) => {
+      this.order = this.order.filter((s) => s !== hand.side);
+      onRelease(it, vel);
+    });
+  }
+
   get position(): THREE.Vector3 {
     return this.root.position;
   }
@@ -298,6 +356,23 @@ export class Character {
   }
 
   update(dt: number, bounds: number): void {
+    if (this.pushing) {
+      // les touches poussent (ou tirent) le meuble ; le perso garde son orientation
+      const step = this.move.clone().setY(0);
+      let moved = false;
+      if (step.lengthSq() > 0 && !this.busy) {
+        step.normalize().multiplyScalar(PUSH_SPEED * dt);
+        const next = this.root.position.clone().add(step);
+        if (Math.abs(next.x) < bounds && Math.abs(next.z) < bounds && this.pushing.move(step)) {
+          this.root.position.copy(next);
+          moved = true;
+        }
+      }
+      this.setGait(moved ? 'walk' : 'idle');
+      this.mixer?.update(dt);
+      this.puppet?.update(dt);
+      return;
+    }
     const dir = new THREE.Vector3();
     if (this.busy) {
       // pendant une saisie ou une dépose, le perso reste sur place
