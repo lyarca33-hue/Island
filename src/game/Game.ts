@@ -18,6 +18,7 @@ import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/catalog';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
+import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
@@ -77,6 +78,8 @@ const WASH_HANDS = { seconds: 3, hygiene: 12 };
 const TAP_DRINK = { seconds: 3 * SPLASH_CYCLE, thirst: 25 };
 /** Vaisselle mouillée hors de l'égouttoir : sèche en tant de minutes de jeu. */
 const AIR_DRY_MINUTES = 120;
+/** Courses commandées : le sac arrive au bout de tant d'heures de jeu. */
+const DELIVERY_HOURS = 0.5;
 /** Mains mouillées après les avoir lavées : sèchent seules en tant de minutes de jeu. */
 const HANDS_DRY_MINUTES = 10;
 /** Verser : litres par seconde quand le récipient est incliné. */
@@ -92,7 +95,7 @@ const SINK_DRAIN = 4;
 const ICE_CUBES = 3;
 const ICE_MELT = 120;
 /** Couleur de chaque liquide (celle du jet de la machine qui le donne). */
-const LIQUID_COLOR = new Map([...ITEM_BY_ID.values()].flatMap((d) => (d.pour ? [[d.pour.liquid, d.pour.color] as const] : [])));
+const LIQUID_COLOR = new Map<string, THREE.ColorRepresentation>([...[...ITEM_BY_ID.values()].flatMap((d) => (d.pour ? [[d.pour.liquid, d.pour.color] as const] : [])), ...Object.entries(DRINK_COLORS)]);
 const liquidColor = (liquid: string): THREE.ColorRepresentation => LIQUID_COLOR.get(liquid) ?? 0x9fcde6;
 /** Contenance d'un récipient (litres). */
 const volumeOf = (item: WorldItem) => item.def.tank ?? item.def.volume ?? 0.25;
@@ -163,6 +166,8 @@ const START_ON_WORKTOP: Array<[string, number, number, number]> = [
   ['pain', 0.32, -0.08, 0.3],
   // l'éponge, près de l'évier
   ['eponge', -0.42, 0.1, 0.2],
+  // la liste de courses, au fond du plan de travail
+  ['liste-courses', 0.42, -0.18, -0.2],
 ];
 
 /** Rangés au départ dans un meuble : [id, meuble, place]. */
@@ -178,8 +183,6 @@ const START_STORED: Array<[string, string, number]> = [
   ['sandwich', 'frigo', 1],
   ['steak', 'frigo', 0],
   ['steak', 'frigo', 3],
-  ['pomme-de-terre', 'frigo', 10],
-  ['pomme-de-terre', 'frigo', 11],
   ['tomate', 'frigo', 2],
   ['carotte', 'frigo', 4],
   ['concombre', 'frigo', 7],
@@ -201,6 +204,44 @@ const START_STORED: Array<[string, string, number]> = [
   // un verre et une cuillère qui sèchent déjà sur l'égouttoir
   ['verre', 'egouttoir', 0],
   ['cuillere', 'egouttoir', 4],
+  // les provisions : le frais au frigo (derrière, puis la clayette du haut)
+  ['jambon', 'frigo', 10],
+  ['saucisses', 'frigo', 11],
+  ['poulet', 'frigo', 12],
+  ['poisson', 'frigo', 13],
+  ['yaourt', 'frigo', 14],
+  ['creme', 'frigo', 15],
+  ['salade', 'frigo', 16],
+  ['champignons', 'frigo', 17],
+  ['poivron', 'frigo', 18],
+  ['courgette', 'frigo', 19],
+  ['citron', 'frigo', 20],
+  ['orange', 'frigo', 21],
+  ['moutarde', 'frigo', 22],
+  ['ketchup', 'frigo', 23],
+  ['jus-orange', 'frigo', 24],
+  ['soda', 'frigo', 25],
+  ['eau-gazeuse', 'frigo', 26],
+  ['vin', 'frigo', 27],
+  ['mayonnaise', 'frigo', 28],
+  // l'épicerie au garde-manger : pommes de terre et oignons en bas, le sec au-dessus
+  ['pomme-de-terre', 'garde-manger', 0],
+  ['pomme-de-terre', 'garde-manger', 1],
+  ['oignon', 'garde-manger', 2],
+  ['oignon', 'garde-manger', 3],
+  ['farine', 'garde-manger', 8],
+  ['sucre', 'garde-manger', 9],
+  ['sauce-tomate', 'garde-manger', 10],
+  ['confiture', 'garde-manger', 11],
+  ['vinaigre', 'garde-manger', 12],
+  ['pate-tartiner', 'garde-manger', 13],
+  ['ail', 'garde-manger', 14],
+  ['levure', 'garde-manger', 15],
+  ['biscuits', 'garde-manger', 16],
+  ['chocolat', 'garde-manger', 17],
+  // les surgelés
+  ['frites', 'congelateur', 2],
+  ['legumes-surgeles', 'congelateur', 4],
   // la serviette, étendue sur le porte-serviettes de la salle de bain
   ['serviette', 'porte-serviettes', 0],
 ];
@@ -294,9 +335,9 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
-const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre']);
+const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
 /** Pronom de l'objet : « lave-la », « lave-le », « lave-les ». */
 const it = (name: string) => (PLURAL.has(name) ? 'les' : FEMININE.has(name) ? 'la' : 'le');
@@ -307,7 +348,7 @@ const agree = (name: string) => `${FEMININE.has(name) ? 'e' : ''}${PLURAL.has(na
 const doneWord = (item: WorldItem, d: Doneness) => (d === 'cru' && item.def.rawWord ? `${item.def.rawWord}${FEMININE.has(item.name) ? 'e' : ''}` : donenessWord(d, FEMININE.has(item.name)));
 const theName = (name: string) => `${PLURAL.has(name) ? 'Les' : FEMININE.has(name) ? 'La' : 'Le'} ${name}`;
 /** « le steak », « la poêle », « l’évier ». */
-const the = (name: string) => (elides(name) ? `l’${name}` : FEMININE.has(name) ? `la ${name}` : `le ${name}`);
+const the = (name: string) => (PLURAL.has(name) ? `les ${name}` : elides(name) ? `l’${name}` : FEMININE.has(name) ? `la ${name}` : `le ${name}`);
 /** « au frigo », « à la table », « à l’évier », « aux quartiers de pomme ». */
 const toThe = (name: string) => (PLURAL.has(name) ? `aux ${name}` : elides(name) ? `à l’${name}` : FEMININE.has(name) ? `à la ${name}` : `au ${name}`);
 
@@ -382,6 +423,10 @@ export class Game {
   private lastSips = new Map<WorldItem, { level: number; contents: string | null }>();
   /** Mains mouillées après les avoir lavées (1), sèches (0) : le torchon les sèche d'un coup. */
   private wetHands = 0;
+  /** Courses commandées : heures de jeu avant que le sac arrive, et ce qu'il contiendra. */
+  private delivery: { hours: number; names: string[] } | null = null;
+  /** Sacs de courses posés : les aliments (noms) encore dedans. */
+  private bags = new Map<WorldItem, string[]>();
   private ground: THREE.Mesh;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
   private rooms: Room[] = [];
@@ -1248,6 +1293,8 @@ export class Game {
       const sorte: WorldObject['sorte'] = item.def.bed ? 'lit' : item.def.lamp ? 'lampe' : item.def.bin ? 'poubelle' : program(item.def) ? 'appareil' : item.def.cold ? 'frigo' : item.def.rack ? 'égouttoir'
         : item.def.door || item.def.drawer ? 'placard' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.heat ? 'gazinière' : item.def.cookware ? 'ustensile' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : item.def.board ? 'planche' : item.def.knife ? 'couteau' : item.def.dish ? 'vaisselle' : undefined;
       if (item === this.sitting) ou += ', le perso est assis dessus';
+      if (item.def.id === 'liste-courses') ou += `, il manque : ${this.listText() || 'rien'}`;
+      if (this.bags.has(item)) ou += `, contient : ${this.bags.get(item)!.join(', ') || 'rien'}`;
       if (item === this.sleep?.bed) ou += ', le perso dort dedans';
       const lamp = this.lamps.get(item);
       if (lamp) ou += lamp.on ? ', allumée' : ', éteinte';
@@ -4404,7 +4451,7 @@ export class Game {
       const was = doneness(food.def, before), now = doneness(food.def, t);
       const cap0 = waterCap(food.def);
       if (now === 'cuit' && was === 'cru') {
-        this.onNotice?.(`${name} est cuit${fem}.`);
+        this.onNotice?.(PLURAL.has(food.name) ? `${name} sont cuit${fem}s.` : `${name} est cuit${fem}.`);
         this.wearItem(pan, WEAR_COOK);
       } else if (before < cap0 && t >= cap0) this.onNotice?.(`Ça sent le brûlé : retire ${the(food.name)} du feu !`);
       else if (now === 'brûlé' && was !== 'brûlé') this.onNotice?.(`${name} a brûlé.`);
@@ -4522,10 +4569,15 @@ export class Game {
 
   /** Meuble où l'objet est rangé (et l'avant du meuble), ou null. */
   private shelfOf(item: WorldItem): { shelf: WorldItem; forward: THREE.Vector3 } | null {
+    const p = item.object.position;
+    const at = new THREE.Vector3();
     for (const shelf of this.items) {
-      if (!shelf.def.slots) continue;
-      for (let i = 0; i < shelf.def.slots.length; i++) {
-        if (this.slot(shelf, i).pos.distanceTo(item.object.position) < 0.02) {
+      // un meuble à plus de 2 m ne peut pas l'avoir rangé : on ne calcule pas ses places
+      if (!shelf.def.slots || shelf === item || shelf.object.position.distanceToSquared(p) > 4) continue;
+      shelf.object.updateMatrixWorld(true);
+      const out = shelf.def.drawer ? this.openness(shelf) * shelf.def.drawer : 0;
+      for (const [x, y, z] of shelf.def.slots) {
+        if (at.set(x, y, z + out).applyMatrix4(shelf.object.matrixWorld).distanceToSquared(p) < 0.0004) {
           return { shelf, forward: new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion) };
         }
       }
@@ -4809,6 +4861,8 @@ export class Game {
       const wetDish = held.find((h) => h.def.dish && h.wet > 0);
       if (towel && wetDish) add(`Essuyer ${the(wetDish.name)}`, () => this.dryDish(this.ref(wetDish)));
       if (towel && this.wetHands > 0) add('S’essuyer les mains', () => this.dryHands());
+      const bag = held.find((h) => this.bags.has(h));
+      if (bag) add('Ranger les courses', () => this.unpackGroceries(this.ref(bag)));
       const rack = wetDish && this.homeOf(wetDish);
       if (rack?.def.rack) add(`Mettre ${the(wetDish!.name)} à égoutter`, () => this.storeIn(rack, false, wetDish));
       if (held.some((h) => h.def.bathTowel)) add('Se sécher', () => this.dryOff());
@@ -4831,6 +4885,12 @@ export class Game {
     if (item.def.slots && !program(item.def)) add('Regarder dedans', () => this.lookInside(ref));
     if (door && (door.target || door.open > 0) && !door.keep) add('Laisser ouvert', () => this.keepOpen(ref));
     // essuyer au torchon la vaisselle mouillée posée là
+    // la liste et le sac de courses
+    if (item.def.id === 'liste-courses') {
+      add('Lire la liste de courses', () => this.readList());
+      if (!this.delivery) add('Commander les courses', () => this.orderGroceries());
+    }
+    if (this.bags.has(item)) add('Ranger les courses', () => this.unpackGroceries(ref));
     if (item.def.dish && item.wet > 0 && held.some((h) => h.def.towel)) add('Essuyer avec le torchon', () => this.dryDish(ref));
     // glaçons (bac tenu) dans une tasse
     if (held.some((h) => h.name === 'bac à glaçons') && item.def.fill && !item.def.cookware && !item.def.mouth && !this.iced.has(item)) add('Mettre des glaçons', () => this.addIce(ref));
@@ -5188,6 +5248,9 @@ export class Game {
         if (last?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
         if (last?.contents === 'thé') this.needs.restore('fatigue', drunk * TEA_ENERGY);
         if (last?.contents === 'jus de fruits') this.needs.restore('faim', drunk * JUICE_HUNGER);
+        // les boissons du frigo (jus d'orange, soda, eau gazeuse, vin)
+        const extra = last?.contents ? DRINK_EFFECTS[last.contents] : undefined;
+        if (extra) for (const [need, n] of Object.entries(extra)) this.needs.restore(need as 'soif' | 'faim' | 'fatigue', drunk * n);
         // un café ou un thé bu jusqu'au bout laisse un fond dans la tasse
         if ((last?.contents === 'café' || last?.contents === 'thé' || last?.contents === 'jus de fruits') && !held.contents && held.def.dish) held.setDirty(true);
       }
@@ -5195,6 +5258,133 @@ export class Game {
     }
     this.lastSips = sips;
     this.tickDry(hours);
+    this.tickDelivery(hours);
+  }
+
+  /** Ce qui manque à la maison par rapport au stock voulu (STOCK) : [nom, combien]. */
+  shoppingList(): Array<[string, number]> {
+    const have = new Map<string, number>();
+    const count = (name: string) => have.set(name, (have.get(name) ?? 0) + 1);
+    for (const it of this.items) count(it.name);
+    for (const names of this.bags.values()) names.forEach(count);
+    for (const name of this.delivery?.names ?? []) count(name);
+    return Object.entries(STOCK).flatMap(([name, n]): Array<[string, number]> => ((have.get(name) ?? 0) < n ? [[name, n - (have.get(name) ?? 0)]] : []));
+  }
+
+  /** La liste écrite : « banane (2), miel, chips ». */
+  private listText(list = this.shoppingList()): string {
+    return list.map(([name, n]) => (n > 1 ? `${name} (${n})` : name)).join(', ');
+  }
+
+  /** Lit la liste de courses : ce qui manque. */
+  readList(): boolean {
+    const list = this.shoppingList();
+    this.onNotice?.(list.length ? `Liste de courses : ${this.listText(list)}.` : 'Liste de courses : rien ne manque.');
+    return true;
+  }
+
+  /** Commande ce qui manque : le sac de courses arrive devant la porte au bout d'une demi-heure de jeu. */
+  orderGroceries(): boolean {
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (this.delivery) return fail('Les courses sont déjà commandées : le sac arrive bientôt à la porte.');
+    const list = this.shoppingList();
+    if (!list.length) return fail('Rien ne manque : pas besoin de courses.');
+    const names = list.flatMap(([name, n]) => Array<string>(n).fill(name));
+    this.delivery = { hours: DELIVERY_HOURS, names };
+    this.onNotice?.(`Courses commandées (${this.listText(list)}) : le sac arrive devant la porte dans une demi-heure.`);
+    return true;
+  }
+
+  /** Le livreur passe : le sac de courses est posé devant la porte d'entrée. */
+  private tickDelivery(hours: number): void {
+    const d = this.delivery;
+    if (!d || hours <= 0) return;
+    d.hours -= hours;
+    if (d.hours > 0) return;
+    this.delivery = null;
+    const def = ITEM_BY_ID.get('sac-courses');
+    const room = ROOMS.find((r) => r.doors.some((o) => o.leaf));
+    const door = room?.doors.find((o) => o.leaf);
+    if (!def || !room || !door) return;
+    const bag = new WorldItem(def);
+    // juste à l'intérieur, devant la porte (murs est et ouest : u le long de z ; nord et sud : le long de x)
+    const u = (door.u0 + door.u1) / 2, r = room.rect;
+    const at = door.wall === 'ouest' ? [r.x0 + 0.45, u] : door.wall === 'est' ? [r.x1 - 0.45, u] : door.wall === 'nord' ? [u, r.z0 + 0.45] : [u, r.z1 - 0.45];
+    bag.object.position.set(at[0], 0, at[1]);
+    this.items.push(bag);
+    this.scene.add(bag.object);
+    this.bags.set(bag, d.names);
+    this.onNotice?.('Les courses sont arrivées : le sac est devant la porte. Clic droit dessus : « Ranger les courses ».');
+  }
+
+  /**
+   * Range le sac de courses `ref` (sinon le plus proche) : le perso le porte d'un meuble à l'autre
+   * (frigo, congélateur, garde-manger…) et chaque aliment va à sa place ; le sac vide disparaît.
+   */
+  unpackGroceries(ref?: string, running = false): boolean {
+    const c = this.character;
+    const bag = ref ? this.byRef(ref) : (c.heldItems.find((h) => this.bags.has(h)) ?? this.nearest((i) => this.bags.has(i)));
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!bag || !this.bags.has(bag)) return fail('Il n’y a pas de sac de courses à ranger.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.unpackGroceries(ref, running));
+    if (!c.handOf(bag) && c.heldItems.length > 1) return fail('Pose d’abord ce que tu tiens pour porter le sac.');
+    // où va chaque aliment (le meuble le plus proche qui le prend)
+    const homes = new Map<WorldItem, string[]>();
+    const left: string[] = [];
+    for (const name of this.bags.get(bag)!) {
+      const def = [...ITEM_BY_ID.values()].find((d) => d.name === name);
+      const home = def && this.homeOf(new WorldItem(def));
+      if (home) homes.set(home, [...(homes.get(home) ?? []), def!.id]);
+      else left.push(name);
+    }
+    const steps: Array<() => boolean> = [() => (c.handOf(bag) ? true : this.take(bag, running))];
+    for (const [home, ids] of homes) {
+      steps.push(() => {
+        const put = () => this.fillShelf(bag, home, ids);
+        if (this.doors.has(home)) return this.withDoorOpen(home, put, running);
+        c.approachThen(this.standBefore(home, 0.4), home.object.position, put, running);
+        return true;
+      });
+    }
+    return this.chain(steps, () => {
+      const rest = this.bags.get(bag) ?? [];
+      if (rest.length) {
+        this.onNotice?.(`Plus de place pour : ${rest.join(', ')}. ${rest.length > 1 ? 'Ils restent' : 'Il reste'} dans le sac.`);
+        return;
+      }
+      this.bags.delete(bag);
+      if (c.handOf(bag) && !c.loseItem(bag)) return;
+      this.removeItem(bag);
+      this.onNotice?.('Courses rangées : le sac est vide (plié et rangé).');
+    });
+  }
+
+  /** Sort du sac les aliments `ids` et les range dans les places libres du meuble. */
+  private fillShelf(bag: WorldItem, shelf: WorldItem, ids: string[]): void {
+    const inBag = this.bags.get(bag);
+    if (!inBag) return;
+    const placed: string[] = [];
+    for (const id of ids) {
+      const def = ITEM_BY_ID.get(id)!;
+      const it = new WorldItem(def);
+      const free = this.freeSlots(shelf, it);
+      if (!free.length) break;
+      const { pos, rot } = this.slot(shelf, free[0]);
+      it.object.position.copy(pos);
+      it.object.quaternion.copy(rot);
+      this.items.push(it);
+      this.scene.add(it.object);
+      inBag.splice(inBag.indexOf(def.name), 1);
+      placed.push(def.name);
+    }
+    if (placed.length) this.onNotice?.(`Rangé dans ${the(shelf.name)} : ${placed.join(', ')}.`);
   }
 
   /** La vaisselle mouillée sèche : vite sur l'égouttoir, lentement ailleurs ; les mains aussi. */

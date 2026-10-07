@@ -203,6 +203,8 @@ export const BATHROOM_ITEMS: ItemDef[] = [
       for (let i = 0; i < 10; i++) {
         const m = new THREE.Sprite(puff);
         m.userData.phase = i / 10;
+        // la vapeur ne se vise pas (un Sprite demande la caméra au rayon : les rayons vers le sol plantaient)
+        m.raycast = () => {};
         steam.add(m);
       }
       g.add(rain, steam);

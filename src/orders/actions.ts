@@ -274,6 +274,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.dryDish(a.objet),
   },
   {
+    name: 'lire_liste',
+    description: 'Lire la liste de courses : ce qui manque à la maison (le stock voulu de chaque aliment, moins ce qu’il y a).',
+    params: {},
+    run: (g) => g.readList(),
+  },
+  {
+    name: 'commander_courses',
+    description: 'Commander ce qui manque sur la liste de courses : un sac de courses est livré devant la porte d’entrée une demi-heure de jeu plus tard.',
+    params: {},
+    run: (g) => g.orderGroceries(),
+  },
+  {
+    name: 'ranger_courses',
+    description: 'Ranger le sac de courses `objet` (sinon le plus proche) : le perso le porte au frigo, au congélateur et au garde-manger, chaque aliment à sa place ; le sac vide disparaît.',
+    params: { objet: 'ref du sac de courses' },
+    run: (g, a) => g.unpackGroceries(a.objet),
+  },
+  {
     name: 'essuyer_mains',
     description: 'S’essuyer les mains au torchon tenu, après les avoir lavées.',
     params: {},
