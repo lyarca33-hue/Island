@@ -14,6 +14,10 @@ export interface Missing {
   quoi: string;
   /** Pourquoi : explication de l'IA ou message du jeu. */
   detail: string;
+  /** Cause probable (« mains prises », « verbe inconnu », « geste absent »…), voir diagnose.ts. */
+  cause?: string;
+  /** Situation du perso à ce moment (« tient : tasse-1 ; assis sur chaise-1 »). */
+  contexte?: string;
   /** Date ISO. */
   at: string;
 }
@@ -25,6 +29,22 @@ export interface MissingGroup {
   count: number;
   last: Missing;
   ordres: string[];
+  /** Combien de fois chaque cause, les plus fréquentes d'abord. */
+  causes: Array<{ cause: string; count: number }>;
+  /** Commentaire écrit par le joueur à la place du commentaire automatique. */
+  note?: string;
+}
+
+/** Clé d'un groupe (genre et action), pour son commentaire. */
+export function groupKey(g: { kind: MissingKind; quoi: string }): string {
+  return `${g.kind}|${g.quoi}`;
+}
+
+/** Commentaire automatique d'un groupe : causes, dernière explication, dernière situation. */
+export function autoComment(g: MissingGroup): string {
+  const causes = g.causes.map((c) => (c.count > 1 ? `${c.cause} ×${c.count}` : c.cause)).join(', ');
+  const ctx = g.last.contexte ? ` (${g.last.contexte})` : '';
+  return `${causes ? `${causes} : ` : ''}${g.last.detail}${ctx}`;
 }
 
 export const KIND_LABEL: Record<MissingKind, string> = {
@@ -34,6 +54,7 @@ export const KIND_LABEL: Record<MissingKind, string> = {
 };
 
 const KEY = 'rp-island.manques';
+const NOTES_KEY = 'rp-island.manques.notes';
 const MAX = 300;
 const listeners = new Set<() => void>();
 
@@ -68,7 +89,39 @@ export function missingList(): Missing[] {
   return read();
 }
 
+/** Repli des commentaires quand le stockage du navigateur est indisponible. */
+let memoryNotes: Record<string, string> = {};
+
+/** Commentaires du joueur, par groupe (voir `groupKey`). */
+export function missingNotes(): Record<string, string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return memoryNotes;
+  }
+}
+
+function writeNotes(notes: Record<string, string>): void {
+  memoryNotes = notes;
+  try {
+    localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+  } catch {
+    // stockage indisponible : gardé pour cette session seulement
+  }
+  listeners.forEach((f) => f());
+}
+
+/** Remplace le commentaire automatique d'un groupe ; texte vide : revient au commentaire automatique. */
+export function setMissingNote(key: string, text: string): void {
+  const notes = { ...missingNotes() };
+  if (text.trim()) notes[key] = text.trim();
+  else delete notes[key];
+  writeNotes(notes);
+}
+
 export function clearMissing(): void {
+  writeNotes({});
   write([]);
 }
 
@@ -116,30 +169,37 @@ export function onMissingChange(f: () => void): () => void {
 }
 
 /** Regroupe par genre et action, les plus fréquents d'abord. */
-export function groupMissing(list = read()): MissingGroup[] {
+export function groupMissing(list = read(), notes = missingNotes()): MissingGroup[] {
   const groups = new Map<string, MissingGroup>();
   for (const m of list) {
-    const k = `${m.kind}|${m.quoi}`;
-    const g = groups.get(k) ?? { kind: m.kind, quoi: m.quoi, count: 0, last: m, ordres: [] };
+    const k = groupKey(m);
+    const g = groups.get(k) ?? { kind: m.kind, quoi: m.quoi, count: 0, last: m, ordres: [], causes: [], note: notes[k] };
     g.count++;
     g.last = m;
     if (!g.ordres.includes(m.ordre)) g.ordres.push(m.ordre);
+    if (m.cause) {
+      const c = g.causes.find((x) => x.cause === m.cause);
+      if (c) c.count++;
+      else g.causes.push({ cause: m.cause, count: 1 });
+    }
     groups.set(k, g);
   }
+  for (const g of groups.values()) g.causes.sort((a, b) => b.count - a.count);
   const order: MissingKind[] = ['action', 'echec', 'incompris'];
   return [...groups.values()].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.count - a.count);
 }
 
 /** Le journal en texte (Markdown), à coller dans une discussion ou un ticket. */
-export function missingReport(list = read()): string {
+export function missingReport(list = read(), notes = missingNotes()): string {
   if (!list.length) return 'Aucun manque noté.';
   const lines = [`# Manques notés (${list.length})`, ''];
   for (const kind of ['action', 'echec', 'incompris'] as MissingKind[]) {
-    const groups = groupMissing(list).filter((g) => g.kind === kind);
+    const groups = groupMissing(list, notes).filter((g) => g.kind === kind);
     if (!groups.length) continue;
     lines.push(`## ${KIND_LABEL[kind]}`, '');
     for (const g of groups) {
-      lines.push(`- **${g.quoi}** ×${g.count} : ${g.last.detail}`);
+      lines.push(`- **${g.quoi}** ×${g.count} : ${g.note ?? autoComment(g)}`);
+      if (g.note) lines.push(`  - diagnostic auto : ${autoComment(g)}`);
       lines.push(`  - ordres : ${g.ordres.slice(0, 5).map((o) => `« ${o} »`).join(', ')}`);
     }
     lines.push('');

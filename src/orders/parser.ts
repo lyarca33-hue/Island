@@ -296,3 +296,31 @@ function count(words: string[]): number | null {
 }
 
 const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rangé');
+
+/**
+ * Pourquoi un ordre n'est pas compris sans IA, morceau par morceau : le verbe inconnu, ou le
+ * verbe reconnu sans objet reconnu, ou les deux reconnus mais la tournure pas prise en charge.
+ * Pour le journal des manques ; `quoi` est ce qui manque (le verbe inconnu, sinon l'ordre).
+ */
+export function explainOrder(text: string, objets: WorldObject[]): { quoi: string; cause: string; detail: string } {
+  for (const original of clauses(text)) {
+    let w = stripFillers(normalize(original).split(' '));
+    if (VERB_OF.get(w[0]) === 'aller' && ['te', 't'].includes(w[1]) && VERB_OF.has(w[2])) w = [w[0], ...w.slice(2)];
+    if (VERB_OF.get(w[0]) === 'aller' && w[1] && VERB_OF.has(w[1]) && VERB_OF.get(w[1]) !== 'aller') w = w.slice(1);
+    if (!w[0]) continue;
+    const verb = VERB_OF.get(w[0]);
+    const rest = w.slice(1);
+    const names = [...new Set(findObjects(rest, objets).found.map((o) => o.nom))];
+    if (!verb) {
+      const seen = names.length ? ` (objet reconnu : ${names.join(', ')})` : '';
+      return { quoi: w[0], cause: 'verbe inconnu', detail: `Le verbe « ${w[0]} » n’est pas connu sans IA${seen}.` };
+    }
+    if (parseClause(verb, rest, original, { enMain: [], objets })?.length) continue;
+    const words = rest.filter((x) => !STOP.has(x));
+    if (!names.length && words.length) {
+      return { quoi: words.join(' '), cause: 'objet inconnu', detail: `Verbe « ${w[0]} » compris, mais aucun objet de la pièce reconnu dans « ${words.join(' ')} ».` };
+    }
+    return { quoi: normalize(text), cause: 'tournure non prise en charge', detail: `Verbe « ${w[0]} »${names.length ? ` et ${names.join(', ')}` : ''} reconnus, mais cette combinaison n’est pas comprise sans IA.` };
+  }
+  return { quoi: normalize(text), cause: 'autre', detail: 'Pas compris sans IA.' };
+}
