@@ -55,6 +55,12 @@ VITE_OPENROUTER_API_KEY=sk-or-...
 VITE_OPENROUTER_MODEL=qwen/qwen3.7-flash
 ```
 
+**Manques** (`src/orders/missing.ts`, Menu → Manques) : ce que le perso n'a pas pu faire pendant
+les essais est noté dans le navigateur, regroupé et compté. Trois sortes : une action ou un objet
+que le jeu n'a pas encore (signalé par l'IA avec la tâche « manque », ex. danser), une action
+ratée (message du jeu), un ordre non compris sans IA. « Copier » ou « Télécharger » donne la
+liste en Markdown, à coller dans la discussion du projet.
+
 Les tâches (`src/orders/tasks.ts`) traduisent un ordre en actions de base selon l'état de la
 pièce : ranger les livres = les prendre par piles de 6, les ranger, recommencer tant qu'il en
 traîne. L'aperçu publié sur claude.ai ne peut pas joindre OpenRouter : les ordres libres y passent par
@@ -113,6 +119,8 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/nav.ts` | Contourner les meubles |
 | `src/orders/ChatBar.tsx` | Zone de saisie parole / action |
 | `src/orders/AiSettingsForm.tsx` | Réglages de l'IA (clé, modèle), dans le menu |
+| `src/orders/missing.ts` | Journal des manques (ce que le perso n'a pas pu faire) |
+| `src/ui/MissingPanel.tsx` | Menu → Manques : liste regroupée, copier, télécharger, vider |
 | `src/ui/Menu.tsx` | Menu déroulant (raccourcis, IA, perso) : une `<MenuSection>` par réglage, ajoutée dans App.tsx |
 | `src/orders/parser.ts` | Ordres simples compris sans IA |
 | `src/orders/tasks.ts` | Un ordre (ranger les livres, café…) → suite d'actions de base |

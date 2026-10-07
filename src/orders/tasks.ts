@@ -20,6 +20,13 @@ export type Intent =
   | { kind: 'arreter_lire' }
   | { kind: 'dire'; texte: string };
 
+/** La tâche en quelques mots (« prendre tasse »), pour le journal des manques. */
+export function intentLabel(i: Intent): string {
+  const what = 'ref' in i ? i.ref : 'refs' in i ? (i.refs.length ? i.refs.join(', ') : 'livres') : '';
+  const sur = i.kind === 'poser' && i.sur ? ` sur ${i.sur}` : '';
+  return `${i.kind.replace('_', ' ')}${what ? ` ${what}` : ''}${sur}`;
+}
+
 /** Action de base en cours, pour l'interface. */
 export interface Step {
   name: string;
@@ -32,7 +39,7 @@ const STACK_MAX = 6;
 class Failed extends Error {}
 
 /** Exécute les tâches l'une après l'autre ; rend si tout s'est bien passé et un message pour le joueur. */
-export async function runIntents(game: Game, intents: Intent[], onStep: (s: Step) => void, signal?: AbortSignal): Promise<{ ok: boolean; message: string }> {
+export async function runIntents(game: Game, intents: Intent[], onStep: (s: Step) => void, signal?: AbortSignal): Promise<{ ok: boolean; message: string; failed?: Intent }> {
   const act = async (name: string, args: Record<string, string> = {}) => {
     onStep({ name, args });
     const { ok, report } = await perform(game, name, args, signal);
@@ -40,11 +47,12 @@ export async function runIntents(game: Game, intents: Intent[], onStep: (s: Step
     if (!ok) throw new Failed(report.replace(/^échec( : )?/, '') || 'Impossible.');
   };
   if (!intents.length) return { ok: false, message: 'Rien à faire.' };
+  let current: Intent | undefined;
   try {
-    for (const intent of intents) await runOne(game, intent, act);
+    for (const intent of intents) await runOne(game, (current = intent), act);
     return { ok: true, message: 'C’est fait.' };
   } catch (e) {
-    if (e instanceof Failed) return { ok: false, message: e.message };
+    if (e instanceof Failed) return { ok: false, message: e.message, failed: current };
     throw e;
   }
 }

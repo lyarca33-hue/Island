@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
 import { type Chat, claudePageChat, loadSettings, openRouterChat, runAi } from './ai';
-import { parseOrder } from './parser';
-import { runIntents, type Step } from './tasks';
+import { logMissing } from './missing';
+import { normalize, parseOrder } from './parser';
+import { intentLabel, runIntents, type Step } from './tasks';
 
 type Mode = 'parole' | 'action';
 
@@ -65,6 +66,7 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
     const intents = parseOrder(t, game.describe());
     const settings = loadSettings();
     if (!intents && !claudeChat && !settings.apiKey) {
+      logMissing({ kind: 'incompris', ordre: t, quoi: normalize(t), detail: 'Pas compris sans IA (pas de clé OpenRouter).' });
       onNeedSettings();
       setResult('Ordre non compris. Ajoute une clé OpenRouter (Menu → IA des ordres) pour les ordres libres.');
       return;
@@ -74,11 +76,21 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
     setBusy(true);
     const ctrl = new AbortController();
     abort.current = ctrl;
+    // ce que le perso n'a pas pu faire va au journal des manques (Menu → Manques)
+    let noted = false;
+    const note = (m: Parameters<typeof logMissing>[0]) => {
+      if (ctrl.signal.aborted) return;
+      logMissing(m);
+      noted = true;
+    };
     try {
-      const msg = intents
-        ? (await runIntents(game, intents, setStep, ctrl.signal)).message
-        : await runAi(game, claudeChat ?? openRouterChat(settings), t, setStep, ctrl.signal);
-      setResult(msg);
+      let msg: string;
+      if (intents) {
+        const r = await runIntents(game, intents, setStep, ctrl.signal);
+        if (!r.ok && r.failed) note({ kind: 'echec', ordre: t, quoi: intentLabel(r.failed), detail: r.message });
+        msg = r.message;
+      } else msg = await runAi(game, claudeChat ?? openRouterChat(settings), t, setStep, ctrl.signal, (m) => note({ ...m, ordre: t }));
+      setResult(noted ? `${msg} (noté dans Menu → Manques)` : msg);
     } catch (e) {
       setResult(ctrl.signal.aborted ? 'Interrompu.' : `IA : ${(e as Error).message}`);
     } finally {

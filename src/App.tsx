@@ -5,6 +5,7 @@ import { Game, type HandActions } from './game/Game';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
 import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
+import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
 
 /** On commence par le créateur de personnage, puis « Jouer » ouvre la map avec ce perso. */
@@ -29,6 +30,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [can, setCan] = useState<HandActions>({ drink: false, read: false, reading: false });
   const [notice, setNotice] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const missing = useMissingCount();
   /** Partie du menu dépliée. */
   const [section, setSection] = useState<string | null>('raccourcis');
   const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
@@ -77,6 +79,9 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
         </MenuSection>
         <MenuSection title="Heure" open={section === 'heure'} onToggle={fold('heure')}>
           <TimeControls game={ready} />
+        </MenuSection>
+        <MenuSection title={`Manques${missing ? ` (${missing})` : ''}`} open={section === 'manques'} onToggle={fold('manques')}>
+          <MissingPanel />
         </MenuSection>
         <MenuSection title="IA des ordres" open={section === 'ia'} onToggle={fold('ia')}>
           <AiSettingsForm />
