@@ -189,3 +189,20 @@
 .hud-drag span {
   color: #ffd27a;
 }
+
+/* Bouton « Signaler » et sa fenêtre */
+.hud-cam .hud-report { width: auto; padding: 0 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; }
+.feedback {
+  position: absolute; top: 62px; right: 16px; width: min(380px, calc(100% - 32px)); padding: 10px 12px; border-radius: 14px;
+  display: flex; flex-direction: column; gap: 8px; font-size: 13px; z-index: 5;
+  background: rgba(20, 24, 40, 0.94); border: 1px solid rgba(255, 240, 210, 0.3); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.feedback-head { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+.feedback textarea {
+  padding: 8px 9px; border-radius: 9px; border: 1px solid rgba(255, 240, 210, 0.3); resize: vertical;
+  background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font: inherit; font-size: 14px; line-height: 1.4;
+}
+.feedback textarea::placeholder { color: rgba(253, 246, 227, 0.5); }
+.feedback-ctx { margin: 0; padding-left: 16px; opacity: 0.7; line-height: 1.4; }
+.feedback small { opacity: 0.6; line-height: 1.35; }
+.feedback .missing-actions button:disabled { opacity: 0.45; cursor: default; }

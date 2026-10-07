@@ -5,6 +5,7 @@ import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game'
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
 import { ContextMenu } from './ui/ContextMenu';
+import { FeedbackPanel } from './ui/FeedbackPanel';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
@@ -43,6 +44,10 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const [inv, setInv] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const missing = useMissingCount();
+  /** Fenêtre « Signaler » ouverte, avec son texte de départ. */
+  const [report, setReport] = useState<string | null>(null);
+  /** Dernier objet survolé : il reste « visé » quand la souris part vers le bouton Signaler. */
+  const aimed = useRef<string | null>(null);
   /** Partie du menu dépliée. */
   const [section, setSection] = useState<string | null>('raccourcis');
   const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
@@ -57,7 +62,10 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       setHeld(name);
       setCan(actions);
     };
-    g.onHover = setHover;
+    g.onHover = (h) => {
+      setHover(h);
+      if (h) aimed.current = h.name;
+    };
     g.onInventory = setInv;
     g.onDrag = setDrag;
     g.onMenu = (m) => {
@@ -100,7 +108,12 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
           <TimeControls game={ready} />
         </MenuSection>
         <MenuSection title={`Manques${missing ? ` (${missing})` : ''}`} open={section === 'manques'} onToggle={fold('manques')}>
-          <MissingPanel />
+          <MissingPanel
+            onReport={(text) => {
+              setMenuOpen(false);
+              setReport(text);
+            }}
+          />
         </MenuSection>
         <MenuSection title="IA des ordres" open={section === 'ia'} onToggle={fold('ia')}>
           <AiSettingsForm />
@@ -110,6 +123,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         </MenuSection>
       </Menu>
       <div className="hud-cam">
+        <button className="hud-report" onClick={() => setReport((r) => (r === null ? '' : null))} aria-expanded={report !== null} title="Écrire un retour et l’envoyer">✉ Signaler</button>
         <button onClick={() => game.current?.rotateCamera(-1)} aria-label="Tourner la caméra à gauche">⟲</button>
         <button onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite">⟳</button>
       </div>
@@ -189,6 +203,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
+      {report !== null && <FeedbackPanel game={ready} context={{ aimed: aimed.current, held }} initial={report} onClose={() => setReport(null)} />}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
       {drag && (

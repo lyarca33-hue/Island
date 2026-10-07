@@ -10,8 +10,11 @@ export function useMissingCount(): number {
   return n;
 }
 
-/** Menu → Manques : ce que le perso n'a pas pu faire, regroupé, à copier ou télécharger. */
-export function MissingPanel() {
+/**
+ * Menu → Manques : ce que le perso n'a pas pu faire, regroupé, à copier ou télécharger.
+ * `onReport` ouvre la fenêtre « Signaler » avec le journal comme texte de départ.
+ */
+export function MissingPanel({ onReport }: { onReport: (text: string) => void }) {
   const [list, setList] = useState(missingList);
   const [notes, setNotes] = useState(missingNotes);
   const [copied, setCopied] = useState(false);
@@ -73,6 +76,7 @@ export function MissingPanel() {
         ))}
       </ul>
       <div className="missing-actions">
+        <button onClick={() => onReport(missingReport(list, notes))} title="Envoyer ce journal sur GitHub ou le copier pour la discussion">Signaler</button>
         <button onClick={copy}>{copied ? 'Copié ✓' : 'Copier'}</button>
         <button onClick={download}>Télécharger</button>
         <button onClick={() => (sure ? (clearMissing(), setSure(false)) : setSure(true))} onBlur={() => setSure(false)}>
