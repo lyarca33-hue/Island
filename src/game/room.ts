@@ -1,22 +1,24 @@
 /**
- * La pièce de la cuisine : carrelage au sol, quatre murs, une porte d'entrée (qui s'ouvre seule
- * quand le perso s'en approche), deux fenêtres, et le décor fixé aux murs (crédence, hotte,
- * étagère, horloge qui donne l'heure du jeu, meuble d'angle).
+ * Les pièces de la maison. Chaque pièce vient d'une fiche (RoomSpec) : son rectangle, son sol,
+ * ses portes et passages, ses fenêtres, ses lampes, son interrupteur, ses meubles rangés contre
+ * les murs et son décor. Les fiches sont listées dans rooms.ts ; la cuisine est ici (KITCHEN).
+ * Deux pièces voisines ont chacune leur mur, dos à dos, percé au même endroit pour le passage ;
+ * leurs toits se rejoignent au-dessus (pas de débord ni de pignon côté mitoyen).
  *
- * Lumière jour et nuit, réglée par l'horloge du jeu : les suspensions s'allument au crépuscule
- * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit. L'interrupteur à côté
- * de la porte allume ou éteint à la main ; l'horloge reprend la main au prochain lever ou coucher.
- * Le jour, une lumière entre par chaque fenêtre (projecteur dehors, ombre du croisillon au sol) ;
+ * Lumière jour et nuit, réglée par l'horloge du jeu : les lampes s'allument au crépuscule
+ * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit. L'interrupteur de la
+ * pièce allume ou éteint à la main ; l'horloge reprend la main au prochain lever ou coucher.
+ * Le jour, une lumière entre par chaque fenêtre (projecteur dedans, ombre du croisillon au sol) ;
  * la nuit, un peu de clair de lune. Un vrai toit couvre la pièce quand le perso est dehors.
  * Un toit et des murs invisibles, qui ne font que de l'ombre, gardent le soleil et la lune dehors
  * (sauf par les fenêtres, même quand un mur est abaissé en coupe) : dedans, ce sont les lampes
  * qui éclairent et projettent les ombres.
  *
- * Murs « en coupe » comme dans les Sims : les murs tournés vers la caméra s'abaissent à hauteur
- * de plinthe pour qu'on voie dedans ; ils se relèvent quand la caméra tourne. Le perso hors de la
- * pièce, derrière un mur, le fait aussi s'abaisser.
+ * Murs « en coupe » comme dans les Sims : quand le perso est dans une pièce, les murs tournés
+ * vers la caméra s'abaissent à hauteur de plinthe dans toutes les pièces ; ils se relèvent quand
+ * la caméra tourne. Le perso dehors, derrière un mur, le fait aussi s'abaisser.
  *
- * Les meubles sont rangés contre les murs par rangées (RUNS) : chacun dos au mur, collé au
+ * Les meubles sont rangés contre les murs par rangées (runs) : chacun dos au mur, collé au
  * précédent ; leurs places viennent de leurs boîtes (placeRuns), pas de coordonnées à la main.
  */
 import * as THREE from 'three';
@@ -25,20 +27,32 @@ import { lightAllPasses } from './postfx';
 import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
 
-/** Intérieur de la pièce (m) : x de x0 à x1, z de z0 à z1. Le fond (nord) est à z0. */
-export const ROOM = { x0: -3.2, x1: 3.2, z0: -2.8, z1: 2.8 };
+/** Rectangle intérieur d'une pièce (m) : x de x0 à x1, z de z0 à z1. Le fond (nord) est à z0. */
+export interface Rect {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+
+/** Intérieur de la cuisine. */
+export const ROOM: Rect = { x0: -3.2, x1: 3.2, z0: -2.8, z1: 2.8 };
 /** Hauteur et épaisseur des murs, hauteur d'un mur abaissé (en coupe). */
-const WALL_H = 2.5;
-const WALL_T = 0.12;
+export const WALL_H = 2.5;
+export const WALL_T = 0.12;
 const CUT_H = 0.2;
-/** Porte d'entrée (mur ouest) : de z0 à z1, hauteur. */
-const DOOR = { z0: 1.35, z1: 2.25, h: 2.08 };
-/** Distance (m) à laquelle la porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
+/** Hauteur d'une porte ou d'un passage. */
+export const DOOR_H = 2.08;
+/** Porte d'entrée de la cuisine (mur ouest) : de z0 à z1. */
+const DOOR = { z0: 1.35, z1: 2.25 };
+/** Passage de la cuisine au salon (mur est de la cuisine, mur ouest du salon) : de z0 à z1. */
+export const SALON_PASS = { z0: -1.9, z1: -1.0 };
+/** Distance (m) à laquelle une porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
 const DOOR_NEAR = 1.4;
 const DOOR_SPEED = 1.8;
 /** Bas et haut des fenêtres (celle du fond, au-dessus de l'évier, passe au-dessus du robinet). */
 const WIN_LOW = 1.3;
-const WIN_HIGH = 2.1;
+export const WIN_HIGH = 2.1;
 /** Hauteur du plan de travail : le haut des meubles bas, le bas de la crédence. */
 const COUNTER_H = 0.9;
 
@@ -46,8 +60,8 @@ const PLASTER = 0xefe5cf;
 const CAP = 0x7c6a58;
 const SKIRT = 0x8a6440;
 const FRAME = 0xf6f3ec;
-const WOOD = 0x8a6440;
-const DARK_WOOD = 0x5d4129;
+export const WOOD = 0x8a6440;
+export const DARK_WOOD = 0x5d4129;
 const COUNTER = 0xd9d3c5;
 
 /** Suspensions : hauteur de l'ampoule, couleur et force de la lumière allumée, portée (m). */
@@ -55,6 +69,8 @@ const LAMP_Y = 1.95;
 const LAMP_COLOR = 0xffc98a;
 const LAMP_I = 9;
 const LAMP_RANGE = 7;
+/** Lampadaire : hauteur de l'ampoule. */
+const FLOOR_LAMP_Y = 1.5;
 /** Les lampes s'allument sur cette durée (h) avant le coucher, s'éteignent après le lever. */
 const LAMP_FADE = 1.5;
 /** Lumière par les fenêtres : couleur et force en plein jour, au lever/coucher, et clair de lune. */
@@ -70,8 +86,7 @@ const ROOF_OVER = 0.3;
 const LAMP_SHADOW = 512;
 /** Vitesse du fondu quand on appuie sur l'interrupteur (part de lumière par seconde). */
 const SWITCH_FADE = 4;
-/** Interrupteur : sur le mur ouest, à côté de la porte (côté sud), hauteur. */
-const SWITCH_Z = DOOR.z1 + 0.2;
+/** Hauteur des interrupteurs. */
 const SWITCH_Y = 1.1;
 /** Vitres : ciel de jour, ciel de nuit (couleur, opacité). */
 const PANE_DAY = { color: new THREE.Color(0xbfe3f2), opacity: 0.35 };
@@ -100,39 +115,66 @@ const WALLS: Record<WallName, WallSpec> = {
   est: { n: [-1, 0], yaw: -Math.PI / 2 },
 };
 
-/**
- * Rangées de meubles, dos au mur, dans l'ordre de x (murs nord et sud) ou de z (est, ouest)
- * croissant à partir de `from` ; un nombre laisse un écart (m).
- *
- * Le long du fond : lave-vaisselle à côté de l'évier (sous la fenêtre), plan de travail pour
- * couper entre l'évier et la gazinière, tiroir à couverts, puis le frigo au bout. Le long du mur
- * ouest : le coin café, le placard à vaisselle (micro-ondes dessus), le four, la poubelle. Les deux
- * rangées partent du meuble d'angle. La bibliothèque (livres de cuisine) au fond, après le frigo.
- */
-export const RUNS: Array<{ wall: WallName; from: number; items: Array<string | number> }> = [
-  { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur'] },
-  { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
-  { wall: 'nord', from: 2.05, items: ['bibliotheque'] },
-];
+/** Ouverture dans un mur, le long du mur (u : x pour nord et sud, z pour est et ouest) et en hauteur. */
+export interface Opening {
+  wall: WallName;
+  u0: number;
+  u1: number;
+  y0: number;
+  y1: number;
+}
 
-/** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
-export const ON_TOP: Array<[string, string, number?, number?, number?]> = [
-  ['micro-ondes', 'placard'],
-  ['bouilloire', 'tiroir'],
-  // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
-  ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
-  ['egouttoir', 'lave-vaisselle', 0.145, 0],
-  ['torchon', 'lave-vaisselle', -0.15, 0.17, 0.1],
-  ['mixeur', 'four'],
-  ['frigo', 'congelateur'],
-];
+/** Porte ou passage : `leaf` = porte d'entrée avec un battant qui s'ouvre seul devant le perso. */
+export interface Doorway {
+  wall: WallName;
+  u0: number;
+  u1: number;
+  leaf?: boolean;
+}
+
+/** Rangée de meubles dos au mur, dans l'ordre de x (nord, sud) ou de z (est, ouest) croissant à partir de `from` ; un nombre laisse un écart (m). */
+export interface Run {
+  wall: WallName;
+  from: number;
+  items: Array<string | number>;
+}
+
+/** Repères pour accrocher le décor au-dessus des meubles : position des meubles placés. */
+export type Anchors = (id: string) => THREE.Vector3 | undefined;
+
+/** Fiche d'une pièce. */
+export interface RoomSpec {
+  /** Nom de la pièce (« cuisine », « salon »). */
+  name: string;
+  rect: Rect;
+  /** Texture du sol. */
+  floor: () => THREE.Material;
+  doors: Doorway[];
+  /** Murs collés à une autre pièce : le toit n'y déborde pas et n'y a pas de pignon. */
+  joined?: WallName[];
+  /** Fenêtres (selon la place des meubles). */
+  windows: (anchor: Anchors) => Opening[];
+  /** Lampes : position au sol, suspension au plafond ou lampadaire. */
+  lamps: (anchor: Anchors) => Array<{ x: number; z: number; kind: 'suspension' | 'lampadaire'; shade?: THREE.ColorRepresentation }>;
+  /** Interrupteur : sur quel mur, à quelle place le long du mur. */
+  lightSwitch: { wall: WallName; u: number };
+  /** Meubles rangés contre les murs. */
+  runs: Run[];
+  /** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
+  onTop?: Array<[string, string, number?, number?, number?]>;
+  /** Objets posés au départ, hors des rangées : [id, x, y, z, rotation (rad)]. */
+  items?: Array<[string, number, number, number, number]>;
+  /** Décor fixe (accroché aux murs, tapis…). */
+  decor?: (room: Room, anchor: Anchors) => void;
+}
 
 /**
- * Range les meubles des rangées (RUNS) contre leurs murs. `pick(id)` donne le prochain objet de
- * ce type pas encore placé.
+ * Range les meubles des rangées de la pièce `spec` contre ses murs. `pick(id)` donne le prochain
+ * objet de ce type pas encore placé.
  */
-export function placeRuns(pick: (id: string) => WorldItem | undefined): void {
-  for (const run of RUNS) {
+export function placeRuns(spec: RoomSpec, pick: (id: string) => WorldItem | undefined): void {
+  const r = spec.rect;
+  for (const run of spec.runs) {
     const w = WALLS[run.wall];
     const [nx, nz] = w.n;
     // axe le long du mur (x ou z croissant) ; l'axe X du meuble tourné, dans le monde
@@ -140,7 +182,7 @@ export function placeRuns(pick: (id: string) => WorldItem | undefined): void {
     const localX = new THREE.Vector3(Math.cos(w.yaw), 0, -Math.sin(w.yaw));
     const s = along.dot(localX) > 0 ? 1 : -1;
     // coordonnée de la face intérieure du mur, mesurée le long de la normale
-    const wallV = nx > 0 ? ROOM.x0 : nx < 0 ? -ROOM.x1 : nz > 0 ? ROOM.z0 : -ROOM.z1;
+    const wallV = nx > 0 ? r.x0 : nx < 0 ? -r.x1 : nz > 0 ? r.z0 : -r.z1;
     let cursor = run.from;
     for (const id of run.items) {
       if (typeof id === 'number') {
@@ -159,9 +201,9 @@ export function placeRuns(pick: (id: string) => WorldItem | undefined): void {
   }
 }
 
-const toon = (color: THREE.ColorRepresentation, map: THREE.Texture | null = null) => createToonMaterial({ color, map, rimStrength: 0 });
+export const toon = (color: THREE.ColorRepresentation, map: THREE.Texture | null = null) => createToonMaterial({ color, map, rimStrength: 0 });
 
-function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, shadow = true): THREE.Mesh {
+export function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, shadow = true): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
   m.castShadow = shadow;
@@ -188,7 +230,7 @@ function windowCookie(): THREE.CanvasTexture {
 }
 
 /** Texture de carreaux : `n` × `n` carreaux de deux tons, joints clairs. */
-function tiles(size: number, n: number, a: string, b: string, grout: string, line = 3): THREE.CanvasTexture {
+export function tiles(size: number, n: number, a: string, b: string, grout: string, line = 3): THREE.CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const g = cv.getContext('2d')!;
@@ -210,12 +252,11 @@ function tiles(size: number, n: number, a: string, b: string, grout: string, lin
   return tex;
 }
 
-/** Ouverture dans un mur, le long du mur (u, coordonnée monde) et en hauteur. */
-interface Opening {
-  u0: number;
-  u1: number;
-  y0: number;
-  y1: number;
+/** Sol carrelé de la cuisine, carreaux de 40 cm. */
+function tiledFloor(r: Rect): THREE.Material {
+  const tex = tiles(256, 2, '#efe4cf', '#d9c7a6', '#c2b293', 4);
+  tex.repeat.set((r.x1 - r.x0) / 0.8, (r.z1 - r.z0) / 0.8);
+  return toon(0xffffff, tex);
 }
 
 /** Un mur : sa partie haute (cachée en coupe), sa partie basse (montrée en coupe). */
@@ -231,24 +272,29 @@ interface Wall {
   boxes: THREE.Box3[];
 }
 
-/** Repères pour accrocher le décor au-dessus des meubles : position des meubles placés. */
-export type Anchors = (id: string) => THREE.Vector3 | undefined;
+/** Porte d'entrée : battant (dans le mur haut), son ombre (gardée en coupe), ouverture. */
+interface Leaf {
+  door: THREE.Group;
+  ghost: THREE.Group;
+  center: THREE.Vector3;
+  open: number;
+}
 
 export class Room {
   readonly group = new THREE.Group();
-  /** Morceaux de mur pleins (et meuble d'angle) que le perso contourne : boîte, position, rotation. */
+  readonly spec: RoomSpec;
+  readonly rect: Rect;
+  /** Morceaux de mur pleins (et meubles fixes du décor) que le perso contourne : boîte, position, rotation. */
   readonly obstacles: Array<{ box: THREE.Box3; pos: THREE.Vector3; yaw: number; wall: boolean }> = [];
   private walls: Wall[] = [];
-  private door: THREE.Group;
-  /** Ombre du battant, gardée même quand le mur ouest est abaissé en coupe. */
-  private doorGhost = new THREE.Group();
-  private doorOpen = 0;
-  private hands: { hour: THREE.Object3D; minute: THREE.Object3D };
+  private leaves: Leaf[] = [];
+  /** Animations du décor (aiguilles de l'horloge…), à chaque image avec l'heure du jeu. */
+  private tickers: Array<(dt: number, hour: number) => void> = [];
   private wallMat = toon(PLASTER);
   private capMat = toon(CAP);
   /** Murs pleins visibles, pour les clics (un clic sur un mur vise le sol à son pied). */
   private solid: THREE.Object3D[] = [];
-  /** Lumières des suspensions, et leurs ampoules (qui brillent allumées). */
+  /** Lumières des lampes, et leurs ampoules (qui brillent allumées). */
   private lamps: THREE.PointLight[] = [];
   /** Lumières qui entrent par les fenêtres. */
   private winLights: THREE.SpotLight[] = [];
@@ -256,7 +302,6 @@ export class Room {
   private roof = new THREE.Group();
   private roofBox = new THREE.Box3();
   private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
-  private shadeMat = toon(0x2f5d50);
   /** Part de lumière des lampes en ce moment (0 à 1). */
   private lampK = 0;
   /** Allumé ou éteint à l'interrupteur (null : l'horloge décide), et ce que l'horloge voulait alors. */
@@ -266,185 +311,86 @@ export class Room {
   readonly lightSwitch = new THREE.Group();
   private rocker = new THREE.Group();
   /** Ombre seule : invisible à l'écran, mais arrête la lumière (toit, murs gardés en coupe). */
-  private shadowMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+  readonly shadowMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
   /** Matériau partagé des vitres, teinté selon l'heure. */
   private glassMat = new THREE.MeshBasicMaterial({ color: PANE_DAY.color, transparent: true, opacity: PANE_DAY.opacity, depthWrite: false });
 
-  constructor(anchor: Anchors) {
-    this.group.name = 'piece';
-    const { x0, x1, z0, z1 } = ROOM;
-    const sinkX = anchor('evier')?.x ?? -1.6;
-    const stoveX = anchor('gaziniere')?.x ?? 0;
-    const worktopX = anchor('plan-de-travail')?.x ?? -0.7;
-    const coffeeZ = anchor('machine-a-cafe')?.z ?? -1.9;
-    const tableAt = anchor('table');
+  constructor(spec: RoomSpec, anchor: Anchors) {
+    this.spec = spec;
+    this.rect = spec.rect;
+    this.group.name = spec.name;
+    const { x0, x1, z0, z1 } = this.rect;
 
-    // sol carrelé, sous la pièce et le seuil de la porte
-    const floorTex = tiles(256, 2, '#efe4cf', '#d9c7a6', '#c2b293', 4);
-    floorTex.repeat.set((x1 - x0) / 0.8, (z1 - z0) / 0.8);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), toon(0xffffff, floorTex));
+    // sol, sous la pièce
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), spec.floor());
     floor.position.set((x0 + x1) / 2, 0.004, (z0 + z1) / 2);
     floor.receiveShadow = true;
-    floor.name = 'carrelage';
+    floor.name = `sol-${spec.name}`;
     this.group.add(floor);
-    this.group.add(box(WALL_T, 0.012, DOOR.z1 - DOOR.z0, toon(DARK_WOOD), x0 - WALL_T / 2, 0.006, (DOOR.z0 + DOOR.z1) / 2, false));
     // toit invisible : le soleil et la lune n'entrent que par les fenêtres
     const roof = box(x1 - x0 + 2 * WALL_T, 0.05, z1 - z0 + 2 * WALL_T, this.shadowMat, (x0 + x1) / 2, WALL_H + 0.03, (z0 + z1) / 2);
     roof.receiveShadow = false;
     roof.name = 'toit-ombre';
     this.group.add(roof);
 
-    // les murs (nord et sud couvrent les coins)
-    const winNorth: Opening = { u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH };
-    const winEast: Opening = { u0: (tableAt?.z ?? 1) - 0.55, u1: (tableAt?.z ?? 1) + 0.55, y0: 0.95, y1: WIN_HIGH };
-    const doorway: Opening = { u0: DOOR.z0, u1: DOOR.z1, y0: 0, y1: DOOR.h };
-    this.addWall('nord', x0 - WALL_T, x1 + WALL_T, [winNorth]);
-    this.addWall('sud', x0 - WALL_T, x1 + WALL_T, []);
-    this.addWall('ouest', z0, z1, [doorway]);
-    this.addWall('est', z0, z1, [winEast]);
-    const north = this.wall('nord'), west = this.wall('ouest'), east = this.wall('est');
-    this.addWindow(north, winNorth);
-    this.addWindow(east, winEast);
+    // les murs (nord et sud couvrent les coins), percés des portes et des fenêtres
+    const windows = spec.windows(anchor);
+    const openings: Opening[] = [...windows, ...spec.doors.map((d) => ({ wall: d.wall, u0: d.u0, u1: d.u1, y0: 0, y1: DOOR_H }))];
+    const on = (w: WallName) => openings.filter((o) => o.wall === w);
+    this.addWall('nord', x0 - WALL_T, x1 + WALL_T, on('nord'));
+    this.addWall('sud', x0 - WALL_T, x1 + WALL_T, on('sud'));
+    this.addWall('ouest', z0, z1, on('ouest'));
+    this.addWall('est', z0, z1, on('est'));
+    for (const o of windows) this.addWindow(this.wall(o.wall), o);
+    for (const d of spec.doors) this.addDoorway(d);
 
-    // porte d'entrée : chambranle côté pièce, battant qui s'ouvre vers l'extérieur
-    const frame = toon(FRAME);
-    const zc = (DOOR.z0 + DOOR.z1) / 2;
-    west.full.add(
-      box(0.03, DOOR.h + 0.06, 0.06, frame, x0 + 0.015, (DOOR.h + 0.06) / 2, DOOR.z0 - 0.03),
-      box(0.03, DOOR.h + 0.06, 0.06, frame, x0 + 0.015, (DOOR.h + 0.06) / 2, DOOR.z1 + 0.03),
-      box(0.03, 0.06, DOOR.z1 - DOOR.z0 + 0.12, frame, x0 + 0.015, DOOR.h + 0.03, zc),
-    );
-    const leafMat = toon(0x6f8f74);
-    const leafW = DOOR.z1 - DOOR.z0 - 0.02;
-    this.door = new THREE.Group();
-    this.door.name = 'porte-entree';
-    this.door.position.set(x0 - WALL_T + 0.02, 0, DOOR.z0 + 0.01);
-    this.door.add(
-      box(0.04, DOOR.h - 0.02, leafW, leafMat, 0, (DOOR.h - 0.02) / 2 + 0.01, leafW / 2),
-      // panneaux moulurés et poignée, côté pièce
-      box(0.01, 0.75, leafW - 0.24, toon(0x5f7d64), 0.025, 1.45, leafW / 2),
-      box(0.01, 0.75, leafW - 0.24, toon(0x5f7d64), 0.025, 0.55, leafW / 2),
-      box(0.04, 0.03, 0.12, toon(0xc9a24a), 0.045, 1.0, leafW - 0.1),
-      box(0.04, 0.03, 0.12, toon(0xc9a24a), -0.045, 1.0, leafW - 0.1),
-    );
-    west.full.add(this.door);
-    this.doorGhost.position.copy(this.door.position);
-    // un peu plus large que le battant : pas de filet de soleil autour quand la porte est fermée
-    const ghostLeaf = box(0.08, DOOR.h + 0.04, leafW + 0.08, this.shadowMat, 0, (DOOR.h + 0.04) / 2, leafW / 2);
-    ghostLeaf.receiveShadow = false;
-    this.doorGhost.add(ghostLeaf);
-    this.group.add(this.doorGhost);
-    // paillasson devant la porte
-    this.group.add(box(0.5, 0.012, 0.8, toon(0x9b6b3d), x0 + 0.32, 0.008, zc, false));
+    spec.decor?.(this, anchor);
 
-    // crédence carrelée au-dessus des plans de travail, du coin au frigo et au bout de la rangée ouest
-    const fridge = anchor('frigo');
-    const bin = anchor('poubelle');
-    const splashTex = tiles(128, 4, '#dfecef', '#cfe1e6', '#ffffff', 2);
-    const splashN = (fridge ? fridge.x - 0.32 : 0.9) - x0;
-    const texN = splashTex.clone();
-    texN.repeat.set(splashN / 0.4, 1);
-    texN.needsUpdate = true;
-    const splashH = WIN_LOW - COUNTER_H;
-    north.full.add(box(splashN, splashH, 0.012, toon(0xffffff, texN), x0 + splashN / 2, COUNTER_H + splashH / 2, z0 + 0.006, false));
-    const splashW = (bin ? bin.z + 0.2 : -0.5) - z0;
-    const texW = splashTex.clone();
-    texW.repeat.set(splashW / 0.4, 1);
-    texW.needsUpdate = true;
-    west.full.add(box(0.012, splashH, splashW, toon(0xffffff, texW), x0 + 0.006, COUNTER_H + splashH / 2, z0 + splashW / 2, false));
-
-    // hotte au-dessus de la gazinière
-    const inox = toon(0xc3c8cd);
-    north.full.add(
-      box(0.62, 0.1, 0.48, inox, stoveX, 1.68, z0 + 0.24),
-      box(0.5, 0.12, 0.36, inox, stoveX, 1.79, z0 + 0.18),
-      box(0.26, WALL_H - 1.85, 0.24, inox, stoveX, (WALL_H + 1.85) / 2, z0 + 0.12),
-      box(0.5, 0.01, 0.4, toon(0x55595e), stoveX, 1.628, z0 + 0.25, false),
-    );
-
-    // étagère au-dessus du plan de travail : pots à épices et bocaux
-    const shelf = new THREE.Group();
-    shelf.add(
-      box(0.86, 0.03, 0.2, toon(WOOD), 0, 1.6, z0 + 0.1),
-      box(0.02, 0.12, 0.16, toon(DARK_WOOD), -0.33, 1.53, z0 + 0.08),
-      box(0.02, 0.12, 0.16, toon(DARK_WOOD), 0.33, 1.53, z0 + 0.08),
-    );
-    const jars: Array<[number, number, number, number]> = [[-0.32, 0.04, 0.13, 0xd65b3a], [-0.22, 0.04, 0.13, 0x6d9a3e], [-0.12, 0.04, 0.13, 0xe0b23a], [0.06, 0.065, 0.2, 0xb8c7cc], [0.22, 0.065, 0.24, 0xb8c7cc]];
-    for (const [x, r, h, c] of jars) {
-      const jar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 14), toon(c));
-      jar.position.set(x, 1.615 + h / 2, z0 + 0.1);
-      jar.castShadow = true;
-      const lid = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.95, 0.02, 14), toon(DARK_WOOD));
-      lid.position.set(x, 1.615 + h + 0.01, z0 + 0.1);
-      shelf.add(jar, lid);
-    }
-    shelf.position.x = worktopX;
-    north.full.add(shelf);
-
-    // horloge au-dessus du coin café : elle donne l'heure du jeu
-    const clock = new THREE.Group();
-    const face = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.03, 32).rotateZ(Math.PI / 2), toon(0xfbf8f0));
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.015, 8, 32).rotateY(Math.PI / 2), toon(DARK_WOOD));
-    clock.add(face, rim);
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      const tick = box(0.01, i % 3 ? 0.02 : 0.035, 0.012, toon(0x333333), 0.016, Math.cos(a) * 0.135, Math.sin(a) * 0.135, false);
-      tick.rotation.x = a;
-      clock.add(tick);
-    }
-    const hand = (len: number, w: number) => {
-      const pivot = new THREE.Group();
-      pivot.position.x = 0.022;
-      pivot.add(box(0.006, len, w, toon(0x222222), 0, len / 2 - 0.02, 0, false));
-      clock.add(pivot);
-      return pivot;
-    };
-    this.hands = { hour: hand(0.09, 0.016), minute: hand(0.13, 0.01) };
-    clock.position.set(x0 + 0.02, 1.85, coffeeZ);
-    west.full.add(clock);
-
-    // meuble d'angle (les deux rangées partent de lui), une plante dessus
-    const corner = new THREE.Group();
-    corner.add(
-      box(0.6, COUNTER_H - 0.04, 0.6, toon(WOOD), 0, (COUNTER_H - 0.04) / 2, 0),
-      box(0.62, 0.04, 0.62, toon(COUNTER), 0, COUNTER_H - 0.02, 0),
-      box(0.58, 0.08, 0.02, toon(DARK_WOOD), 0, 0.04, 0.3),
-    );
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.16, 16), toon(0xb5653a));
-    pot.position.set(-0.06, COUNTER_H + 0.08, -0.06);
-    corner.add(pot);
-    for (const [x, z, h] of [[0, 0, 0.32], [0.06, 0.03, 0.24], [-0.05, 0.05, 0.27], [0.03, -0.06, 0.22]]) {
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, h, 8), toon(0x4f8a3c));
-      leaf.position.set(-0.06 + x, COUNTER_H + 0.16 + h / 2, -0.06 + z);
-      leaf.castShadow = true;
-      corner.add(leaf);
-    }
-    corner.position.set(x0 + 0.3, 0, z0 + 0.3);
-    corner.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
-    this.group.add(corner);
-    this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.31, 0, -0.31), new THREE.Vector3(0.31, COUNTER_H, 0.31)), pos: corner.position.clone(), yaw: 0, wall: false });
-
-    // tapis sous la table et sa chaise
-    if (tableAt) this.group.add(box(2, 0.01, 2.1, toon(0xb04a3c), tableAt.x, 0.008, tableAt.z - 0.45, false), box(1.8, 0.012, 1.9, toon(0xd8b07a), tableAt.x, 0.009, tableAt.z - 0.45, false));
-    // tapis devant l'évier
-    this.group.add(box(0.8, 0.01, 0.45, toon(0x5b7fa8), sinkX, 0.008, z0 + 1.0, false));
-
-    // suspension au-dessus de la table
-    this.addLamp(tableAt ? tableAt.x : 1.6, tableAt ? tableAt.z - 0.2 : 1);
+    for (const l of spec.lamps(anchor)) this.addLamp(l.x, l.z, l.kind, l.shade ?? 0x2f5d50);
     // lumière du dehors par les fenêtres, et le toit vu du dehors
-    this.addWindowLight(north, winNorth);
-    this.addWindowLight(east, winEast);
+    for (const o of windows) this.addWindowLight(this.wall(o.wall), o);
     this.buildRoof();
 
-    // interrupteur à côté de la porte : plaque blanche, bascule (haut enfoncé = allumé)
+    // interrupteur : plaque blanche, bascule (haut enfoncé = allumé)
     const sw = this.lightSwitch;
     sw.name = 'interrupteur';
     sw.add(box(0.012, 0.11, 0.08, toon(0xf4f1ea), 0.006, 0, 0, false));
     this.rocker.add(box(0.014, 0.05, 0.035, toon(0xffffff), 0.007, 0, 0, false));
     this.rocker.position.x = 0.012;
     sw.add(this.rocker);
-    sw.position.set(x0, SWITCH_Y, SWITCH_Z);
-    west.full.add(sw);
+    const swAt = this.wallFrame(spec.lightSwitch.wall, spec.lightSwitch.u, SWITCH_Y);
+    swAt.add(sw);
+    this.wallGroup(spec.lightSwitch.wall).add(swAt);
+  }
+
+  /** Le point (x, z) est-il dans la pièce ? */
+  contains(p: THREE.Vector3): boolean {
+    const { x0, x1, z0, z1 } = this.rect;
+    return p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1;
+  }
+
+  /** Mur haut `name` : y accrocher du décor, caché avec le mur quand il est abaissé en coupe. */
+  wallGroup(name: WallName): THREE.Group {
+    return this.wall(name).full;
+  }
+
+  /** Ajoute une animation du décor, appelée à chaque image avec l'heure du jeu. */
+  onTick(fn: (dt: number, hour: number) => void): void {
+    this.tickers.push(fn);
+  }
+
+  /**
+   * Repère posé sur la face intérieure du mur `name`, à la place `u` le long du mur et à la
+   * hauteur `y` : son X local entre dans la pièce, son Z local suit le mur.
+   */
+  wallFrame(name: WallName, u: number, y = 0): THREE.Group {
+    const [nx, nz] = WALLS[name].n;
+    const { x0, x1, z0, z1 } = this.rect;
+    const g = new THREE.Group();
+    if (nx === 0) g.position.set(u, y, nz > 0 ? z0 : z1);
+    else g.position.set(nx > 0 ? x0 : x1, y, u);
+    g.rotation.y = Math.atan2(-nz, nx);
+    return g;
   }
 
   /** Les lampes sont-elles allumées (ou en train de s'allumer) ? */
@@ -459,7 +405,9 @@ export class Room {
 
   /** Où se tenir pour appuyer sur l'interrupteur, et le point à regarder. */
   switchSpot(): { stand: THREE.Vector3; face: THREE.Vector3 } {
-    return { stand: new THREE.Vector3(ROOM.x0 + 0.45, 0, SWITCH_Z), face: new THREE.Vector3(ROOM.x0, SWITCH_Y, SWITCH_Z) };
+    const f = this.wallFrame(this.spec.lightSwitch.wall, this.spec.lightSwitch.u, SWITCH_Y);
+    const [nx, nz] = WALLS[this.spec.lightSwitch.wall].n;
+    return { stand: f.position.clone().setY(0).add(new THREE.Vector3(nx, 0, nz).multiplyScalar(0.45)), face: f.position.clone() };
   }
 
   /** Distance de l'interrupteur sur le rayon, s'il est visible et touché. */
@@ -468,24 +416,40 @@ export class Room {
     return ray.intersectObject(this.lightSwitch, true)[0]?.distance ?? null;
   }
 
-  /** Suspension au plafond (fil, abat-jour, ampoule) et sa lumière, éteinte au départ. */
-  private addLamp(x: number, z: number): void {
+  /** Lampe (suspension au plafond, ou lampadaire posé au sol) et sa lumière, éteinte au départ. */
+  private addLamp(x: number, z: number, kind: 'suspension' | 'lampadaire', shadeColor: THREE.ColorRepresentation): void {
     const lamp = new THREE.Group();
-    lamp.name = 'suspension';
-    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, WALL_H - LAMP_Y - 0.1, 6), toon(0x2a2a2a));
-    cord.position.y = (WALL_H + LAMP_Y + 0.1) / 2;
-    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.2, 0.16, 20, 1, true), this.shadeMat);
-    shade.material.side = THREE.DoubleSide;
-    shade.position.y = LAMP_Y + 0.06;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 12), toon(0xc9a24a));
-    cap.position.y = LAMP_Y + 0.16;
+    lamp.name = kind;
+    const shadeMat = toon(shadeColor);
+    shadeMat.side = THREE.DoubleSide;
+    const y = kind === 'suspension' ? LAMP_Y : FLOOR_LAMP_Y;
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), this.bulbMat);
-    bulb.position.y = LAMP_Y;
-    lamp.add(cord, shade, cap, bulb);
+    bulb.position.y = y;
+    if (kind === 'suspension') {
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, WALL_H - LAMP_Y - 0.1, 6), toon(0x2a2a2a));
+      cord.position.y = (WALL_H + LAMP_Y + 0.1) / 2;
+      const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.2, 0.16, 20, 1, true), shadeMat);
+      shade.position.y = LAMP_Y + 0.06;
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 12), toon(0xc9a24a));
+      cap.position.y = LAMP_Y + 0.16;
+      lamp.add(cord, shade, cap, bulb);
+    } else {
+      // socle rond, pied fin, abat-jour en tronc de cône au-dessus de l'ampoule
+      const brass = toon(0xc9a24a);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.03, 24), brass);
+      base.position.y = 0.015;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, y - 0.03, 8), brass);
+      pole.position.y = (y - 0.03) / 2 + 0.03;
+      const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, 0.28, 24, 1, true), shadeMat);
+      shade.position.y = y + 0.06;
+      lamp.add(base, pole, shade, bulb);
+      lamp.traverse((o) => { if (o instanceof THREE.Mesh && o !== bulb) o.castShadow = true; });
+      this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.2, 0, -0.2), new THREE.Vector3(0.2, y + 0.2, 0.2)), pos: new THREE.Vector3(x, 0, z), yaw: 0, wall: false });
+    }
     lamp.position.set(x, 0, z);
     // la lumière part juste sous l'ampoule, pour éclairer sous l'abat-jour
     const light = lightAllPasses(new THREE.PointLight(LAMP_COLOR, 0, LAMP_RANGE, 2));
-    light.position.set(x, LAMP_Y - 0.08, z);
+    light.position.set(x, y - 0.08, z);
     light.castShadow = true;
     light.shadow.mapSize.set(LAMP_SHADOW, LAMP_SHADOW);
     light.shadow.camera.near = 0.05;
@@ -497,6 +461,57 @@ export class Room {
     light.shadow.needsUpdate = true;
     this.lamps.push(light);
     this.group.add(lamp, light);
+  }
+
+  /**
+   * Porte ou passage `d` : chambranle côté pièce, seuil dans l'épaisseur du mur ; une porte
+   * d'entrée a en plus un battant qui s'ouvre vers l'extérieur, et un paillasson.
+   */
+  private addDoorway(d: Doorway): void {
+    const w = this.wall(d.wall);
+    const uc = (d.u0 + d.u1) / 2, half = (d.u1 - d.u0) / 2;
+    const frame = toon(FRAME);
+    const f = this.wallFrame(d.wall, uc);
+    f.add(
+      box(0.03, DOOR_H + 0.06, 0.06, frame, 0.015, (DOOR_H + 0.06) / 2, -half - 0.03),
+      box(0.03, DOOR_H + 0.06, 0.06, frame, 0.015, (DOOR_H + 0.06) / 2, half + 0.03),
+      box(0.03, 0.06, 2 * half + 0.12, frame, 0.015, DOOR_H + 0.03, 0),
+    );
+    w.full.add(f);
+    // seuil en bois dans l'épaisseur du mur
+    const sill = this.wallFrame(d.wall, uc);
+    sill.add(box(WALL_T, 0.012, 2 * half, toon(DARK_WOOD), -WALL_T / 2, 0.006, 0, false));
+    this.group.add(sill);
+    if (!d.leaf) return;
+    const leafMat = toon(0x6f8f74);
+    const leafW = 2 * half - 0.02;
+    const door = new THREE.Group();
+    door.name = 'porte-entree';
+    door.position.set(-WALL_T + 0.02, 0, -half + 0.01);
+    door.add(
+      box(0.04, DOOR_H - 0.02, leafW, leafMat, 0, (DOOR_H - 0.02) / 2 + 0.01, leafW / 2),
+      // panneaux moulurés et poignée, côté pièce
+      box(0.01, 0.75, leafW - 0.24, toon(0x5f7d64), 0.025, 1.45, leafW / 2),
+      box(0.01, 0.75, leafW - 0.24, toon(0x5f7d64), 0.025, 0.55, leafW / 2),
+      box(0.04, 0.03, 0.12, toon(0xc9a24a), 0.045, 1.0, leafW - 0.1),
+      box(0.04, 0.03, 0.12, toon(0xc9a24a), -0.045, 1.0, leafW - 0.1),
+    );
+    f.add(door);
+    // ombre du battant, gardée même quand le mur est abaissé en coupe ; un peu plus large que le
+    // battant : pas de filet de soleil autour quand la porte est fermée
+    const gf = this.wallFrame(d.wall, uc);
+    const ghost = new THREE.Group();
+    ghost.position.copy(door.position);
+    const ghostLeaf = box(0.08, DOOR_H + 0.04, leafW + 0.08, this.shadowMat, 0, (DOOR_H + 0.04) / 2, leafW / 2);
+    ghostLeaf.receiveShadow = false;
+    ghost.add(ghostLeaf);
+    gf.add(ghost);
+    this.group.add(gf);
+    // paillasson devant la porte
+    const mat = this.wallFrame(d.wall, uc);
+    mat.add(box(0.5, 0.012, 0.8, toon(0x9b6b3d), 0.32, 0.008, 0, false));
+    this.group.add(mat);
+    this.leaves.push({ door, ghost, center: f.position.clone(), open: 0 });
   }
 
   /**
@@ -526,14 +541,21 @@ export class Room {
     this.group.add(light, light.target);
   }
 
-  /** Toit à deux pentes (faîtage le long de x) et pignons, au-dessus des murs. */
+  /**
+   * Toit à deux pentes (faîtage le long de x) et pignons, au-dessus des murs. Côté mitoyen
+   * (spec.joined), ni débord ni pignon : il rejoint le toit de la pièce voisine.
+   */
   private buildRoof(): void {
-    const { x0, x1, z0, z1 } = ROOM;
-    const lx = x1 - x0 + 2 * (WALL_T + ROOF_OVER);
-    const half = (z1 - z0) / 2 + WALL_T + ROOF_OVER;
-    const rise = half * Math.tan(ROOF_PITCH);
-    const slope = half / Math.cos(ROOF_PITCH);
-    const zc = (z0 + z1) / 2, xc = (x0 + x1) / 2;
+    const { x0, x1, z0, z1 } = this.rect;
+    const joined = new Set(this.spec.joined ?? []);
+    const over = (w: WallName) => (joined.has(w) ? 0 : ROOF_OVER);
+    const xa = x0 - WALL_T - over('ouest'), xb = x1 + WALL_T + over('est');
+    const lx = xb - xa, xc = (xa + xb) / 2;
+    const tan = Math.tan(ROOF_PITCH);
+    const halfIn = (z1 - z0) / 2 + WALL_T;
+    const zc = (z0 + z1) / 2;
+    // faîtage : au-dessus du milieu, à la hauteur où la pente passe sur le haut des murs
+    const ridgeY = WALL_H - 0.02 + halfIn * tan;
     // tuiles : rangées en quinconce
     const cv = document.createElement('canvas');
     cv.width = cv.height = 128;
@@ -545,27 +567,26 @@ export class Room {
       g.fillRect(0, r * 32 + 28, 128, 4);
       for (let i = 0; i < 4; i++) g.fillRect(((i + (r % 2) * 0.5) * 32) % 128, r * 32, 3, 28);
     }
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(lx / 0.8, slope / 0.6);
-    const tileMat = toon(0xffffff, tex);
-    const y0 = WALL_H - 0.02 - ROOF_OVER * Math.tan(ROOF_PITCH);
     for (const side of [-1, 1]) {
-      const pan = box(lx, 0.06, slope, tileMat, xc, y0 + rise / 2, zc + side * half / 2, false);
+      const run = halfIn + over(side < 0 ? 'nord' : 'sud');
+      const slope = run / Math.cos(ROOF_PITCH);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(lx / 0.8, slope / 0.6);
+      const pan = box(lx, 0.06, slope, toon(0xffffff, tex), xc, ridgeY - (run * tan) / 2, zc + side * run / 2, false);
       pan.rotation.x = side * ROOF_PITCH;
       this.roof.add(pan);
     }
-    this.roof.add(box(lx + 0.04, 0.08, 0.12, toon(0x7e3a28), xc, y0 + rise + 0.03, zc, false));
+    this.roof.add(box(lx + 0.04, 0.08, 0.12, toon(0x7e3a28), xc, ridgeY + 0.03, zc, false));
     // pignons, en crépi comme les murs, à l'aplomb des murs est et ouest
     const tri = new THREE.Shape();
-    const hw = (z1 - z0) / 2 + WALL_T;
-    const top = (hw + ROOF_OVER) * Math.tan(ROOF_PITCH) - ROOF_OVER * Math.tan(ROOF_PITCH);
-    tri.moveTo(-hw, 0);
-    tri.lineTo(hw, 0);
-    tri.lineTo(0, top);
+    tri.moveTo(-halfIn, 0);
+    tri.lineTo(halfIn, 0);
+    tri.lineTo(0, halfIn * tan);
     const gable = new THREE.ExtrudeGeometry(tri, { depth: WALL_T, bevelEnabled: false });
-    for (const x of [x0 - WALL_T, x1]) {
+    for (const [w, x] of [['ouest', x0 - WALL_T], ['est', x1]] as const) {
+      if (joined.has(w)) continue;
       const m = new THREE.Mesh(gable, this.wallMat);
       m.rotation.y = Math.PI / 2;
       m.position.set(x, WALL_H, zc);
@@ -615,7 +636,7 @@ export class Room {
    * de ses ouvertures : morceaux pleins de toute hauteur, allèges et linteaux autour des ouvertures.
    */
   private addWall(name: WallName, a: number, b: number, openings: Opening[]): void {
-    const { x0, x1, z0, z1 } = ROOM;
+    const { x0, x1, z0, z1 } = this.rect;
     const [nx, nz] = WALLS[name].n;
     const alongX = nx === 0;
     // centre de l'épaisseur du mur, côté extérieur de la pièce
@@ -715,20 +736,20 @@ export class Room {
   }
 
   /**
-   * À chaque image : murs abaissés côté caméra quand le perso est dedans (relevés quand il sort,
-   * sauf un mur qui le cacherait),
-   * porte qui s'ouvre devant le perso, aiguilles de l'horloge, lampes et vitres selon l'heure.
+   * À chaque image : murs abaissés côté caméra quand le perso est dans une pièce (`indoors`, celle-ci
+   * ou une autre ; relevés quand il sort, sauf un mur qui le cacherait), portes qui s'ouvrent
+   * devant le perso, décor animé, lampes et vitres selon l'heure.
    */
-  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3): void {
+  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3, indoors: boolean): void {
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
-    const p2 = new THREE.Vector2(player.x, player.z);
-    const inside = !this.walls.some((w) => p2.clone().sub(w.at).dot(w.n) < 0);
     let anyCut = false;
-    // dehors : rayons du perso (jambes, buste, tête) vers la caméra
-    const rays = inside ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
+    // perso hors de cette pièce : rayons du perso (jambes, buste, tête) vers la caméra
+    const rays = this.contains(player) ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
+    const hides = (w: Wall) => rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
     for (const w of this.walls) {
-      // dedans : les murs côté caméra s'abaissent ; dehors, ils restent pleins, sauf celui qui cache le perso
-      const cut = inside ? w.n.dot(view) < -0.1 : rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
+      // dans une pièce : les murs côté caméra s'abaissent, et celui qui cache le perso dans la pièce
+      // voisine (le mur mitoyen) ; dehors, ils restent pleins, sauf celui qui cache le perso
+      const cut = indoors ? w.n.dot(view) < -0.1 || hides(w) : hides(w);
       anyCut ||= cut;
       if (cut !== w.cut) {
         w.cut = cut;
@@ -737,29 +758,28 @@ export class Room {
       }
     }
     // toit : dehors, sauf s'il cache le perso (ou qu'un mur abaissé le cache)
-    this.roof.visible = !inside && !anyCut && !rays.some((r) => r.intersectsBox(this.roofBox));
-    const { x0 } = ROOM;
-    const zc = (DOOR.z0 + DOOR.z1) / 2;
-    const near = Math.hypot(player.x - x0, player.z - zc) < DOOR_NEAR;
-    this.doorOpen = THREE.MathUtils.clamp(this.doorOpen + (near ? 1 : -1) * DOOR_SPEED * dt, 0, 1);
-    this.door.rotation.y = -THREE.MathUtils.smootherstep(this.doorOpen, 0, 1) * THREE.MathUtils.degToRad(100);
-    this.doorGhost.rotation.y = this.door.rotation.y;
-    const m = ((hour % 12) + 12) % 12;
-    this.hands.hour.rotation.x = -(m / 12) * Math.PI * 2;
-    this.hands.minute.rotation.x = -(hour % 1) * Math.PI * 2;
+    this.roof.visible = !indoors && !anyCut && !rays.some((r) => r.intersectsBox(this.roofBox));
+    for (const l of this.leaves) {
+      const near = Math.hypot(player.x - l.center.x, player.z - l.center.z) < DOOR_NEAR;
+      l.open = THREE.MathUtils.clamp(l.open + (near ? 1 : -1) * DOOR_SPEED * dt, 0, 1);
+      l.door.rotation.y = -THREE.MathUtils.smootherstep(l.open, 0, 1) * THREE.MathUtils.degToRad(100);
+      l.ghost.rotation.y = l.door.rotation.y;
+    }
+    for (const t of this.tickers) t(dt, hour);
     this.hour = hour;
     this.applyLight(dt, hour);
   }
 
-  /** Point du sol au pied du mur visé par le rayon (côté pièce), s'il touche un mur avant le sol. */
-  wallHit(ray: THREE.Raycaster, groundDist: number): THREE.Vector3 | null {
+  /** Point du sol au pied du mur visé par le rayon (côté pièce) et sa distance, s'il touche un mur avant `maxDist`. */
+  wallHit(ray: THREE.Raycaster, maxDist: number): { point: THREE.Vector3; distance: number } | null {
     const hit = ray.intersectObjects(this.solid.filter((o) => this.visibleChain(o)), false)[0];
-    if (!hit || hit.distance >= groundDist) return null;
+    if (!hit || hit.distance >= maxDist) return null;
+    const { x0, x1, z0, z1 } = this.rect;
     const p = hit.point.clone().setY(0);
     // un peu en avant du mur, dans la pièce
-    p.x = THREE.MathUtils.clamp(p.x, ROOM.x0 + 0.3, ROOM.x1 - 0.3);
-    p.z = THREE.MathUtils.clamp(p.z, ROOM.z0 + 0.3, ROOM.z1 - 0.3);
-    return p;
+    p.x = THREE.MathUtils.clamp(p.x, x0 + 0.3, x1 - 0.3);
+    p.z = THREE.MathUtils.clamp(p.z, z0 + 0.3, z1 - 0.3);
+    return { point: p, distance: hit.distance };
   }
 
   private visibleChain(o: THREE.Object3D): boolean {
@@ -768,15 +788,19 @@ export class Room {
   }
 
   /**
-   * Un objet lancé ne traverse pas les murs : s'il sort de la pièce ailleurs que par la porte, il
-   * rebondit sur le mur (vitesse renvoyée, ralentie). Modifie `pos` et `vel`.
+   * Un objet lancé ne traverse pas les murs : s'il sort de la pièce ailleurs que par une porte ou
+   * un passage, il rebondit sur le mur (vitesse renvoyée, ralentie). Modifie `pos` et `vel`.
    */
   bounce(prev: THREE.Vector3, pos: THREE.Vector3, vel: THREE.Vector3): void {
-    const { x0, x1, z0, z1 } = ROOM;
-    const inside = (p: THREE.Vector3) => p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1;
-    if (!inside(prev) || inside(pos)) return;
-    const door = pos.x <= x0 && pos.z > DOOR.z0 + 0.05 && pos.z < DOOR.z1 - 0.05 && pos.y < DOOR.h;
-    if (door) return;
+    const { x0, x1, z0, z1 } = this.rect;
+    if (!this.contains(prev) || this.contains(pos)) return;
+    const through = this.spec.doors.some((d) => {
+      const [nx, nz] = WALLS[d.wall].n;
+      const out = nx > 0 ? pos.x <= x0 : nx < 0 ? pos.x >= x1 : nz > 0 ? pos.z <= z0 : pos.z >= z1;
+      const u = nx === 0 ? pos.x : pos.z;
+      return out && u > d.u0 + 0.05 && u < d.u1 - 0.05 && pos.y < DOOR_H;
+    });
+    if (through) return;
     const e = 0.02;
     if (pos.x <= x0 || pos.x >= x1) {
       pos.x = THREE.MathUtils.clamp(pos.x, x0 + e, x1 - e);
@@ -788,3 +812,162 @@ export class Room {
     }
   }
 }
+
+/**
+ * Décor de la cuisine : crédence, hotte, étagère à épices, horloge qui donne l'heure du jeu,
+ * meuble d'angle, tapis.
+ */
+function kitchenDecor(room: Room, anchor: Anchors): void {
+  const { x0, z0 } = room.rect;
+  const stoveX = anchor('gaziniere')?.x ?? 0;
+  const worktopX = anchor('plan-de-travail')?.x ?? -0.7;
+  const coffeeZ = anchor('machine-a-cafe')?.z ?? -1.9;
+  const sinkX = anchor('evier')?.x ?? -1.6;
+  const tableAt = anchor('table');
+  const north = room.wallGroup('nord'), west = room.wallGroup('ouest');
+
+  // crédence carrelée au-dessus des plans de travail, du coin au frigo et au bout de la rangée ouest
+  const fridge = anchor('frigo');
+  const bin = anchor('poubelle');
+  const splashTex = tiles(128, 4, '#dfecef', '#cfe1e6', '#ffffff', 2);
+  const splashN = (fridge ? fridge.x - 0.32 : 0.9) - x0;
+  const texN = splashTex.clone();
+  texN.repeat.set(splashN / 0.4, 1);
+  texN.needsUpdate = true;
+  const splashH = WIN_LOW - COUNTER_H;
+  north.add(box(splashN, splashH, 0.012, toon(0xffffff, texN), x0 + splashN / 2, COUNTER_H + splashH / 2, z0 + 0.006, false));
+  const splashW = (bin ? bin.z + 0.2 : -0.5) - z0;
+  const texW = splashTex.clone();
+  texW.repeat.set(splashW / 0.4, 1);
+  texW.needsUpdate = true;
+  west.add(box(0.012, splashH, splashW, toon(0xffffff, texW), x0 + 0.006, COUNTER_H + splashH / 2, z0 + splashW / 2, false));
+
+  // hotte au-dessus de la gazinière
+  const inox = toon(0xc3c8cd);
+  north.add(
+    box(0.62, 0.1, 0.48, inox, stoveX, 1.68, z0 + 0.24),
+    box(0.5, 0.12, 0.36, inox, stoveX, 1.79, z0 + 0.18),
+    box(0.26, WALL_H - 1.85, 0.24, inox, stoveX, (WALL_H + 1.85) / 2, z0 + 0.12),
+    box(0.5, 0.01, 0.4, toon(0x55595e), stoveX, 1.628, z0 + 0.25, false),
+  );
+
+  // étagère au-dessus du plan de travail : pots à épices et bocaux
+  const shelf = new THREE.Group();
+  shelf.add(
+    box(0.86, 0.03, 0.2, toon(WOOD), 0, 1.6, z0 + 0.1),
+    box(0.02, 0.12, 0.16, toon(DARK_WOOD), -0.33, 1.53, z0 + 0.08),
+    box(0.02, 0.12, 0.16, toon(DARK_WOOD), 0.33, 1.53, z0 + 0.08),
+  );
+  const jars: Array<[number, number, number, number]> = [[-0.32, 0.04, 0.13, 0xd65b3a], [-0.22, 0.04, 0.13, 0x6d9a3e], [-0.12, 0.04, 0.13, 0xe0b23a], [0.06, 0.065, 0.2, 0xb8c7cc], [0.22, 0.065, 0.24, 0xb8c7cc]];
+  for (const [x, r, h, c] of jars) {
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 14), toon(c));
+    jar.position.set(x, 1.615 + h / 2, z0 + 0.1);
+    jar.castShadow = true;
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.95, 0.02, 14), toon(DARK_WOOD));
+    lid.position.set(x, 1.615 + h + 0.01, z0 + 0.1);
+    shelf.add(jar, lid);
+  }
+  shelf.position.x = worktopX;
+  north.add(shelf);
+
+  // horloge au-dessus du coin café : elle donne l'heure du jeu
+  const clock = new THREE.Group();
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.03, 32).rotateZ(Math.PI / 2), toon(0xfbf8f0));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.015, 8, 32).rotateY(Math.PI / 2), toon(DARK_WOOD));
+  clock.add(face, rim);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const tick = box(0.01, i % 3 ? 0.02 : 0.035, 0.012, toon(0x333333), 0.016, Math.cos(a) * 0.135, Math.sin(a) * 0.135, false);
+    tick.rotation.x = a;
+    clock.add(tick);
+  }
+  const hand = (len: number, w: number) => {
+    const pivot = new THREE.Group();
+    pivot.position.x = 0.022;
+    pivot.add(box(0.006, len, w, toon(0x222222), 0, len / 2 - 0.02, 0, false));
+    clock.add(pivot);
+    return pivot;
+  };
+  const hourHand = hand(0.09, 0.016), minuteHand = hand(0.13, 0.01);
+  clock.position.set(x0 + 0.02, 1.85, coffeeZ);
+  west.add(clock);
+  room.onTick((_dt, hour) => {
+    const m = ((hour % 12) + 12) % 12;
+    hourHand.rotation.x = -(m / 12) * Math.PI * 2;
+    minuteHand.rotation.x = -(hour % 1) * Math.PI * 2;
+  });
+
+  // meuble d'angle (les deux rangées partent de lui), une plante dessus
+  const corner = new THREE.Group();
+  corner.add(
+    box(0.6, COUNTER_H - 0.04, 0.6, toon(WOOD), 0, (COUNTER_H - 0.04) / 2, 0),
+    box(0.62, 0.04, 0.62, toon(COUNTER), 0, COUNTER_H - 0.02, 0),
+    box(0.58, 0.08, 0.02, toon(DARK_WOOD), 0, 0.04, 0.3),
+  );
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.16, 16), toon(0xb5653a));
+  pot.position.set(-0.06, COUNTER_H + 0.08, -0.06);
+  corner.add(pot);
+  for (const [x, z, h] of [[0, 0, 0.32], [0.06, 0.03, 0.24], [-0.05, 0.05, 0.27], [0.03, -0.06, 0.22]]) {
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, h, 8), toon(0x4f8a3c));
+    leaf.position.set(-0.06 + x, COUNTER_H + 0.16 + h / 2, -0.06 + z);
+    leaf.castShadow = true;
+    corner.add(leaf);
+  }
+  corner.position.set(x0 + 0.3, 0, z0 + 0.3);
+  corner.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
+  room.group.add(corner);
+  room.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.31, 0, -0.31), new THREE.Vector3(0.31, COUNTER_H, 0.31)), pos: corner.position.clone(), yaw: 0, wall: false });
+
+  // tapis sous la table et sa chaise
+  if (tableAt) room.group.add(box(2, 0.01, 2.1, toon(0xb04a3c), tableAt.x, 0.008, tableAt.z - 0.45, false), box(1.8, 0.012, 1.9, toon(0xd8b07a), tableAt.x, 0.009, tableAt.z - 0.45, false));
+  // tapis devant l'évier
+  room.group.add(box(0.8, 0.01, 0.45, toon(0x5b7fa8), sinkX, 0.008, z0 + 1.0, false));
+}
+
+/**
+ * La cuisine : porte d'entrée (mur ouest), passage vers le salon (mur est), fenêtre au-dessus de
+ * l'évier et à côté de la table, suspension au-dessus de la table, interrupteur à côté de la porte.
+ *
+ * Le long du fond : lave-vaisselle à côté de l'évier (sous la fenêtre), plan de travail pour
+ * couper entre l'évier et la gazinière, tiroir à couverts, puis le frigo au bout. Le long du mur
+ * ouest : le coin café, le placard à vaisselle (micro-ondes dessus), le four, la poubelle. Les deux
+ * rangées partent du meuble d'angle.
+ */
+export const KITCHEN: RoomSpec = {
+  name: 'cuisine',
+  rect: ROOM,
+  floor: () => tiledFloor(ROOM),
+  doors: [
+    { wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1, leaf: true },
+    { wall: 'est', u0: SALON_PASS.z0, u1: SALON_PASS.z1 },
+  ],
+  joined: ['est'],
+  windows: (anchor) => {
+    const sinkX = anchor('evier')?.x ?? -1.6;
+    const tableZ = anchor('table')?.z ?? 1;
+    return [
+      { wall: 'nord', u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH },
+      { wall: 'est', u0: tableZ - 0.55, u1: tableZ + 0.55, y0: 0.95, y1: WIN_HIGH },
+    ];
+  },
+  lamps: (anchor) => {
+    const t = anchor('table');
+    return [{ x: t ? t.x : 1.6, z: t ? t.z - 0.2 : 1, kind: 'suspension' }];
+  },
+  lightSwitch: { wall: 'ouest', u: DOOR.z1 + 0.2 },
+  runs: [
+    { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur'] },
+    { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
+  ],
+  onTop: [
+    ['micro-ondes', 'placard'],
+    ['bouilloire', 'tiroir'],
+    // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
+    ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
+    ['egouttoir', 'lave-vaisselle', 0.145, 0],
+    ['torchon', 'lave-vaisselle', -0.15, 0.17, 0.1],
+    ['mixeur', 'four'],
+    ['frigo', 'congelateur'],
+  ],
+  decor: kitchenDecor,
+};

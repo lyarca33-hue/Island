@@ -21,7 +21,9 @@ import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } fro
 import { createMotes } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
-import { ON_TOP, placeRuns, Room, RUNS } from './room';
+import { placeRuns, Room } from './room';
+import { ROOMS } from './rooms';
+import { CHANNELS, Tv } from './tv';
 import { lightAllPasses, PostFx } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -95,8 +97,8 @@ const TABLE_MEAL = 1.25;
 const TABLE_REACH = 1.1;
 
 /**
- * Objets posés au départ dans la pièce, hors des meubles rangés contre les murs (voir RUNS dans
- * room.ts) : [id, x, y, z, rotation (rad)].
+ * Objets posés au départ dans la cuisine, hors des meubles rangés contre les murs (voir les
+ * fiches des pièces, rooms.ts) : [id, x, y, z, rotation (rad)].
  */
 const START_ITEMS: Array<[string, number, number, number, number]> = [
   // coin repas, côté caméra : la table, sa chaise au fond (on s'y assoit face à la caméra)
@@ -113,8 +115,6 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['plateau', 1, TABLE_H, 1.13, 0],
   // la carafe d'eau, au bout de la table
   ['carafe', 1.36, TABLE_H, 1.13, -Math.PI / 2],
-  // près de la bibliothèque, tournée vers la pièce : le coin lecture
-  ['chaise', 2.45, 0, -1.55, -0.5],
   // la caisse rangée dans le coin, près de la fenêtre
   ['caisse', 2.85, 0, 2.45, 0],
 ];
@@ -349,7 +349,7 @@ export class Game {
   private wetHands = 0;
   private ground: THREE.Mesh;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
-  private room: Room;
+  private rooms: Room[] = [];
   private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3) => void };
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
@@ -413,6 +413,8 @@ export class Game {
   private stream: THREE.Mesh;
   /** Évier : bouchon mis, robinet ouvert, eau dans la cuve (0 à 1), temps avant la prochaine flaque (s). */
   private sinks = new Map<WorldItem, { plug: boolean; tap: boolean; water: number; spill: number; warned: boolean }>();
+  /** Télés du salon : allumées ou non, chaîne, écran et lueur (tv.ts). */
+  private tvs = new Map<WorldItem, Tv>();
   /** Glaçons dans un récipient : les cubes (enfants de son modèle) et le temps avant qu'ils fondent (s). */
   private iced = new Map<WorldItem, { cubes: THREE.Mesh[]; t: number; fresh: boolean }>();
   /** Plats coupés en bouchées dans l'assiette (cutInPlate) : chaque bouchée compte double. */
@@ -499,7 +501,7 @@ export class Game {
       this.scene.add(item.object);
       return item;
     };
-    for (const [id, x, y, z, rot] of START_ITEMS) {
+    for (const [id, x, y, z, rot] of [...START_ITEMS, ...ROOMS.flatMap((r) => r.items ?? [])]) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -510,14 +512,16 @@ export class Game {
       }
     }
     // les meubles rangés contre les murs, et ce qui est posé dessus (micro-ondes sur le placard)
-    const runItems = RUNS.flatMap((r) => r.items.filter((id): id is string => typeof id === 'string').map(add));
-    const placed = new Set<WorldItem>();
-    placeRuns((id) => {
-      const it = runItems.find((i) => i.def.id === id && !placed.has(i));
-      if (it) placed.add(it);
-      return it;
-    });
-    for (const [id, under, x = 0, z = 0, rot = 0] of ON_TOP) {
+    for (const spec of ROOMS) {
+      const runItems = spec.runs.flatMap((r) => r.items.filter((id): id is string => typeof id === 'string').map(add));
+      const placed = new Set<WorldItem>();
+      placeRuns(spec, (id) => {
+        const it = runItems.find((i) => i.def.id === id && !placed.has(i));
+        if (it) placed.add(it);
+        return it;
+      });
+    }
+    for (const [id, under, x = 0, z = 0, rot = 0] of ROOMS.flatMap((r) => r.onTop ?? [])) {
       const base = this.items.find((i) => i.def.id === under);
       if (!base) continue;
       const it = add(id);
@@ -526,12 +530,21 @@ export class Game {
       it.object.position.copy(new THREE.Vector3(x, base.box.max.y, z).applyMatrix4(base.object.matrixWorld));
       it.object.rotation.y = base.object.rotation.y + rot;
     }
-    this.room = new Room((id) => this.items.find((i) => i.def.id === id)?.object.position);
-    this.scene.add(this.room.group);
+    for (const spec of ROOMS) {
+      const room = new Room(spec, (id) => this.items.find((i) => i.def.id === id)?.object.position);
+      this.rooms.push(room);
+      this.scene.add(room.group);
+    }
     // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item), keep: false });
     for (const item of this.items) if (item.def.wash) this.sinks.set(item, { plug: false, tap: false, water: 0, spill: 0, warned: false });
+    for (const item of this.items) {
+      if (!item.def.screen) continue;
+      const tv = new Tv(item);
+      this.tvs.set(item, tv);
+      this.scene.add(tv.light);
+    }
     // la carafe d'eau, presque pleine
     for (const item of this.items) {
       if (!item.def.jug) continue;
@@ -708,14 +721,14 @@ export class Game {
   /** Les obstacles à contourner, sauf `skip`. */
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
-    for (const o of this.room.obstacles) nav.add(o.box, o.pos, o.yaw, o.wall);
+    for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(it.box, it.object.position, it.object.rotation.y);
     return nav;
   }
 
   /** Le rectangle au sol d'un meuble déplacé entre-t-il dans un mur ? */
   private hitsWall(rect: ReturnType<typeof footprint>): boolean {
-    return this.room.obstacles.some((w) => overlaps(rect, footprint(w.box, w.pos, w.yaw)));
+    return this.rooms.flatMap((r) => r.obstacles).some((w) => overlaps(rect, footprint(w.box, w.pos, w.yaw)));
   }
 
   /** Obstacle : un meuble, ou un gros objet (porté à deux mains : chaise, caisse) posé au sol. */
@@ -944,7 +957,7 @@ export class Game {
         const lim = GROUND_HALF - 14;
         o.position.x = THREE.MathUtils.clamp(o.position.x, -lim, lim);
         o.position.z = THREE.MathUtils.clamp(o.position.z, -lim, lim);
-        this.room.bounce(prev, o.position, f.vel);
+        for (const r of this.rooms) r.bounce(prev, o.position, f.vel);
         const surf = this.surfaceAt(o.position.x, o.position.z, f.item);
         const lift = f.item.restLift(o.quaternion);
         if (o.position.y - lift >= surf) continue;
@@ -1140,6 +1153,8 @@ export class Game {
         ou += `, ${part} ${door.target ? 'ouvert' : 'fermé'}${part === 'porte' ? 'e' : ''}`;
       }
       if (this.appliances.has(item)) ou += ', en marche';
+      const tv = this.tvs.get(item);
+      if (tv) ou += tv.on ? `, allumée (${CHANNELS[tv.channel]})` : ', éteinte';
       if (this.crumbs.has(item)) ou += ', des miettes (à essuyer)';
       if (item.def.seat && this.tucked(item)) ou += ', rangée sous la table';
       if (item.def.blends) {
@@ -1216,28 +1231,76 @@ export class Game {
     return this.tryPickUp(item, false);
   }
 
-  /** Va à l'interrupteur près de la porte et allume (`on`) ou éteint les lampes de la cuisine ; sans `on`, inverse. */
-  switchLights(on = !this.room.lightsOn, running = false): boolean {
+  /**
+   * Allume (`on`) ou éteint la télé `item` ; sans `on`, inverse. Assis, le perso a la télécommande ;
+   * debout, il va devant la télé.
+   */
+  private setTv(item: WorldItem, on: boolean | undefined, running: boolean): boolean {
+    const tv = this.tvs.get(item)!;
     if (this.moving) {
       this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
       return false;
     }
-    const { stand, face } = this.room.switchSpot();
+    const want = on ?? !tv.on;
+    const done = () => {
+      tv.set(want);
+      this.onNotice?.(want ? `Télé allumée : ${CHANNELS[tv.channel]}.` : 'Télé éteinte.');
+    };
+    if (this.sitting) done();
+    else this.character.approachThen(this.standBefore(item, 0.45), item.object.position, done, running);
+    return true;
+  }
+
+  /** Chaîne suivante (à la télécommande si le perso est assis). */
+  private zapTv(item: WorldItem, running: boolean): boolean {
+    const tv = this.tvs.get(item)!;
+    if (!tv.on) return this.setTv(item, true, running);
+    const done = () => {
+      tv.zap();
+      this.onNotice?.(`Chaîne : ${CHANNELS[tv.channel]}.`);
+    };
+    if (this.sitting) done();
+    else this.character.approachThen(this.standBefore(item, 0.45), item.object.position, done, running);
+    return true;
+  }
+
+  /** La pièce où est le perso ; dehors, celle dont l'interrupteur est le plus proche. */
+  private hereRoom(): Room {
+    const p = this.character.position;
+    return this.rooms.find((r) => r.contains(p))
+      ?? [...this.rooms].sort((a, b) => a.switchSpot().stand.distanceTo(p) - b.switchSpot().stand.distanceTo(p))[0];
+  }
+
+  /**
+   * Va à l'interrupteur de la pièce `room` (celle où est le perso, sans `room`) et allume (`on`)
+   * ou éteint ses lampes ; sans `on`, inverse.
+   */
+  switchLights(on?: boolean, running = false, room = this.hereRoom()): boolean {
+    if (this.moving) {
+      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+      return false;
+    }
+    const want = on ?? !room.lightsOn;
+    const { stand, face } = room.switchSpot();
     this.character.approachThen(stand, face, () => {
-      this.room.setLights(on);
-      this.onNotice?.(on ? 'Lumière allumée.' : 'Lumière éteinte.');
+      room.setLights(want);
+      this.onNotice?.(want ? `Lumière allumée (${room.spec.name}).` : `Lumière éteinte (${room.spec.name}).`);
     }, running);
     return true;
   }
 
-  /** L'interrupteur est-il sous ce pixel (avant tout objet) ? */
-  private switchAt(cx: number, cy: number): boolean {
+  /** L'interrupteur sous ce pixel (avant tout objet), et sa pièce. */
+  private switchAt(cx: number, cy: number): Room | null {
     this.aim(cx, cy);
-    const d = this.room.switchHit(this.raycaster);
-    if (d === null) return false;
+    let best: { room: Room; d: number } | null = null;
+    for (const room of this.rooms) {
+      const d = room.switchHit(this.raycaster);
+      if (d !== null && (!best || d < best.d)) best = { room, d };
+    }
+    if (!best) return null;
     const carried = this.character.carried;
     const item = this.raycaster.intersectObjects(this.items.filter((i) => !carried.includes(i)).map((i) => i.object), true)[0];
-    return !item || item.distance > d;
+    return !item || item.distance > best.d ? best.room : null;
   }
 
   /** Marche jusqu'à l'objet `ref` (s'arrête devant lui). */
@@ -1987,7 +2050,7 @@ export class Game {
         return true;
       }
       // le geste du menu de la cible qui sert l'objet tenu ; sinon on le pose dessus
-      const skip = /^(Prendre|Aller|Déplacer|S’asseoir|S’attabler|Regarder|Laisser|Mettre la table|Débarrasser|Ouvrir|Fermer|Tirer|Ranger sous|Allumer|Éteindre|Arrêter|Lancer un lavage|Mettre en marche|Vider la poubelle|Vider et ranger|Charger|Ouvrir le robinet|Fermer le robinet|Boire au robinet|Se lever|Couper ici|Préparer)/;
+      const skip = /^(Prendre|Aller|Déplacer|S’asseoir|S’attabler|Regarder|Laisser|Mettre la table|Débarrasser|Ouvrir|Fermer|Tirer|Ranger sous|Allumer|Éteindre|Arrêter|Changer|Lancer un lavage|Mettre en marche|Vider la poubelle|Vider et ranger|Charger|Ouvrir le robinet|Fermer le robinet|Boire au robinet|Se lever|Couper ici|Préparer)/;
       const entry = this.menuFor(target).find((e) => !skip.test(e.label));
       if (entry) return entry.run();
       if (target.def.slots) return this.storeIn(target, false, item);
@@ -3665,6 +3728,8 @@ export class Game {
   }
 
   private switchTo(on: boolean, ref?: string, running = false, pan?: string): boolean {
+    const screen = ref ? this.byRef(ref) : undefined;
+    if (screen && this.tvs.has(screen)) return this.setTv(screen, on, running);
     const item = this.heaterItem(ref);
     if (!item) return false;
     const under = pan ? this.byRef(pan) : undefined;
@@ -3849,6 +3914,8 @@ export class Game {
     else if (program(item.def)) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
     else if (item.def.bin && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
+    // télé, mains vides : on l'allume ou on l'éteint
+    else if (item.def.screen && !held.length) return this.setTv(item, undefined, running);
     // mains vides : un gros meuble s'agrippe pour le déplacer
     else if (item.def.movable && !held.length) return this.grabFurniture(item, running);
     // évier : la vaisselle sale en main se lave ; la tasse (propre) se remplit d'eau ; sinon on se lave les mains
@@ -4048,9 +4115,10 @@ export class Game {
           return;
         }
       }
-      if (!e.buttons && this.switchAt(e.clientX, e.clientY)) {
+      const hovered = e.buttons ? null : this.switchAt(e.clientX, e.clientY);
+      if (hovered) {
         const r = el.getBoundingClientRect();
-        this.onHover?.({ name: 'interrupteur', grade: gradeName(1, false), condition: 1, state: this.room.lightsOn ? 'lumière allumée' : 'lumière éteinte', x: e.clientX - r.left, y: e.clientY - r.top });
+        this.onHover?.({ name: 'interrupteur', grade: gradeName(1, false), condition: 1, state: hovered.lightsOn ? 'lumière allumée' : 'lumière éteinte', x: e.clientX - r.left, y: e.clientY - r.top });
         return;
       }
       const item = e.buttons ? null : this.itemAt(e.clientX, e.clientY);
@@ -4065,9 +4133,10 @@ export class Game {
     on(el, 'contextmenu', (e) => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      if (this.switchAt(e.clientX, e.clientY)) {
-        const on = this.room.lightsOn;
-        this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: 'interrupteur', entries: [{ label: on ? 'Éteindre la lumière' : 'Allumer la lumière', run: () => this.switchLights(!on) }] });
+      const sw = this.switchAt(e.clientX, e.clientY);
+      if (sw) {
+        const on = sw.lightsOn;
+        this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: 'interrupteur', entries: [{ label: on ? 'Éteindre la lumière' : 'Allumer la lumière', run: () => this.switchLights(!on, false, sw) }] });
         return;
       }
       const item = this.hitAt(e.clientX, e.clientY)?.item ?? null;
@@ -4082,8 +4151,9 @@ export class Game {
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
       this.onMenu?.(null);
-      if (this.switchAt(e.clientX, e.clientY)) {
-        this.switchLights(undefined, e.shiftKey);
+      const sw = this.switchAt(e.clientX, e.clientY);
+      if (sw) {
+        this.switchLights(undefined, e.shiftKey, sw);
         return;
       }
       const hit = this.hitAt(e.clientX, e.clientY);
@@ -4233,6 +4303,12 @@ export class Game {
     if (heat && !item.def.pour) {
       if (heat.on.some(Boolean)) add('Éteindre', () => this.switchOff(ref));
       else add('Allumer', () => this.switchOn(ref));
+    }
+    // télé : allumer, éteindre, changer de chaîne
+    const tv = this.tvs.get(item);
+    if (tv) {
+      add(tv.on ? 'Éteindre la télé' : 'Allumer la télé', () => this.setTv(item, !tv.on, false));
+      if (tv.on) add('Changer de chaîne', () => this.zapTv(item, false));
     }
     // four, micro-ondes, lave-vaisselle, grille-pain, mixeur
     if (program(item.def)) {
@@ -4405,7 +4481,12 @@ export class Game {
     const hit = this.raycaster.intersectObject(this.ground, false)[0];
     if (!hit) return null;
     // un clic sur un mur : au pied du mur, dans la pièce
-    return this.room.wallHit(this.raycaster, hit.distance) ?? hit.point;
+    let point = hit.point, distance = hit.distance;
+    for (const r of this.rooms) {
+      const w = r.wallHit(this.raycaster, distance);
+      if (w) ({ point, distance } = w);
+    }
+    return point;
   }
 
   /** Direction clavier dans le repère monde (relative à la caméra : « haut » = vers le fond). */
@@ -4483,7 +4564,10 @@ export class Game {
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);
     this.updateCamera(dt);
-    this.room.update(dt, this.yaw, c.position, this.clock.hour, this.camera.position.clone().sub(this.focus).normalize());
+    const toCamera = this.camera.position.clone().sub(this.focus).normalize();
+    const indoors = this.rooms.some((r) => r.contains(c.position));
+    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, toCamera, indoors);
+    for (const tv of this.tvs.values()) tv.tick(dt);
     this.placeBubble();
     this.motes.update(now / 1000, this.character.position);
     this.post.render();
