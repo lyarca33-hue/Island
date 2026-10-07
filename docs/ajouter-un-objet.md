@@ -115,6 +115,10 @@ matériau toon par pièce et les ombres.
 - Nouvelle action : `src/orders/actions.ts` (tâche), `parser.ts` (`VERBS`), le prompt de
   `src/orders/ai.ts`, une méthode publique dans `Game.ts`, `HandActions` + bouton + touche dans
   `App.tsx`, et la liste des raccourcis du menu.
+- Nouvelle recette (un plat fait d'ingrédients réunis sur la planche ou dans l'assiette) :
+  une entrée dans `RECIPES` et la fiche du plat dans `DISHES` (`src/game/items/recipes.ts`), ses
+  mots dans `words` (ordres tapés), son id dans la tâche `preparer` du prompt de `ai.ts`, et le
+  nom féminin dans `DISH_FEMININE`. Les ingrédients doivent déjà se couper ou se cuire.
 - Nouvelle « sorte » (comme `rangement`, `machine`, `récipient`) : `WorldObject.sorte` dans
   `Game.describe()`, sinon l'IA ne sait pas à quoi sert l'objet.
 

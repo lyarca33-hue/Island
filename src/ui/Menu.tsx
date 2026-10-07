@@ -48,6 +48,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['P', 'Servir dans l’assiette'],
   ['V', 'Faire la vaisselle'],
   ['K', 'Couper'],
+  ['G', 'Préparer un plat'],
   ['L', 'Lire'],
   ['T', 'Lancer'],
   ['C', 'S’asseoir / se lever'],

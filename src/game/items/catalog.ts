@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
+import { DISHES } from './recipes';
 
 export interface ItemDef {
   id: string;
@@ -1074,6 +1075,8 @@ export const ITEMS: ItemDef[] = [
   },
   // la cuisine : rangements et appareils (kitchen.ts)
   ...KITCHEN_ITEMS,
+  // les plats des recettes (recipes.ts)
+  ...DISHES,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

@@ -7,6 +7,7 @@
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
+import { RECIPES } from '../game/items/recipes';
 import type { Intent } from './tasks';
 
 /** Minuscules, sans accents ni ponctuation, apostrophes et tirets en espaces. */
@@ -261,6 +262,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (VERB_OF.get(rest[0]) === 'cuire') return parseClause('cuire', rest.slice(1), original, world, rest[0]);
       // « fais la vaisselle » (à l'évier), « fais la vaisselle au lave-vaisselle »
       if (rest.includes('vaisselle')) return machineWash(original) ? machineDishes(world) : [{ kind: 'vaisselle', refs: [] }];
+      // « fais-toi une salade », « prépare un sandwich », « fais un steak frites » : une recette
+      if (!['sers', 'servir'].includes(word)) {
+        const recipe = RECIPES.find((r) => r.words.some((w) => w.split(' ').every((x) => rest.includes(x))));
+        if (recipe) return [{ kind: 'preparer', plat: recipe.dish }];
+      }
       // « sers le sandwich (dans l'assiette) », « sers-toi une pomme »
       {
         const food = found.find((o) => o.sorte === 'nourriture');
