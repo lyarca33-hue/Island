@@ -21,7 +21,7 @@ import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } fro
 import { createMotes } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
-import { placeRuns, Room } from './room';
+import { placeRuns, Room, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { CHANNELS, Tv } from './tv';
 import { lightAllPasses, PostFx } from './postfx';
@@ -343,6 +343,8 @@ export class Game {
   private ground: THREE.Mesh;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
   private rooms: Room[] = [];
+  /** Pièce où est le perso (gardée dans les passages), null dehors. */
+  private activeRoom: Room | null = null;
   private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3) => void };
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
@@ -4683,8 +4685,12 @@ export class Game {
     mm.opacity = Math.max(0, mm.opacity - dt * 0.9);
     this.updateCamera(dt);
     const toCamera = this.camera.position.clone().sub(this.focus).normalize();
-    const indoors = this.rooms.some((r) => r.contains(c.position));
-    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, toCamera, indoors);
+    // pièce du perso ; dans un passage (entre deux pièces, dans l'épaisseur des murs), il reste dans
+    // la dernière : sans ça, le toit et les murs se relèvent le temps de traverser
+    const inRoom = this.rooms.find((r) => r.contains(c.position));
+    if (inRoom) this.activeRoom = inRoom;
+    else if (this.activeRoom && !this.activeRoom.contains(c.position, 2 * WALL_T + 0.15)) this.activeRoom = null;
+    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, toCamera, this.activeRoom?.rect ?? null);
     for (const tv of this.tvs.values()) tv.tick(dt);
     this.placeBubble();
     this.motes.update(now / 1000, this.character.position);
