@@ -73,6 +73,24 @@ export interface ItemDef {
    * pièce `jet` (l'eau qui coule) sert aussi pendant qu'on se lave.
    */
   wash?: { hands: [number, number, number] };
+  /** Récipient déjà plein au départ (bouteille d'eau) : ce qu'il contient. */
+  startFull?: string;
+  /**
+   * Point de l'objet qui va aux lèvres pour boire ou manger (goulot, bord de la pomme) ; absent =
+   * le bord de la tasse, à l'opposé de l'anse.
+   */
+  mouth?: [number, number, number];
+  /** Se mange en `bites` bouchées ; la faim remonte de `hunger` points pour l'objet entier. */
+  food?: { hunger: number; bites: number };
+  /**
+   * Porte qui s'ouvre (frigo) : la pièce nommée `porte`, posée sur sa charnière, tourne autour de
+   * Y de cet angle (rad) quand on l'ouvre.
+   */
+  door?: number;
+  /** Meuble de rangement : noms des objets qu'on peut y ranger (absent = les livres). */
+  holds?: string[];
+  /** Mot du message quand il casse (« écrasé » pour une pomme) ; défaut : « brisé ». */
+  breakWord?: string;
   build(): THREE.Object3D;
 }
 
@@ -155,6 +173,19 @@ const TAP_Z = 0.03;
 const TAP_Y = COUNTER_H + 0.25;
 const CUP_H = 0.1;
 
+/** Frigo : largeur, profondeur (sans la porte), hauteur, épaisseur des parois et de la porte (m). */
+const FRIDGE_W = 0.6;
+const FRIDGE_D = 0.6;
+const FRIDGE_H = 1.55;
+const FRIDGE_T = 0.03;
+const FRIDGE_DOOR_T = 0.05;
+/** Dessus des clayettes (le bas du frigo compris) ; places de gauche à droite, près de la porte. */
+const FRIDGE_SHELVES = [FRIDGE_T + 0.03, 0.55, 0.98];
+const FRIDGE_SLOTS = FRIDGE_SHELVES.flatMap((y) => [-0.19, -0.065, 0.065, 0.19].map((x): [number, number, number] => [x, y, 0.13]));
+
+const BOTTLE_R = 0.033;
+const BOTTLE_H = 0.24;
+const APPLE_R = 0.04;
 /** Chaise en bois : assise (hauteur, largeur, profondeur), haut du dossier, section des pieds (m). */
 const SEAT_H = 0.45;
 const SEAT_W = 0.42;
@@ -357,6 +388,132 @@ export const ITEMS: ItemDef[] = [
       jet.position.set(0, TAP_Y, TAP_Z);
       g.add(jet);
       return g;
+    },
+  },
+  {
+    id: 'frigo',
+    name: 'frigo',
+    portable: false,
+    movable: true,
+    // métal et plastique épais : ne se brise pas d'un choc, mais finit par lâcher à force d'être ouvert et poussé
+    fragility: 8,
+    durability: 350,
+    door: THREE.MathUtils.degToRad(105),
+    holds: ["bouteille d'eau", 'pomme', 'sandwich'],
+    slots: FRIDGE_SLOTS,
+    build: () => {
+      const W = FRIDGE_W, D = FRIDGE_D, H = FRIDGE_H, t = FRIDGE_T;
+      const shell = 0xe9e6de, inside = 0xf3f5f4, glass = 0xc9dfe6;
+      const g = group(
+        // caisse ouverte à l'avant : côtés, fond, dessus, bas
+        mesh(new THREE.BoxGeometry(t, H, D), shell, -W / 2 + t / 2, H / 2, 0),
+        mesh(new THREE.BoxGeometry(t, H, D), shell, W / 2 - t / 2, H / 2, 0),
+        mesh(new THREE.BoxGeometry(W, H, t), shell, 0, H / 2, -D / 2 + t / 2),
+        mesh(new THREE.BoxGeometry(W, t, D), shell, 0, H - t / 2, 0),
+        mesh(new THREE.BoxGeometry(W, t, D), shell, 0, t / 2, 0),
+        // intérieur plus clair, socle sombre
+        mesh(new THREE.BoxGeometry(W - 2 * t, H - 2 * t, 0.004), inside, 0, H / 2, -D / 2 + t + 0.002),
+        mesh(new THREE.BoxGeometry(W + 0.004, 0.05, 0.04), 0x8d9093, 0, 0.025, D / 2 - 0.02),
+      );
+      for (const y of FRIDGE_SHELVES.slice(1)) g.add(mesh(new THREE.BoxGeometry(W - 2 * t, 0.012, D - t - 0.02), glass, 0, y - 0.006, 0.0));
+      // porte : la charnière à droite (+X), à l'avant ; elle s'ouvre vers l'avant
+      const door = new THREE.Group();
+      door.name = 'porte';
+      door.position.set(W / 2, 0, D / 2);
+      door.add(
+        mesh(new THREE.BoxGeometry(W, H - 0.06, FRIDGE_DOOR_T), shell, -W / 2, 0.06 + (H - 0.06) / 2, FRIDGE_DOOR_T / 2),
+        // joint et bacs de porte, vus quand elle est ouverte
+        mesh(new THREE.BoxGeometry(W - 0.06, H - 0.16, 0.006), 0xd5d8d6, -W / 2, 0.06 + (H - 0.06) / 2, -0.003),
+        // poignée côté gauche, à hauteur de main
+        mesh(new THREE.BoxGeometry(0.025, 0.36, 0.03), 0x9ea4aa, -W + 0.05, 1.02, FRIDGE_DOOR_T + 0.025),
+        mesh(new THREE.BoxGeometry(0.025, 0.025, 0.03), 0x9ea4aa, -W + 0.05, 1.19, FRIDGE_DOOR_T + 0.01),
+        mesh(new THREE.BoxGeometry(0.025, 0.025, 0.03), 0x9ea4aa, -W + 0.05, 0.85, FRIDGE_DOOR_T + 0.01),
+      );
+      g.add(door);
+      return g;
+    },
+  },
+  {
+    id: 'bouteille-eau',
+    name: "bouteille d'eau",
+    portable: true,
+    grip: 'fist',
+    // tenue par le milieu, côté +Z dans le poing ; on boit au goulot
+    gripPoint: [0, 0.1, BOTTLE_R],
+    mouth: [0, BOTTLE_H, 0],
+    fill: [0.008, 0.18],
+    startFull: 'eau',
+    // plastique : se cabosse plus qu'il ne casse
+    fragility: 9,
+    durability: 40,
+    breakWord: 'fendu',
+    build: () => {
+      const R = BOTTLE_R;
+      // plastique transparent : on voit le niveau de l'eau baisser
+      const body = mesh(new THREE.CylinderGeometry(R, R, 0.19, 18, 1, true), 0xd6ecf5, 0, 0.095, 0);
+      const bm = body.material as THREE.MeshToonMaterial;
+      bm.transparent = true;
+      bm.opacity = 0.45;
+      bm.depthWrite = false;
+      bm.side = THREE.DoubleSide;
+      const bottom = mesh(new THREE.CircleGeometry(R, 18).rotateX(-Math.PI / 2), 0xbcd9e6, 0, 0.002, 0);
+      const shoulder = mesh(new THREE.CylinderGeometry(0.012, R, 0.035, 18), 0xd6ecf5, 0, 0.2075, 0);
+      const sm = shoulder.material as THREE.MeshToonMaterial;
+      sm.transparent = true;
+      sm.opacity = 0.55;
+      sm.depthWrite = false;
+      const cap = mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.015, 12), 0x2f6fb3, 0, BOTTLE_H - 0.0075, 0);
+      const label = mesh(new THREE.CylinderGeometry(R + 0.001, R + 0.001, 0.05, 18, 1, true), 0x3d86c6, 0, 0.13, 0);
+      // colonne d'eau : hauteur 1 de 0 à 1, mise à l'échelle par le niveau (ItemDef.fill)
+      const water = mesh(new THREE.CylinderGeometry(R * 0.92, R * 0.92, 1, 18).translate(0, 0.5, 0), 0x7fbde0, 0, 0.008, 0);
+      water.name = 'liquide';
+      water.userData.column = true;
+      water.renderOrder = -1;
+      return group(water, bottom, body, shoulder, cap, label);
+    },
+  },
+  {
+    id: 'pomme',
+    name: 'pomme',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, APPLE_R, APPLE_R],
+    // on croque le côté opposé à la paume
+    mouth: [0, APPLE_R * 1.2, -APPLE_R],
+    food: { hunger: 12, bites: 4 },
+    // un fruit ne se brise pas : il s'écrase s'il tombe fort
+    fragility: 6,
+    durability: 20,
+    breakWord: 'écrasé',
+    build: () => {
+      const fruit = mesh(new THREE.SphereGeometry(APPLE_R, 16, 12).scale(1, 0.92, 1), 0xc0392b, 0, APPLE_R * 0.92, 0);
+      const stem = mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.02, 6), 0x6b4a2b, 0, APPLE_R * 1.84 + 0.006, 0);
+      const leaf = mesh(new THREE.SphereGeometry(0.009, 8, 6).scale(1.6, 0.35, 0.8), 0x4f8a3a, 0.01, APPLE_R * 1.84 + 0.008, 0);
+      return group(fruit, stem, leaf);
+    },
+  },
+  {
+    id: 'sandwich',
+    name: 'sandwich',
+    portable: true,
+    grip: 'fist',
+    // tenu par un bord, croqué par l'autre
+    gripPoint: [0, 0.025, 0.045],
+    mouth: [0, 0.03, -0.045],
+    food: { hunger: 30, bites: 4 },
+    // pain et garniture : rien à casser
+    fragility: 10,
+    durability: 20,
+    build: () => {
+      const bread = 0xe2b871, crust = 0xb98a4a;
+      return group(
+        mesh(new THREE.BoxGeometry(0.11, 0.016, 0.09), bread, 0, 0.008, 0),
+        mesh(new THREE.BoxGeometry(0.115, 0.006, 0.095), 0x6fae4b, 0, 0.019, 0),
+        mesh(new THREE.BoxGeometry(0.105, 0.008, 0.085), 0xe7a3a0, 0, 0.026, 0),
+        mesh(new THREE.BoxGeometry(0.108, 0.005, 0.088), 0xf2cf5b, 0, 0.0325, 0),
+        mesh(new THREE.BoxGeometry(0.11, 0.016, 0.09), bread, 0, 0.043, 0),
+        mesh(new THREE.BoxGeometry(0.112, 0.004, 0.092), crust, 0, 0.0515, 0),
+      );
     },
   },
   {

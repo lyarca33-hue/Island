@@ -27,7 +27,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
-  const [can, setCan] = useState<HandActions>({ drink: false, throw: false, moving: false, read: false, reading: false, seated: false });
+  const [can, setCan] = useState<HandActions>({ drink: false, eat: false, throw: false, moving: false, read: false, reading: false, seated: false });
   const [notice, setNotice] = useState<string | null>(null);
   /** Objet sous la souris : sa jauge de durabilité. */
   const [hover, setHover] = useState<{ name: string; grade: string; condition: number; x: number; y: number } | null>(null);
@@ -114,6 +114,11 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
           {can.drink && !can.reading && (
             <button onClick={() => game.current?.drink()}>
               <b>Boire (B)</b>
+            </button>
+          )}
+          {can.eat && !can.reading && (
+            <button onClick={() => game.current?.eat()}>
+              <b>Manger (M)</b>
             </button>
           )}
           {can.throw && !can.reading && (

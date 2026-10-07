@@ -22,9 +22,10 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ranger',
-    description: 'Aller ranger dans un meuble de rangement (bibliothèque) tous les livres tenus, un par un.',
+    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, pomme, sandwich dans le frigo (le perso ouvre la porte).',
     params: { meuble: 'ref du meuble' },
-    run: (g, a) => g.use(a.meuble),
+    // `objet` (facultatif) : ne ranger que lui
+    run: (g, a) => g.store(a.meuble, a.objet),
   },
   {
     name: 'poser',
@@ -62,9 +63,27 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'boire',
-    description: 'Boire une gorgée de ce que contient la tasse tenue (il faut qu’elle soit pleine).',
+    description: 'Boire une gorgée de ce que contient le récipient tenu (tasse de café, bouteille d’eau ; il ne doit pas être vide).',
     params: {},
     run: (g) => g.drink(),
+  },
+  {
+    name: 'manger',
+    description: 'Prendre une bouchée de l’aliment tenu (pomme, sandwich) ; une fois fini, il disparaît et la faim remonte.',
+    params: {},
+    run: (g) => g.eat(),
+  },
+  {
+    name: 'ouvrir',
+    description: 'Aller ouvrir la porte d’un meuble (frigo).',
+    params: { objet: 'ref du meuble' },
+    run: (g, a) => g.openDoor(a.objet),
+  },
+  {
+    name: 'fermer',
+    description: 'Fermer la porte d’un meuble (frigo).',
+    params: { objet: 'ref du meuble' },
+    run: (g, a) => g.closeDoor(a.objet),
   },
   {
     name: 'eau',

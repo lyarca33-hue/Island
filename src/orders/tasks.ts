@@ -13,9 +13,18 @@ export type Intent =
   | { kind: 'aller'; ref: string }
   /** Ranger des livres (tous ceux qui traînent si `refs` est vide) dans le meuble de rangement. */
   | { kind: 'ranger'; refs: string[]; onlyHeld?: boolean }
+  /** Mettre l'objet `ref` (ou ce qu'on tient) dans le frigo `dans`. */
+  | { kind: 'mettre'; ref?: string; dans: string }
   | { kind: 'cafe' }
-  /** Boire dans la tasse ; vide, elle est d'abord remplie de `liquide` (café par défaut). */
-  | { kind: 'boire'; liquide?: 'eau' | 'café' }
+  /**
+   * Boire dans le récipient `ref` (bouteille d'eau), sinon dans ce qu'on tient, sinon dans la
+   * tasse ; vide, la tasse est d'abord remplie de `liquide` (café par défaut).
+   */
+  | { kind: 'boire'; ref?: string; liquide?: 'eau' | 'café' }
+  /** Manger l'aliment `ref` en entier (sinon celui qu'on tient, sinon le plus proche). */
+  | { kind: 'manger'; ref?: string }
+  | { kind: 'ouvrir'; ref: string }
+  | { kind: 'fermer'; ref: string }
   /** Remplir la tasse d'eau à l'évier. */
   | { kind: 'eau' }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
@@ -161,23 +170,51 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return;
     }
     case 'cafe': {
-      const cup = world(game).objets.find((o) => o.sorte === 'récipient');
+      const cup = world(game).objets.find((o) => o.nom === 'tasse');
       if (!cup) throw new Failed('Il n’y a pas de tasse.');
       await take(game, act, cup.ref);
       return act('cafe');
     }
     case 'boire': {
-      const cup = world(game).objets.find((o) => o.sorte === 'récipient');
+      const w = world(game);
+      const full = (o: WorldObject) => o.ou.includes('contient');
+      const drinks = w.objets.filter((o) => o.sorte === 'récipient');
+      // le récipient demandé, sinon un récipient plein qu'on tient, sinon la tasse (café)
+      const cup = intent.ref ? drinks.find((o) => o.ref === intent.ref) : ((!intent.liquide ? drinks.find((o) => w.enMain.includes(o.ref) && full(o)) : undefined) ?? drinks.find((o) => o.nom === 'tasse'));
       if (!cup) throw new Failed('Il n’y a rien à boire.');
       await take(game, act, cup.ref);
       const ou = world(game).objets.find((o) => o.ref === cup.ref)!.ou;
+      if (cup.nom !== 'tasse') {
+        // une bouteille vide, c'est fini
+        if (!ou.includes('contient')) throw new Failed(`${cup.nom} est vide.`);
+      }
       // tasse vide : on la remplit d'abord (café par défaut) ; « bois de l'eau » avec du café dedans : on la remplit d'eau
-      if (intent.liquide === 'eau' && !ou.includes('contient de l’eau')) await act('eau');
+      else if (intent.liquide === 'eau' && !ou.includes('contient de l’eau')) await act('eau');
       else if (!ou.includes('contient')) await act(intent.liquide === 'eau' ? 'eau' : 'cafe');
       return act('boire');
     }
+    case 'manger': {
+      const w = world(game);
+      const foods = w.objets.filter((o) => o.sorte === 'nourriture');
+      const food = intent.ref
+        ? foods.find((o) => o.ref === intent.ref)
+        : (foods.find((o) => w.enMain.includes(o.ref)) ?? [...foods].sort((a, b) => +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0]);
+      if (!food) throw new Failed('Il n’y a rien à manger.');
+      await take(game, act, food.ref);
+      // bouchée après bouchée jusqu'à la fin (l'aliment disparaît)
+      for (let i = 0; i < 12 && world(game).enMain.includes(food.ref); i++) await act('manger');
+      return;
+    }
+    case 'mettre':
+      if (intent.ref) await take(game, act, intent.ref);
+      if (!held(game).length) throw new Failed('Rien en main à ranger.');
+      return act('ranger', intent.ref ? { meuble: intent.dans, objet: intent.ref } : { meuble: intent.dans });
+    case 'ouvrir':
+      return act('ouvrir', { objet: intent.ref });
+    case 'fermer':
+      return act('fermer', { objet: intent.ref });
     case 'eau': {
-      const cup = world(game).objets.find((o) => o.sorte === 'récipient');
+      const cup = world(game).objets.find((o) => o.nom === 'tasse');
       if (!cup) throw new Failed('Il n’y a pas de tasse.');
       await take(game, act, cup.ref);
       return act('eau');

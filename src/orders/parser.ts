@@ -20,12 +20,13 @@ export function normalize(text: string): string {
 }
 
 const VERBS: Record<string, string[]> = {
-  prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer'],
-  poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer'],
+  prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer', 'sors', 'sort', 'sortir'],
+  poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer', 'mets', 'met', 'mettre', 'remets', 'remettre'],
   ranger: ['range', 'ranger', 'rangez'],
   aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher'],
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
+  manger: ['mange', 'manges', 'manger', 'croque', 'croquer', 'grignote', 'grignoter', 'avale', 'avaler'],
   dire: ['dis', 'dit', 'dire', 'crie', 'crier'],
   lire: ['lis', 'lit', 'lire', 'ouvre', 'ouvrir', 'feuillette', 'feuilleter', 'bouquine'],
   remplir: ['remplis', 'remplir', 'remplit', 'rempli'],
@@ -56,6 +57,10 @@ const ALIASES: Record<string, string[]> = {
   chaise: ['chaise', 'chaises', 'siege'],
   'machine a cafe': ['machine', 'cafetiere'],
   evier: ['evier', 'lavabo', 'robinet'],
+  frigo: ['frigo', 'frigos', 'frigidaire', 'refrigerateur'],
+  'bouteille d eau': ['bouteille', 'bouteilles'],
+  pomme: ['pomme', 'pommes', 'fruit', 'fruits'],
+  sandwich: ['sandwich', 'sandwichs', 'sandwiches', 'casse'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -165,12 +170,18 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const target = where >= 0 ? findObjects(rest.slice(where + 1), world.objets).found.find((o) => o.ref !== item?.ref) : undefined;
       if (where >= 0 && !target) return null;
       if (target?.sorte === 'rangement' && (item?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: item ? [item.ref] : [], onlyHeld: !item }];
+      // « mets la pomme dans le frigo »
+      if (target?.sorte === 'frigo') return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
       return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
     case 'ranger': {
       // « range-le » : ce qu'on tient
       if (rest.length && rest.every((x) => ['le', 'la', 'les', 'l', 'ca'].includes(x))) return [{ kind: 'ranger', refs: [], onlyHeld: true }];
       const things = found.filter((o) => o.portable);
+      // « range la pomme (dans le frigo) » : ce qui se garde au frais
+      const fridge = world.objets.find((o) => o.sorte === 'frigo');
+      const cold = things.filter((o) => o.sorte === 'nourriture' || o.nom === 'bouteille d\'eau');
+      if (fridge && cold.length && cold.length === things.length) return [{ kind: 'mettre', ref: (cold.find((o) => !o.ou.startsWith('rangé')) ?? cold[0]).ref, dans: fridge.ref }];
       // « range » tout court, « range les livres », « range le livre rouge »
       if (things.some((o) => o.nom !== 'livre')) return null;
       if (all || !things.length) return [{ kind: 'ranger', refs: [] }];
@@ -184,9 +195,23 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « fais ta toilette »
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
-    case 'boire':
-      // « bois de l'eau », « bois un café » : de quoi remplir la tasse si elle est vide
-      return [{ kind: 'boire', liquide: rest.includes('eau') ? 'eau' : rest.includes('cafe') ? 'café' : undefined }];
+    case 'boire': {
+      // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »
+      const liquide = rest.includes('eau') ? 'eau' : rest.includes('cafe') ? 'café' : undefined;
+      const drink = found.filter((o) => o.sorte === 'récipient');
+      if (found.length && !drink.length) return null;
+      const full = (o: WorldObject) => o.ou.includes('contient');
+      const named = drink.find((o) => world.enMain.includes(o.ref)) ?? drink[0];
+      const bottles = world.objets.filter((o) => o.sorte === 'récipient' && o.nom !== 'tasse' && full(o));
+      const bottle = liquide === 'eau' && !named ? (bottles.find((o) => world.enMain.includes(o.ref)) ?? bottles[0]) : undefined;
+      return [{ kind: 'boire', ref: (named ?? bottle)?.ref, liquide }];
+    }
+    case 'manger': {
+      // « mange une pomme », « mange » (ce qu'on tient, sinon ce qu'il y a)
+      const food = found.filter((o) => o.sorte === 'nourriture');
+      if (found.length && !food.length) return null;
+      return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
+    }
     case 'remplir':
       // « remplis la tasse (d'eau / de café) » ; d'eau si rien n'est dit
       if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine')) return null;
@@ -200,6 +225,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'laver', visage: !handsOnly }];
     }
     case 'lire': {
+      // « ouvre le frigo »
+      const door = found.find((o) => o.sorte === 'frigo');
+      if (door) return [{ kind: 'ouvrir', ref: door.ref }];
       // « lis le livre rouge », « lis un livre », « lis » (celui qu'on tient)
       const books = found.filter((o) => o.nom === 'livre');
       if (found.length && !books.length) return null;
@@ -215,6 +243,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'lever':
       return [{ kind: 'lever' }];
     case 'arreter':
+      // « ferme le frigo »
+      if (found[0]?.sorte === 'frigo') return [{ kind: 'fermer', ref: found[0].ref }];
       // « arrête de lire », « ferme le livre », « stop »
       return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;
     case 'dire': {
