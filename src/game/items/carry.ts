@@ -11,6 +11,7 @@ import type { VRMHumanBoneName } from '@pixiv/three-vrm';
 import * as THREE from 'three';
 import type { ItemDef } from './catalog';
 import { GRIPS, guessGrip, isTwoHanded, vec, type GripSpec, type GripType, type HandSpec } from './grips';
+import { gradeIndex, showWear } from './durability';
 import { basisRotation, Rig, solveTwoBone } from './ik';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
@@ -30,6 +31,8 @@ export class WorldItem {
   level = 0;
   /** Ce qu'il contient (« café »), ou null. */
   contents: string | null = null;
+  /** Durabilité restante (points, sur maxDurability) ; à zéro, l'objet se brise. */
+  durability: number;
 
   private closed: THREE.Object3D;
   private opened: THREE.Object3D | null = null;
@@ -51,6 +54,29 @@ export class WorldItem {
     this.grip = def.grip ?? guessGrip(this.size);
     this.gripPoint = def.gripPoint ? vec(def.gripPoint) : new THREE.Vector3(0, this.size.y / 2, 0);
     if (def.fill) this.setLevel(0);
+    this.durability = this.maxDurability;
+  }
+
+  get maxDurability(): number {
+    return this.def.durability ?? 100;
+  }
+
+  /** Part de durabilité restante (1 neuf, 0 cassé). */
+  get condition(): number {
+    return this.durability / this.maxDurability;
+  }
+
+  /** Use l'objet de `points` ; vrai s'il change de grade (neuf → bon état…). */
+  wear(points: number): boolean {
+    return this.setCondition((this.durability - points) / this.maxDurability);
+  }
+
+  /** Fixe la durabilité (part de 0 à 1) et montre l'usure ; vrai si le grade change. */
+  setCondition(ratio: number): boolean {
+    const before = gradeIndex(this.condition);
+    this.durability = THREE.MathUtils.clamp(ratio, 0, 1) * this.maxDurability;
+    showWear(this.object, this.condition);
+    return gradeIndex(this.condition) !== before;
   }
 
   /** Montre le livre ouvert (lecture) ou fermé. */
@@ -97,9 +123,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.6, store: 0.6, drink: 2.4, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s). */
 const STACK_BLEND = 0.4;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -310,6 +336,19 @@ export class Carry {
     return true;
   }
 
+  /**
+   * L'objet tenu disparaît de la main (il s'est brisé) : le bras retombe. Seulement quand il est
+   * simplement tenu (pas en plein geste, pas de pile).
+   */
+  lose(): WorldItem | null {
+    const item = this.item;
+    if (!item || this.phase !== 'hold' || this.stack.length) return null;
+    this.throwGrip = item.grip;
+    this.item = null;
+    this.start('let');
+    return item;
+  }
+
   /** Prise (main gauche : miroir). */
   private spec(grip: GripType = this.grip): GripSpec {
     return sided(GRIPS[grip], this.side);
@@ -405,7 +444,7 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
@@ -451,7 +490,9 @@ export class Carry {
       // le bras revient à la pose animée après le lancer
       case 'brace': return { w: k, r: 0, c: 0 };
       case 'push': return { w: 1, r: 0, c: 0 };
-      case 'unbrace': return { w: 1 - k, r: 0, c: 0 };
+      case 'unbrace':
+      // l'objet s'est brisé en main : le bras retombe
+      case 'let': return { w: 1 - k, r: 0, c: 0 };
       case 'throw': return { w: 1 - ease(THREE.MathUtils.clamp((this.t - THROW_SWING) / (DURATION.throw - THROW_SWING), 0, 1)), r: 0, c: 0 };
       case 'lower': return { w: 1, r: k, c: k };
       case 'release': return { w: 1 - k, r: 1, c: 1 - k };
@@ -464,7 +505,7 @@ export class Carry {
 
   apply(dt: number): void {
     this.advance(dt);
-    if (this.phase === 'idle' || (!this.item && this.phase !== 'throw' && !this.bracing)) return;
+    if (this.phase === 'idle' || (!this.item && this.phase !== 'throw' && this.phase !== 'let' && !this.bracing)) return;
     if (this.phase !== 'reach') for (const e of this.stack) e.age += dt;
     const { w, r, c } = this.weights();
     this.sip = this.phase === 'drink' ? this.sipAmount() : 0;

@@ -331,6 +331,14 @@ export class Character {
     return this.carries.right.unbrace(onDone);
   }
 
+  /** L'objet tenu `item` s'est brisé : la main se vide (faux si elle est en plein geste). */
+  loseItem(item: WorldItem): boolean {
+    const hand = this.handOf(item);
+    if (!hand || hand.held !== item || !hand.lose()) return false;
+    this.order = this.order.filter((s) => s !== hand.side);
+    return true;
+  }
+
   /** Lance l'objet tenu `item` (petit ou moyen, tenu d'une main) devant soi. */
   throwItem(item: WorldItem, onRelease: (item: WorldItem, vel: THREE.Vector3) => void): boolean {
     const hand = this.handOf(item);

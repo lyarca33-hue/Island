@@ -29,6 +29,8 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [held, setHeld] = useState<string | null>(null);
   const [can, setCan] = useState<HandActions>({ drink: false, throw: false, moving: false, read: false, reading: false });
   const [notice, setNotice] = useState<string | null>(null);
+  /** Objet sous la souris : sa jauge de durabilité. */
+  const [hover, setHover] = useState<{ name: string; grade: string; condition: number; x: number; y: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const missing = useMissingCount();
   /** Partie du menu dépliée. */
@@ -45,6 +47,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
       setHeld(name);
       setCan(actions);
     };
+    g.onHover = setHover;
     let timer = 0;
     g.onNotice = (text) => {
       setNotice(text);
@@ -126,6 +129,16 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
+      {hover && (
+        <div className="hud-wear" style={{ left: hover.x, top: hover.y }}>
+          <div>
+            {hover.name} · <b>{hover.grade}</b>
+          </div>
+          <div className="hud-wear-bar">
+            <span style={{ width: `${Math.round(hover.condition * 100)}%`, background: `hsl(${Math.round(hover.condition * 110)}, 65%, 50%)` }} />
+          </div>
+        </div>
+      )}
       <ChatBar
         game={ready}
         onNeedSettings={() => {
