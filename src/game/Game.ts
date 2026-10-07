@@ -19,6 +19,7 @@ import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/cata
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
+import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS } from './items/prep';
 import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
@@ -95,7 +96,7 @@ const SINK_DRAIN = 4;
 const ICE_CUBES = 3;
 const ICE_MELT = 120;
 /** Couleur de chaque liquide (celle du jet de la machine qui le donne). */
-const LIQUID_COLOR = new Map<string, THREE.ColorRepresentation>([...[...ITEM_BY_ID.values()].flatMap((d) => (d.pour ? [[d.pour.liquid, d.pour.color] as const] : [])), ...Object.entries(DRINK_COLORS)]);
+const LIQUID_COLOR = new Map<string, THREE.ColorRepresentation>([...[...ITEM_BY_ID.values()].flatMap((d) => (d.pour ? [[d.pour.liquid, d.pour.color] as const] : [])), ...Object.entries(DRINK_COLORS), ...Object.entries(PREP_LIQUIDS)]);
 const liquidColor = (liquid: string): THREE.ColorRepresentation => LIQUID_COLOR.get(liquid) ?? 0x9fcde6;
 /** Contenance d'un récipient (litres). */
 const volumeOf = (item: WorldItem) => item.def.tank ?? item.def.volume ?? 0.25;
@@ -204,6 +205,25 @@ const START_STORED: Array<[string, string, number]> = [
   // un verre et une cuillère qui sèchent déjà sur l'égouttoir
   ['verre', 'egouttoir', 0],
   ['cuillere', 'egouttoir', 4],
+  // les gestes : œufs, lait, beurre et fromage au frigo ; saladier et râpe au placard ; ustensiles au pot ; épices sur l'étagère
+  ['lait', 'frigo', 29],
+  ['beurre', 'frigo', 30],
+  ['fromage', 'frigo', 31],
+  ['oeuf', 'frigo', 36],
+  ['oeuf', 'frigo', 37],
+  ['oeuf', 'frigo', 38],
+  ['oeuf', 'frigo', 39],
+  ['saladier', 'placard', 3],
+  ['rape', 'placard', 5],
+  ['fouet', 'pot-ustensiles', 0],
+  ['spatule', 'pot-ustensiles', 1],
+  ['cuillere-bois', 'pot-ustensiles', 2],
+  ['louche', 'pot-ustensiles', 3],
+  ['sel', 'etagere-epices', 0],
+  ['poivre', 'etagere-epices', 1],
+  ['paprika', 'etagere-epices', 2],
+  ['herbes', 'etagere-epices', 3],
+  ['huile', 'etagere-epices', 4],
   // les provisions : le frais au frigo (derrière, puis la clayette du haut)
   ['jambon', 'frigo', 10],
   ['saucisses', 'frigo', 11],
@@ -283,10 +303,10 @@ const WEAR_CUT = { knife: 1, board: 0.6 };
 const CUT_STAND = 0.28;
 
 /** « le café », « l'eau » ; « de café », « d'eau » ; « du café », « de l'eau ». */
-const elides = (w: string) => /^[aeiouyéèêh]/i.test(w);
+const elides = (w: string) => /^[aeiouyéèêhœ]/i.test(w);
 const theLiquid = (w: string) => (elides(w) ? `l’${w}` : `le ${w}`);
 const ofLiquid = (w: string) => (elides(w) ? `d’${w}` : `de ${w}`);
-const someLiquid = (w: string) => (elides(w) ? `de l’${w}` : `du ${w}`);
+const someLiquid = (w: string) => (PLURAL.has(w) ? `des ${w}` : elides(w) ? `de l’${w}` : FEMININE.has(w) ? `de la ${w}` : `du ${w}`);
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 /** Usure de la fourchette à chaque bouchée, et de la vaisselle à chaque lavage. */
 const WEAR_FORK = 0.2;
@@ -335,9 +355,9 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
-const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL]);
+const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
 /** Pronom de l'objet : « lave-la », « lave-le », « lave-les ». */
 const it = (name: string) => (PLURAL.has(name) ? 'les' : FEMININE.has(name) ? 'la' : 'le');
@@ -351,6 +371,15 @@ const theName = (name: string) => `${PLURAL.has(name) ? 'Les' : FEMININE.has(nam
 const the = (name: string) => (PLURAL.has(name) ? `les ${name}` : elides(name) ? `l’${name}` : FEMININE.has(name) ? `la ${name}` : `le ${name}`);
 /** « au frigo », « à la table », « à l’évier », « aux quartiers de pomme ». */
 const toThe = (name: string) => (PLURAL.has(name) ? `aux ${name}` : elides(name) ? `à l’${name}` : FEMININE.has(name) ? `à la ${name}` : `au ${name}`);
+
+/** Ingrédients secs qu'on verse dans le saladier, et de combien ils le remplissent. */
+const MIX_DRY: Record<string, number> = { farine: 0.15, sucre: 0.05, levure: 0.02 };
+/** Sur le feu sans eau, un aliment qu'on ne remue pas attache au bout de tant de secondes, et cuit (brûle) d'autant plus vite. */
+const STICK_AFTER = 10;
+const STICK_SPEED = 0.6;
+/** Faire sauter : durée du saut (s) et hauteur (m). */
+const TOSS_TIME = 0.7;
+const TOSS_HEIGHT = 0.22;
 
 /** Pesanteur des objets lancés (m/s²). */
 const GRAVITY = 9.8;
@@ -473,6 +502,15 @@ export class Game {
   private navKey = '';
   /** Gros meuble en train d'être déplacé, et ce qui est posé ou rangé dedans (suit le meuble). */
   private moving: { item: WorldItem; riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> } | null = null;
+  /** Saladiers : ce qu'on y a mis (œufs, lait, farine…) et la pâte une fois mélangé. */
+  private mixes = new Map<WorldItem, { parts: string[]; batter: string | null }>();
+  /** Sur le feu sans eau : secondes de cuisson depuis qu'on a remué (ça attache au-delà de STICK_AFTER). */
+  private unstirred = new Map<WorldItem, number>();
+  /** Assaisonnements d'un aliment (sel, poivre…), et ce qu'on a mis dessus (fromage râpé). */
+  private seasoned = new Map<WorldItem, Set<string>>();
+  private toppings = new Map<WorldItem, string[]>();
+  /** Saut en cours dans la poêle tenue : l'aliment, sa place dans la poêle, le temps, s'il tombe à côté. */
+  private tossing: { pan: WorldItem; food: WorldItem; rel: THREE.Matrix4; t: number; fall: boolean } | null = null;
   /** Objets lancés en vol, et éclats des objets brisés. */
   private flying: Flying[] = [];
   private debris: Array<Debris | Spill> = [];
@@ -593,6 +631,7 @@ export class Game {
 
     // au moment de la prise, l'objet est encore posé : on note ce qui est dessus ; les livres
     // posés sur un livre forment la pile qu'on emporte
+    this.character.onStuck = () => this.onNotice?.('Je n’arrive pas à passer : quelque chose bloque le chemin.');
     this.character.onGrab = (item, hand) => {
       this.wearItem(item, WEAR_GRAB);
       const riders = this.ridersOf(item);
@@ -868,7 +907,7 @@ export class Game {
   get idle(): boolean {
     // endormi, c'est fini : on ne bouge plus jusqu'au réveil
     if (this.sleep) return this.sleep.phase === 'asleep';
-    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.showering && !this.toiletVisit && !this.cookWait && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.showering && !this.toiletVisit && !this.cookWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
@@ -1117,7 +1156,8 @@ export class Game {
         const surf = this.surfaceAt(o.position.x, o.position.z, f.item);
         const lift = f.item.restLift(o.quaternion);
         if (o.position.y - lift >= surf) continue;
-        if (prevBottom < surf - 0.02) {
+        // parti de plus bas que la surface sous lui : il ne s'enfonce pas au-delà du sol
+        if (prevBottom < surf - 0.02 && o.position.y - lift > -0.05) {
           // heurte le flanc d'un meuble : repart en arrière, ralenti
           o.position.set(prev.x, o.position.y, prev.z);
           f.vel.x *= -0.3;
@@ -1348,6 +1388,7 @@ export class Game {
       if (cuisson) ou += `, ${doneWord(item, cuisson)}`;
       if (item.dirty) ou += ', sale';
       if (item.wet > 0) ou += `, mouillé${agree(item.name)}`;
+      ou += this.prepWords(item).map((w) => `, ${w}`).join('');
       const sink = this.sinks.get(item);
       if (sink?.tap) ou += ', robinet ouvert';
       if (sink?.plug) ou += sink.water > 0.98 ? ', bouché, la cuve déborde' : ', bouché';
@@ -1810,7 +1851,7 @@ export class Game {
   serve(ref?: string, running = false): boolean {
     const c = this.character;
     const food = c.heldItems.find((i) => i.def.food);
-    const plate = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.plate && !c.carried.includes(i) && !i.dirty && !this.foodOn(i));
+    const plate = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.plate && !c.carried.includes(i) && !this.shelfOf(i) && !i.dirty && !this.foodOn(i));
     if (!food) this.onNotice?.('Prends de quoi manger (il y en a dans le frigo) pour le servir.');
     else if (!plate) this.onNotice?.(ref ? `Aucun objet « ${ref} ».` : 'Pas d’assiette propre et vide où servir.');
     else return this.serveOn(plate, food, running);
@@ -3271,6 +3312,9 @@ export class Game {
     dish.object.quaternion.setFromAxisAngle(UP, yaw);
     const at = base.def.board ? this.boardTop(base) : this.plateFloor(base);
     dish.object.position.set(at.x, at.y + dish.restLift(dish.object.quaternion), at.z);
+    // l'assaisonnement et le fromage râpé des ingrédients restent sur le plat
+    const spices = new Set(use.flatMap((i) => [...(this.seasoned.get(i) ?? [])]));
+    if (spices.size) this.seasoned.set(dish, spices);
     for (const i of use) {
       this.items = this.items.filter((x) => x !== i);
       this.riders = this.riders.filter((r) => r.item !== i && r.base !== i);
@@ -3534,6 +3578,9 @@ export class Game {
     if (into.def.tank) return liquid === 'eau' ? (into.level > 0.98 ? `${cap(the(into.name))} est déjà plein${agree(into.name)}.` : null) : `On ne met que de l’eau dans ${the(into.name)}.`;
     if (!into.def.fill || !into.def.portable) return `On ne verse rien dans ${the(into.name)}.`;
     if (into.dirty) return `${cap(the(into.name))} est sale : lave-${it(into.name)} d’abord.`;
+    // la pâte du saladier se verse dans la poêle (Game.pourBatter) ; dans le saladier, seulement du lait
+    if (from.def.mixes) return 'Verse la pâte dans la poêle (clic droit sur la poêle).';
+    if (into.def.mixes) return liquid !== 'lait' ? `On ne met pas ${someLiquid(liquid)} dans le saladier.` : into.level > 0.98 ? 'Le saladier est plein.' : this.mixes.get(into)?.batter ? 'La pâte est déjà prête.' : null;
     if (into.contents && into.contents !== liquid) return `${cap(the(into.name))} contient déjà ${someLiquid(into.contents)}.`;
     if (into.level > 0.98) return `${cap(the(into.name))} est déjà plein${agree(into.name)}.`;
     if (this.inPan(into).length && liquid !== 'eau') return `Il y a déjà ${this.inPan(into).map((i) => i.name).join(' et ')} dans ${the(into.name)}.`;
@@ -3678,6 +3725,12 @@ export class Game {
     this.pouring = null;
     this.stream.visible = false;
     if (!p) return;
+    // le lait versé dans le saladier rejoint la préparation ; un saladier vidé n'a plus de pâte
+    if (p.into?.def.mixes) this.addToMix(p.into, p.liquid, 0);
+    if (p.from.def.mixes && p.from.level <= 0.01) {
+      this.mixes.delete(p.from);
+      this.showMix(p.from);
+    }
     const what = theLiquid(p.liquid);
     if (p.sink) {
       const kept = this.inPan(p.from);
@@ -4503,7 +4556,12 @@ export class Game {
     for (const food of this.inPan(pan)) {
       const before = food.cooking;
       // dans l'eau, ça cuit sans jamais brûler
-      const t = water ? Math.min(before + dt * warm, Math.max(before, waterCap(food.def))) : before + dt * warm;
+      // sans eau, ce qu'on ne remue pas attache au fond : ça cuit et brûle plus vite
+      const left = (this.unstirred.get(food) ?? 0) + dt * warm;
+      if (!water) this.unstirred.set(food, left);
+      if (!water && left > STICK_AFTER && left - dt * warm <= STICK_AFTER && doneness(food.def, before) !== 'brûlé') this.onNotice?.(`${cap(the(food.name))} attache au fond : remue avec la spatule (ou fais sauter).`);
+      const sticks = !water && left > STICK_AFTER ? 1 + STICK_SPEED : 1;
+      const t = water ? Math.min(before + dt * warm, Math.max(before, waterCap(food.def))) : before + dt * warm * sticks;
       if (t === before) continue;
       food.cooking = t;
       showDoneness(food);
@@ -4941,6 +4999,7 @@ export class Game {
       if (towel && this.wetHands > 0) add('S’essuyer les mains', () => this.dryHands());
       const bag = held.find((h) => this.bags.has(h));
       if (bag) add('Ranger les courses', () => this.unpackGroceries(this.ref(bag)));
+      this.prepMenu(null, add);
       const rack = wetDish && this.homeOf(wetDish);
       if (rack?.def.rack) add(`Mettre ${the(wetDish!.name)} à égoutter`, () => this.storeIn(rack, false, wetDish));
       if (held.some((h) => h.def.bathTowel)) add('Se sécher', () => this.dryOff());
@@ -5037,6 +5096,7 @@ export class Game {
     // ustensile : y mettre l'ingrédient tenu
     const food = item.def.cookware && held.find((h) => this.cookFits(item, h));
     if (food) add(`Mettre ${the(food.name)} dedans`, () => this.putIn(item, food, false));
+    this.prepMenu(item, add);
     // planche, assiette : couper, servir, préparer
     const board = item.def.board ? item : this.boardOn(item);
     if (board && held.some((h) => h.def.cut && h.portion === 1)) add('Couper ici', () => this.cutOn(board, false));
@@ -5100,6 +5160,7 @@ export class Game {
     const door = this.doors.get(item);
     if (door?.target) words.push(`${item.def.drawer ? 'tiroir' : item.def.bin ? 'couvercle' : 'porte'} ouvert${item.def.drawer || item.def.bin ? '' : 'e'}`);
     if (this.iced.has(item)) words.push('avec glaçons');
+    words.push(...this.prepWords(item));
     if (this.towelsWet.has(item)) words.push('mouillée');
     if (item.def.shower && this.showering?.shower === item) words.push('l’eau coule');
     if (item.def.mirror && this.mirrorFog > 0.3) words.push('miroir embué');
@@ -5218,6 +5279,7 @@ export class Game {
     this.character.update(dt, GROUND_HALF - 14);
     const c = this.character;
     const held = c.heldItems;
+    this.tickToss(dt);
     // les objets posés dessus suivent l'objet tenu, jusqu'à sa dernière position une fois reposé
     for (const r of this.riders) {
       if (!held.includes(r.base) && !this.prevHeld.includes(r.base)) continue;
@@ -5394,6 +5456,559 @@ export class Game {
     this.lastSips = sips;
     this.tickDry(hours);
     this.tickDelivery(hours);
+  }
+
+  // ——— gestes de cuisine (lot 3) : casser, mélanger, remuer, faire sauter, servir, assaisonner, tartiner, râper, goûter ———
+
+  /** Les gestes de cuisine possibles sur `item` (ou avec ce qu'on tient, sans objet visé). */
+  private prepMenu(item: WorldItem | null, add: (label: string, run: () => boolean) => void): void {
+    const c = this.character;
+    const held = c.heldItems;
+    const egg = held.find((h) => h.def.id === 'oeuf');
+    const dry = held.find((h) => MIX_DRY[h.name] !== undefined);
+    const tool = held.find((h) => !!h.def.stirs);
+    const jar = held.find((h) => !!h.def.spice);
+    const pot = held.find((h) => SPREADS[h.name] !== undefined);
+    const knife = held.find((h) => !!h.def.knife || h.name === 'couteau de table');
+    const rasp = held.find((h) => !!h.def.grates) && held.find((h) => h.def.id === 'fromage');
+    const spoon = held.find((h) => h.name === 'cuillère' || h.name === 'cuillère en bois');
+    const bowl = held.find((h) => !!h.def.mixes);
+    const cooked = (f: WorldItem) => doneness(f.def, f.cooking) !== 'cru';
+    if (!item) {
+      if (egg) add('Casser l’œuf', () => this.crackEgg());
+      if (tool && bowl && this.mixes.get(bowl)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(this.ref(bowl)));
+      const food = held.find((h) => !!h.def.food);
+      if (jar && food) add(`Assaisonner ${the(food.name)} (${jar.name})`, () => this.season(this.ref(food)));
+      if (rasp) add('Râper le fromage', () => this.grate());
+      if (spoon && bowl && this.mixes.has(bowl)) add('Goûter', () => this.taste(this.ref(bowl)));
+      return;
+    }
+    const ref = this.ref(item);
+    const foods = this.foodsAt(item);
+    if (egg && (item.def.mixes || item.def.cookware?.holds.includes('œuf au plat'))) add(`Casser l’œuf dans ${the(item.name)}`, () => this.crackEgg(ref));
+    if (dry && item.def.mixes) add(`Verser ${the(dry.name)} dedans`, () => this.addToBowl(ref));
+    if (tool && item.def.mixes && this.mixes.get(item)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(ref));
+    const batter = bowl && this.mixes.get(bowl)?.batter;
+    if (batter && item.def.cookware && !item.def.fill) add(`Verser ${theLiquid(batter)} dedans`, () => this.pourBatter(ref));
+    if (item.def.cookware && foods.length) {
+      if (tool) add('Remuer', () => this.stirPan(ref));
+      if (!item.def.fill && (c.carried.includes(item) || c.freeHand(item))) add('Faire sauter', () => this.tossPan(ref));
+      if (tool && foods.some(cooked)) add('Servir dans l’assiette', () => this.serveFromPan(undefined, ref));
+    }
+    if (tool && item.def.plate && !item.dirty && !this.foodOn(item) && !c.carried.includes(item) && this.items.some((p) => p.def.cookware && this.inPan(p).some(cooked))) add(`Servir ici à ${the(tool.name)}`, () => this.serveFromPan(ref));
+    if (jar && foods.length) add(`Assaisonner (${jar.name})`, () => this.season(ref));
+    if (pot && knife && SPREAD_ON[item.name] !== undefined) add(`Tartiner de ${pot.name}`, () => this.spread(ref));
+    if (rasp && (foods.length || item.def.board)) add('Râper le fromage dessus', () => this.grate(ref));
+    if (spoon && ((foods.length && (item.def.cookware || item.def.plate)) || this.mixes.get(item)?.parts.length)) add('Goûter', () => this.taste(ref));
+  }
+
+  /** État laissé par les gestes : saladier à mélanger, assaisonné, fromage râpé dessus, attache au fond. */
+  private prepWords(item: WorldItem): string[] {
+    const words: string[] = [];
+    const mix = this.mixes.get(item);
+    if (mix && !mix.batter) words.push(`${mix.parts.join(', ')} (à mélanger)`);
+    const spices = this.seasoned.get(item);
+    if (spices?.size) words.push(`assaisonné${agree(item.name)} (${[...spices].join(', ')})`);
+    if (this.toppings.get(item)?.includes('fromage')) words.push('fromage râpé dessus');
+    if ((this.unstirred.get(item) ?? 0) > STICK_AFTER && this.heating(item) && doneness(item.def, item.cooking) !== 'brûlé') words.push('attache au fond');
+    return words;
+  }
+
+  /** Ce que tient la main qui vérifie `ok` (ou undefined). */
+  private heldWith(ok: (i: WorldItem) => boolean): WorldItem | undefined {
+    return this.character.heldItems.find(ok);
+  }
+
+  /** Où se tenir pour un geste sur `target` : devant la gazinière s'il est sur le feu, sinon à côté ; rien s'il est en main. */
+  private gestureStand(target: WorldItem): THREE.Vector3 | null {
+    if (this.character.carried.includes(target)) return null;
+    const under = target.def.cookware ? this.stoveUnder(target) : null;
+    if (under) return this.frontOf(under.heater);
+    const board = target.def.board ? target : this.items.find((b) => b.def.board && b !== target && !this.character.carried.includes(b) && this.isAbove(target, b));
+    return board ? this.cutStand(board) : this.character.standFor(target);
+  }
+
+  /**
+   * Le perso va devant `target` et fait le geste avec l'outil tenu `tool` au-dessus de `at()` :
+   * `stir` (va-et-vient : fouetter, remuer, tartiner, râper) ou `tilt` (incliner : casser, saupoudrer,
+   * verser) ; puis `done`.
+   */
+  private gesture(tool: WorldItem, target: WorldItem, kind: 'stir' | 'tilt', at: () => THREE.Vector3, done: () => void, running: boolean): boolean {
+    const c = this.character;
+    if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    else if (this.washing || c.washing) this.onNotice?.('Tu te laves, un instant.');
+    else if (this.pouring) this.onNotice?.('Tu verses déjà.');
+    else if (c.busy || c.bracing) return false;
+    else if (this.closeBookThen(() => this.gesture(tool, target, kind, at, done, running))) return true;
+    else if (c.seated) return c.standUp(() => this.gesture(tool, target, kind, at, done, running));
+    else {
+      c.approachThen(this.gestureStand(target), target.object.position, () => {
+        const hand = c.handOf(tool);
+        const ok = kind === 'stir' ? hand?.cut(at, done) : hand?.pour(at, done);
+        if (!ok) this.onNotice?.('Impossible pour l’instant.');
+      }, running);
+      return true;
+    }
+    return false;
+  }
+
+  /** Au-dessus de l'objet (un peu plus haut que son dessus). */
+  private above(item: WorldItem, lift = 0.06): () => THREE.Vector3 {
+    return () => {
+      const b = new THREE.Box3().setFromObject(item.object);
+      return b.getCenter(new THREE.Vector3()).setY(b.max.y + lift);
+    };
+  }
+
+  /** Les aliments d'un récipient ou d'un support : dans l'ustensile, servi dans l'assiette, sur la planche ; ou l'aliment lui-même. */
+  private foodsAt(target: WorldItem): WorldItem[] {
+    if (target.def.cookware) return this.inPan(target);
+    // pas ce qu'on tient au-dessus (le fromage qu'on râpe)
+    const carried = this.character.carried;
+    if (target.def.plate || target.def.board) return this.itemsOn(target).filter((i) => i.def.food && !carried.includes(i)).slice(0, target.def.plate ? 1 : undefined);
+    return target.def.food ? [target] : [];
+  }
+
+  /** Ce que contient le saladier, recalculé : sa préparation (nom, couleur, niveau). */
+  private showMix(bowl: WorldItem): void {
+    const mix = this.mixes.get(bowl);
+    if (!mix || !mix.parts.length) {
+      this.mixes.delete(bowl);
+      bowl.contents = null;
+      bowl.setLevel(0);
+      return;
+    }
+    const kinds = new Set(mix.parts);
+    bowl.contents = mix.batter ?? (kinds.size === 1 ? (mix.parts[0] === 'œuf' ? 'œufs' : mix.parts[0] === 'lait' ? 'lait' : 'préparation') : 'préparation');
+    bowl.setLiquidColor(liquidColor(bowl.contents));
+  }
+
+  /** Ajoute `what` au saladier (et ce que ça fait monter). */
+  private addToMix(bowl: WorldItem, what: string, level: number): void {
+    const mix = this.mixes.get(bowl) ?? { parts: [], batter: null };
+    mix.parts.push(what);
+    // une pâte déjà faite à laquelle on ajoute quelque chose : il faut remélanger
+    mix.batter = null;
+    this.mixes.set(bowl, mix);
+    if (level) bowl.setLevel(Math.min(1, bowl.level + level));
+    this.showMix(bowl);
+  }
+
+  /** Le saladier le plus proche (tenu d'abord), propre. */
+  private bowlFor(ref?: string): WorldItem | undefined {
+    if (ref) return this.byRef(ref);
+    return this.heldWith((h) => !!h.def.mixes) ?? this.nearest((i) => !!i.def.mixes && !i.dirty);
+  }
+
+  /** La poêle (ou l'ustensile) la plus proche : sur le feu d'abord. */
+  private panFor(ref: string | undefined, ok: (p: WorldItem) => boolean = () => true): WorldItem | undefined {
+    if (ref) return this.byRef(ref);
+    const pans = this.items.filter((i) => i.def.cookware && ok(i));
+    const p = this.character.position;
+    return pans.sort((a, b) => +!this.stoveUnder(a) - +!this.stoveUnder(b) || a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+  }
+
+  /** Une place de la poêle (monde), ou son milieu. */
+  private panSpot(pan: WorldItem, center = false): THREE.Vector3 | null {
+    pan.object.updateMatrixWorld(true);
+    const j = center ? -1 : this.freePlace(pan);
+    if (!center && j < 0) return null;
+    const p = center ? [0, pan.def.cookware!.places[0][1], 0] : pan.def.cookware!.places[j];
+    return new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(pan.object.matrixWorld);
+  }
+
+  /** Fait apparaître l'objet `id` au point `at` (la crêpe dans la poêle, le fromage râpé sur la planche). */
+  private spawnAt(id: string, at: THREE.Vector3, yaw: number): WorldItem | null {
+    const def = ITEM_BY_ID.get(id);
+    if (!def) return null;
+    const made = new WorldItem(def);
+    made.object.quaternion.setFromAxisAngle(UP, yaw);
+    made.object.position.copy(at).setY(at.y + made.restLift(made.object.quaternion));
+    this.items.push(made);
+    this.scene.add(made.object);
+    return made;
+  }
+
+  /**
+   * Casse l'œuf tenu dans `ref` : la poêle (un œuf au plat, qui cuit sur le feu) ou le saladier
+   * (pour une omelette ou une pâte). Sans `ref` : le saladier tenu ou proche, sinon la poêle.
+   */
+  crackEgg(ref?: string, running = false): boolean {
+    const egg = this.heldWith((h) => h.def.id === 'oeuf');
+    if (!egg) {
+      this.onNotice?.('Prends un œuf (il y en a dans le frigo).');
+      return false;
+    }
+    const into = ref ? this.byRef(ref) : (this.heldWith((h) => !!h.def.mixes) ?? this.panFor(undefined, (p) => !!p.def.cookware!.holds.includes('œuf au plat') && this.freePlace(p) >= 0) ?? this.bowlFor());
+    if (!into || (!into.def.mixes && !into.def.cookware?.holds.includes('œuf au plat'))) {
+      this.onNotice?.('Casse l’œuf dans la poêle ou dans le saladier.');
+      return false;
+    }
+    if (into.dirty) {
+      this.onNotice?.(`${cap(the(into.name))} est sale : lave-${it(into.name)} d’abord.`);
+      return false;
+    }
+    if (into.def.mixes && this.mixes.get(into)?.batter && this.mixes.get(into)!.batter !== 'œufs battus') {
+      this.onNotice?.(`Il y a déjà de la ${this.mixes.get(into)!.batter} dans le saladier.`);
+      return false;
+    }
+    if (into.def.cookware && this.freePlace(into) < 0) {
+      this.onNotice?.(`${cap(the(into.name))} est pleine.`);
+      return false;
+    }
+    if (into.def.cookware && this.character.carried.includes(into)) {
+      this.onNotice?.(`Pose d’abord ${the(into.name)} (sur le feu).`);
+      return false;
+    }
+    return this.gesture(egg, into, 'tilt', this.above(into, 0.08), () => {
+      if (!this.items.includes(egg)) return;
+      this.character.loseItem(egg);
+      this.removeItem(egg);
+      this.wearItem(into, 1, false);
+      if (into.def.mixes) {
+        this.addToMix(into, 'œuf', 0.12);
+        const n = this.mixes.get(into)!.parts.filter((p) => p === 'œuf').length;
+        this.onNotice?.(`Œuf cassé dans le saladier (${n} œuf${n > 1 ? 's' : ''}). Mélange au fouet pour une omelette, ou ajoute lait et farine pour des crêpes.`);
+        return;
+      }
+      const at = this.panSpot(into);
+      if (!at) return;
+      this.spawnAt('oeuf-plat', at, into.object.rotation.y);
+      this.onNotice?.(this.stoveUnder(into) ? 'Œuf cassé dans la poêle : il cuit sur le feu.' : 'Œuf cassé dans la poêle : mets-la sur le feu pour le cuire.');
+    }, running);
+  }
+
+  /** Verse dans le saladier `ref` (sinon le plus proche) l'ingrédient sec tenu : farine, sucre, levure. */
+  addToBowl(ref?: string, running = false): boolean {
+    const dry = this.heldWith((h) => MIX_DRY[h.name] !== undefined);
+    const bowl = this.bowlFor(ref);
+    if (!dry) this.onNotice?.('Prends de la farine, du sucre ou de la levure (au garde-manger) pour la mettre dans le saladier.');
+    else if (!bowl?.def.mixes) this.onNotice?.('Il n’y a pas de saladier (il est au placard).');
+    else if (bowl.dirty) this.onNotice?.('Le saladier est sale : lave-le d’abord.');
+    else if (bowl.level > 0.95) this.onNotice?.('Le saladier est plein.');
+    else {
+      return this.gesture(dry, bowl, 'tilt', this.above(bowl, 0.1), () => {
+        this.addToMix(bowl, dry.name, MIX_DRY[dry.name]);
+        this.onNotice?.(`${cap(the(dry.name))} est dans le saladier.`);
+      }, running);
+    }
+    return false;
+  }
+
+  /**
+   * Mélange le saladier `ref` (sinon le plus proche) au fouet ou à la cuillère tenus : les œufs
+   * battus (omelette), ou la pâte à crêpes avec farine, œufs et lait.
+   */
+  mixBowl(ref?: string, running = false): boolean {
+    const tool = this.heldWith((h) => !!h.def.stirs);
+    const bowl = this.bowlFor(ref);
+    const mix = bowl && this.mixes.get(bowl);
+    if (!tool) this.onNotice?.('Prends le fouet ou une cuillère en bois (dans le pot à ustensiles) pour mélanger.');
+    else if (!bowl?.def.mixes) this.onNotice?.('Il n’y a pas de saladier.');
+    else if (!mix?.parts.length) this.onNotice?.('Le saladier est vide : casse-y des œufs, verse du lait, de la farine.');
+    else {
+      return this.gesture(tool, bowl, 'stir', this.above(bowl, 0.02), () => {
+        tool.setDirty(true);
+        const parts = new Set(mix.parts);
+        const batter = BATTERS.find((b) => b.needs.every((n) => parts.has(n)) && (b.name !== 'œufs battus' || [...parts].every((p) => p === 'œuf' || p === 'lait')));
+        if (!batter) {
+          this.onNotice?.(parts.has('œuf') ? 'Ça ne donne rien de bon : pour des crêpes, il faut aussi du lait et de la farine.' : 'Il manque des œufs : casse-en au moins un.');
+          return;
+        }
+        mix.batter = batter.name;
+        this.showMix(bowl);
+        this.onNotice?.(batter.name === 'œufs battus' ? 'Les œufs sont battus : verse-les dans la poêle pour faire une omelette.' : 'La pâte à crêpes est prête : verses-en dans la poêle chaude, une crêpe à la fois.');
+      }, running);
+    }
+    return false;
+  }
+
+  /** Verse la pâte du saladier tenu dans la poêle `ref` (sinon celle sur le feu) : une omelette, ou une crêpe. */
+  pourBatter(ref?: string, running = false): boolean {
+    const bowl = this.heldWith((h) => !!h.def.mixes);
+    const mix = bowl && this.mixes.get(bowl);
+    const batter = mix?.batter ? BATTERS.find((b) => b.name === mix.batter) : undefined;
+    const cooks = batter && ITEM_BY_ID.get(batter.cooks)!.name;
+    const pan = cooks ? this.panFor(ref, (p) => !!p.def.cookware!.holds.includes(cooks) && !this.character.carried.includes(p)) : undefined;
+    if (!bowl) this.onNotice?.('Prends le saladier pour verser la pâte.');
+    else if (!batter || !cooks) this.onNotice?.(mix?.parts.length ? 'Mélange d’abord au fouet.' : 'Le saladier est vide.');
+    else if (!pan?.def.cookware?.holds.includes(cooks)) this.onNotice?.('Il n’y a pas de poêle où verser.');
+    else if (this.inPan(pan).length) this.onNotice?.(`Il y a déjà ${this.inPan(pan).map((i) => i.name).join(' et ')} dans ${the(pan.name)}.`);
+    else {
+      return this.gesture(bowl, pan, 'tilt', this.above(pan, 0.12), () => {
+        const at = this.panSpot(pan, true);
+        if (!at || !this.mixes.has(bowl)) return;
+        this.spawnAt(batter.cooks, at, pan.object.rotation.y);
+        bowl.setLevel(Math.max(0, bowl.level - batter.per));
+        if (bowl.level <= 0.02) {
+          this.mixes.delete(bowl);
+          this.showMix(bowl);
+          bowl.setDirty(true);
+        }
+        const hot = this.stoveUnder(pan);
+        this.onNotice?.(`${cap(cooks === 'crêpe' ? 'une crêpe' : 'l’omelette')} cuit dans ${the(pan.name)}${hot ? '' : ' (allume le feu dessous)'}${cooks === 'crêpe' ? ' : fais-la sauter pour la retourner.' : '.'}`);
+      }, running);
+    }
+    return false;
+  }
+
+  /** Remue ce qui cuit dans l'ustensile `ref` (sinon celui sur le feu) avec la spatule ou la cuillère en bois : ça n'attache plus. */
+  stirPan(ref?: string, running = false): boolean {
+    const tool = this.heldWith((h) => !!h.def.stirs);
+    const pan = this.panFor(ref, (p) => this.inPan(p).length > 0);
+    if (!tool) this.onNotice?.('Prends la spatule ou la cuillère en bois (dans le pot à ustensiles) pour remuer.');
+    else if (!pan || !this.inPan(pan).length) this.onNotice?.('Rien ne cuit à remuer.');
+    else {
+      return this.gesture(tool, pan, 'stir', this.above(pan, 0.01), () => {
+        tool.setDirty(true);
+        const was = this.inPan(pan).some((f) => (this.unstirred.get(f) ?? 0) > STICK_AFTER);
+        for (const f of this.inPan(pan)) this.unstirred.set(f, 0);
+        this.onNotice?.(was ? 'Remué : ça n’attache plus au fond.' : `Tu remues ${the(pan.name)}.`);
+      }, running);
+    }
+    return false;
+  }
+
+  /**
+   * Fait sauter ce qui cuit dans la poêle `ref` (sinon celle sur le feu) : le perso la prend, d'un
+   * geste du poignet l'aliment se retourne en l'air (il peut tomber à côté), puis la repose sur le feu.
+   */
+  tossPan(ref?: string, running = false): boolean {
+    const c = this.character;
+    const pan = this.panFor(ref, (p) => (c.carried.includes(p) ? this.riders.some((r) => r.base === p) : this.inPan(p).length > 0));
+    const foods = pan ? (c.carried.includes(pan) ? this.riders.filter((r) => r.base === pan).map((r) => r.item) : this.inPan(pan)) : [];
+    if (!pan || !foods.length) {
+      this.onNotice?.('Rien dans la poêle à faire sauter.');
+      return false;
+    }
+    if (pan.def.fill) {
+      this.onNotice?.(`On ne fait pas sauter ${the(pan.name)} : remue plutôt.`);
+      return false;
+    }
+    if (this.tossing) return false;
+    const under = this.stoveUnder(pan);
+    const back = under ? this.spotWorld(under.heater, under.i) : null;
+    const toss = () => this.startToss(pan);
+    const steps: Array<() => boolean> = [];
+    if (!c.carried.includes(pan)) steps.push(() => this.take(pan, running));
+    steps.push(toss);
+    if (under && back) steps.push(() => this.putOnStove(under.heater, pan, running));
+    return this.chain(steps);
+  }
+
+  /** Lance le saut : l'aliment monte, se retourne et retombe (voir tickToss). */
+  private startToss(pan: WorldItem): boolean {
+    const r = this.riders.find((x) => x.base === pan && x.item.def.cook);
+    if (!r || !this.character.carried.includes(pan)) {
+      this.onNotice?.('Prends la poêle en main pour la faire sauter.');
+      return false;
+    }
+    // une crêpe tombe plus souvent qu'un steak
+    const miss = r.item.name === 'crêpe' ? 0.2 : 0.1;
+    this.tossing = { pan, food: r.item, rel: r.rel.clone(), t: 0, fall: Math.random() < miss };
+    return true;
+  }
+
+  /** Le saut en cours : monte, tourne d'un demi-tour, retombe dans la poêle (ou à côté). */
+  private tickToss(dt: number): void {
+    const s = this.tossing;
+    if (!s) return;
+    s.t += dt;
+    const k = Math.min(1, s.t / TOSS_TIME);
+    const r = this.riders.find((x) => x.base === s.pan && x.item === s.food);
+    if (!r || !this.items.includes(s.food)) {
+      this.tossing = null;
+      return;
+    }
+    const up = 4 * TOSS_HEIGHT * k * (1 - k);
+    r.rel.copy(s.rel).premultiply(new THREE.Matrix4().makeTranslation(0, up, s.fall ? -0.25 * k : 0)).multiply(new THREE.Matrix4().makeRotationX(Math.PI * k));
+    if (k < 1) return;
+    this.tossing = null;
+    this.unstirred.set(s.food, 0);
+    const name = cap(the(s.food.name));
+    if (s.fall) {
+      // à côté : elle tombe par terre
+      this.riders = this.riders.filter((x) => x !== r);
+      // part d'au-dessus de la gazinière (pas de dedans : il passerait au travers)
+      const o = s.food.object;
+      o.position.y = Math.max(o.position.y, this.surfaceAt(o.position.x, o.position.z, s.food) + s.food.restLift(o.quaternion) + 0.03);
+      this.launch(s.food, new THREE.Vector3(0, 0.5, 0).add(new THREE.Vector3(0, 0, -0.6).applyQuaternion(s.pan.object.quaternion)));
+      this.onNotice?.(`Raté ! ${name} est tombé${agree(s.food.name)} à côté de la poêle.`);
+      return;
+    }
+    // retournée : à plat de nouveau dans la poêle
+    r.rel.copy(s.rel);
+    this.onNotice?.(`Hop ! ${name} ${PLURAL.has(s.food.name) ? 'sont retournés' : `est retourné${agree(s.food.name)}`}.`);
+  }
+
+  /**
+   * Sert à la spatule (ou à la louche) ce qui a cuit dans l'ustensile `pan` (sinon celui où quelque
+   * chose est cuit) dans l'assiette ou le bol `ref` (sinon le plus proche, propre et vide).
+   */
+  serveFromPan(ref?: string, pan?: string, running = false): boolean {
+    const c = this.character;
+    const tool = this.heldWith((h) => !!h.def.stirs);
+    const cookedIn = (p: WorldItem) => this.inPan(p).some((f) => doneness(f.def, f.cooking) !== 'cru');
+    const from = this.panFor(pan, (p) => cookedIn(p) && !c.carried.includes(p));
+    const plate = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.plate && !c.carried.includes(i) && !this.shelfOf(i) && !i.dirty && !this.foodOn(i));
+    const food = from && this.inPan(from).find((f) => doneness(f.def, f.cooking) !== 'cru');
+    if (!tool) this.onNotice?.('Prends la spatule ou la louche (dans le pot à ustensiles) pour servir.');
+    else if (!from || !food) this.onNotice?.('Rien de cuit à servir dans les poêles et casseroles.');
+    else if (!plate?.def.plate) this.onNotice?.('Pas d’assiette ou de bol propre et vide où servir.');
+    else if (c.carried.includes(plate)) this.onNotice?.('Pose d’abord l’assiette pour y servir.');
+    else if (this.shelfOf(plate)) this.onNotice?.(`Sors d’abord ${the(plate.name)} du rangement.`);
+    else if (plate.dirty) this.onNotice?.(`${cap(the(plate.name))} est sale.`);
+    else if (this.foodOn(plate)) this.onNotice?.(`Il y a déjà ${this.foodOn(plate)!.name} dans ${the(plate.name)}.`);
+    else {
+      // 1. dans l'ustensile : l'aliment passe sur la spatule ; 2. au-dessus de l'assiette : il y glisse
+      return this.gesture(tool, from, 'stir', this.above(from, 0.01), () => {
+        if (!this.items.includes(food) || !c.carried.includes(tool)) return;
+        const head = new THREE.Matrix4().makeTranslation(0, tool.size.y * 0.75, 0.01);
+        this.riders.push({ base: tool, item: food, rel: head });
+        this.gesture(tool, plate, 'tilt', this.above(plate, 0.05), () => {
+          this.riders = this.riders.filter((r) => r.item !== food);
+          plate.object.updateMatrixWorld(true);
+          const spot = new THREE.Vector3(0, plate.def.plate!, 0).applyMatrix4(plate.object.matrixWorld);
+          food.object.quaternion.setFromAxisAngle(UP, plate.object.rotation.y);
+          food.object.position.copy(spot).setY(spot.y + food.restLift(food.object.quaternion));
+          tool.setDirty(true);
+          this.onNotice?.(`${cap(the(food.name))} est servi${agree(food.name)} dans ${the(plate.name)}.`);
+        }, running);
+      }, running);
+    }
+    return false;
+  }
+
+  /** Assaisonne avec le pot d'épices tenu ce qu'il y a dans (ou sur) `ref` : la poêle, l'assiette, la planche, ou un aliment tenu. */
+  season(ref?: string, running = false): boolean {
+    const c = this.character;
+    const jar = this.heldWith((h) => !!h.def.spice);
+    const target = ref ? this.byRef(ref) : (this.heldWith((h) => !!h.def.food) ?? this.panFor(undefined, (p) => this.inPan(p).length > 0) ?? this.nearest((i) => !!i.def.plate && !!this.foodOn(i) && !c.carried.includes(i) && !this.shelfOf(i)));
+    const foods = target ? this.foodsAt(target) : [];
+    if (!jar) this.onNotice?.('Prends un pot sur l’étagère à épices (sel, poivre, paprika, herbes, huile).');
+    else if (!target || !foods.length) this.onNotice?.('Rien à assaisonner : un plat dans la poêle, l’assiette ou sur la planche.');
+    else {
+      return this.gesture(jar, target, 'tilt', this.above(target, 0.1), () => {
+        for (const f of foods) (this.seasoned.get(f) ?? this.seasoned.set(f, new Set()).get(f)!).add(jar.name);
+        this.wearItem(jar, 1, false);
+        this.onNotice?.(`${cap(jar.def.spice!)} sur ${foods.map((f) => the(f.name)).join(' et ')}.`);
+      }, running);
+    }
+    return false;
+  }
+
+  /** Tartine `ref` (tranches de pain, pain grillé, crêpe cuite) avec le pot tenu, au couteau tenu dans l'autre main. */
+  spread(ref?: string, running = false): boolean {
+    const c = this.character;
+    const pot = this.heldWith((h) => SPREADS[h.name] !== undefined);
+    const knife = this.heldWith((h) => !!h.def.knife || h.name === 'couteau de table');
+    const ok = (i: WorldItem) => SPREAD_ON[i.name] !== undefined && !c.carried.includes(i) && (i.name !== 'crêpe' || doneness(i.def, i.cooking) === 'cuit');
+    const bread = ref ? this.byRef(ref) : this.nearest(ok);
+    if (!pot) this.onNotice?.('Prends de quoi tartiner : confiture, miel, pâte à tartiner (garde-manger) ou beurre (frigo).');
+    else if (!knife) this.onNotice?.('Il faut aussi un couteau dans l’autre main.');
+    else if (!bread || !ok(bread)) this.onNotice?.(bread?.name === 'crêpe' ? 'La crêpe n’est pas cuite.' : 'Rien à tartiner : coupe du pain en tranches (ou fais une crêpe), et pose-le.');
+    else {
+      return this.gesture(knife, bread, 'stir', this.above(bread, 0.005), () => {
+        if (!this.items.includes(bread)) return;
+        const made = this.turnInto(bread, `${SPREAD_ON[bread.name]}-${SPREADS[pot.name]}`);
+        knife.setDirty(true);
+        if (made) this.onNotice?.(`${cap(made.name)}, prêt${agree(made.name)} !`);
+      }, running);
+    }
+    return false;
+  }
+
+  /** Râpe le fromage tenu (râpe dans l'autre main) sur ce qu'il y a dans `ref` (assiette, poêle, planche) ; sur une planche vide : un tas de fromage râpé. */
+  grate(ref?: string, running = false): boolean {
+    const c = this.character;
+    const rasp = this.heldWith((h) => !!h.def.grates);
+    const cheese = this.heldWith((h) => h.def.id === 'fromage');
+    const target = ref ? this.byRef(ref) : (this.nearest((i) => !!i.def.plate && !!this.foodOn(i) && !c.carried.includes(i) && !this.shelfOf(i)) ?? this.panFor(undefined, (p) => this.inPan(p).length > 0) ?? this.nearest((i) => !!i.def.board && !c.carried.includes(i)));
+    if (!rasp || !cheese) this.onNotice?.(rasp ? 'Prends le fromage (au frigo) dans l’autre main.' : 'Prends la râpe (au placard) et le fromage.');
+    else if (!target) this.onNotice?.('Rien où râper le fromage.');
+    else {
+      return this.gesture(rasp, target, 'stir', this.above(target, 0.12), () => {
+        if (!this.items.includes(cheese)) return;
+        const foods = this.foodsAt(target).filter((f) => f !== cheese);
+        cheese.bite();
+        rasp.setDirty(true);
+        if (foods.length) {
+          for (const f of foods) this.topWithCheese(f);
+          this.onNotice?.(`Du fromage râpé sur ${foods.map((f) => the(f.name)).join(' et ')}.`);
+        } else if (target.def.board) {
+          this.spawnAt('fromage-rape', this.boardSpot(target, target), target.object.rotation.y);
+          this.onNotice?.('Un tas de fromage râpé sur la planche.');
+        } else this.onNotice?.('Le fromage tombe à côté : il n’y a rien dessous.');
+        if (cheese.portion <= 0) {
+          c.loseItem(cheese);
+          this.removeItem(cheese);
+          this.onNotice?.('Le fromage est fini.');
+        }
+      }, running);
+    }
+    return false;
+  }
+
+  /** Quelques brins de fromage sur l'aliment (montrés dessus, et notés). */
+  private topWithCheese(food: WorldItem): void {
+    const tops = this.toppings.get(food) ?? [];
+    if (tops.includes('fromage')) return;
+    this.toppings.set(food, [...tops, 'fromage']);
+    const b = food.box;
+    const g = new THREE.Group();
+    g.name = 'fromage-rape';
+    for (let i = 0; i < 12; i++) {
+      const a = i * 2.4, d = Math.sqrt(i / 12) * Math.min(b.max.x, b.max.z) * 0.8;
+      const s = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.003, 0.003), new THREE.MeshToonMaterial({ color: 0xf2cf5b }));
+      s.position.set(Math.cos(a) * d, b.max.y + 0.002 + (i % 3) * 0.002, Math.sin(a) * d);
+      s.rotation.y = a * 1.7;
+      g.add(s);
+    }
+    food.object.add(g);
+  }
+
+  /**
+   * Goûte à la cuillère (ou cuillère en bois) ce qu'il y a dans `ref` (la poêle, l'assiette, le
+   * saladier) : le perso dit si c'est cuit, brûlé, fade ou bon.
+   */
+  taste(ref?: string, running = false): boolean {
+    const c = this.character;
+    const spoon = this.heldWith((h) => h.name === 'cuillère' || h.name === 'cuillère en bois');
+    const target = ref ? this.byRef(ref) : (this.panFor(undefined, (p) => this.inPan(p).length > 0) ?? this.nearest((i) => !!i.def.plate && !!this.foodOn(i) && !c.carried.includes(i) && !this.shelfOf(i)) ?? this.heldWith((h) => !!h.def.mixes));
+    const foods = target ? this.foodsAt(target) : [];
+    const mix = target && this.mixes.get(target);
+    if (!spoon) this.onNotice?.('Prends une cuillère (au tiroir) ou la cuillère en bois pour goûter.');
+    else if (!target || (!foods.length && !mix)) this.onNotice?.('Rien à goûter ici.');
+    else {
+      const verdict = () => {
+        if (mix) return mix.batter ? `${cap(mix.batter)} : bien lisse.` : 'Pas encore mélangé : passe le fouet.';
+        const f = foods[0];
+        const d = doneness(f.def, f.cooking);
+        const spices = this.seasoned.get(f);
+        if (d === 'cru') return f.def.cook ? `${cap(the(f.name))} : pas encore cuit${agree(f.name)}.` : '';
+        if (d === 'brûlé') return 'Beurk, c’est brûlé.';
+        if (!spices?.size) return 'C’est un peu fade : il manque du sel.';
+        if (spices.size >= 2) return 'Délicieux, bien assaisonné !';
+        return 'C’est bon !';
+      };
+      const go = () => {
+        const hand = c.handOf(spoon);
+        const ok = hand?.eat(undefined, () => {
+          spoon.setDirty(true);
+          this.needs.restore('faim', 1);
+          const v = verdict() || 'Hmm.';
+          this.say(v);
+          this.onNotice?.(`Tu goûtes : ${v.charAt(0).toLowerCase()}${v.slice(1)}`);
+        });
+        if (!ok) this.onNotice?.('Impossible de goûter pour l’instant.');
+      };
+      if (c.busy || c.bracing) return false;
+      if (this.closeBookThen(() => this.taste(ref, running))) return true;
+      if (c.seated && !c.carried.includes(target)) return c.standUp(() => this.taste(ref, running));
+      c.approachThen(this.gestureStand(target), target.object.position, go, running);
+      return true;
+    }
+    return false;
   }
 
   /** Ce qui manque à la maison par rapport au stock voulu (STOCK) : [nom, combien]. */

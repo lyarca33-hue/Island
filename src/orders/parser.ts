@@ -16,6 +16,8 @@ import type { Intent } from './tasks';
 export function normalize(text: string): string {
   return text
     .toLowerCase()
+    .replace(/œ/g, 'oe')
+    .replace(/æ/g, 'ae')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/[’'`\-]/g, ' ')
@@ -61,7 +63,22 @@ const VERBS: Record<string, string[]> = {
   essuyer: ['essuie', 'essuyer', 'nettoie', 'nettoyer', 'eponge', 'eponger', 'seche', 'secher', 'seches'],
   empiler: ['empile', 'empiler'],
   doucher: ['douche', 'doucher', 'douches'],
+  // gestes de cuisine
+  casser: ['casse', 'casser', 'casses'],
+  fouetter: ['fouette', 'fouetter', 'bats', 'bat', 'battre', 'melange', 'melanger', 'melanges'],
+  remuer: ['remue', 'remuer', 'remues', 'touille', 'touiller', 'tourne', 'tourner'],
+  sauter: ['saute', 'sauter', 'retourne', 'retourner', 'flambe', 'flamber'],
+  assaisonner: ['assaisonne', 'assaisonner', 'sale', 'saler', 'poivre', 'poivrer', 'epice', 'epicer'],
+  tartiner: ['tartine', 'tartiner', 'beurre', 'beurrer'],
+  raper: ['rape', 'raper', 'rapes'],
+  gouter: ['goute', 'gouter', 'goutes'],
 };
+/** Les pots de l'étagère à épices, par mot dit. */
+const SPICE_WORDS: Record<string, string> = { sel: 'sel', sale: 'sel', saler: 'sel', poivre: 'poivre', poivrer: 'poivre', paprika: 'paprika', herbes: 'herbes de Provence', herbe: 'herbes de Provence', huile: "huile d'olive" };
+/** Ce qu'on tartine, par mot dit. */
+const SPREAD_WORDS: Record<string, string> = { confiture: 'confiture', miel: 'miel', nutella: 'pâte à tartiner', chocolat: 'pâte à tartiner', pate: 'pâte à tartiner', beurre: 'beurre', beurrer: 'beurre' };
+/** Ustensiles et pots : jamais la cible d'un geste de cuisine. */
+const TOOLS = new Set(['fouet', 'spatule', 'cuillère en bois', 'louche', 'râpe', 'cuillère', 'couteau', 'couteau de table', ...Object.values(SPICE_WORDS), ...Object.values(SPREAD_WORDS)]);
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
 /** Meubles qu'on ouvre et ferme (porte, tiroir, couvercle). */
@@ -197,6 +214,33 @@ const ALIASES: Record<string, string[]> = {
   'garde manger': ['garde', 'gardemanger', 'cellier', 'provisions', 'reserve'],
   'sac de courses': ['sac', 'cabas'],
   'liste de courses': ['liste'],
+  // la cuisine (lot gestes)
+  oeuf: ['oeuf', 'oeufs'],
+  lait: ['lait'],
+  beurre: ['beurre'],
+  fromage: ['fromage', 'gruyere', 'emmental'],
+  saladier: ['saladier', 'saladiers', 'jatte'],
+  fouet: ['fouet'],
+  spatule: ['spatule'],
+  'cuillere en bois': ['bois'],
+  louche: ['louche'],
+  rape: ['rape'],
+  'pot a ustensiles': ['ustensiles'],
+  'etagere a epices': ['epices', 'epice'],
+  'herbes de provence': ['herbes', 'herbe'],
+  'huile d olive': ['huile'],
+  omelette: ['omelette', 'omelettes'],
+  crepe: ['crepe', 'crepes'],
+  'oeuf au plat': ['oeuf', 'oeufs'],
+  'fromage rape': ['fromage'],
+  'crepe a la confiture': ['crepe', 'crepes'],
+  'crepe au miel': ['crepe', 'crepes'],
+  'crepe au chocolat': ['crepe', 'crepes'],
+  'crepe au beurre': ['crepe', 'crepes'],
+  'tartines de confiture': ['tartine', 'tartines'],
+  'tartines au miel': ['tartine', 'tartines'],
+  'tartines au chocolat': ['tartine', 'tartines'],
+  'tartines beurrees': ['tartine', 'tartines'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -314,6 +358,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return portable.filter((o) => o.nom === portable[0].nom).slice(0, n).map((o) => ({ kind: 'prendre', ref: o.ref }));
     }
     case 'poser': {
+      // « mets du poivre (sur l'omelette) », « mets un peu d'huile » : assaisonner
+      if (['du', 'de', 'des', 'un'].includes(rest[0]) && rest.some((x) => SPICE_WORDS[x])) return parseClause('assaisonner', rest, original, world);
       // « mets une pastille (dans le lave-vaisselle) »
       if (rest.some((x) => x.startsWith('pastille'))) return [{ kind: 'pastille' }];
       // « mets la vaisselle sale au lave-vaisselle »
@@ -393,6 +439,19 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
       // « fais les courses »
       if (rest.includes('courses')) return [{ kind: 'courses' }];
+      // « fais sauter la crêpe », « fais goûter »
+      if (['sauter', 'gouter', 'fouetter', 'remuer'].includes(VERB_OF.get(rest[0]) ?? '')) return parseClause(VERB_OF.get(rest[0])!, rest.slice(1), original, world, rest[0]);
+      // « fais une omelette », « fais des crêpes », « fais un œuf au plat » (pas « sers l'omelette »)
+      if (!['sers', 'servir'].includes(word)) {
+        if (rest.includes('omelette') || rest.includes('omelettes')) return [{ kind: 'omelette' }];
+        if (rest.includes('crepe') || rest.includes('crepes')) return [{ kind: 'crepe' }];
+        if ((rest.includes('oeuf') || rest.includes('oeufs')) && rest.includes('plat')) return [{ kind: 'oeuf_plat' }];
+      }
+      // « sers l'omelette », « sers la poêle » : à la spatule, de la poêle à l'assiette
+      {
+        const cooked = found.find((o) => o.sorte === 'nourriture' && /^dans (poele|casserole)/.test(o.ou)) ?? found.find((o) => o.nom === 'poêle');
+        if (cooked) return [{ kind: 'servir_poele', sur: found.find((o) => o.nom in BOWLS)?.ref }];
+      }
       // « fais cuire la pomme », « fais chauffer le sandwich »
       if (VERB_OF.get(rest[0]) === 'cuire') return parseClause('cuire', rest.slice(1), original, world, rest[0]);
       // « fais la vaisselle » (à l'évier), « fais la vaisselle au lave-vaisselle »
@@ -701,6 +760,43 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « vide la poubelle »
       const bin = found.find((o) => o.sorte === 'poubelle') ?? (!found.length ? world.objets.find((o) => o.sorte === 'poubelle') : undefined);
       return bin ? [{ kind: 'vider', ref: bin.ref }] : null;
+    }
+    case 'casser': {
+      // « casse un œuf (dans le saladier / la poêle) »
+      if (!rest.includes('oeuf') && !rest.includes('oeufs')) return null;
+      const into = found.find((o) => o.nom === 'saladier' || o.nom === 'poêle');
+      return [{ kind: 'casser_oeuf', dans: into?.ref }];
+    }
+    case 'fouetter':
+      // « bats les œufs », « mélange la pâte », « fouette »
+      return [{ kind: 'fouetter' }];
+    case 'remuer':
+      return [{ kind: 'remuer', ref: found.find((o) => o.sorte === 'ustensile')?.ref }];
+    case 'sauter':
+      // « retourne à la table » : y aller
+      if (found.length && !found.some((o) => o.nom === 'poêle' || o.sorte === 'nourriture')) return [{ kind: 'aller', ref: found[0].ref }];
+      // « fais sauter la crêpe », « retourne l'omelette »
+      return [{ kind: 'sauter', ref: found.find((o) => o.nom === 'poêle')?.ref }];
+    case 'assaisonner': {
+      // « sale l'omelette », « mets du poivre », « assaisonne avec des herbes »
+      const spice = SPICE_WORDS[word] ?? rest.map((x) => SPICE_WORDS[x]).find(Boolean) ?? 'sel';
+      const target = found.find((o) => !TOOLS.has(o.nom) && o.nom !== 'étagère à épices');
+      return [{ kind: 'assaisonner', epice: spice, ref: target?.ref }];
+    }
+    case 'tartiner': {
+      // « tartine le pain de confiture », « beurre les tartines », « tartine la crêpe au nutella »
+      const pot = rest.map((x) => SPREAD_WORDS[x]).find(Boolean) ?? (word.startsWith('beurr') ? 'beurre' : undefined);
+      const target = found.find((o) => ['tranches de pain', 'pain grillé', 'crêpe'].includes(o.nom));
+      return [{ kind: 'tartiner', pot, ref: target?.ref }];
+    }
+    case 'raper': {
+      // « râpe du fromage (sur l'omelette) »
+      const target = found.find((o) => !TOOLS.has(o.nom) && o.nom !== 'fromage');
+      return [{ kind: 'raper', ref: target?.ref }];
+    }
+    case 'gouter': {
+      const target = found.find((o) => !TOOLS.has(o.nom));
+      return [{ kind: 'gouter', ref: target?.ref }];
     }
     case 'dire': {
       // le texte d'origine après le verbe (« dis bonjour à tous » → « bonjour à tous »)

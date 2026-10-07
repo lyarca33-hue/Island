@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
+import { PREP_STOCK } from './prep';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -49,6 +50,7 @@ export const DRINK_EFFECTS: Record<string, { soif?: number; faim?: number; fatig
   soda: { fatigue: 4 },
   'eau gazeuse': { soif: 15 },
   vin: {},
+  lait: { faim: 4 },
 };
 
 /** Épicerie : se range au garde-manger. */
@@ -79,6 +81,7 @@ export const STOCK: Record<string, number> = {
   moutarde: 1, ketchup: 1, mayonnaise: 1, "jus d'orange": 1, soda: 2, 'eau gazeuse': 1, vin: 1,
   frites: 1, pizza: 1, 'légumes surgelés': 1,
   pomme: 2, steak: 2, tomate: 1, carotte: 1, concombre: 1, 'pomme de terre': 2, pain: 1, "bouteille d'eau": 2, lasagne: 1, sandwich: 1,
+  ...PREP_STOCK,
 };
 
 /** Paquet en carton ou en papier : corps, bande de couleur (étiquette). */

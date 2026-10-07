@@ -905,13 +905,12 @@ export class Room {
 }
 
 /**
- * Décor de la cuisine : crédence, hotte, étagère à épices, horloge qui donne l'heure du jeu,
+ * Décor de la cuisine : crédence, hotte, horloge qui donne l'heure du jeu,
  * meuble d'angle, tapis.
  */
 function kitchenDecor(room: Room, anchor: Anchors): void {
   const { x0, z0 } = room.rect;
   const stoveX = anchor('gaziniere')?.x ?? 0;
-  const worktopX = anchor('plan-de-travail')?.x ?? -0.7;
   const coffeeZ = anchor('machine-a-cafe')?.z ?? -1.9;
   const sinkX = anchor('evier')?.x ?? -1.6;
   const tableAt = anchor('table');
@@ -942,24 +941,7 @@ function kitchenDecor(room: Room, anchor: Anchors): void {
     box(0.5, 0.01, 0.4, toon(0x55595e), stoveX, 1.628, z0 + 0.25, false),
   );
 
-  // étagère au-dessus du plan de travail : pots à épices et bocaux
-  const shelf = new THREE.Group();
-  shelf.add(
-    box(0.86, 0.03, 0.2, toon(WOOD), 0, 1.6, z0 + 0.1),
-    box(0.02, 0.12, 0.16, toon(DARK_WOOD), -0.33, 1.53, z0 + 0.08),
-    box(0.02, 0.12, 0.16, toon(DARK_WOOD), 0.33, 1.53, z0 + 0.08),
-  );
-  const jars: Array<[number, number, number, number]> = [[-0.32, 0.04, 0.13, 0xd65b3a], [-0.22, 0.04, 0.13, 0x6d9a3e], [-0.12, 0.04, 0.13, 0xe0b23a], [0.06, 0.065, 0.2, 0xb8c7cc], [0.22, 0.065, 0.24, 0xb8c7cc]];
-  for (const [x, r, h, c] of jars) {
-    const jar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 14), toon(c));
-    jar.position.set(x, 1.615 + h / 2, z0 + 0.1);
-    jar.castShadow = true;
-    const lid = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.95, 0.02, 14), toon(DARK_WOOD));
-    lid.position.set(x, 1.615 + h + 0.01, z0 + 0.1);
-    shelf.add(jar, lid);
-  }
-  shelf.position.x = worktopX;
-  north.add(shelf);
+  // l'étagère à épices au-dessus du plan de travail est un objet (prep.ts) : ses pots se prennent
 
   // horloge au-dessus du coin café : elle donne l'heure du jeu
   const clock = new THREE.Group();
@@ -1053,6 +1035,9 @@ export const KITCHEN: RoomSpec = {
   onTop: [
     ['micro-ondes', 'placard'],
     ['bouilloire', 'tiroir'],
+    // le pot à ustensiles à côté de la bouilloire, l'étagère à épices au mur au-dessus du plan de travail
+    ['pot-ustensiles', 'tiroir', 0.17, -0.14],
+    ['etagere-epices', 'plan-de-travail', 0, -0.15],
     // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
     ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
     ['egouttoir', 'lave-vaisselle', 0.145, 0],
