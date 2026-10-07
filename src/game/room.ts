@@ -65,13 +65,13 @@ const WALLS: Record<WallName, WallSpec> = {
  * rangées partent du meuble d'angle. La bibliothèque (livres de cuisine) au fond, après le frigo.
  */
 export const RUNS: Array<{ wall: WallName; from: number; items: Array<string | number> }> = [
-  { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'frigo'] },
+  { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur'] },
   { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
   { wall: 'nord', from: 2.05, items: ['bibliotheque'] },
 ];
 
 /** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
-export const ON_TOP: Array<[string, string]> = [['micro-ondes', 'placard'], ['bouilloire', 'tiroir']];
+export const ON_TOP: Array<[string, string]> = [['micro-ondes', 'placard'], ['bouilloire', 'tiroir'], ['frigo', 'congelateur']];
 
 /**
  * Range les meubles des rangées (RUNS) contre leurs murs. `pick(id)` donne le prochain objet de

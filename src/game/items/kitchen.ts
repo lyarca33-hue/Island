@@ -57,7 +57,7 @@ export const DISHES = ['tasse', 'assiette', 'fourchette', 'couteau de table'];
 /** Petits objets qui vont dans le tiroir : les couverts, la lettre. */
 export const DRAWER_THINGS = ['fourchette', 'couteau de table', 'lettre'];
 /** Ce qui se met au four et au micro-ondes. */
-export const OVEN_FOOD = ['steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte'];
+export const OVEN_FOOD = ['lasagne', 'steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte'];
 
 /** Caisson de meuble bas (côtés, fond, socle) et son plan de travail, ouvert à l'avant. */
 function carcass(w: number, d: number, color: THREE.ColorRepresentation = WOOD): THREE.Group {
@@ -104,6 +104,16 @@ const MW_W = 0.46;
 const MW_D = 0.34;
 const MW_H = 0.27;
 const MW_CAV = 0.32;
+
+/** Congélateur sous le frigo : largeur, profondeur, hauteur, fond du tiroir, course (m). */
+const FZ_W = 0.6;
+const FZ_D = 0.6;
+const FZ_H = 0.45;
+const FZ_Y = 0.07;
+const FZ_OUT = 0.34;
+const FRIDGE_WHITE = 0xe9e6de;
+/** Ce qui va au congélateur (la lasagne : un plat surgelé). */
+export const FROZEN_THINGS = ['bac à glaçons', 'lasagne', 'steak', 'pain'];
 
 /** Poubelle à pédale : côté, hauteur (m). */
 const BIN_S = 0.3;
@@ -172,6 +182,76 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       );
       g.add(drawer);
       return g;
+    },
+  },
+  {
+    id: 'congelateur',
+    name: 'congélateur',
+    portable: false,
+    movable: true,
+    durability: 300,
+    fragility: 8,
+    cold: true,
+    freezer: true,
+    // un grand tiroir, sous le frigo (posé dessus, voir ON_TOP)
+    drawer: FZ_OUT,
+    holds: FROZEN_THINGS,
+    slots: [-0.13, 0.13].flatMap((x) => [-0.12, 0.1].map((z): [number, number, number] => [x, FZ_Y + 0.006, z])),
+    build: () => {
+      const t = 0.03;
+      const g = group(
+        box(t, FZ_H, FZ_D, FRIDGE_WHITE, -FZ_W / 2 + t / 2, FZ_H / 2, 0),
+        box(t, FZ_H, FZ_D, FRIDGE_WHITE, FZ_W / 2 - t / 2, FZ_H / 2, 0),
+        box(FZ_W, FZ_H, t, FRIDGE_WHITE, 0, FZ_H / 2, -FZ_D / 2 + t / 2),
+        box(FZ_W, t, FZ_D, FRIDGE_WHITE, 0, FZ_H - t / 2, 0),
+        box(FZ_W + 0.004, 0.05, 0.04, 0x8d9093, 0, 0.025, FZ_D / 2 - 0.02),
+      );
+      // le tiroir : façade blanche, poignée, bac givré
+      const drawer = new THREE.Group();
+      drawer.name = 'porte';
+      const iw = FZ_W - 2 * t - 0.01, id = FZ_D - 0.06;
+      const zc = FZ_D / 2 - id / 2;
+      drawer.add(
+        box(FZ_W - 0.004, FZ_H - 0.07, 0.05, FRIDGE_WHITE, 0, 0.06 + (FZ_H - 0.07) / 2, FZ_D / 2 + 0.025),
+        box(FZ_W - 0.12, 0.025, 0.03, 0x9ea4aa, 0, FZ_H - 0.08, FZ_D / 2 + 0.06),
+        box(iw, 0.006, id, 0xdfe9ee, 0, FZ_Y + 0.003, zc),
+        box(0.01, 0.2, id, 0xdfe9ee, -iw / 2, FZ_Y + 0.1, zc),
+        box(0.01, 0.2, id, 0xdfe9ee, iw / 2, FZ_Y + 0.1, zc),
+        box(iw, 0.2, 0.01, 0xdfe9ee, 0, FZ_Y + 0.1, FZ_D / 2 - id),
+      );
+      g.add(drawer);
+      return g;
+    },
+  },
+  {
+    id: 'bac-glacons',
+    name: 'bac à glaçons',
+    portable: true,
+    grip: 'fist',
+    fragility: 8,
+    durability: 80,
+    // en plastique bleuté, les glaçons dans leurs cases
+    build: () => {
+      const g = group(box(0.22, 0.03, 0.1, 0x9cc4e4, 0, 0.015, 0));
+      for (const x of [-0.075, -0.025, 0.025, 0.075]) for (const z of [-0.025, 0.025]) g.add(box(0.036, 0.022, 0.036, 0xf2f8fb, x, 0.03, z));
+      return g;
+    },
+  },
+  {
+    id: 'lasagne',
+    name: 'lasagne',
+    portable: true,
+    grip: 'fist',
+    fragility: 9,
+    durability: 30,
+    // une lasagne surgelée en barquette : givrée au départ, il faut la réchauffer (micro-ondes, four)
+    food: { hunger: 45, bites: 6, color: 0xc0583a },
+    cook: { seconds: 3, burn: 20, colors: [0xe4eef3, 0xc0583a, 0x3a2a20] },
+    rawWord: 'congelé',
+    build: () => {
+      const top = box(0.15, 0.012, 0.11, 0xe4eef3, 0, 0.042, 0);
+      top.name = 'cuit';
+      return group(box(0.17, 0.04, 0.13, 0xb9bfc6, 0, 0.02, 0), top);
     },
   },
   {

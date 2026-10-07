@@ -5,6 +5,7 @@ import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game'
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
 import { ContextMenu } from './ui/ContextMenu';
+import { InventoryPanel } from './ui/InventoryPanel';
 import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
@@ -37,6 +38,8 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const [hover, setHover] = useState<{ name: string; grade: string; condition: number; state: string; x: number; y: number } | null>(null);
   /** Menu au clic droit ouvert. */
   const [ctx, setCtx] = useState<Menu3D | null>(null);
+  /** Meuble dont la fenêtre d'inventaire est ouverte. */
+  const [inv, setInv] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const missing = useMissingCount();
   /** Partie du menu dépliée. */
@@ -54,6 +57,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       setCan(actions);
     };
     g.onHover = setHover;
+    g.onInventory = setInv;
     g.onMenu = (m) => {
       setCtx(m);
       if (m) setHover(null);
@@ -183,6 +187,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
+      {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
       {hover && !ctx && (
         <div className="hud-wear" style={{ left: hover.x, top: hover.y }}>

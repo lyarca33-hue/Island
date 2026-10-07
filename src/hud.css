@@ -155,3 +155,21 @@
 .ctx-entry:hover, .ctx-entry:focus-visible { background: rgba(70, 60, 30, 0.95); border-color: #ffd98a; outline: none; }
 @keyframes ctx-in { from { opacity: 0; transform: translate(var(--ax, -50%), -50%) scale(0.6); } to { opacity: 1; transform: translate(var(--ax, -50%), -50%) scale(1); } }
 .hud-wear-state { margin-top: 2px; font-size: 12px; opacity: 0.85; }
+
+/* Fenêtre « ce qu'il y a dedans » (frigo, placard…) */
+.inv-panel {
+  position: absolute; left: 16px; top: 72px; width: min(280px, calc(100% - 32px)); max-height: calc(100% - 180px); overflow: auto;
+  padding: 10px 12px; border-radius: 12px; background: rgba(20, 24, 40, 0.88); border: 1px solid rgba(255, 240, 210, 0.35); font-size: 14px; z-index: 15;
+}
+.inv-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.inv-x { background: none; border: none; color: #fdf6e3; font-size: 16px; cursor: pointer; }
+.inv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.inv-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.inv-list small { opacity: 0.75; }
+.inv-list button, .inv-close {
+  padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(255, 240, 210, 0.5); background: rgba(40, 46, 74, 0.8);
+  color: #fdf6e3; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.inv-list button:hover, .inv-close:hover { border-color: #ffd98a; }
+.inv-empty { margin: 4px 0; opacity: 0.75; }
+.inv-close { margin-top: 8px; }
