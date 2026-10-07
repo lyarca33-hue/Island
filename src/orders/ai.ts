@@ -134,6 +134,19 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "laisser_ouvert", "objet": "<ref>"} : ouvrir un meuble et laisser sa porte ouverte (elle ne se referme plus seule)
 - {"tache": "glacons", "dans": "<ref>"} : mettre des glaçons (bac au congélateur) dans une tasse (« dans » facultatif)
 - La lasagne du congélateur est congelée : il faut la « mettre » au micro-ondes (ou au four) et l'« allumer » avant de la manger
+- {"tache": "omelette"} : faire une omelette (poêle sur le feu, 2 œufs du frigo cassés dans le saladier, fouettés, versés, cuits en remuant, servis dans une assiette sortie s'il y en a une)
+- {"tache": "crepe"} : faire une crêpe (pâte au saladier : œuf, lait, farine, fouettés ; une crêpe par ordre, sautée dans la poêle)
+- {"tache": "oeuf_plat"} : faire un œuf au plat (cassé dans la poêle sur le feu)
+- {"tache": "casser_oeuf", "dans": "<ref>"} : casser un œuf du frigo dans le saladier ou la poêle (« dans » facultatif)
+- {"tache": "fouetter"} : mélanger le saladier au fouet (œufs → œufs battus ; œuf, lait, farine → pâte à crêpes)
+- {"tache": "remuer", "objet": "<ref>"} : remuer à la spatule ce qui cuit (sinon ça attache au fond et brûle plus vite)
+- {"tache": "sauter", "objet": "<ref>"} : faire sauter (retourner en l'air) la crêpe ou l'omelette dans la poêle ; elle peut tomber à côté
+- {"tache": "servir_poele", "assiette": "<ref>"} : servir à la spatule ce qui est cuit dans la poêle, dans une assiette posée (« assiette » facultatif)
+- {"tache": "assaisonner", "epice": "sel", "objet": "<ref>"} : assaisonner (épices de l'étagère : sel, poivre, paprika, herbes de Provence, huile d'olive) le plat de la poêle ou de l'assiette (« objet » facultatif)
+- {"tache": "tartiner", "pot": "confiture", "objet": "<ref>"} : tartiner des tranches de pain ou une crêpe cuite (« pot » : confiture, miel, pâte à tartiner ou beurre ; facultatif)
+- {"tache": "raper", "objet": "<ref>"} : râper du fromage (frigo) à la râpe (placard) sur le plat de l'assiette ou de la poêle, ou sur la planche
+- {"tache": "gouter", "objet": "<ref>"} : goûter à la cuillère ce qui cuit ou ce qui est servi ; le perso dit si c'est bon
+- Ustensiles : fouet, spatule, cuillère en bois et louche dans le pot à ustensiles ; saladier et râpe au placard ; œufs, lait, beurre, fromage au frigo
 - {"tache": "laver", "visage": true} : se laver à l'évier ou au lavabo (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "douche"} : prendre une douche dans la salle de bain (hygiène à fond) ; le perso en sort mouillé
 - {"tache": "secher"} : se sécher avec la serviette (sur le porte-serviettes), puis la remettre à sa place
@@ -263,6 +276,18 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'cuire': return { kind: 'cuire', ref: s('objet') || undefined };
     case 'allumer': return { kind: 'allumer', ref: s('objet') || undefined };
     case 'eteindre': return { kind: 'eteindre', ref: s('objet') || undefined };
+    case 'omelette': return { kind: 'omelette' };
+    case 'crepe': return { kind: 'crepe' };
+    case 'oeuf_plat': return { kind: 'oeuf_plat' };
+    case 'casser_oeuf': return { kind: 'casser_oeuf', dans: s('dans') || undefined };
+    case 'fouetter': return { kind: 'fouetter' };
+    case 'remuer': return { kind: 'remuer', ref: s('objet') || undefined };
+    case 'sauter': return { kind: 'sauter', ref: s('objet') || undefined };
+    case 'servir_poele': return { kind: 'servir_poele', sur: s('assiette') || undefined };
+    case 'assaisonner': return { kind: 'assaisonner', epice: s('epice') || 'sel', ref: s('objet') || undefined };
+    case 'tartiner': return { kind: 'tartiner', pot: s('pot') || undefined, ref: s('objet') || undefined };
+    case 'raper': return { kind: 'raper', ref: s('objet') || undefined };
+    case 'gouter': return { kind: 'gouter', ref: s('objet') || undefined };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
     case 'manque': return s('action') || s('raison') ? 'manque' : null;

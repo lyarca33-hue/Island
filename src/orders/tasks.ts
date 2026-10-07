@@ -119,6 +119,24 @@ export type Intent =
    * (rempli d'eau pour la casserole) sur le feu, ingrédient dedans, feu allumé, puis éteint une fois cuit.
    */
   | { kind: 'cuire'; ref?: string }
+  /**
+   * Gestes de cuisine : casser un œuf (dans le saladier `dans`, sinon la poêle), fouetter le
+   * saladier, remuer ou faire sauter ce qui cuit, servir la poêle à la spatule dans l'assiette
+   * `sur`, assaisonner d'`epice`, tartiner de `pot`, râper du fromage, goûter.
+   */
+  | { kind: 'casser_oeuf'; dans?: string }
+  | { kind: 'fouetter' }
+  | { kind: 'remuer'; ref?: string }
+  | { kind: 'sauter'; ref?: string }
+  | { kind: 'servir_poele'; sur?: string }
+  | { kind: 'assaisonner'; epice: string; ref?: string }
+  | { kind: 'tartiner'; pot?: string; ref?: string }
+  | { kind: 'raper'; ref?: string }
+  | { kind: 'gouter'; ref?: string }
+  /** Toute la recette au fourneau : omelette, une crêpe, œuf au plat (cuits puis servis si une assiette est sortie). */
+  | { kind: 'omelette' }
+  | { kind: 'crepe' }
+  | { kind: 'oeuf_plat' }
   /** Allumer ou éteindre un appareil (la gazinière la plus proche sans `ref`). */
   | { kind: 'allumer'; ref?: string }
   | { kind: 'eteindre'; ref?: string };
@@ -234,6 +252,102 @@ async function take(game: Game, act: Act, ref: string): Promise<void> {
   await act('prendre', { objet: ref });
 }
 
+/** L'objet nommé `nom` le plus commode : en main, puis propre, puis le plus proche. */
+function nearestNamed(game: Game, nom: string): WorldObject | undefined {
+  const w = world(game);
+  return w.objets.filter((o) => o.nom === nom).sort((a, b) => +!w.enMain.includes(a.ref) - +!w.enMain.includes(b.ref) || +a.ou.includes(', sale') - +b.ou.includes(', sale') || a.distance - b.distance)[0];
+}
+
+/** Prend l'outil `nom` (le premier qui existe de la liste), en gardant en main ce que vérifie `keep`. */
+async function takeTool(game: Game, act: Act, noms: string[], keep: (ref: string) => boolean = () => false): Promise<string> {
+  const tool = noms.map((n) => nearestNamed(game, n)).find(Boolean);
+  if (!tool) throw new Failed(`Il n’y a pas de ${noms[0]}.`);
+  if (!world(game).enMain.includes(tool.ref)) {
+    // une main libre, sans lâcher ce qu'on garde
+    const w = world(game);
+    if (!w.mainsLibres) {
+      const load = w.mains.find((l) => !l.some(keep));
+      if (!load) throw new Failed('Les mains sont prises.');
+      await dropLoad(act, load);
+    }
+    await act('prendre', { objet: tool.ref });
+  }
+  return tool.ref;
+}
+
+/** La poêle (ou `nom`) sur la gazinière, propre ; rend sa ref et celle de la gazinière. */
+async function panOnStove(game: Game, act: Act, nom = 'poêle'): Promise<{ pan: string; stove: string }> {
+  const w = world(game);
+  const stove = w.objets.filter((o) => o.sorte === 'gazinière').sort((a, b) => a.distance - b.distance)[0];
+  if (!stove) throw new Failed('Il n’y a pas de gazinière.');
+  const pans = w.objets.filter((o) => o.nom === nom).sort((a, b) => +!a.ou.startsWith(`posé sur ${stove.ref}`) - +!b.ou.startsWith(`posé sur ${stove.ref}`) || a.distance - b.distance);
+  const pan = pans[0];
+  if (!pan) throw new Failed(`Il n’y a pas de ${nom}.`);
+  if (w.objets.some((o) => o.ou.startsWith(`dans ${pan.ref}`))) throw new Failed(`Il y a déjà quelque chose dans ${nom === 'poêle' ? 'la poêle' : nom} : sers-le ou retire-le d’abord.`);
+  if (!pan.ou.startsWith(`posé sur ${stove.ref}`) || isDirty(game, pan.ref)) {
+    await take(game, act, pan.ref);
+    if (isDirty(game, pan.ref)) await act('vaisselle');
+    await act('mettre_sur_feu', { objet: stove.ref });
+  }
+  return { pan: pan.ref, stove: stove.ref };
+}
+
+/** Le saladier en main, propre. */
+async function bowlInHand(game: Game, act: Act): Promise<string> {
+  const bowl = nearestNamed(game, 'saladier');
+  if (!bowl) throw new Failed('Il n’y a pas de saladier.');
+  await take(game, act, bowl.ref);
+  if (isDirty(game, bowl.ref) && !bowl.ou.includes('contient')) await act('vaisselle');
+  return bowl.ref;
+}
+
+/** Casse un œuf du frigo dans `into` (tenu ou posé). */
+async function crackInto(game: Game, act: Act, into: string): Promise<void> {
+  const egg = nearestNamed(game, 'œuf');
+  if (!egg) throw new Failed('Il n’y a plus d’œufs : commande les courses.');
+  await takeTool(game, act, ['œuf'], (ref) => ref === into);
+  await act('casser_oeuf', { dans: into });
+}
+
+/** Mélange au fouet le saladier tenu, puis repose le fouet. */
+async function whisk(game: Game, act: Act, bowl: string): Promise<void> {
+  const tool = await takeTool(game, act, ['fouet', 'cuillère en bois'], (ref) => ref === bowl);
+  await act('fouetter', { saladier: bowl });
+  await act('poser', { objet: tool });
+}
+
+/** Ce qui cuit dans `pan`, nommé `nom`. */
+const cookingIn = (game: Game, pan: string, nom: string) => world(game).objets.find((o) => o.nom === nom && o.ou.startsWith(`dans ${pan}`));
+
+/** Feu allumé, cuisson (remuée ou retournée à la spatule), feu éteint, puis servi dans une assiette sortie s'il y en a une. */
+async function cookAndServe(game: Game, act: Act, pan: string, stove: string, nom: string, toss: boolean): Promise<void> {
+  const food = cookingIn(game, pan, nom);
+  if (!food) throw new Failed(`Pas de ${nom} dans la poêle.`);
+  // le saladier sur le plan de travail (pas sur la gazinière, devant soi)
+  const w0 = world(game);
+  const bowl = w0.objets.find((o) => o.nom === 'saladier' && w0.enMain.includes(o.ref));
+  const top = w0.objets.filter((o) => o.nom === 'plan de travail').sort((a, b) => a.distance - b.distance)[0];
+  if (bowl && top) {
+    await act('aller', { objet: top.ref });
+    await act('poser', { objet: bowl.ref });
+  }
+  await freeHands(game, act, () => false);
+  await act('allumer', { objet: stove, ustensile: pan });
+  if (toss) await act('faire_sauter', { objet: pan });
+  else if (nom === 'omelette') {
+    await takeTool(game, act, ['spatule', 'cuillère en bois']);
+    await act('remuer', { objet: pan });
+  }
+  await act('attendre_cuisson', { objet: food.ref });
+  await act('eteindre', { objet: stove, ustensile: pan });
+  // servi à la spatule si une assiette propre attend (sinon il reste au chaud dans la poêle)
+  const w = world(game);
+  const plate = w.objets.filter((o) => o.nom === 'assiette' && isLoose(o) && !o.ou.includes(', sale') && !servedOn(w, o.ref)).sort((a, b) => a.distance - b.distance)[0];
+  if (!plate) return;
+  await takeTool(game, act, ['spatule', 'cuillère en bois']);
+  await act('servir_poele', { assiette: plate.ref, objet: pan });
+}
+
 async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
   switch (intent.kind) {
     case 'prendre':
@@ -255,7 +369,9 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'dire':
       return act('dire', { texte: intent.texte });
     case 'ranger': {
-      const shelf = world(game).objets.find((o) => o.sorte === 'rangement');
+      // la bibliothèque (le pot à ustensiles et l'étagère à épices rangent aussi)
+      const shelves = world(game).objets.filter((o) => o.sorte === 'rangement');
+      const shelf = shelves.find((o) => o.nom === 'bibliothèque') ?? shelves[0];
       if (!shelf) throw new Failed('Il n’y a pas de meuble où ranger.');
       if (intent.onlyHeld) {
         if (!held(game).length) throw new Failed('Rien en main à ranger.');
@@ -698,5 +814,100 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'arreter_lire':
       if (!world(game).lit) return;
       return act('arreter_lire');
+    case 'casser_oeuf': {
+      // dans le saladier (pris s'il est nommé ou tenu), sinon la poêle sur le feu
+      const w = world(game);
+      const bowl = intent.dans ? w.objets.find((o) => o.ref === intent.dans) : w.objets.find((o) => o.nom === 'saladier' && w.enMain.includes(o.ref));
+      if (bowl?.nom === 'saladier') {
+        await take(game, act, bowl.ref);
+        return crackInto(game, act, bowl.ref);
+      }
+      const { pan } = await panOnStove(game, act, bowl?.nom ?? 'poêle');
+      await freeHands(game, act, () => false);
+      return crackInto(game, act, pan);
+    }
+    case 'fouetter': {
+      const bowl = nearestNamed(game, 'saladier');
+      if (!bowl) throw new Failed('Il n’y a pas de saladier.');
+      await take(game, act, bowl.ref);
+      return whisk(game, act, bowl.ref);
+    }
+    case 'remuer':
+      await takeTool(game, act, ['spatule', 'cuillère en bois']);
+      return act('remuer', intent.ref ? { objet: intent.ref } : {});
+    case 'sauter': {
+      // une main libre pour prendre la poêle
+      const w = world(game);
+      if (!w.mainsLibres) await dropLoad(act, w.mains[w.mains.length - 1]);
+      return act('faire_sauter', intent.ref ? { objet: intent.ref } : {});
+    }
+    case 'servir_poele':
+      await takeTool(game, act, ['spatule', 'louche', 'cuillère en bois']);
+      return act('servir_poele', intent.sur ? { assiette: intent.sur } : {});
+    case 'assaisonner': {
+      const jar = await takeTool(game, act, [intent.epice], (ref) => ref === intent.ref);
+      await act('assaisonner', intent.ref ? { objet: intent.ref } : {});
+      // le pot retourne sur l'étagère
+      return act('ranger_place', { objet: jar }).then(() => {}, () => {});
+    }
+    case 'tartiner': {
+      const w = world(game);
+      const pots = ['confiture', 'pâte à tartiner', 'miel', 'beurre'];
+      const pot = intent.pot ?? pots.find((n) => w.objets.some((o) => o.nom === n && w.enMain.includes(o.ref))) ?? pots.find((n) => w.objets.some((o) => o.nom === n));
+      if (!pot) throw new Failed('Il n’y a rien à tartiner (confiture, miel, pâte à tartiner, beurre).');
+      const potRef = await takeTool(game, act, [pot]);
+      await takeTool(game, act, ['couteau de table', 'couteau'], (ref) => ref === potRef);
+      return act('tartiner', intent.ref ? { objet: intent.ref } : {});
+    }
+    case 'raper': {
+      const rasp = await takeTool(game, act, ['râpe']);
+      await takeTool(game, act, ['fromage'], (ref) => ref === rasp);
+      return act('raper', intent.ref ? { objet: intent.ref } : {});
+    }
+    case 'gouter':
+      await takeTool(game, act, ['cuillère', 'cuillère en bois']);
+      return act('gouter', intent.ref ? { objet: intent.ref } : {});
+    case 'omelette': {
+      const { pan, stove } = await panOnStove(game, act);
+      await freeHands(game, act, () => false);
+      const bowl = await bowlInHand(game, act);
+      const ou = () => world(game).objets.find((o) => o.ref === bowl)?.ou ?? '';
+      if (!ou().includes('œufs battus')) {
+        for (let i = 0; i < 2; i++) await crackInto(game, act, bowl);
+        await whisk(game, act, bowl);
+      }
+      await act('verser_pate', { poele: pan });
+      return cookAndServe(game, act, pan, stove, 'omelette', false);
+    }
+    case 'crepe': {
+      const { pan, stove } = await panOnStove(game, act);
+      await freeHands(game, act, () => false);
+      const bowl = await bowlInHand(game, act);
+      const ou = () => world(game).objets.find((o) => o.ref === bowl)?.ou ?? '';
+      if (!ou().includes('pâte à crêpes')) {
+        if (ou().includes('contient') && !/œuf|lait|farine/.test(ou())) throw new Failed('Le saladier n’est pas vide : vide-le ou lave-le d’abord.');
+        const keepBowl = (ref: string) => ref === bowl;
+        if (!ou().includes('œuf')) await crackInto(game, act, bowl);
+        if (!ou().includes('lait')) {
+          const milk = await takeTool(game, act, ['lait'], keepBowl);
+          await act('verser', { dans: bowl });
+          await act('poser', { objet: milk });
+        }
+        if (!ou().includes('farine')) {
+          const flour = await takeTool(game, act, ['farine'], keepBowl);
+          await act('ajouter_saladier', { saladier: bowl });
+          await act('poser', { objet: flour });
+        }
+        await whisk(game, act, bowl);
+      }
+      await act('verser_pate', { poele: pan });
+      return cookAndServe(game, act, pan, stove, 'crêpe', true);
+    }
+    case 'oeuf_plat': {
+      const { pan, stove } = await panOnStove(game, act);
+      await freeHands(game, act, () => false);
+      await crackInto(game, act, pan);
+      return cookAndServe(game, act, pan, stove, 'œuf au plat', false);
+    }
   }
 }
