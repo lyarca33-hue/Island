@@ -106,7 +106,10 @@ export class Character {
   /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
   async load(recipe?: Recipe | null): Promise<void> {
     if (recipe) {
-      this.puppet = await Puppet.create(recipe);
+      const puppet = await Puppet.create(recipe);
+      // jeu fermé pendant le chargement (en dev, React monte deux fois) : rien à garder
+      if (this.disposed) return void puppet.dispose();
+      this.puppet = puppet;
       const rig = new Rig(this.puppet.vrm);
       const carries = { right: new Carry(rig, 'right'), left: new Carry(rig, 'left') };
       this.carries = carries;
@@ -746,7 +749,10 @@ export class Character {
     this.puppet?.setExpression(key);
   }
 
+  private disposed = false;
+
   dispose(): void {
+    this.disposed = true;
     this.puppet?.dispose();
   }
 

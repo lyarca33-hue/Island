@@ -28,6 +28,8 @@ def main():
     ap.add_argument('--src', required=True, type=Path)
     ap.add_argument('--out', required=True, type=Path)
     ap.add_argument('--clips', nargs='+', required=True)
+    ap.add_argument('--root', help="ne garder les déplacements (translation) que de cet os (ex. mixamorig:Hips) : "
+                    "le jeu ne lit que les rotations et le déplacement du bassin (src/creator/retarget.ts)")
     a = ap.parse_args()
     j, bin_ = read_glb(a.src)
 
@@ -62,13 +64,27 @@ def main():
         remap[i] = len(accessors) - 1
         return remap[i]
 
+    def kept(c):
+        path = c['target']['path']
+        # échelles inutiles (toujours 1) : on les retire ; déplacements : seulement la racine si --root
+        if path == 'scale':
+            return False
+        if path == 'translation' and a.root:
+            return j['nodes'][c['target']['node']].get('name') == a.root
+        return True
+
     for an in anims:
-        for s in an['samplers']:
+        # canaux gardés d'abord : seuls leurs échantillonneurs (et leurs données) sont recopiés
+        channels = [c for c in an['channels'] if kept(c)]
+        samplers = []
+        for c in channels:
+            s = dict(an['samplers'][c['sampler']])
             s['input'] = copy_accessor(s['input'])
             s['output'] = copy_accessor(s['output'])
-        # échelles inutiles (toujours 1) : on les retire
-        keep = [c for c in an['channels'] if c['target']['path'] != 'scale']
-        an['channels'] = keep
+            samplers.append(s)
+            c['sampler'] = len(samplers) - 1
+        an['channels'] = channels
+        an['samplers'] = samplers
 
     nodes = []
     for nd in j['nodes']:

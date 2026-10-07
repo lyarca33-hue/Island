@@ -331,3 +331,16 @@
 @media (prefers-reduced-motion: reduce) {
   .app *, .app *::before { animation: none !important; transition: none !important; }
 }
+
+/* Menu → Affichage : case à cocher, et compteur d'images par seconde (en bas à gauche) */
+.menu-form .menu-check { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
+.menu-form .menu-check input { width: auto; margin: 0; accent-color: var(--hud-honey); }
+.hud-fps {
+  position: absolute; left: var(--hud-gap); bottom: max(var(--hud-gap), env(safe-area-inset-bottom)); pointer-events: none;
+  padding: 4px 9px; border-radius: 10px; font-size: 12px; line-height: 1.4; font-variant-numeric: tabular-nums;
+  color: var(--hud-ink-2); background: var(--hud-glass-soft); border: 1px solid var(--hud-line); box-shadow: var(--hud-hi);
+}
+.hud-fps b { color: var(--hud-ok); }
+.hud-fps.mid b { color: var(--hud-mid); }
+.hud-fps.low b { color: var(--hud-low); }
+.hud-fps.ok b { color: var(--hud-up); }

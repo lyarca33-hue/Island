@@ -37,6 +37,9 @@ export class Puppet {
   /** Dernière recette demandée (les reconstructions se suivent sans se chevaucher). */
   private wanted: Recipe;
   private building: Promise<void> | null = null;
+  /** Appelé quand des clips arrivent après coup (poses du créateur). */
+  onClips: (() => void) | null = null;
+
   /** Retouche de pose du jeu (le créateur n'en a pas). */
   hook: PoseHook | null = null;
 
@@ -49,13 +52,20 @@ export class Puppet {
   }
 
   static async create(recipe: Recipe): Promise<Puppet> {
-    const [avatar, source, sit, poses] = await Promise.all([
-      Avatar.build(recipe), loadAnimationSource(), loadSitAnimations(), loadPoseAnimations(),
-    ]);
+    const [avatar, source, sit] = await Promise.all([Avatar.build(recipe), loadAnimationSource(), loadSitAnimations()]);
     const p = new Puppet(avatar, recipe);
-    p.extra = [sit, ...poses].flatMap((s) => (s ? [{ ...s, bones: UAL_TO_VRM }] : []));
+    p.extra = sit ? [{ ...sit, bones: UAL_TO_VRM }] : [];
     p.loadClips(source);
     p.play('idle', 0);
+    // poses du créateur (1,7 Mo) : ajoutées à leur arrivée, sans retarder l'entrée dans le jeu
+    void loadPoseAnimations().then((poses) => {
+      for (const s of poses) {
+        const src = { ...s, bones: UAL_TO_VRM };
+        p.extra.push(src);
+        for (const clip of retargetClips(src, p.avatar.base)) p.actions.set(clip.name, p.mixer.clipAction(clip));
+      }
+      p.onClips?.();
+    });
     return p;
   }
 
