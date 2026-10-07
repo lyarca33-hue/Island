@@ -112,7 +112,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "asseoir", "objet": "<ref>"} : s'asseoir sur un siège (sorte « siège », ex. la chaise ; « objet » facultatif : le plus proche). Assis, le perso peut boire, lire, parler ; il se lève tout seul pour marcher ou prendre un objet
 - {"tache": "lever"} : se lever quand on est assis
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
-- {"tache": "manque", "action": "<verbe court, ex. danser>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore
+- {"tache": "manque", "action": "<verbe court, ex. danser>", "sorte": "geste", "objet": "<nom>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore (« sorte » : "geste" si l'objet existe mais pas le geste, ex. laver la tasse ; "objet" si l'objet n'est pas dans la pièce, ex. une casserole ; "autre" sinon. « objet » facultatif : l'objet concerné)
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
 
 Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
@@ -208,7 +208,8 @@ export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: S
     if (intent === 'fini') return typeof json!.message === 'string' && json!.message ? json!.message : 'C’est fait.';
     if (intent === 'manque') {
       const str = (k: string) => (typeof json![k] === 'string' ? (json![k] as string) : '');
-      onMissing?.({ kind: 'action', quoi: str('action') || str('raison'), detail: str('raison') || str('action') });
+      const sorte = str('sorte') === 'objet' ? `objet absent du jeu${str('objet') ? ` (${str('objet')})` : ''}` : str('sorte') === 'geste' ? `geste absent${str('objet') ? ` pour ${str('objet')}` : ''}` : undefined;
+      onMissing?.({ kind: 'action', quoi: str('action') || str('raison'), detail: str('raison') || str('action'), cause: sorte });
       messages.push({ role: 'user', content: 'Noté. Continue.' });
       continue;
     }
