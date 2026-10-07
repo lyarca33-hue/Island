@@ -320,19 +320,13 @@ async function whisk(game: Game, act: Act, bowl: string): Promise<void> {
 const cookingIn = (game: Game, pan: string, nom: string) => world(game).objets.find((o) => o.nom === nom && o.ou.startsWith(`dans ${pan}`));
 
 /** Feu allumé, cuisson (remuée ou retournée à la spatule), feu éteint, puis servi dans une assiette sortie s'il y en a une. */
-async function cookAndServe(game: Game, act: Act, pan: string, stove: string, nom: string, toss: boolean): Promise<void> {
+async function cookAndServe(game: Game, act: Act, pan: string, stove: string, nom: string): Promise<void> {
   const food = cookingIn(game, pan, nom);
   if (!food) throw new Failed(`Pas de ${nom} dans la poêle.`);
   await freeHands(game, act, () => false);
   await act('allumer', { objet: stove, ustensile: pan });
-  if (toss) {
-    await act('faire_sauter', { objet: pan });
-    if (!cookingIn(game, pan, nom)) throw new Failed(`Raté, ${nom === 'crêpe' ? 'la crêpe est tombée' : 'c’est tombé'} à côté de la poêle : recommence.`);
-  }
-  else if (nom === 'omelette') {
-    await takeTool(game, act, ['spatule', 'cuillère en bois']);
-    await act('remuer', { objet: pan });
-  }
+  await takeTool(game, act, ['spatule', 'cuillère en bois']);
+  await act('remuer', { objet: pan });
   await act('attendre_cuisson', { objet: food.ref });
   await act('eteindre', { objet: stove, ustensile: pan });
   // servi à la spatule si une assiette propre attend (sinon il reste au chaud dans la poêle)
@@ -873,7 +867,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
         await whisk(game, act, bowl);
       }
       await act('verser_pate', { poele: pan });
-      return cookAndServe(game, act, pan, stove, 'omelette', false);
+      return cookAndServe(game, act, pan, stove, 'omelette');
     }
     case 'crepe': {
       const { pan, stove } = await panOnStove(game, act);
@@ -897,13 +891,14 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
         await whisk(game, act, bowl);
       }
       await act('verser_pate', { poele: pan });
-      return cookAndServe(game, act, pan, stove, 'crêpe', true);
+      // retournée à la spatule (sûr) : « fais sauter la crêpe » reste le geste du joueur
+      return cookAndServe(game, act, pan, stove, 'crêpe');
     }
     case 'oeuf_plat': {
       const { pan, stove } = await panOnStove(game, act);
       await freeHands(game, act, () => false);
       await crackInto(game, act, pan);
-      return cookAndServe(game, act, pan, stove, 'œuf au plat', false);
+      return cookAndServe(game, act, pan, stove, 'œuf au plat');
     }
   }
 }

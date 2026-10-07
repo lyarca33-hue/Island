@@ -135,7 +135,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "glacons", "dans": "<ref>"} : mettre des glaçons (bac au congélateur) dans une tasse (« dans » facultatif)
 - La lasagne du congélateur est congelée : il faut la « mettre » au micro-ondes (ou au four) et l'« allumer » avant de la manger
 - {"tache": "omelette"} : faire une omelette (poêle sur le feu, 2 œufs du frigo cassés dans le saladier, fouettés, versés, cuits en remuant, servis dans une assiette sortie s'il y en a une)
-- {"tache": "crepe"} : faire une crêpe (pâte au saladier : œuf, lait, farine, fouettés ; une crêpe par ordre, sautée dans la poêle)
+- {"tache": "crepe"} : faire une crêpe (pâte au saladier : œuf, lait, farine, fouettés ; une crêpe par ordre, retournée à la spatule)
 - {"tache": "oeuf_plat"} : faire un œuf au plat (cassé dans la poêle sur le feu)
 - {"tache": "casser_oeuf", "dans": "<ref>"} : casser un œuf du frigo dans le saladier ou la poêle (« dans » facultatif)
 - {"tache": "fouetter"} : mélanger le saladier au fouet (œufs → œufs battus ; œuf, lait, farine → pâte à crêpes)
