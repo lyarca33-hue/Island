@@ -48,6 +48,8 @@ const VERBS: Record<string, string[]> = {
   enlever: ['enleve', 'enlever', 'retire', 'retirer'],
   regarder: ['regarde', 'regarder', 'inspecte', 'inspecter', 'fouille', 'fouiller', 'inventorie'],
   laisser: ['laisse', 'laisser'],
+  charger: ['charge', 'charger', 'chargez'],
+  debarrasser: ['debarrasse', 'debarrasser', 'dessers', 'desservir'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
@@ -88,6 +90,7 @@ const ALIASES: Record<string, string[]> = {
   four: ['four', 'fours'],
   'micro ondes': ['micro', 'microondes', 'ondes'],
   'lave vaisselle': ['vaisselle'],
+  'boite de pastilles': ['pastille', 'pastilles', 'boite'],
   poubelle: ['poubelle', 'poubelles', 'corbeille'],
   assiette: ['assiette', 'assiettes'],
   fourchette: ['fourchette', 'fourchettes', 'couverts'],
@@ -229,6 +232,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return portable.filter((o) => o.nom === portable[0].nom).slice(0, n).map((o) => ({ kind: 'prendre', ref: o.ref }));
     }
     case 'poser': {
+      // « mets une pastille (dans le lave-vaisselle) »
+      if (rest.some((x) => x.startsWith('pastille'))) return [{ kind: 'pastille' }];
+      // « mets la vaisselle sale au lave-vaisselle »
+      if (machineWash(original) && rest.includes('vaisselle') && rest.filter((x) => x === 'vaisselle').length > 1) return [{ kind: 'charger_lv' }];
+      // « mets la table », « mets le couvert »
+      if (rest.includes('couvert') || (found.length === 1 && found[0].nom === 'table' && !rest.some((x) => ['sur', 'dans', 'a', 'au', 'pres'].includes(x)))) return [{ kind: 'mettre_table' }];
       // « mets des glaçons dans la tasse »
       if (rest.some((x) => x.startsWith('glacon'))) return [{ kind: 'glacons', dans: found.find((o) => o.nom === 'tasse')?.ref }];
       // « pose la tasse sur la caisse » : prendre la tasse si besoin, aller à la caisse, poser
@@ -322,12 +331,16 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
     }
     case 'couper': {
+      // « coupe le steak dans l'assiette », « coupe ta viande » : en bouchées, à table
+      if (rest.includes('assiette') || rest.includes('bouchees') || rest.includes('viande')) return [{ kind: 'couper_assiette' }];
       // « coupe la pomme », « coupe le pain sur la planche », « coupe » (ce qu'on tient, sinon ce qu'il y a)
       const food = found.filter((o) => o.coupable);
       if (found.length && !food.length) return null;
       return [{ kind: 'couper', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food.find(isLoose) ?? food[0])?.ref }];
     }
     case 'remplir': {
+      // « remplis le lave-vaisselle » : la vaisselle sale dedans
+      if (machineWash(original)) return [{ kind: 'charger_lv' }];
       // « remplis la bouilloire » : de l'eau versée dedans
       const kettle = found.find((o) => o.nom === 'bouilloire');
       if (kettle && !rest.includes('tasse')) return [{ kind: 'remplir_bouilloire', ref: kettle.ref }];
@@ -345,6 +358,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (into?.sorte === 'évier') return [{ kind: 'vider_recipient', ref: from?.ref }];
       return [{ kind: 'verser', ref: from?.ref, dans: into?.ref }];
     }
+    case 'charger':
+      // « charge le lave-vaisselle »
+      return machineWash(original) || rest.includes('vaisselle') ? [{ kind: 'charger_lv' }] : null;
+    case 'debarrasser':
+      // « débarrasse la table », « débarrasse »
+      return [{ kind: 'debarrasser' }];
     case 'regarder': {
       // « regarde dans le frigo », « fouille le placard »
       const store = found.find((o) => STORES.has(o.sorte ?? ''));
@@ -367,7 +386,7 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
         const cups = found.filter((o) => o.sorte === 'vaisselle' || o.nom === 'tasse');
         if (!cups.length) return machineDishes(world);
         const lv = appliance('lave-vaisselle')!;
-        return [...cups.slice(0, all ? cups.length : 1).map((o): Intent => ({ kind: 'mettre', ref: o.ref, dans: lv.ref })), { kind: 'allumer', ref: lv.ref }];
+        return [...cups.slice(0, all ? cups.length : 1).map((o): Intent => ({ kind: 'mettre', ref: o.ref, dans: lv.ref })), ...tablet(lv), { kind: 'allumer', ref: lv.ref }];
       }
       // « lave la vaisselle », « lave l'assiette », « lave les couverts », « rince la tasse » : à l'évier
       const sink = found.filter((o) => o.nom !== 'lave-vaisselle');
@@ -432,6 +451,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (app) return [{ kind: verb, ref: app.ref }];
       // « allume la gazinière », « éteins le feu », « allume la machine à café »
       const target = found.find((o) => o.sorte === 'gazinière' || o.sorte === 'machine');
+      // « coupe la pomme », « coupe dans l'assiette » : couper, pas éteindre
+      if (!target && ['coupe', 'couper'].includes(word) && (found.length || rest.length)) return parseClause('couper', rest, original, world, word);
       if (found.length && !target) return null;
       return [{ kind: verb, ref: target?.ref }];
     }
@@ -454,6 +475,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'jeter', ref: (thing.find((o) => world.enMain.includes(o.ref)) ?? thing[0])?.ref }];
     }
     case 'vider': {
+      // « vide le lave-vaisselle » : la vaisselle propre rangée à sa place
+      if (machineWash(original) && appliance('lave-vaisselle')) return [{ kind: 'vider_lv' }];
       // « vide la tasse », « vide la casserole » (dans l'évier)
       const vessel = found.find((o) => o.sorte === 'récipient' || o.sorte === 'ustensile');
       if (vessel) return [{ kind: 'vider_recipient', ref: vessel.ref }];
@@ -495,7 +518,12 @@ function machineDishes(world: { objets: WorldObject[] }): Intent[] | null {
   const lv = world.objets.find((o) => o.nom === 'lave-vaisselle');
   if (!lv) return null;
   const dirty = world.objets.filter((o) => (o.sorte === 'récipient' || o.sorte === 'vaisselle') && o.ou.includes(', sale') && !o.ou.startsWith(`rangé dans ${lv.ref}`));
-  return [...dirty.map((o): Intent => ({ kind: 'mettre', ref: o.ref, dans: lv.ref })), { kind: 'allumer', ref: lv.ref }];
+  return [...(dirty.length ? [{ kind: 'charger_lv' } as Intent] : []), ...tablet(lv), { kind: 'allumer', ref: lv.ref }];
+}
+
+/** Une pastille d'abord si le lave-vaisselle n'en a pas (sans elle, le lavage rate). */
+function tablet(lv: WorldObject): Intent[] {
+  return lv.ou.includes('sans pastille') ? [{ kind: 'pastille' }] : [];
 }
 
 /**

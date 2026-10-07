@@ -129,7 +129,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     fragility: 7,
     // la porte : charnière à droite, comme le frigo
     door: THREE.MathUtils.degToRad(100),
-    holds: [...DISHES, "bouteille d'eau", 'pomme', 'pain'],
+    holds: [...DISHES, "bouteille d'eau", 'pomme', 'pain', 'boîte de pastilles'],
     slots: CUP_SLOTS,
     build: () => {
       const g = carcass(CUP_W, CUP_D);
@@ -236,6 +236,16 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       for (const x of [-0.075, -0.025, 0.025, 0.075]) for (const z of [-0.025, 0.025]) g.add(box(0.036, 0.022, 0.036, 0xf2f8fb, x, 0.03, z));
       return g;
     },
+  },
+  {
+    id: 'pastilles',
+    name: 'boîte de pastilles',
+    portable: true,
+    grip: 'fist',
+    fragility: 6,
+    durability: 60,
+    // une boîte en carton pour le lave-vaisselle (Game compte les pastilles qui restent)
+    build: () => group(box(0.12, 0.09, 0.07, 0x2f7fc1, 0, 0.045, 0), box(0.121, 0.03, 0.071, 0xf0f4f7, 0, 0.06, 0)),
   },
   {
     id: 'lasagne',

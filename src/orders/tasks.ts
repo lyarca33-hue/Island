@@ -53,6 +53,15 @@ export type Intent =
   /** Boucher l'évier ou enlever le bouchon. */
   | { kind: 'bouchon'; mettre: boolean }
   | { kind: 'boire_robinet' }
+  /** Lave-vaisselle : charger la vaisselle sale, mettre une pastille, le vider et tout ranger. */
+  | { kind: 'charger_lv' }
+  | { kind: 'pastille' }
+  | { kind: 'vider_lv' }
+  /** Mettre le couvert devant la chaise ; débarrasser la table. */
+  | { kind: 'mettre_table' }
+  | { kind: 'debarrasser' }
+  /** Couper dans l'assiette servie avec le couteau de table (assis à table). */
+  | { kind: 'couper_assiette' }
   /** Regarder ce que contient le meuble `ref`. */
   | { kind: 'regarder'; ref: string }
   /** Ranger à sa place l'objet `ref` (pris d'abord si besoin), sinon ce qu'on tient. */
@@ -427,6 +436,37 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'boire_robinet':
       await freeHands(game, act);
       return act('boire_robinet');
+    case 'charger_lv':
+      await freeHands(game, act, (ref) => world(game).objets.some((o) => o.ref === ref && o.ou.includes(', sale') && o.sorte === 'vaisselle'));
+      return act('charger_lave_vaisselle');
+    case 'pastille': {
+      const box = world(game).objets.find((o) => o.nom === 'boîte de pastilles');
+      if (!box) throw new Failed('Il n’y a pas de pastilles.');
+      await take(game, act, box.ref);
+      await act('pastille');
+      // la boîte retourne au placard
+      return act('ranger_place').then(() => {}, () => {});
+    }
+    case 'vider_lv':
+      await freeHands(game, act);
+      return act('vider_lave_vaisselle');
+    case 'mettre_table':
+      await freeHands(game, act);
+      return act('mettre_table');
+    case 'debarrasser':
+      await freeHands(game, act);
+      return act('debarrasser');
+    case 'couper_assiette': {
+      const w = world(game);
+      const knives = w.objets.filter((o) => o.nom === 'couteau de table').sort((a, b) => +a.ou.includes('sale') - +b.ou.includes('sale') || a.distance - b.distance);
+      const knife = knives.find((o) => w.enMain.includes(o.ref)) ?? knives[0];
+      if (!knife) throw new Failed('Il n’y a pas de couteau de table.');
+      const plate = w.objets.find((o) => o.nom === 'assiette' && servedOn(w, o.ref));
+      if (!plate) throw new Failed('Il n’y a rien de servi dans l’assiette.');
+      await take(game, act, knife.ref);
+      await act('attabler', { assiette: plate.ref });
+      return act('couper_assiette');
+    }
     case 'regarder':
       return act('regarder_dedans', { objet: intent.ref });
     case 'ranger_place':
@@ -502,7 +542,12 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       if (!fork) throw new Failed('Il n’y a pas de fourchette.');
       await freeHands(game, act, (ref) => ref === fork.ref || world(game).objets.find((o) => o.ref === ref)?.nom === 'couteau de table');
       await take(game, act, fork.ref);
+      // le couteau de table dans l'autre main s'il y en a un propre : on coupe d'abord en bouchées
+      w = world(game);
+      const knife = w.objets.find((o) => o.nom === 'couteau de table' && (w.enMain.includes(o.ref) || (!o.ou.includes('sale') && isLoose(o))));
+      if (knife && w.enMain.length < 2) await take(game, act, knife.ref).catch(() => {});
       await act('attabler', { assiette: plate.ref });
+      if (knife && world(game).enMain.includes(knife.ref)) await act('couper_assiette').catch(() => {});
       // bouchée après bouchée jusqu'à la fin du plat
       for (let i = 0; i < 12 && world(game).objets.some((o) => o.ref === dish.ref); i++) await act('manger');
       return;
