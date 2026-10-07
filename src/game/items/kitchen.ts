@@ -238,6 +238,17 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     },
   },
   {
+    id: 'eponge',
+    name: 'éponge',
+    portable: true,
+    grip: 'fist',
+    fragility: 1,
+    durability: 50,
+    wipes: true,
+    // jaune, le côté qui gratte en vert
+    build: () => group(box(0.1, 0.03, 0.065, 0xf2d34a, 0, 0.015, 0), box(0.1, 0.008, 0.065, 0x3f8f4a, 0, 0.034, 0)),
+  },
+  {
     id: 'pastilles',
     name: 'boîte de pastilles',
     portable: true,

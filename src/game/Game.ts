@@ -124,6 +124,8 @@ const START_ON_WORKTOP: Array<[string, number, number, number]> = [
   // couché à plat, le long de la profondeur, le manche vers l'avant
   ['couteau', 0.14, 0.04, -Math.PI / 2],
   ['pain', 0.32, -0.08, 0.3],
+  // l'éponge, près de l'évier
+  ['eponge', -0.42, 0.1, 0.2],
 ];
 
 /** Rangés au départ dans un meuble : [id, meuble, place]. */
@@ -159,6 +161,12 @@ const WEAR_GRAB = 0.3;
 const WEAR_BREW = { machine: 1.5, cup: 0.5 };
 /** Usure de la porte (frigo) à chaque ouverture. */
 const WEAR_DOOR = 0.4;
+/** Chaise et table : écart entre la chaise et le bord de la table, rangée dessous ou tirée (m), et profondeur de l'assise. */
+const CHAIR_TUCKED = 0.08;
+const CHAIR_PULLED = 0.74;
+const SEAT_DEPTH = 0.4;
+/** Vitesse de la chaise tirée sans la saisir (m/s). */
+const CHAIR_SLIDE = 0.6;
 /** Pastilles dans une boîte neuve (lave-vaisselle). */
 const TABLETS = 12;
 /** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
@@ -225,7 +233,7 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', ...DISH_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', ...DISH_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre']);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -376,6 +384,10 @@ export class Game {
   /** Pastilles qui restent dans chaque boîte ; lave-vaisselle où l'on en a mis une (consommée au lavage). */
   private tablets = new Map<WorldItem, number>();
   private tabletIn = new Set<WorldItem>();
+  /** Miettes laissées sur une table après un repas (à essuyer avec l'éponge). */
+  private crumbs = new Map<WorldItem, THREE.Group>();
+  /** Une chaise glisse (tirée sans la saisir) : pas encore fini. */
+  private sliding = false;
   /** Fenêtre « ce qu'il y a dedans » ouverte sur un meuble (null : la fermer). */
   onInventory: ((ref: string | null) => void) | null = null;
   /** Ingrédient dont on attend la cuisson (ordre « cuire »). */
@@ -641,7 +653,7 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    return this.character.idle && !this.brew && !this.washing && !this.cookWait && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.cookWait && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
@@ -1077,6 +1089,8 @@ export class Game {
         ou += `, ${part} ${door.target ? 'ouvert' : 'fermé'}${part === 'porte' ? 'e' : ''}`;
       }
       if (this.appliances.has(item)) ou += ', en marche';
+      if (this.crumbs.has(item)) ou += ', des miettes (à essuyer)';
+      if (item.def.seat && this.tucked(item)) ou += ', rangée sous la table';
       if (item.def.washes) ou += this.tabletIn.has(item) ? ', pastille mise' : ', sans pastille';
       if (this.tablets.has(item)) ou += `, ${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`;
       if (item.def.bin) {
@@ -1213,6 +1227,8 @@ export class Game {
     const on = this.itemsOn(seat);
     if (on.length) return fail(`Il y a ${on.map((i) => `${FEMININE.has(i.name) ? 'une' : 'un'} ${i.name}`).join(' et ')} sur ${name}.`);
     if (c.seated) return c.standUp(() => this.sit(this.ref(seat), running));
+    // rangée sous la table : on la tire d'abord
+    if (this.tucked(seat)) return this.slideChair(this.ref(seat), false, running, () => this.sit(this.ref(seat), running));
     const o = seat.object;
     o.updateMatrixWorld(true);
     const center = seat.box.getCenter(new THREE.Vector3()).setY(0).applyMatrix4(o.matrixWorld).setY(0);
@@ -1384,6 +1400,7 @@ export class Game {
     this.items = this.items.filter((i) => i !== food);
     this.lastBite.delete(food);
     food.object.removeFromParent();
+    this.dropCrumbs(plate, f.color);
     const fem = FEMININE.has(food.name);
     this.onNotice?.(`${fem ? 'La' : 'Le'} ${food.name} est fini${fem ? 'e' : ''}. Miam ! Reste la vaisselle.`);
   }
@@ -1684,6 +1701,148 @@ export class Game {
       const dirty = inside.length - clean.length;
       this.onNotice?.(`Lave-vaisselle vidé, tout est rangé.${dirty ? ` Il reste ${dirty} pièce${dirty > 1 ? 's' : ''} sale${dirty > 1 ? 's' : ''}.` : ''}`);
     });
+  }
+
+  /** Quelques miettes sur la table autour de l'assiette `plate`, à la fin d'un repas. */
+  private dropCrumbs(plate: WorldItem, color: THREE.ColorRepresentation = 0xc89a5a): void {
+    const table = this.items.find((t) => t.name === 'table' && plate.object.position.y > t.object.position.y && this.isAbove(plate, t));
+    if (!table) return;
+    let g = this.crumbs.get(table);
+    if (!g) {
+      g = new THREE.Group();
+      g.name = 'miettes';
+      table.object.add(g);
+      this.crumbs.set(table, g);
+    }
+    table.object.updateMatrixWorld(true);
+    const at = table.object.worldToLocal(plate.object.position.clone());
+    const mat = new THREE.MeshToonMaterial({ color });
+    for (let i = 0; i < 9; i++) {
+      const a = Math.random() * Math.PI * 2, r = 0.13 + Math.random() * 0.1;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.006, 0.01), mat);
+      m.position.set(at.x + Math.cos(a) * r, table.box.max.y + 0.003, at.z + Math.sin(a) * r);
+      m.rotation.y = Math.random() * Math.PI;
+      g.add(m);
+    }
+  }
+
+  /** Essuie la table `ref` (sinon la plus proche qui a des miettes) avec l'éponge tenue. */
+  wipeTable(ref?: string, running = false): boolean {
+    const c = this.character;
+    const table = ref ? this.byRef(ref) : (this.nearest((i) => this.crumbs.has(i)) ?? this.nearest((i) => i.name === 'table'));
+    const sponge = c.heldItems.find((h) => h.def.wipes);
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!table || table.name !== 'table') return fail('Il n’y a pas de table à essuyer.');
+    if (!sponge) return fail('Prends l’éponge (près de l’évier) pour essuyer la table.');
+    if (!this.crumbs.has(table)) return fail('La table est propre, pas une miette.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.wipeTable(ref, running));
+    const g = this.crumbs.get(table)!;
+    // au milieu des miettes, du côté libre le plus proche
+    table.object.updateMatrixWorld(true);
+    const mid = new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
+    const top = () => mid.clone().setY(mid.y + 0.04);
+    c.approachThen(this.standNear(mid, 0.3), mid, () => {
+      if (!c.handOf(sponge)?.cut(top, () => {
+        g.removeFromParent();
+        this.crumbs.delete(table);
+        this.wearItem(sponge, 2);
+        this.onNotice?.('La table est essuyée.');
+      })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
+    }, running);
+    return true;
+  }
+
+  /** La table devant la chaise `seat` (à portée), son bord côté chaise et l'écart chaise–bord. */
+  private chairTable(seat: WorldItem): { table: WorldItem; dir: THREE.Vector3; gap: number } | null {
+    const p = seat.object.position;
+    const table = this.items.filter((t) => t.name === 'table' && !this.character.carried.includes(t) && t.object.position.distanceTo(p) < 1.6).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    if (!table) return null;
+    const o = table.object;
+    o.updateMatrixWorld(true);
+    const local = o.worldToLocal(p.clone());
+    const b = table.box;
+    const alongX = Math.abs(local.x) / (b.max.x - b.min.x) > Math.abs(local.z) / (b.max.z - b.min.z);
+    // de la chaise vers la table, le long de l'axe de la table
+    const out = alongX ? new THREE.Vector3(Math.sign(local.x), 0, 0) : new THREE.Vector3(0, 0, Math.sign(local.z) || -1);
+    const edge = alongX ? (local.x > 0 ? b.max.x : -b.min.x) : local.z > 0 ? b.max.z : -b.min.z;
+    const gap = (alongX ? Math.abs(local.x) : Math.abs(local.z)) - edge;
+    return { table, dir: out.negate().transformDirection(o.matrixWorld).setY(0).normalize(), gap };
+  }
+
+  /** La chaise est-elle rangée sous la table ? */
+  private tucked(seat: WorldItem): boolean {
+    const t = seat.def.seat ? this.chairTable(seat) : null;
+    return !!t && t.gap < CHAIR_TUCKED + 0.1;
+  }
+
+  /**
+   * Range la chaise `ref` sous la table (`under`), ou la tire pour s'asseoir : le perso la prend
+   * par le dossier et la fait glisser. `then` : la suite une fois lâchée.
+   */
+  slideChair(ref: string | undefined, under: boolean, running = false, then?: () => void): boolean {
+    const c = this.character;
+    const p = c.position;
+    const seat = ref ? this.byRef(ref) : this.items.filter((i) => i.def.seat && this.chairTable(i)).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!seat?.def.seat) return fail('Pas de chaise à pousser.');
+    const t = this.chairTable(seat);
+    if (!t) return fail('La chaise n’est pas à une table.');
+    if (seat === this.sitting) return fail('Lève-toi d’abord.');
+    if (c.bracing || this.moving) return fail('Lâche d’abord ce que tu déplaces.');
+    if (this.itemsOn(seat).length) return fail('Il y a quelque chose sur la chaise.');
+    const want = under ? CHAIR_TUCKED : CHAIR_PULLED;
+    const dist = t.gap - want;
+    if (Math.abs(dist) < 0.05) return fail(under ? 'La chaise est déjà rangée sous la table.' : 'La chaise est déjà tirée.');
+    if (c.busy) return false;
+    const o = seat.object;
+    o.updateMatrixWorld(true);
+    // derrière le dossier, les mains en haut des montants
+    const back = o.position.clone().addScaledVector(t.dir, -(SEAT_DEPTH / 2 + 0.42)).setY(0);
+    const local = (v: THREE.Vector3) => o.worldToLocal(v.clone());
+    const top = o.localToWorld(new THREE.Vector3(0, 0.82, -SEAT_DEPTH / 2 + 0.02));
+    const side = new THREE.Vector3(-t.dir.z, 0, t.dir.x).multiplyScalar(0.16);
+    const hands = { right: local(top.clone().sub(side)), left: local(top.clone().add(side)) };
+    const at = () => ({ right: o.localToWorld(hands.right.clone()), left: o.localToWorld(hands.left.clone()) });
+    const move = (step: THREE.Vector3) => {
+      o.position.add(step);
+      o.updateMatrixWorld(true);
+      return true;
+    };
+    // les mains prises (couverts, assiette) : on la tire du bout des doigts, sans la saisir
+    if (c.heldItems.length) {
+      c.approachThen(back, o.position.clone().setY(0), () => {
+        this.sliding = true;
+        const left = t.dir.clone().multiplyScalar(dist);
+        let last = performance.now();
+        const slide = (now: number) => {
+          const d = Math.min(left.length(), (CHAIR_SLIDE * (now - last)) / 1000);
+          last = now;
+          const s = left.clone().setLength(d);
+          move(s);
+          left.sub(s);
+          if (left.length() > 1e-4) return void requestAnimationFrame(slide);
+          this.sliding = false;
+          c.nav = this.buildNav();
+          then?.();
+        };
+        requestAnimationFrame(slide);
+      }, running);
+      return true;
+    }
+    const ok = c.startPush(back, o.position.clone().setY(0), at, move, () => null, running, () => {
+      c.pushBy(t.dir.clone().multiplyScalar(dist), () => c.stopPush(() => {
+        c.nav = this.buildNav();
+        then?.();
+      }));
+    });
+    return ok;
   }
 
   /**
@@ -3765,6 +3924,11 @@ export class Game {
     }
     // siège
     if (item.def.seat && item !== this.sitting) add('S’asseoir', () => this.sit(ref));
+    if (item.def.seat && item !== this.sitting && this.chairTable(item)) {
+      if (this.tucked(item)) add('Tirer la chaise', () => this.slideChair(ref, false));
+      else add('Ranger sous la table', () => this.slideChair(ref, true));
+    }
+    if (item.name === 'table' && this.crumbs.has(item) && held.some((h) => h.def.wipes)) add('Essuyer la table', () => this.wipeTable(ref));
     if (item === this.sitting) add('Se lever', () => this.standUp());
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
@@ -3780,6 +3944,8 @@ export class Game {
     const cuisson = doneness(item.def, item.cooking);
     if (cuisson) words.push(doneWord(item, cuisson) + (PLURAL.has(item.name) ? 's' : ''));
     if (item.def.food && item.portion < 1) words.push(`entamé${a}`);
+    if (item.name === 'table' && this.crumbs.has(item)) words.push('des miettes');
+    if (item.def.seat && this.tucked(item)) words.push('rangée sous la table');
     if (this.tablets.has(item)) words.push(`${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`);
     if (item.def.washes && this.tabletIn.has(item)) words.push('pastille mise');
     if (item.def.tank) {

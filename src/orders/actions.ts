@@ -226,6 +226,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.unloadDishwasher(),
   },
   {
+    name: 'ranger_chaise',
+    description: 'Ranger la chaise sous la table : le perso la prend par le dossier et la pousse. Les mains doivent être vides.',
+    params: { objet: 'ref de la chaise' },
+    run: (g, a) => g.slideChair(a.objet, true),
+  },
+  {
+    name: 'tirer_chaise',
+    description: 'Tirer la chaise de sous la table (pour s’asseoir ; « s’asseoir » la tire aussi tout seul). Les mains doivent être vides.',
+    params: { objet: 'ref de la chaise' },
+    run: (g, a) => g.slideChair(a.objet, false),
+  },
+  {
+    name: 'essuyer_table',
+    description: 'Essuyer les miettes laissées sur la table après un repas (il faut tenir l’éponge, près de l’évier).',
+    params: {},
+    run: (g, a) => g.wipeTable(a.objet),
+  },
+  {
     name: 'mettre_table',
     description: 'Mettre la table devant la chaise : une assiette, une fourchette et un couteau de table propres, pris au placard et au tiroir, posés chacun à sa place. Les mains doivent être vides.',
     params: {},

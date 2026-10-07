@@ -50,6 +50,9 @@ const VERBS: Record<string, string[]> = {
   laisser: ['laisse', 'laisser'],
   charger: ['charge', 'charger', 'chargez'],
   debarrasser: ['debarrasse', 'debarrasser', 'dessers', 'desservir'],
+  tirer: ['tire', 'tirer', 'recule', 'reculer'],
+  pousser: ['pousse', 'pousser', 'glisse', 'glisser', 'rentre', 'rentrer'],
+  essuyer: ['essuie', 'essuyer', 'nettoie', 'nettoyer', 'eponge', 'eponger'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
@@ -68,7 +71,7 @@ const FILLERS = [
   'allez', 'bon', 'alors', 'maintenant', 'et',
 ];
 /** Petits mots sans importance pour reconnaître un objet. */
-const STOP = new Set(['le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'd', 'a', 'au', 'aux', 'toi', 'moi', 'te', 'me', 'm', 't', 'se', 's', 'y', 'en', 'vers', 'jusqu', 'jusque', 'sur', 'dans', 'tous', 'toutes', 'tout', 'toute', 'ce', 'cette', 'ces', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'qui', 'trainent', 'traine', 'piece', 'ici', 'et', 'aussi', 'stp', 'svp', 'ouvert', 'ouverte', 'ouverts', 'place']);
+const STOP = new Set(['le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'd', 'a', 'au', 'aux', 'toi', 'moi', 'te', 'me', 'm', 't', 'se', 's', 'y', 'en', 'vers', 'jusqu', 'jusque', 'sur', 'dans', 'tous', 'toutes', 'tout', 'toute', 'ce', 'cette', 'ces', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'qui', 'trainent', 'traine', 'piece', 'ici', 'et', 'aussi', 'stp', 'svp', 'ouvert', 'ouverte', 'ouverts', 'place', 'sous', 'dessous']);
 
 /** Autres noms donnés aux objets (forme normalisée). */
 const ALIASES: Record<string, string[]> = {
@@ -259,6 +262,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'ranger': {
       // « range-le » : ce qu'on tient
       if (rest.length && rest.every((x) => ['le', 'la', 'les', 'l', 'ca'].includes(x))) return [{ kind: 'ranger', refs: [], onlyHeld: true }];
+      // « range la chaise (sous la table) »
+      const chair = found.find((o) => o.sorte === 'siège');
+      if (chair && found.every((o) => o.sorte === 'siège' || o.nom === 'table')) return [{ kind: 'chaise', ref: chair.ref, sous: true }];
       // « range la vaisselle », « range les couverts » : chaque pièce propre qui traîne, à sa place
       if (rest.includes('vaisselle') || rest.includes('couverts')) {
         const dishes = world.objets.filter((o) => (o.sorte === 'vaisselle' || o.nom === 'tasse') && isLoose(o) && !o.ou.includes('sale') && !o.ou.includes('contient') && (rest.includes('vaisselle') || o.sorte === 'vaisselle' && o.nom !== 'assiette'));
@@ -361,6 +367,15 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'charger':
       // « charge le lave-vaisselle »
       return machineWash(original) || rest.includes('vaisselle') ? [{ kind: 'charger_lv' }] : null;
+    case 'tirer':
+    case 'pousser': {
+      // « tire la chaise », « pousse la chaise sous la table »
+      const chair = found.find((o) => o.sorte === 'siège');
+      return chair ? [{ kind: 'chaise', ref: chair.ref, sous: verb === 'pousser' }] : null;
+    }
+    case 'essuyer':
+      // « essuie la table », « nettoie la table »
+      return found.length && found.every((o) => o.nom === 'table' || o.nom === 'éponge') ? [{ kind: 'essuyer', ref: found.find((o) => o.nom === 'table')?.ref }] : null;
     case 'debarrasser':
       // « débarrasse la table », « débarrasse »
       return [{ kind: 'debarrasser' }];

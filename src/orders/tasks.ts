@@ -57,6 +57,10 @@ export type Intent =
   | { kind: 'charger_lv' }
   | { kind: 'pastille' }
   | { kind: 'vider_lv' }
+  /** Ranger la chaise `ref` sous la table (`sous`) ou la tirer. */
+  | { kind: 'chaise'; ref: string; sous: boolean }
+  /** Essuyer les miettes de la table `ref` avec l'éponge. */
+  | { kind: 'essuyer'; ref?: string }
   /** Mettre le couvert devant la chaise ; débarrasser la table. */
   | { kind: 'mettre_table' }
   | { kind: 'debarrasser' }
@@ -450,6 +454,15 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'vider_lv':
       await freeHands(game, act);
       return act('vider_lave_vaisselle');
+    case 'chaise':
+      await freeHands(game, act);
+      return act(intent.sous ? 'ranger_chaise' : 'tirer_chaise', { objet: intent.ref });
+    case 'essuyer': {
+      const sponge = world(game).objets.find((o) => o.nom === 'éponge');
+      if (!sponge) throw new Failed('Il n’y a pas d’éponge.');
+      await take(game, act, sponge.ref);
+      return act('essuyer_table', intent.ref ? { objet: intent.ref } : {});
+    }
     case 'mettre_table':
       await freeHands(game, act);
       return act('mettre_table');

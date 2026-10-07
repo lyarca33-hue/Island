@@ -113,6 +113,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "charger_lv"} : charger toute la vaisselle sale au lave-vaisselle
 - {"tache": "pastille"} : mettre une pastille dans le lave-vaisselle (boîte au placard) ; sans pastille, le lavage rate. Pour laver : charger_lv, pastille, puis allumer le lave-vaisselle
 - {"tache": "vider_lv"} : vider le lave-vaisselle et ranger la vaisselle propre à sa place
+- {"tache": "chaise", "objet": "<ref>", "sous": true} : ranger la chaise sous la table (« sous »: false pour la tirer)
+- {"tache": "essuyer", "objet": "<ref>"} : essuyer les miettes de la table avec l'éponge (« objet » facultatif)
 - {"tache": "mettre_table"} : mettre le couvert devant la chaise (assiette, fourchette, couteau de table pris au placard et au tiroir)
 - {"tache": "debarrasser"} : débarrasser la table (vaisselle sale au lave-vaisselle, propre à sa place)
 - {"tache": "couper_assiette"} : assis devant l'assiette servie, couper le plat en bouchées avec le couteau de table
@@ -199,6 +201,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'charger_lv': return { kind: 'charger_lv' };
     case 'pastille': return { kind: 'pastille' };
     case 'vider_lv': return { kind: 'vider_lv' };
+    case 'chaise': return s('objet') ? { kind: 'chaise', ref: s('objet'), sous: o.sous !== false } : null;
+    case 'essuyer': return { kind: 'essuyer', ref: s('objet') || undefined };
     case 'mettre_table': return { kind: 'mettre_table' };
     case 'debarrasser': return { kind: 'debarrasser' };
     case 'couper_assiette': return { kind: 'couper_assiette' };
