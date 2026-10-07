@@ -10,6 +10,7 @@ import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
 import { DISHES } from './recipes';
+import { SALON_ITEMS } from './salon';
 
 export interface ItemDef {
   id: string;
@@ -176,6 +177,8 @@ export interface ItemDef {
   board?: boolean;
   /** Couteau : sert à couper sur la planche. */
   knife?: boolean;
+  /** Télé : s'allume et s'éteint ; sa pièce `ecran` montre un programme allumée, le `voyant` de veille éteinte. */
+  screen?: boolean;
   build(): THREE.Object3D;
 }
 
@@ -1130,6 +1133,8 @@ export const ITEMS: ItemDef[] = [
   ...KITCHEN_ITEMS,
   // les plats des recettes (recipes.ts)
   ...DISHES,
+  // le salon : canapé, table basse, télé (salon.ts)
+  ...SALON_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));
