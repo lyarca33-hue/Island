@@ -22,7 +22,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ranger',
-    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, pomme, sandwich dans le frigo (le perso ouvre la porte).',
+    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, aliments (entiers ou coupés) dans le frigo (le perso ouvre la porte).',
     params: { meuble: 'ref du meuble' },
     // `objet` (facultatif) : ne ranger que lui
     run: (g, a) => g.store(a.meuble, a.objet),
@@ -69,7 +69,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'manger',
-    description: 'Prendre une bouchée de l’aliment tenu (pomme, sandwich) ; une fois fini, il disparaît et la faim remonte. Sans aliment en main, assis devant une assiette servie avec la fourchette en main : une bouchée de l’assiette (un repas à table rassasie un peu plus).',
+    description: 'Prendre une bouchée de l’aliment tenu (pomme, sandwich, pain, légumes, morceaux) ; une fois fini, il disparaît et la faim remonte. Sans aliment en main, assis devant une assiette servie avec la fourchette en main : une bouchée de l’assiette (un repas à table rassasie un peu plus).',
     params: {},
     run: (g) => g.eat(),
   },
@@ -90,6 +90,13 @@ export const ACTIONS: ActionDef[] = [
     description: 'Laver à l’évier la vaisselle tenue (assiette, fourchette, couteau, tasse ; une pièce par main) : posée au fond de la cuve, frottée sous l’eau, puis reprise propre. Les mains ne doivent tenir que de la vaisselle.',
     params: {},
     run: (g) => g.washDishes(),
+  },
+  {
+    name: 'couper',
+    description: 'Couper en morceaux l’aliment entier tenu (pomme, pain, carotte, tomate, concombre) : le perso le pose sur la planche à découper, prend le couteau, coupe, puis repose le couteau. Les morceaux restent sur la planche.',
+    params: {},
+    // `objet` (facultatif) : l'aliment tenu à couper
+    run: (g, a) => g.cut(a.objet),
   },
   {
     name: 'ouvrir',

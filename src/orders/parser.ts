@@ -28,6 +28,7 @@ const VERBS: Record<string, string[]> = {
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
   manger: ['mange', 'manges', 'manger', 'croque', 'croquer', 'grignote', 'grignoter', 'avale', 'avaler'],
+  couper: ['coupe', 'coupes', 'couper', 'decoupe', 'decouper', 'tranche', 'trancher', 'emince', 'emincer', 'hache', 'hacher'],
   dire: ['dis', 'dit', 'dire', 'crie', 'crier'],
   lire: ['lis', 'lit', 'lire', 'ouvre', 'ouvrir', 'feuillette', 'feuilleter', 'bouquine'],
   remplir: ['remplis', 'remplir', 'remplit', 'rempli'],
@@ -63,8 +64,20 @@ const ALIASES: Record<string, string[]> = {
   pomme: ['pomme', 'pommes', 'fruit', 'fruits'],
   sandwich: ['sandwich', 'sandwichs', 'sandwiches', 'casse'],
   assiette: ['assiette', 'assiettes'],
-  fourchette: ['fourchette', 'fourchettes'],
+  fourchette: ['fourchette', 'fourchettes', 'couverts'],
+  'couteau de table': ['couteau', 'couteaux', 'couverts'],
+  'plan de travail': ['plan', 'comptoir', 'paillasse'],
+  'planche a decouper': ['planche', 'planches'],
   couteau: ['couteau', 'couteaux'],
+  pain: ['pain', 'pains', 'miche', 'batard'],
+  carotte: ['carotte', 'carottes'],
+  tomate: ['tomate', 'tomates'],
+  concombre: ['concombre', 'concombres'],
+  'quartiers de pomme': ['quartiers', 'quartier'],
+  'tranches de pain': ['tranches', 'tranche', 'tartine', 'tartines'],
+  'rondelles de carotte': ['rondelles', 'rondelle'],
+  'tranches de tomate': ['tranches', 'tranche'],
+  'rondelles de concombre': ['rondelles', 'rondelle'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -87,9 +100,19 @@ function findObjects(clause: string[], objets: WorldObject[]): { found: WorldObj
     return true;
   });
   found.sort((a, b) => a.distance - b.distance);
+  // un nom entier dit dans l'ordre l'emporte sur un nom voisin : « les tranches de tomate » (pas
+  // celles de pain), « les quartiers de pomme » (pas la pomme)
+  const text = ` ${clause.join(' ')} `;
+  const said = (o: WorldObject) => text.includes(` ${normalize(o.nom)} `);
+  const exact = found.filter((x) => !found.some((y) => {
+    if (y.nom === x.nom || !said(y)) return false;
+    if (y.nom.includes(x.nom)) return true;
+    const kx = words(x).kind;
+    return !said(x) && words(y).kind.some((k) => kx.includes(k));
+  }));
   // « tous », « les », ou un nom au pluriel (« livres »)
   const all = clause.some((w) => ['tous', 'toutes', 'les'].includes(w) || (w.endsWith('s') && w.length > 3 && Object.values(ALIASES).flat().includes(w)));
-  return { found, all };
+  return { found: exact, all };
 }
 
 /** Découpe l'ordre en morceaux (« … puis … », « … et va … »), en gardant le texte d'origine. */
@@ -231,6 +254,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (!food.length && served && !held.some((o) => o.sorte === 'nourriture')) return [{ kind: 'repas', ref: served.ref }];
       return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
     }
+    case 'couper': {
+      // « coupe la pomme », « coupe le pain sur la planche », « coupe » (ce qu'on tient, sinon ce qu'il y a)
+      const food = found.filter((o) => o.coupable);
+      if (found.length && !food.length) return null;
+      return [{ kind: 'couper', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food.find(isLoose) ?? food[0])?.ref }];
+    }
     case 'remplir':
       // « remplis la tasse (d'eau / de café) » ; d'eau si rien n'est dit
       if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine')) return null;
@@ -241,7 +270,7 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (rest.includes('vaisselle') || rest.includes('couverts') || dishes.length) {
         if (found.some((o) => o.sorte !== 'évier' && !dishes.includes(o))) return null;
         // « lave les couverts » : fourchettes et couteaux
-        if (!dishes.length && rest.includes('couverts')) return [{ kind: 'vaisselle', refs: world.objets.filter((o) => o.nom === 'fourchette' || o.nom === 'couteau').map((o) => o.ref) }];
+        if (!dishes.length && rest.includes('couverts')) return [{ kind: 'vaisselle', refs: world.objets.filter((o) => o.nom === 'fourchette' || o.nom === 'couteau de table').map((o) => o.ref) }];
         if (all || !dishes.length) return [{ kind: 'vaisselle', refs: dishes.map((o) => o.ref) }];
         return [{ kind: 'vaisselle', refs: [(dishes.find((o) => o.ou.includes('sale')) ?? dishes[0]).ref] }];
       }

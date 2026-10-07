@@ -160,9 +160,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let' | 'cut';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.9, store: 0.9, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.9, store: 0.9, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45, cut: 2.6 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s) : la main l'y ramène (moitié de DURATION.add). */
 const STACK_BLEND = 0.45;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -285,6 +285,20 @@ const THROW_RELEASE = 0.5;
 const THROW_SPEED = 4.2;
 const THROW_LIFT = 2.4;
 
+/**
+ * Couper sur la planche : le couteau tenu pointe vers l'avant et le bas (doigts vers le bas, paume
+ * vers l'intérieur, repère du buste, main droite) ; la main monte et descend au-dessus de
+ * l'aliment (hauteur au-dessus de lui en bas du geste et course en m, vitesse en rad/s), un peu
+ * en retrait pour que la lame, pas le poing, arrive dessus.
+ */
+const CUT_HAND = { fingers: [0, -0.92, -0.38] as [number, number, number], palm: [1, 0, 0] as [number, number, number] };
+const CUT_ABOVE = 0.07;
+const CUT_LIFT = 0.06;
+const CUT_BACK = 0.12;
+const CUT_SPEED = 11;
+/** Temps pour amener le couteau au-dessus de l'aliment, et pour le ramener (s). */
+const CUT_EASE = 0.35;
+
 /** Pencher la tête vers le livre pendant la lecture (rad). */
 const READ_NOD = THREE.MathUtils.degToRad(16);
 
@@ -330,6 +344,8 @@ export class Carry {
   /** Se laver : la toilette (mains au visage) ou les mains seulement, et le temps sous l'eau (s). */
   private washFace = false;
   private washT = 0;
+  /** Couper : le point de l'aliment (monde) au-dessus duquel va la lame. */
+  private cutAt: (() => THREE.Vector3) | null = null;
   /** Main imposée par un geste (lancer) : position depuis l'épaule et coude. */
   private swing: { reach: THREE.Vector3; pole: THREE.Vector3 } | null = null;
   /** Pose de l'objet dans la main au moment où elle le touche (voir SETTLE). */
@@ -522,6 +538,19 @@ export class Carry {
     return true;
   }
 
+  /**
+   * Coupe avec le couteau tenu : la lame va et vient au-dessus du point `at()` (monde, le dessus de
+   * l'aliment posé sur la planche) ; `onDone` une fois le couteau revenu en main.
+   */
+  cut(at: () => THREE.Vector3, onDone?: () => void): boolean {
+    if (!this.item?.def.knife || this.phase !== 'hold' || this.stack.length) return false;
+    this.cutAt = at;
+    // le buste se penche vers la planche (voir weights)
+    this.target.copy(at());
+    this.start('cut', onDone);
+    return true;
+  }
+
   /** Saisit un objet à portée (le perso doit déjà lui faire face). */
   pickUp(item: WorldItem, onDone?: () => void): boolean {
     if (this.item || this.busy || !item.def.portable) return false;
@@ -559,13 +588,14 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', drink: 'hold', eat: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', cut: 'hold', drink: 'hold', eat: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
       this.heldPos.copy(this.item.object.position);
       this.heldRot.copy(this.item.object.quaternion);
     }
+    if (this.phase === 'cut') this.cutAt = null;
     if (this.phase === 'store') {
       const top = this.stack.pop()!;
       top.item.object.position.copy(top.leaving!.pos);
@@ -609,6 +639,8 @@ export class Carry {
       case 'brace': return { w: k, r: 0, c: this.braceGrip === 'wash' ? k : 0 };
       case 'push': return { w: 1, r: 0, c: this.braceGrip === 'wash' ? 1 - 0.6 * this.splashAmount() : 0 };
       case 'unbrace': return { w: 1 - k, r: 0, c: this.braceGrip === 'wash' ? 1 - k : 0 };
+      // au-dessus de la planche, le buste se penche un peu
+      case 'cut': return { w: 1, r: 0, c: this.cutAmount() };
       // l'objet s'est brisé en main : le bras retombe
       case 'let': return { w: 1 - k, r: 0, c: 0 };
       case 'throw': return { w: 1 - ease(THREE.MathUtils.clamp((this.t - THROW_SWING) / (DURATION.throw - THROW_SWING), 0, 1)), r: 0, c: 0 };
@@ -763,6 +795,13 @@ export class Carry {
     return ease(1 - (t - S.basin - S.up - S.face) / S.down);
   }
 
+  /** Couteau au-dessus de l'aliment : 0 tenu normalement, 1 en train de couper (fondu au début et à la fin). */
+  private cutAmount(): number {
+    if (this.phase !== 'cut') return 0;
+    const t = this.t, T = DURATION.cut;
+    return ease(Math.min(1, t / CUT_EASE, (T - t) / CUT_EASE));
+  }
+
   /** Tasse vers la bouche : monte, reste le temps de la gorgée, redescend. */
   private sipAmount(): number {
     const t = this.t, T = DURATION[this.phase];
@@ -912,6 +951,17 @@ export class Carry {
         const now = rest.fingers.clone().applyQuaternion(handRot);
         const turn = new THREE.Quaternion().setFromUnitVectors(now, along);
         handRot.premultiply(new THREE.Quaternion().slerp(turn, WRIST_FOLLOW * r));
+      }
+      const cutting = side === this.side && this.cutAt ? this.cutAmount() : 0;
+      if (cutting > 0) {
+        // la lame monte et descend au-dessus de l'aliment, le poing un peu en retrait
+        const back = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chestRot).setY(0).normalize();
+        const lift = CUT_ABOVE + CUT_LIFT * (0.5 + 0.5 * Math.cos(this.t * CUT_SPEED));
+        const food = this.cutAt!();
+        const at = food.clone().addScaledVector(back, -CUT_BACK).setY(food.y + lift);
+        palmTarget.lerp(at, cutting);
+        const cutRot = basisRotation(rest.fingers, PALM_REST, vec(flip(CUT_HAND.fingers, side)).normalize().applyQuaternion(this.chestRot), vec(flip(CUT_HAND.palm, side)).normalize().applyQuaternion(this.chestRot));
+        handRot.slerp(cutRot, cutting);
       }
       if (sipping) {
         palmTarget.lerp(this.mouthHold(scale, side), this.sip);

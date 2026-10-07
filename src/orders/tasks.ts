@@ -23,6 +23,8 @@ export type Intent =
   | { kind: 'boire'; ref?: string; liquide?: 'eau' | 'café' }
   /** Manger l'aliment `ref` en entier (sinon celui qu'on tient, sinon le plus proche). */
   | { kind: 'manger'; ref?: string }
+  /** Couper en morceaux l'aliment `ref` (sinon celui qu'on tient, sinon le plus proche) sur la planche. */
+  | { kind: 'couper'; ref?: string }
   | { kind: 'ouvrir'; ref: string }
   | { kind: 'fermer'; ref: string }
   /** Remplir la tasse d'eau à l'évier. */
@@ -227,6 +229,16 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       for (let i = 0; i < 12 && world(game).enMain.includes(food.ref); i++) await act('manger');
       return;
     }
+    case 'couper': {
+      const w = world(game);
+      const foods = w.objets.filter((o) => o.coupable);
+      const food = intent.ref
+        ? foods.find((o) => o.ref === intent.ref)
+        : (foods.find((o) => w.enMain.includes(o.ref)) ?? [...foods].sort((a, b) => +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0]);
+      if (!food) throw new Failed(intent.ref ? `On ne peut pas couper : ${intent.ref}.` : 'Il n’y a rien à couper.');
+      await take(game, act, food.ref);
+      return act('couper', { objet: food.ref });
+    }
     case 'mettre':
       if (intent.ref) await take(game, act, intent.ref);
       if (!held(game).length) throw new Failed('Rien en main à ranger.');
@@ -297,7 +309,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const forks = w.objets.filter((o) => o.nom === 'fourchette').sort((a, b) => +a.ou.includes('sale') - +b.ou.includes('sale') || a.distance - b.distance);
       const fork = forks.find((o) => w.enMain.includes(o.ref)) ?? forks[0];
       if (!fork) throw new Failed('Il n’y a pas de fourchette.');
-      await freeHands(game, act, (ref) => ref === fork.ref || world(game).objets.find((o) => o.ref === ref)?.nom === 'couteau');
+      await freeHands(game, act, (ref) => ref === fork.ref || world(game).objets.find((o) => o.ref === ref)?.nom === 'couteau de table');
       await take(game, act, fork.ref);
       await act('attabler', { assiette: plate.ref });
       // bouchée après bouchée jusqu'à la fin du plat
