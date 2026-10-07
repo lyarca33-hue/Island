@@ -26,7 +26,7 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
-  const [can, setCan] = useState<HandActions>({ drink: false, read: false, reading: false });
+  const [can, setCan] = useState<HandActions>({ drink: false, throw: false, moving: false, read: false, reading: false });
   const [notice, setNotice] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   /** Partie du menu dépliée. */
@@ -93,11 +93,24 @@ function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }
       {held && (
         <div className="hud-held">
           <button onClick={() => game.current?.drop()}>
-            En main : {held} · <b>Poser (E)</b>
+            {can.moving ? (
+              <>
+                Déplace : {held} (Z Q S D) · <b>Lâcher (E)</b>
+              </>
+            ) : (
+              <>
+                En main : {held} · <b>Poser (E)</b>
+              </>
+            )}
           </button>
           {can.drink && !can.reading && (
             <button onClick={() => game.current?.drink()}>
               <b>Boire (B)</b>
+            </button>
+          )}
+          {can.throw && !can.reading && (
+            <button onClick={() => game.current?.throwItem()}>
+              <b>Lancer (T)</b>
             </button>
           )}
           {(can.read || can.reading) && (

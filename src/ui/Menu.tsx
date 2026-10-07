@@ -47,6 +47,8 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['E', 'Poser'],
   ['B', 'Boire'],
   ['L', 'Lire / fermer le livre'],
+  ['T', 'Lancer l’objet tenu'],
+  ['Clic sur un meuble (mains vides)', 'L’agripper : Z Q S D le déplacent, E le lâche'],
   ['Entrée', 'Écrire'],
   ['Tab (en écrivant)', 'Parole ↔ Action'],
   ['Échap', 'Menu'],

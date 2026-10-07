@@ -11,11 +11,12 @@ import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { applySky, GameClock } from './clock';
 import { createGround, GROUND_HALF } from './ground';
+import { breakChance, Debris } from './items/breakage';
 import { LAY_FLAT, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
-import { Nav } from './nav';
+import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
 import { lightAllPasses, PostFx } from './postfx';
 
@@ -72,9 +73,32 @@ export interface WorldObject {
   distance: number;
 }
 
+/** Noms féminins (accord des messages). */
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'table', 'bibliothèque', 'machine à café']);
+
+/** Pesanteur des objets lancés (m/s²). */
+const GRAVITY = 9.8;
+
+/** Le point au sol (y = 0). */
+const p0 = (v: THREE.Vector3) => v.clone().setY(0);
+
+/** Objet lancé, en vol. */
+interface Flying {
+  item: WorldItem;
+  vel: THREE.Vector3;
+  /** Rotation en vol : axe × vitesse (rad/s). */
+  spin: THREE.Vector3;
+  /** Déjà rebondi une fois (le premier choc seul peut le casser). */
+  bounced: boolean;
+}
+
 /** Ce qu'on peut faire avec ce qu'on tient (boutons de l'interface). */
 export interface HandActions {
   drink: boolean;
+  /** L'objet tenu (le dernier pris) peut être lancé. */
+  throw: boolean;
+  /** En train de déplacer un gros meuble. */
+  moving: boolean;
   read: boolean;
   reading: boolean;
 }
@@ -118,6 +142,11 @@ export class Game {
   private riders: Array<{ base: WorldItem; item: WorldItem; rel: THREE.Matrix4 }> = [];
   /** Objets tenus à l'image précédente (les objets posés dessus suivent jusqu'à la dépose). */
   private prevHeld: WorldItem[] = [];
+  /** Gros meuble en train d'être déplacé, et ce qui est posé ou rangé dedans (suit le meuble). */
+  private moving: { item: WorldItem; riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> } | null = null;
+  /** Objets lancés en vol, et éclats des objets brisés. */
+  private flying: Flying[] = [];
+  private debris: Debris[] = [];
   /** Café en train de couler : la machine, la tasse posée dessous, le temps écoulé (s). */
   private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
@@ -188,9 +217,7 @@ export class Game {
       item.object.rotation.y = rot;
     }
     // les meubles (objets non portables) se contournent
-    const nav = new Nav();
-    for (const it of this.items) if (!it.def.portable) nav.add(it.box, it.object.position, it.object.rotation.y);
-    this.character.nav = nav;
+    this.character.nav = this.buildNav();
     const shelf = this.items.find((i) => i.def.slots)!;
     for (const [id, at] of START_BOOKS) {
       const book = add(id);
@@ -247,6 +274,7 @@ export class Game {
    * le meuble qui s'y trouve (table), sinon au sol.
    */
   drop(name?: string): boolean {
+    if (this.moving) return this.release();
     const held = name ? this.character.heldItems.find((i) => i.name === name) : this.character.held;
     if (!held) return false;
     if (this.closeBookThen(() => this.drop(name))) return true;
@@ -307,7 +335,234 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    return this.character.idle && !this.brew;
+    return this.character.idle && !this.brew && !this.flying.length;
+  }
+
+  /** Les meubles (objets non portables) à contourner, sauf `skip`. */
+  private buildNav(skip?: WorldItem): Nav {
+    const nav = new Nav();
+    for (const it of this.items) if (!it.def.portable && it !== skip) nav.add(it.box, it.object.position, it.object.rotation.y);
+    return nav;
+  }
+
+  /**
+   * Agrippe le gros meuble `ref` (ou le plus proche déplaçable) : le perso va se placer contre
+   * le côté le plus proche et y pose les mains ; ensuite les touches le déplacent, E le lâche.
+   */
+  grab(ref?: string, running = false): boolean {
+    const p = this.character.position;
+    const item = ref
+      ? this.byRef(ref)
+      : this.items.filter((i) => i.def.movable).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    if (!item) {
+      this.onNotice?.(ref ? `Aucun objet « ${ref} ».` : 'Aucun meuble à déplacer.');
+      return false;
+    }
+    return this.grabFurniture(item, running);
+  }
+
+  /** Lâche le meuble qu'on déplace. */
+  release(): boolean {
+    const m = this.moving;
+    if (!m) return false;
+    this.moving = null;
+    // les meubles ont bougé : les chemins les contournent à leur nouvelle place
+    this.character.nav = this.buildNav();
+    return this.character.stopPush();
+  }
+
+  /** Nom du meuble qu'on déplace (ou null). */
+  get movingName(): string | null {
+    return this.moving?.item.name ?? null;
+  }
+
+  private grabFurniture(item: WorldItem, running: boolean): boolean {
+    const c = this.character;
+    if (!c.canCarry) {
+      this.onNotice?.('Crée un perso pour pouvoir déplacer des meubles.');
+      return false;
+    }
+    if (!item.def.movable) {
+      this.onNotice?.(`On ne peut pas déplacer : ${item.name}.`);
+      return false;
+    }
+    if (c.heldItems.length || c.bracing) {
+      this.onNotice?.('Il faut les deux mains libres pour déplacer un meuble.');
+      return false;
+    }
+    if (this.brew?.machine === item) {
+      this.onNotice?.(`Le ${item.def.pour!.liquid} coule encore.`);
+      return false;
+    }
+    // le côté du meuble le plus proche du perso (repère du meuble)
+    const o = item.object;
+    o.updateMatrixWorld(true);
+    const b = item.box;
+    const ctr = b.getCenter(new THREE.Vector3());
+    const half = b.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+    const local = o.worldToLocal(p0(c.position)).sub(ctr);
+    const alongX = Math.abs(local.x) / half.x > Math.abs(local.z) / half.z;
+    const normal = alongX ? new THREE.Vector3(Math.sign(local.x) || 1, 0, 0) : new THREE.Vector3(0, 0, Math.sign(local.z) || 1);
+    const tangent = new THREE.Vector3(-normal.z, 0, normal.x);
+    const faceHalf = alongX ? half.x : half.z;
+    const spread = Math.min(0.2, (alongX ? half.z : half.x) - 0.04);
+    // mains un peu sous le dessus du meuble (au plus à hauteur de poitrine)
+    const handY = Math.min(b.max.y - 0.02, 0.95);
+    const face = ctr.clone().addScaledVector(normal, faceHalf + 0.01).setY(handY);
+    const hands = {
+      // le perso fait face au meuble : sa droite est du côté -tangent
+      right: face.clone().addScaledVector(tangent, -spread),
+      left: face.clone().addScaledVector(tangent, spread),
+    };
+    const at = () => ({ right: o.localToWorld(hands.right.clone()), left: o.localToWorld(hands.left.clone()) });
+    const stand = o.localToWorld(ctr.clone().addScaledVector(normal, faceHalf + 0.42).setY(0)).setY(0);
+    const faceAt = o.localToWorld(ctr.clone().setY(0)).setY(0);
+    // ce qui est posé dessus ou rangé dedans part avec lui
+    const riders = this.items
+      .filter((it) => it !== item && it.def.portable && !c.carried.includes(it) && !this.flying.some((f) => f.item === it))
+      .filter((it) => {
+        const q = o.worldToLocal(new THREE.Box3().setFromObject(it.object).getCenter(new THREE.Vector3()));
+        return q.x > b.min.x && q.x < b.max.x && q.z > b.min.z && q.z < b.max.z && q.y > b.min.y && q.y < b.max.y + 0.6;
+      })
+      .map((it) => {
+        it.object.updateMatrixWorld(true);
+        return { item: it, rel: o.matrixWorld.clone().invert().multiply(it.object.matrixWorld) };
+      });
+    const others = this.buildNav(item);
+    const move = (step: THREE.Vector3): boolean => {
+      // le meuble à sa nouvelle place ne doit pas entrer dans un autre, ni le perso dans un meuble
+      const next = o.position.clone().add(step);
+      const rect = footprint(b, next, o.rotation.y);
+      const blocked = this.items.some((it) => it !== item && (!it.def.portable || isTwoHanded(it.grip)) && !riders.some((r) => r.item === it)
+        && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)));
+      if (blocked || others.blocked(c.position.clone().add(step))) return false;
+      o.position.copy(next);
+      o.updateMatrixWorld(true);
+      for (const r of riders) {
+        const ro = r.item.object;
+        ro.matrix.multiplyMatrices(o.matrixWorld, r.rel);
+        ro.matrix.decompose(ro.position, ro.quaternion, ro.scale);
+      }
+      return true;
+    };
+    const ok = c.startPush(stand, faceAt, at, move, running);
+    if (ok) this.moving = { item, riders };
+    return ok;
+  }
+
+  /**
+   * Lance devant le perso l'objet tenu (le dernier pris, ou celui nommé) : petit ou moyen, tenu
+   * d'une main. En retombant, il peut se briser selon sa fragilité (fiche, 1 à 10).
+   */
+  throwItem(name?: string): boolean {
+    const c = this.character;
+    const held = name ? c.heldItems.find((i) => i.name === name) : c.held;
+    if (!held) {
+      this.onNotice?.(name ? `Pas de ${name} en main.` : 'Rien à lancer.');
+      return false;
+    }
+    if (this.closeBookThen(() => this.throwItem(name))) return true;
+    const hand = c.handOf(held);
+    if (hand?.stacked) this.onNotice?.('On ne lance pas une pile de livres.');
+    else if (isTwoHanded(held.grip)) this.onNotice?.(`Trop gros pour être lancé : ${held.name}.`);
+    else if (c.busy) return false;
+    else return c.throwItem(held, (item, vel) => this.launch(item, vel));
+    return false;
+  }
+
+  /** L'objet quitte la main : il vole en tournant sur lui-même. */
+  private launch(item: WorldItem, vel: THREE.Vector3): void {
+    const spin = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(6 + Math.random() * 6);
+    this.flying.push({ item, vel, spin, bounced: false });
+  }
+
+  /** Hauteur de la surface sous (x, z) : dessus d'un meuble ou d'une caisse, sinon le sol. */
+  private surfaceAt(x: number, z: number, skip: WorldItem): number {
+    let top = 0;
+    const p = new THREE.Vector3();
+    for (const it of this.items) {
+      if (it === skip || (it.def.portable && !isTwoHanded(it.grip)) || this.character.carried.includes(it)) continue;
+      it.object.worldToLocal(p.set(x, 0, z));
+      const b = it.box;
+      if (p.x > b.min.x && p.x < b.max.x && p.z > b.min.z && p.z < b.max.z) top = Math.max(top, it.object.position.y + b.max.y);
+    }
+    return top;
+  }
+
+  /** Objets en vol : pesanteur, chocs sur le sol et les meubles, casse ou rebond puis repos. */
+  private tickFlying(dt: number): void {
+    const steps = Math.max(1, Math.ceil(dt / 0.01));
+    const h = dt / steps;
+    const q = new THREE.Quaternion();
+    for (const f of [...this.flying]) {
+      const o = f.item.object;
+      for (let i = 0; i < steps && this.flying.includes(f); i++) {
+        const prev = o.position.clone();
+        const prevBottom = prev.y - f.item.restLift(o.quaternion);
+        f.vel.y -= GRAVITY * h;
+        o.position.addScaledVector(f.vel, h);
+        const w = f.spin.length();
+        if (w > 0) o.quaternion.premultiply(q.setFromAxisAngle(f.spin.clone().divideScalar(w), w * h));
+        const lim = GROUND_HALF - 14;
+        o.position.x = THREE.MathUtils.clamp(o.position.x, -lim, lim);
+        o.position.z = THREE.MathUtils.clamp(o.position.z, -lim, lim);
+        const surf = this.surfaceAt(o.position.x, o.position.z, f.item);
+        const lift = f.item.restLift(o.quaternion);
+        if (o.position.y - lift >= surf) continue;
+        if (prevBottom < surf - 0.02) {
+          // heurte le flanc d'un meuble : repart en arrière, ralenti
+          o.position.set(prev.x, o.position.y, prev.z);
+          f.vel.x *= -0.3;
+          f.vel.z *= -0.3;
+          continue;
+        }
+        o.position.y = surf + lift;
+        this.impact(f, surf);
+      }
+    }
+  }
+
+  /** Choc d'un objet lancé : il se brise (selon sa fragilité), rebondit ou se pose. */
+  private impact(f: Flying, surf: number): void {
+    const item = f.item;
+    const speed = f.vel.length();
+    if (!f.bounced && Math.random() < breakChance(item.def.fragility ?? 5, speed)) {
+      this.flying = this.flying.filter((x) => x !== f);
+      this.shatter(item, surf, f.vel);
+      return;
+    }
+    if (Math.abs(f.vel.y) > 1.2) {
+      f.bounced = true;
+      f.vel.set(f.vel.x * 0.5, -f.vel.y * 0.3, f.vel.z * 0.5);
+      f.spin.multiplyScalar(0.5);
+      return;
+    }
+    // se pose : à plat (livre) ou debout, tourné comme il est arrivé
+    this.flying = this.flying.filter((x) => x !== f);
+    const o = item.object;
+    const yaw = new THREE.Euler().setFromQuaternion(o.quaternion, 'YXZ').y;
+    o.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    if (item.def.layFlat) o.quaternion.multiply(LAY_FLAT);
+    o.position.y = surf + item.restLift(o.quaternion);
+    // un récipient lancé se renverse
+    if (item.contents) {
+      this.addDebris(new Debris(item, surf, f.vel, false));
+      item.setLevel(0);
+      item.contents = null;
+    }
+  }
+
+  /** L'objet se brise : il disparaît de la pièce, ses éclats s'éparpillent. */
+  private shatter(item: WorldItem, floor: number, vel = new THREE.Vector3()): void {
+    this.addDebris(new Debris(item, floor, vel));
+    this.items = this.items.filter((i) => i !== item);
+    item.object.removeFromParent();
+    this.onNotice?.(`${item.name[0].toUpperCase()}${item.name.slice(1)} s'est brisé${FEMININE.has(item.name) ? 'e' : ''} !`);
+  }
+
+  private addDebris(d: Debris): void {
+    this.debris.push(d);
+    this.scene.add(d.group);
   }
 
   /**
@@ -484,7 +739,11 @@ export class Game {
     // un livre rangé se prend par l'avant du meuble
     const from = this.shelfOf(item)?.forward;
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
+    else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    // mains vides : un gros meuble s'agrippe pour le déplacer
+    else if (item.def.movable && !held.length) return this.grabFurniture(item, running);
     else if (item.def.pour) return this.pourAt(item, running);
+    else if (this.flying.some((f) => f.item === item)) return false;
     else if (item === this.brew?.cup) this.onNotice?.(`Le ${this.brew.machine.def.pour!.liquid} coule encore.`);
     else if (item.def.slots && held.length) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
@@ -595,6 +854,7 @@ export class Game {
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
       if (e.code === 'KeyB' && !e.repeat) this.drink();
+      if (e.code === 'KeyT' && !e.repeat) this.throwItem();
       if (e.code === 'KeyL' && !e.repeat) {
         if (this.character.reading) this.stopReading();
         else this.read();
@@ -618,6 +878,10 @@ export class Game {
       }
       const p = this.groundPoint(e.clientX, e.clientY);
       if (!p) return;
+      if (this.moving) {
+        this.onNotice?.('Z Q S D pour déplacer le meuble, E pour le lâcher.');
+        return;
+      }
       this.character.goTo(p, e.shiftKey);
       this.marker.position.set(p.x, 0.01, p.z);
       (this.marker.material as THREE.MeshBasicMaterial).opacity = 0.9;
@@ -651,6 +915,10 @@ export class Game {
 
   /** E : reposer l'objet tenu, sinon prendre l'objet portable le plus proche (à 1,5 m). */
   private useKey(): void {
+    if (this.moving) {
+      this.release();
+      return;
+    }
     if (this.character.held) {
       this.drop();
       return;
@@ -724,17 +992,22 @@ export class Game {
     this.riders = this.riders.filter((r) => held.includes(r.base));
     this.prevHeld = held;
     this.tickBrew(dt);
+    this.tickFlying(dt);
+    this.debris = this.debris.filter((d) => d.update(dt));
     this.tickNeeds(dt);
     const names = held.map((h) => {
       const n = h.contents ? `${h.name} de ${h.contents}` : h.name;
       const count = c.handOf(h)?.carried.length ?? 1;
       return count > 1 ? `${n} ×${count}` : n;
     });
-    const label = names.length ? names.join(' et ') : null;
+    const label = this.moving ? this.moving.item.name : names.length ? names.join(' et ') : null;
     const book = held.find((h) => h.def.buildOpen);
     const bookHand = book ? c.handOf(book) : null;
+    const last = c.held;
     const can: HandActions = {
       drink: held.some((h) => !!h.contents),
+      throw: !!last && !!c.handOf(last)?.canThrow,
+      moving: !!this.moving,
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
       reading: !!c.reading,
     };

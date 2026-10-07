@@ -156,6 +156,17 @@ Lire : livre en main (l'autre main libre), bouton « Lire » ou touche L. Le per
 devant lui à deux mains et penche la tête ; L de nouveau pour le refermer. Prendre ou poser
 quelque chose referme le livre d'abord.
 
+Lancer : objet petit ou moyen tenu d'une main (tasse, livre, lettre), bouton « Lancer » ou
+touche T. Le bras part en arrière puis fouette, l'objet vole en tournant. Au premier choc il peut
+se briser selon sa fragilité (fiche `fragility`, de 1 très fragile à 10 incassable ; tasse 2,
+livre 8, lettre 10) et la force du choc : il disparaît en éclats de ses couleurs, et une tasse
+pleine laisse une flaque. Sinon il rebondit et se pose (un livre à plat).
+
+Déplacer un gros meuble (fiche `movable` : table, bibliothèque, machine à café) : mains vides,
+clic sur le meuble. Le perso se place contre le côté le plus proche et pose les mains dessus ;
+Z Q S D le poussent ou le tirent (ce qui est posé ou rangé dedans suit), il bute sur les autres
+meubles. E le lâche.
+
 Boire : tasse de café en main, bouton « Boire » ou touche B. Le perso porte la tasse à la bouche,
 l'incline et boit une gorgée ; le niveau baisse (environ trois gorgées). Vide, elle se remplit
 de nouveau à la machine.
@@ -165,4 +176,5 @@ Les meubles (objets non portables) sont des rectangles au sol que le perso conto
 
 Depuis la console (et plus tard pour l'IA de RP) : `game.pickUp('tasse')`, `game.drop()` (ou
 `game.drop('livre')` pour poser cet objet-là), `game.read()`, `game.stopReading()`, `game.heldNames`,
-`game.store()` (ranger les livres tenus), `game.makeCoffee()`, `game.drink()`, `game.itemNames`.
+`game.store()` (ranger les livres tenus), `game.makeCoffee()`, `game.drink()`, `game.throwItem()` (ou `game.throwItem('tasse')`),
+`game.grab('table')` / `game.release()`, `game.itemNames`.

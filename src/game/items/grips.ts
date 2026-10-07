@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 
-export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack' | 'read';
+export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack' | 'read' | 'push';
 
 export interface HandSpec {
   /** Où va la main, depuis l'épaule (longueurs de bras, repère du buste). */
@@ -111,6 +111,16 @@ export const GRIPS: Record<GripType, GripSpec> = {
     forward: [0, 0.57, -0.82],
     hold: [-0.06, -0.02, 0],
     width: 0.3,
+  },
+  // mains à plat contre un gros meuble pour le pousser ou le tirer (les mains vont aux points
+  // d'appui donnés, voir Carry.brace)
+  push: {
+    label: 'contre un meuble',
+    right: { reach: [0, -0.3, 0.7], pole: [-0.7, -0.7, -0.2], fingers: [0.25, 1, 0.1], palm: [0, 0, 1], curl: 10, thumb: 15 },
+    left: { reach: [0, -0.3, 0.7], pole: [0.7, -0.7, -0.2], fingers: [-0.25, 1, 0.1], palm: [0, 0, 1], curl: 10, thumb: 15 },
+    up: [0, 1, 0],
+    forward: [0, 0, 1],
+    hold: [-0.05, -0.02, 0],
   },
 };
 

@@ -11,7 +11,7 @@ const RADIUS = 0.22;
 /** Marge des coins de contournement, un peu hors du rectangle élargi. */
 const CORNER = 0.06;
 
-interface Rect {
+export interface Rect {
   x: number;
   z: number;
   /** Axes du rectangle (cos, sin de sa rotation). */
@@ -21,22 +21,36 @@ interface Rect {
   hz: number;
 }
 
+/** Rectangle au sol d'un meuble (sa boîte tournée comme lui), élargi de `grow`. */
+export function footprint(box: THREE.Box3, pos: THREE.Vector3, yaw: number, grow = 0): Rect {
+  const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return {
+    // centre de la boîte tourné comme le meuble (rotation autour de Y)
+    x: pos.x + cx * c + cz * s,
+    z: pos.z - cx * s + cz * c,
+    c,
+    s,
+    hx: (box.max.x - box.min.x) / 2 + grow,
+    hz: (box.max.z - box.min.z) / 2 + grow,
+  };
+}
+
+/** Deux rectangles au sol se chevauchent-ils ? (axes séparateurs) */
+export function overlaps(a: Rect, b: Rect): boolean {
+  const dx = b.x - a.x, dz = b.z - a.z;
+  // axes locaux X et Z de chaque rectangle, dans le monde (x, z)
+  const axes: Array<[number, number]> = [[a.c, -a.s], [a.s, a.c], [b.c, -b.s], [b.s, b.c]];
+  const ext = (r: Rect, ax: number, az: number) => r.hx * Math.abs(r.c * ax - r.s * az) + r.hz * Math.abs(r.s * ax + r.c * az);
+  return axes.every(([ax, az]) => Math.abs(dx * ax + dz * az) < ext(a, ax, az) + ext(b, ax, az));
+}
+
 export class Nav {
   private rects: Rect[] = [];
 
   /** Ajoute un meuble : sa boîte (repère du meuble), sa position et sa rotation (lacet). */
   add(box: THREE.Box3, pos: THREE.Vector3, yaw: number): void {
-    const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
-    const c = Math.cos(yaw), s = Math.sin(yaw);
-    this.rects.push({
-      // centre de la boîte tourné comme le meuble (rotation autour de Y)
-      x: pos.x + cx * c + cz * s,
-      z: pos.z - cx * s + cz * c,
-      c,
-      s,
-      hx: (box.max.x - box.min.x) / 2 + RADIUS,
-      hz: (box.max.z - box.min.z) / 2 + RADIUS,
-    });
+    this.rects.push(footprint(box, pos, yaw, RADIUS));
   }
 
   /** Point dans le repère du rectangle. */
