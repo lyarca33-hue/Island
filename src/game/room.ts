@@ -3,6 +3,9 @@
  * quand le perso s'en approche), deux fenêtres, et le décor fixé aux murs (crédence, hotte,
  * étagère, horloge qui donne l'heure du jeu, meuble d'angle).
  *
+ * Lumière jour et nuit, réglée par l'horloge du jeu : les suspensions s'allument au crépuscule
+ * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit.
+ *
  * Murs « en coupe » comme dans les Sims : les murs tournés vers la caméra s'abaissent à hauteur
  * de plinthe pour qu'on voie dedans ; ils se relèvent quand la caméra tourne. Le perso hors de la
  * pièce, derrière un mur, le fait aussi s'abaisser.
@@ -12,6 +15,8 @@
  */
 import * as THREE from 'three';
 import { createToonMaterial } from './toon';
+import { lightAllPasses } from './postfx';
+import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
 
 /** Intérieur de la pièce (m) : x de x0 à x1, z de z0 à z1. Le fond (nord) est à z0. */
@@ -38,6 +43,24 @@ const FRAME = 0xf6f3ec;
 const WOOD = 0x8a6440;
 const DARK_WOOD = 0x5d4129;
 const COUNTER = 0xd9d3c5;
+
+/** Suspensions : hauteur de l'ampoule, couleur et force de la lumière allumée, portée (m). */
+const LAMP_Y = 1.95;
+const LAMP_COLOR = 0xffc98a;
+const LAMP_I = 7;
+const LAMP_RANGE = 7;
+/** Les lampes s'allument sur cette durée (h) avant le coucher, s'éteignent après le lever. */
+const LAMP_FADE = 1.5;
+/** Vitres : ciel de jour, ciel de nuit (couleur, opacité). */
+const PANE_DAY = { color: new THREE.Color(0xbfe3f2), opacity: 0.35 };
+const PANE_NIGHT = { color: new THREE.Color(0x1c2748), opacity: 0.75 };
+
+/** Part de lumière des lampes à l'heure `h` : 1 la nuit, 0 en plein jour, fondu autour du lever et du coucher. */
+export function lampLevel(h: number): number {
+  const morning = 1 - THREE.MathUtils.smoothstep(h, SUNRISE, SUNRISE + LAMP_FADE);
+  const evening = THREE.MathUtils.smoothstep(h, SUNSET - LAMP_FADE, SUNSET);
+  return Math.max(morning, evening);
+}
 
 export type WallName = 'nord' | 'sud' | 'est' | 'ouest';
 
@@ -172,6 +195,12 @@ export class Room {
   private capMat = toon(CAP);
   /** Murs pleins visibles, pour les clics (un clic sur un mur vise le sol à son pied). */
   private solid: THREE.Object3D[] = [];
+  /** Lumières des suspensions, et leurs ampoules (qui brillent allumées). */
+  private lamps: THREE.PointLight[] = [];
+  private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
+  private shadeMat = toon(0x2f5d50);
+  /** Matériau partagé des vitres, teinté selon l'heure. */
+  private glassMat = new THREE.MeshBasicMaterial({ color: PANE_DAY.color, transparent: true, opacity: PANE_DAY.opacity, depthWrite: false });
 
   constructor(anchor: Anchors) {
     this.group.name = 'piece';
@@ -320,6 +349,44 @@ export class Room {
     if (tableAt) this.group.add(box(2, 0.01, 2.1, toon(0xb04a3c), tableAt.x, 0.008, tableAt.z - 0.45, false), box(1.8, 0.012, 1.9, toon(0xd8b07a), tableAt.x, 0.009, tableAt.z - 0.45, false));
     // tapis devant l'évier
     this.group.add(box(0.8, 0.01, 0.45, toon(0x5b7fa8), sinkX, 0.008, z0 + 1.0, false));
+
+    // suspensions : une au-dessus de la table, une au milieu du coin cuisine
+    this.addLamp(tableAt ? tableAt.x : 1.6, tableAt ? tableAt.z - 0.2 : 1);
+    this.addLamp((sinkX + stoveX) / 2, z0 + 1.3);
+  }
+
+  /** Suspension au plafond (fil, abat-jour, ampoule) et sa lumière, éteinte au départ. */
+  private addLamp(x: number, z: number): void {
+    const lamp = new THREE.Group();
+    lamp.name = 'suspension';
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, WALL_H - LAMP_Y - 0.1, 6), toon(0x2a2a2a));
+    cord.position.y = (WALL_H + LAMP_Y + 0.1) / 2;
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.2, 0.16, 20, 1, true), this.shadeMat);
+    shade.material.side = THREE.DoubleSide;
+    shade.position.y = LAMP_Y + 0.06;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 12), toon(0xc9a24a));
+    cap.position.y = LAMP_Y + 0.16;
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), this.bulbMat);
+    bulb.position.y = LAMP_Y;
+    lamp.add(cord, shade, cap, bulb);
+    lamp.position.set(x, 0, z);
+    // la lumière part juste sous l'ampoule, pour éclairer sous l'abat-jour
+    const light = lightAllPasses(new THREE.PointLight(LAMP_COLOR, 0, LAMP_RANGE, 2));
+    light.position.set(x, LAMP_Y - 0.08, z);
+    this.lamps.push(light);
+    this.group.add(lamp, light);
+  }
+
+  /** Lampes et vitres selon l'heure `hour` (0 à 24). */
+  private applyLight(hour: number): void {
+    const k = lampLevel(hour);
+    for (const l of this.lamps) l.intensity = LAMP_I * k;
+    // ampoule éteinte grise, allumée au-dessus de 1 : le bloom la fait briller
+    this.bulbMat.color.setRGB(0.23 + 2.4 * k, 0.2 + 1.9 * k, 0.17 + 1.1 * k);
+    // vitres : nuit dès que le soleil est couché, un peu avant que les lampes soient à fond
+    const night = Math.max(1 - THREE.MathUtils.smoothstep(hour, SUNRISE - 0.5, SUNRISE + 1), THREE.MathUtils.smoothstep(hour, SUNSET - 1, SUNSET + 0.5));
+    this.glassMat.color.copy(PANE_DAY.color).lerp(PANE_NIGHT.color, night);
+    this.glassMat.opacity = THREE.MathUtils.lerp(PANE_DAY.opacity, PANE_NIGHT.opacity, night);
   }
 
   private wall(name: WallName): Wall {
@@ -391,7 +458,7 @@ export class Room {
     const sgn = alongX ? w.n.y : w.n.x;
     const c = inner - sgn * WALL_T / 2;
     const frame = toon(FRAME);
-    const glass = new THREE.MeshBasicMaterial({ color: 0xbfe3f2, transparent: true, opacity: 0.35, depthWrite: false });
+    const glass = this.glassMat;
     const add = (u: number, y: number, lu: number, ly: number, t: number, mat: THREE.Material, off = 0) => {
       const m = alongX ? box(lu, ly, t, mat, u, y, c + off) : box(t, ly, lu, mat, c + off, y, u);
       m.castShadow = false;
@@ -414,7 +481,7 @@ export class Room {
 
   /**
    * À chaque image : murs abaissés côté caméra (et entre la caméra et le perso s'il est dehors),
-   * porte qui s'ouvre devant le perso, aiguilles de l'horloge.
+   * porte qui s'ouvre devant le perso, aiguilles de l'horloge, lampes et vitres selon l'heure.
    */
   update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number): void {
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
@@ -437,6 +504,7 @@ export class Room {
     const m = ((hour % 12) + 12) % 12;
     this.hands.hour.rotation.x = -(m / 12) * Math.PI * 2;
     this.hands.minute.rotation.x = -(hour % 1) * Math.PI * 2;
+    this.applyLight(hour);
   }
 
   /** Point du sol au pied du mur visé par le rayon (côté pièce), s'il touche un mur avant le sol. */
