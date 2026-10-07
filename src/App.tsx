@@ -46,8 +46,6 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const missing = useMissingCount();
   /** Fenêtre « Signaler » ouverte, avec son texte de départ. */
   const [report, setReport] = useState<string | null>(null);
-  /** Dernier objet survolé : il reste « visé » quand la souris part vers le bouton Signaler. */
-  const aimed = useRef<string | null>(null);
   /** Partie du menu dépliée. */
   const [section, setSection] = useState<string | null>('raccourcis');
   const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
@@ -62,10 +60,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       setHeld(name);
       setCan(actions);
     };
-    g.onHover = (h) => {
-      setHover(h);
-      if (h) aimed.current = h.name;
-    };
+    g.onHover = setHover;
     g.onInventory = setInv;
     g.onDrag = setDrag;
     g.onMenu = (m) => {
@@ -203,7 +198,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
-      {report !== null && <FeedbackPanel game={ready} context={{ aimed: aimed.current, held }} initial={report} onClose={() => setReport(null)} />}
+      {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
       {drag && (

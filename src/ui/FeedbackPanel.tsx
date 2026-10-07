@@ -1,32 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Game } from '../game/Game';
-import { situation } from '../orders/diagnose';
 
 /** Dépôt où le bouton « Envoyer » ouvre une issue pré-remplie (aucun jeton : le joueur valide sur GitHub). */
 const ISSUES_URL = 'https://github.com/lyarca33-hue/Island/issues/new';
 /** GitHub refuse les adresses trop longues : au-delà, le texte est coupé (le bouton Copier garde tout). */
 const MAX_BODY = 6000;
-
-let lastOrder: string | null = null;
-/** Retient le dernier ordre tapé (ChatBar), joint au retour comme contexte. */
-export function noteLastOrder(text: string): void {
-  lastOrder = text;
-}
-
-/** Ce que le jeu sait au moment du retour : joint automatiquement au texte du joueur. */
-export interface FeedbackContext {
-  aimed: string | null;
-  held: string | null;
-}
-
-function contextLines(game: Game | null, ctx: FeedbackContext): string[] {
-  const lines: string[] = [];
-  if (game) lines.push(`- Heure du jeu : jour ${game.clock.day}, ${game.clock.label}`);
-  lines.push(`- Dernier objet survolé : ${ctx.aimed ?? 'aucun'}`);
-  lines.push(game ? `- Perso : ${situation(game)}` : `- En main : ${ctx.held ?? 'rien'}`);
-  lines.push(`- Dernier ordre : ${lastOrder ? `« ${lastOrder} »` : 'aucun'}`);
-  return lines;
-}
 
 /** Titre de l'issue : la première ligne du texte, raccourcie. */
 function titleOf(text: string): string {
@@ -34,11 +11,7 @@ function titleOf(text: string): string {
   return first.length > 70 ? `${first.slice(0, 67)}…` : first || 'Retour depuis le jeu';
 }
 
-function report(text: string, ctx: string[]): string {
-  return [text.trim(), '', '---', '**Contexte (automatique)**', ...ctx].join('\n');
-}
-
-export async function copyText(text: string): Promise<void> {
+async function copyText(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
@@ -53,18 +26,15 @@ export async function copyText(text: string): Promise<void> {
 }
 
 /**
- * Fenêtre « Signaler » : le joueur écrit ce qu'il veut, le jeu ajoute le contexte (heure, objet
- * visé, objet en main, dernier ordre). « Envoyer sur GitHub » ouvre une issue pré-remplie dans un
- * nouvel onglet ; « Copier » met le tout dans le presse-papiers pour le coller dans la discussion.
+ * Fenêtre « Signaler » : le joueur écrit ce qu'il veut. « Envoyer sur GitHub » ouvre une issue
+ * pré-remplie dans un nouvel onglet ; « Copier » met le tout dans le presse-papiers pour le coller dans la discussion.
  * `initial` : texte de départ (Menu → Manques y verse son journal).
  */
-export function FeedbackPanel({ game, context, initial, onClose }: { game: Game | null; context: FeedbackContext; initial: string; onClose: () => void }) {
+export function FeedbackPanel({ initial, onClose }: { initial: string; onClose: () => void }) {
   const [text, setText] = useState(initial);
   const [copied, setCopied] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
-  // Contexte figé à l'ouverture : c'est le moment que le joueur signale.
-  const [ctx] = useState(() => contextLines(game, context));
-  const full = report(text, ctx);
+  const full = text.trim();
   const empty = !text.trim();
 
   useEffect(() => {
@@ -107,11 +77,6 @@ export function FeedbackPanel({ game, context, initial, onClose }: { game: Game 
           } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !empty) send();
         }}
       />
-      <ul className="feedback-ctx">
-        {ctx.map((l) => (
-          <li key={l}>{l.slice(2)}</li>
-        ))}
-      </ul>
       <div className="missing-actions">
         <button onClick={send} disabled={empty} title="Ouvre une issue pré-remplie sur GitHub (Ctrl+Entrée)">Envoyer sur GitHub</button>
         <button onClick={copy} disabled={empty} title="Pour le coller dans la discussion du projet">{copied ? 'Copié ✓' : 'Copier'}</button>

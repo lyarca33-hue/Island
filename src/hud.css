@@ -203,6 +203,5 @@
   background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font: inherit; font-size: 14px; line-height: 1.4;
 }
 .feedback textarea::placeholder { color: rgba(253, 246, 227, 0.5); }
-.feedback-ctx { margin: 0; padding-left: 16px; opacity: 0.7; line-height: 1.4; }
 .feedback small { opacity: 0.6; line-height: 1.35; }
 .feedback .missing-actions button:disabled { opacity: 0.45; cursor: default; }

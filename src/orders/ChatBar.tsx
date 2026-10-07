@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
 import { type Chat, claudePageChat, loadSettings, openRouterChat, runAi } from './ai';
 import { failureCause, situation } from './diagnose';
-import { noteLastOrder } from '../ui/FeedbackPanel';
 import { logMissing } from './missing';
 import { explainOrder, parseOrder } from './parser';
 import { intentLabel, runIntents, type Step } from './tasks';
@@ -65,7 +64,6 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
       return;
     }
     if (busy) return;
-    noteLastOrder(t);
     const intents = parseOrder(t, game.describe());
     const settings = loadSettings();
     if (!intents && !claudeChat && !settings.apiKey) {
