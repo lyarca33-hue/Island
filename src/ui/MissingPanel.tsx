@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { clearMissing, groupMissing, KIND_LABEL, missingList, missingReport, noteKnownMissing, onMissingChange } from '../orders/missing';
+import { autoComment, clearMissing, groupKey, groupMissing, KIND_LABEL, type MissingGroup, missingList, missingNotes, missingReport, noteKnownMissing, onMissingChange, setMissingNote } from '../orders/missing';
 
 noteKnownMissing();
 
@@ -13,14 +13,29 @@ export function useMissingCount(): number {
 /** Menu → Manques : ce que le perso n'a pas pu faire, regroupé, à copier ou télécharger. */
 export function MissingPanel() {
   const [list, setList] = useState(missingList);
+  const [notes, setNotes] = useState(missingNotes);
   const [copied, setCopied] = useState(false);
+  /** Groupe dont on modifie le commentaire, et le texte en cours. */
+  const [editing, setEditing] = useState<{ key: string; text: string } | null>(null);
   /** « Vider » demande un second clic (les fenêtres confirm() sont bloquées dans l'aperçu). */
   const [sure, setSure] = useState(false);
-  useEffect(() => onMissingChange(() => setList(missingList())), []);
-  const groups = groupMissing(list);
+  useEffect(
+    () =>
+      onMissingChange(() => {
+        setList(missingList());
+        setNotes(missingNotes());
+      }),
+    [],
+  );
+  const groups = groupMissing(list, notes);
+
+  const save = (key: string, text: string) => {
+    setMissingNote(key, text);
+    setEditing(null);
+  };
 
   const copy = async () => {
-    const text = missingReport(list);
+    const text = missingReport(list, notes);
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -37,7 +52,7 @@ export function MissingPanel() {
   };
 
   const download = () => {
-    const url = URL.createObjectURL(new Blob([missingReport(list)], { type: 'text/markdown' }));
+    const url = URL.createObjectURL(new Blob([missingReport(list, notes)], { type: 'text/markdown' }));
     const a = document.createElement('a');
     a.href = url;
     a.download = `manques-rp-island-${new Date().toISOString().slice(0, 10)}.md`;
@@ -52,13 +67,7 @@ export function MissingPanel() {
     <div className="missing">
       <ul className="missing-list">
         {groups.map((g) => (
-          <li key={`${g.kind}|${g.quoi}`} title={g.ordres.map((o) => `« ${o} »`).join('\n')}>
-            <div className="missing-head">
-              <b>{g.quoi}</b>
-              {g.count > 1 && <span className="missing-count">×{g.count}</span>}
-            </div>
-            <small>{KIND_LABEL[g.kind]} · {g.last.detail}</small>
-          </li>
+          <MissingItem key={groupKey(g)} group={g} editing={editing?.key === groupKey(g) ? editing.text : null} onEdit={(text) => setEditing({ key: groupKey(g), text })} onCancel={() => setEditing(null)} onSave={(text) => save(groupKey(g), text)} />
         ))}
       </ul>
       <div className="missing-actions">
@@ -69,5 +78,55 @@ export function MissingPanel() {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Un manque : son commentaire (automatique, ou celui du joueur) et le crayon pour le modifier.
+ * `editing` : le texte en cours de modification, null hors modification.
+ */
+function MissingItem({ group: g, editing, onEdit, onCancel, onSave }: { group: MissingGroup; editing: string | null; onEdit: (text: string) => void; onCancel: () => void; onSave: (text: string) => void }) {
+  const auto = autoComment(g);
+  return (
+    <li title={g.ordres.map((o) => `« ${o} »`).join('\n')}>
+      <div className="missing-head">
+        <b>{g.quoi}</b>
+        <span className="missing-tools">
+          {g.count > 1 && <span className="missing-count">×{g.count}</span>}
+          {editing === null && (
+            <button className="missing-edit" onClick={() => onEdit(g.note ?? auto)} aria-label="Modifier le commentaire" title="Modifier le commentaire">
+              ✎
+            </button>
+          )}
+        </span>
+      </div>
+      {editing === null ? (
+        <small>
+          {KIND_LABEL[g.kind]} · {g.note ?? auto}
+          {g.note && <em className="missing-mine"> (ton commentaire)</em>}
+        </small>
+      ) : (
+        <div className="missing-editor">
+          <textarea
+            value={editing}
+            rows={3}
+            autoFocus
+            onChange={(e) => onEdit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                onCancel();
+              } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) onSave(editing === auto ? '' : editing);
+            }}
+          />
+          <small>Diagnostic auto : {auto}</small>
+          <div className="missing-actions">
+            <button onClick={() => onSave(editing === auto ? '' : editing)}>Enregistrer</button>
+            {g.note && <button onClick={() => onSave('')}>Texte auto</button>}
+            <button onClick={onCancel}>Annuler</button>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }

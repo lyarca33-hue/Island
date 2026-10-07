@@ -74,6 +74,18 @@
 .missing-list li { display: flex; flex-direction: column; gap: 2px; }
 .missing-head { display: flex; justify-content: space-between; gap: 8px; }
 .missing-count { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.missing-tools { display: flex; align-items: center; gap: 6px; }
+.missing-edit {
+  padding: 0 6px; border-radius: 6px; border: 1px solid transparent; background: none; color: #fdf6e3;
+  font: inherit; font-size: 13px; opacity: 0.6; cursor: pointer;
+}
+.missing-edit:hover { opacity: 1; border-color: rgba(255, 240, 210, 0.35); }
+.missing-mine { opacity: 0.8; }
+.missing-editor { display: flex; flex-direction: column; gap: 4px; }
+.missing-editor textarea {
+  padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255, 240, 210, 0.3); resize: vertical;
+  background: rgba(255, 255, 255, 0.08); color: #fdf6e3; font: inherit; font-size: 13px; line-height: 1.35;
+}
 .missing-list small { opacity: 0.65; line-height: 1.35; }
 .missing-actions { display: flex; gap: 6px; }
 .missing-actions button {
