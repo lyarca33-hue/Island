@@ -53,6 +53,7 @@ const VERBS: Record<string, string[]> = {
   tirer: ['tire', 'tirer', 'recule', 'reculer'],
   pousser: ['pousse', 'pousser', 'glisse', 'glisser', 'rentre', 'rentrer'],
   essuyer: ['essuie', 'essuyer', 'nettoie', 'nettoyer', 'eponge', 'eponger'],
+  empiler: ['empile', 'empiler'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
@@ -375,7 +376,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const chair = found.find((o) => o.sorte === 'siège');
       return chair ? [{ kind: 'chaise', ref: chair.ref, sous: verb === 'pousser' }] : null;
     }
+    case 'empiler':
+      // « empile les assiettes »
+      return !found.length || found.every((o) => o.nom === 'assiette') ? [{ kind: 'empiler' }] : null;
     case 'essuyer':
+      // « essuie la flaque », « nettoie par terre », « éponge l'eau »
+      if (rest.some((x) => ['flaque', 'flaques', 'sol', 'terre', 'eau'].includes(x))) return [{ kind: 'essuyer_sol' }];
       // « essuie la table », « nettoie la table »
       return found.length && found.every((o) => o.nom === 'table' || o.nom === 'éponge') ? [{ kind: 'essuyer', ref: found.find((o) => o.nom === 'table')?.ref }] : null;
     case 'debarrasser':

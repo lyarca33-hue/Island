@@ -251,6 +251,23 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     build: () => group(box(0.1, 0.03, 0.065, 0xf2d34a, 0, 0.015, 0), box(0.1, 0.008, 0.065, 0x3f8f4a, 0, 0.034, 0)),
   },
   {
+    id: 'plateau',
+    name: 'plateau',
+    portable: true,
+    // à deux mains par les bords ; ce qu'on pose dessus part avec lui
+    grip: 'twoHands',
+    gripPoint: [0, 0.02, 0],
+    fragility: 4,
+    durability: 120,
+    build: () => group(
+      box(0.44, 0.012, 0.3, 0x6e4a2c, 0, 0.006, 0),
+      box(0.44, 0.03, 0.012, 0x5e3e24, 0, 0.015, 0.144),
+      box(0.44, 0.03, 0.012, 0x5e3e24, 0, 0.015, -0.144),
+      box(0.012, 0.03, 0.3, 0x5e3e24, 0.214, 0.015, 0),
+      box(0.012, 0.03, 0.3, 0x5e3e24, -0.214, 0.015, 0),
+    ),
+  },
+  {
     id: 'pastilles',
     name: 'boîte de pastilles',
     portable: true,

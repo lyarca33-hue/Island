@@ -61,6 +61,9 @@ export type Intent =
   | { kind: 'chaise'; ref: string; sous: boolean }
   /** Essuyer les miettes de la table `ref` avec l'éponge. */
   | { kind: 'essuyer'; ref?: string }
+  /** Empiler les assiettes ; essuyer les flaques par terre. */
+  | { kind: 'empiler' }
+  | { kind: 'essuyer_sol' }
   /** Mettre le couvert devant la chaise ; débarrasser la table. */
   | { kind: 'mettre_table' }
   | { kind: 'debarrasser' }
@@ -222,6 +225,9 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'poser': {
       if (intent.ref) await take(game, act, intent.ref);
       if (!held(game).length) throw new Failed('Rien en main à poser.');
+      // sur le plateau ou une assiette : posé dessus, au milieu (pas devant soi)
+      const onto = intent.sur ? world(game).objets.find((o) => o.ref === intent.sur) : undefined;
+      if (onto && (onto.nom === 'plateau' || onto.nom === 'assiette')) return act('poser_sur', { sur: onto.ref, ...(intent.ref ? { objet: intent.ref } : {}) });
       if (intent.sur) await act('aller', { objet: intent.sur });
       // l'objet demandé : la main qui le tient (pile comprise)
       const load = intent.ref ? world(game).mains.find((l) => l.includes(intent.ref!)) : undefined;
@@ -454,6 +460,15 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'vider_lv':
       await freeHands(game, act);
       return act('vider_lave_vaisselle');
+    case 'empiler':
+      await freeHands(game, act);
+      return act('empiler');
+    case 'essuyer_sol': {
+      const sponge = world(game).objets.find((o) => o.nom === 'éponge');
+      if (!sponge) throw new Failed('Il n’y a pas d’éponge.');
+      await take(game, act, sponge.ref);
+      return act('essuyer_sol');
+    }
     case 'chaise':
       await freeHands(game, act);
       return act(intent.sous ? 'ranger_chaise' : 'tirer_chaise', { objet: intent.ref });

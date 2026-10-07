@@ -103,6 +103,8 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['couteau-table', 0.78, TABLE_H, 0.786, -Math.PI / 2],
   ['tasse', 0.64, TABLE_H, 0.852, -0.19],
   ['lettre', 1.36, TABLE_H, 0.852, 0.26],
+  // le plateau, de l'autre côté de la table
+  ['plateau', 1, TABLE_H, 1.13, 0],
   // près de la bibliothèque, tournée vers la pièce : le coin lecture
   ['chaise', 2.45, 0, -1.55, -0.5],
   // la caisse rangée dans le coin, près de la fenêtre
@@ -147,6 +149,9 @@ const START_STORED: Array<[string, string, number]> = [
   ['lasagne', 'congelateur', 3],
   // sous l'évier, en vrai ; ici au placard
   ['pastilles', 'placard', 2],
+  // deux assiettes de plus, pour recevoir (et empiler)
+  ['assiette', 'placard', 0],
+  ['assiette', 'placard', 1],
 ];
 
 /** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
@@ -167,6 +172,8 @@ const CHAIR_PULLED = 0.74;
 const SEAT_DEPTH = 0.4;
 /** Vitesse de la chaise tirée sans la saisir (m/s). */
 const CHAIR_SLIDE = 0.6;
+/** Distance (px) à partir de laquelle un clic enfoncé devient un glisser-déposer. */
+const DRAG_START = 10;
 /** Pastilles dans une boîte neuve (lave-vaisselle). */
 const TABLETS = 12;
 /** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
@@ -398,6 +405,10 @@ export class Game {
   onHover: ((info: { name: string; grade: string; condition: number; state: string; x: number; y: number } | null) => void) | null = null;
   /** Menu au clic droit à ouvrir (null : le fermer). */
   onMenu: ((menu: ContextMenu | null) => void) | null = null;
+  /** Glisser-déposer en cours : l'objet traîné et la cible sous la souris (null : fini). */
+  onDrag: ((drag: { name: string; over: string | null; x: number; y: number } | null) => void) | null = null;
+  /** Clic gauche enfoncé sur un objet : un glisser s'il bouge assez avant d'être relâché. */
+  private press: { hit: NonNullable<ReturnType<Game['hitAt']>>; x: number; y: number; shift: boolean; dragging: boolean } | null = null;
   /** Petit message à afficher (ex. objet non portable). */
   onNotice: ((text: string) => void) | null = null;
   /** Bulle de parole au-dessus du perso, et quand elle disparaît (ms, horloge de la page). */
@@ -1072,7 +1083,9 @@ export class Game {
       let ou = 'au sol';
       const shelf = this.shelfOf(item);
       const pan = item.def.cook && !carried.includes(item) ? this.panOf(item) : undefined;
+      const rider = this.riders.find((r) => r.item === item);
       if (carried.includes(item)) ou = 'en main';
+      else if (rider) ou = `porté sur ${this.ref(rider.base)}`;
       else if (shelf) ou = `rangé dans ${this.ref(shelf.shelf)}`;
       else if (pan) ou = `dans ${this.ref(pan)}`;
       else if (item.object.position.y > 0.05) {
@@ -1436,9 +1449,14 @@ export class Game {
       return true;
     }
     if (!first()) return false;
+    // l'étape suivante attend que le geste ait commencé (ou un court délai), puis qu'il soit fini
     let calm = 0;
+    let frames = 0;
+    let moved = !this.idle;
     const next = () => {
-      calm = this.idle ? calm + 1 : 0;
+      frames++;
+      if (!this.idle) moved = true;
+      calm = this.idle && (moved || frames > 20) ? calm + 1 : 0;
       if (calm < 3) requestAnimationFrame(next);
       else this.chain(rest, onEnd);
     };
@@ -1754,6 +1772,124 @@ export class Game {
       })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
     }, running);
     return true;
+  }
+
+  /**
+   * Pose l'objet tenu `item` sur `target` (plateau, assiette, table…), au point `at` s'il est donné
+   * (le dessus de `target` à cet endroit), sinon au milieu.
+   */
+  private placeOn(item: WorldItem, target: WorldItem, at?: THREE.Vector3, running = false): boolean {
+    const c = this.character;
+    if (!c.handOf(item) || target === item) return false;
+    if (c.seated) return c.standUp(() => this.placeOn(item, target, at, running));
+    target.object.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(target.object);
+    const p = (at ?? box.getCenter(new THREE.Vector3())).clone();
+    this.raycaster.set(new THREE.Vector3(p.x, box.max.y + 1, p.z), new THREE.Vector3(0, -1, 0));
+    const hit = this.raycaster.intersectObject(target.object, true).find((h) => (h.face?.normal.y ?? 0) > 0.7);
+    const spot = new THREE.Vector3(p.x, hit ? hit.point.y : box.max.y, p.z);
+    c.approachThen(this.standNear(spot, Math.max(item.size.x, item.size.z)), spot, () => {
+      if (!c.drop(spot, undefined, undefined, false, item)) this.onNotice?.(`Impossible de poser ${the(item.name)} sur ${the(target.name)}.`);
+    }, running);
+    return true;
+  }
+
+  /** Pose l'objet tenu `ref` (sinon le dernier pris) sur l'objet `on` (plateau, assiette…). */
+  putOn(on: string, ref?: string, running = false): boolean {
+    const c = this.character;
+    const target = this.byRef(on);
+    const item = ref ? this.byRef(ref) : c.held;
+    if (!target) return this.onNotice?.(`Aucun objet « ${on} ».`), false;
+    if (!item || !c.handOf(item)) return this.onNotice?.('Rien en main à poser.'), false;
+    if (c.busy) return false;
+    return this.placeOn(item, target, undefined, running);
+  }
+
+  /** Empile les assiettes propres qui traînent sur celle de la pile la plus proche (on emporte la pile en prenant celle du dessous). */
+  stackPlates(running = false): boolean {
+    const c = this.character;
+    const p = c.position;
+    // les assiettes propres et vides, celles du placard comprises
+    const loose = this.items.filter((i) => i.def.plate && !i.dirty && !this.foodOn(i) && !this.flying.some((f) => f.item === i));
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (loose.length < 2) return fail('Il faut au moins deux assiettes propres (le placard en a) pour les empiler.');
+    if (c.heldItems.some((h) => !loose.includes(h))) return fail('Pose d’abord ce que tu tiens.');
+    if (c.busy || c.bracing || this.moving) return false;
+    // la base : celle qui porte déjà la pile la plus haute, sinon la plus proche posée
+    const onTop = (b: WorldItem) => this.ridersOf(b).filter((r) => r.item.def.plate).length;
+    const base = loose.filter((i) => !c.carried.includes(i) && !this.shelfOf(i)).sort((a, b) => onTop(b) - onTop(a) || a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    if (!base) return fail('Pose d’abord une assiette pour commencer la pile.');
+    const inPile = new Set([base, ...this.ridersOf(base).map((r) => r.item)]);
+    const todo = loose.filter((i) => !inPile.has(i));
+    if (!todo.length) return fail('Les assiettes sont déjà empilées.');
+    const top = () => [base, ...this.ridersOf(base).map((r) => r.item)].filter((i) => i.def.plate).sort((a, b) => b.object.position.y - a.object.position.y)[0];
+    const steps: Array<() => boolean> = [];
+    for (const it of todo) {
+      steps.push(() => (c.handOf(it) ? true : this.take(it, running)));
+      steps.push(() => this.placeOn(it, top(), top().object.position, running));
+    }
+    return this.chain(steps, () => this.onNotice?.(`${todo.length + inPile.size} assiettes empilées : prends celle du dessous pour emporter la pile.`));
+  }
+
+  /** Flaques encore par terre. */
+  private puddles(): Spill[] {
+    return this.debris.filter((d): d is Spill => d instanceof Spill && d.wet);
+  }
+
+  /** Essuie les flaques par terre avec l'éponge tenue, l'une après l'autre (la plus proche d'abord). */
+  cleanFloor(running = false): boolean {
+    const c = this.character;
+    const sponge = c.heldItems.find((h) => h.def.wipes);
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!this.puddles().length) return fail('Pas de flaque par terre.');
+    if (!sponge) return fail('Prends l’éponge (près de l’évier) pour essuyer la flaque.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.cleanFloor(running));
+    const p = c.position;
+    const spill = this.puddles().sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
+    const at = spill.position.clone();
+    c.approachThen(this.standNear(at, 0.2), at, () => {
+      if (!c.handOf(sponge)?.cut(() => at.clone().setY(0.03), () => {
+        spill.wipe();
+        this.wearItem(sponge, 1);
+        // la suivante, s'il en reste
+        if (this.puddles().length) requestAnimationFrame(() => this.cleanFloor(running));
+        else this.onNotice?.('Le sol est sec.');
+      })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
+    }, running);
+    return true;
+  }
+
+  /**
+   * Glisser-déposer : `item` lâché sur `target` (ou par terre en `ground`). Le perso le prend si
+   * besoin, puis fait le geste qui va de soi (ranger, servir, verser, jeter, poser dessus…).
+   */
+  dragDrop(item: WorldItem, target: WorldItem | null, point: THREE.Vector3 | null): boolean {
+    const c = this.character;
+    if (target === item) return false;
+    if (!item.def.portable) return this.onNotice?.(`On ne porte pas : ${item.name}.`), false;
+    const use = () => {
+      if (!c.handOf(item)) return false;
+      if (!target) {
+        if (!point) return false;
+        c.approachThen(this.standNear(point, Math.max(item.size.x, item.size.z)), point, () => c.drop(point.clone().setY(0), undefined, undefined, false, item), false);
+        return true;
+      }
+      // le geste du menu de la cible qui sert l'objet tenu ; sinon on le pose dessus
+      const skip = /^(Prendre|Aller|Déplacer|S’asseoir|S’attabler|Regarder|Laisser|Mettre la table|Débarrasser|Ouvrir|Fermer|Tirer|Ranger sous|Allumer|Éteindre|Arrêter|Lancer un lavage|Mettre en marche|Vider la poubelle|Vider et ranger|Charger|Ouvrir le robinet|Fermer le robinet|Boire au robinet|Se lever|Couper ici|Préparer)/;
+      const entry = this.menuFor(target).find((e) => !skip.test(e.label));
+      if (entry) return entry.run();
+      if (target.def.slots) return this.storeIn(target, false, item);
+      return this.placeOn(item, target, point ?? undefined);
+    };
+    if (c.handOf(item)) return use();
+    return this.chain([() => this.take(item, false), use]);
   }
 
   /** La table devant la chaise `seat` (à portée), son bord côté chaise et l'écart chaise–bord. */
@@ -3750,6 +3886,17 @@ export class Game {
       this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
     on(el, 'pointermove', (e) => {
+      const pr = this.press;
+      if (pr && e.buttons & 1) {
+        if (!pr.dragging && Math.hypot(e.clientX - pr.x, e.clientY - pr.y) > DRAG_START) pr.dragging = true;
+        if (pr.dragging) {
+          const r = el.getBoundingClientRect();
+          const over = this.hitAt(e.clientX, e.clientY)?.item;
+          this.onHover?.(null);
+          this.onDrag?.({ name: pr.hit.item.name, over: over && over !== pr.hit.item ? over.name : null, x: e.clientX - r.left, y: e.clientY - r.top });
+          return;
+        }
+      }
       if (!e.buttons && this.switchAt(e.clientX, e.clientY)) {
         const r = el.getBoundingClientRect();
         this.onHover?.({ name: 'interrupteur', grade: gradeName(1, false), condition: 1, state: this.room.lightsOn ? 'lumière allumée' : 'lumière éteinte', x: e.clientX - r.left, y: e.clientY - r.top });
@@ -3790,8 +3937,12 @@ export class Game {
       }
       const hit = this.hitAt(e.clientX, e.clientY);
       if (hit) {
-        // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser
-        this.tryPickUp(hit.item, e.shiftKey, { body: !!(hit.item.def.door || hit.item.def.drawer) && !hit.door, button: hit.button });
+        // un objet qu'on porte peut être traîné (glisser-déposer) : on attend de savoir si c'est un clic
+        if (hit.item.def.portable && !this.moving) {
+          this.press = { hit, x: e.clientX, y: e.clientY, shift: e.shiftKey, dragging: false };
+          return;
+        }
+        this.clickItem(hit, e.shiftKey);
         return;
       }
       const p = this.groundPoint(e.clientX, e.clientY);
@@ -3804,6 +3955,22 @@ export class Game {
       this.marker.position.set(p.x, 0.01, p.z);
       (this.marker.material as THREE.MeshBasicMaterial).opacity = 0.9;
     });
+    on(window, 'pointerup', (e) => {
+      const pr = this.press;
+      if (!pr || e.button !== 0) return;
+      this.press = null;
+      if (!pr.dragging) return this.clickItem(pr.hit, pr.shift);
+      this.onDrag?.(null);
+      const target = this.hitAt(e.clientX, e.clientY);
+      // sur un objet : le geste qui va de soi ; sinon par terre, là où on lâche
+      this.dragDrop(pr.hit.item, target?.item ?? null, target ? target.point : this.groundPoint(e.clientX, e.clientY));
+    });
+  }
+
+  /** Clic gauche sur un objet : le prendre (ou ouvrir la porte, appuyer sur le bouton…). */
+  private clickItem(hit: NonNullable<ReturnType<Game['hitAt']>>, shift: boolean): void {
+    // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser
+    this.tryPickUp(hit.item, shift, { body: !!(hit.item.def.door || hit.item.def.drawer) && !hit.door, button: hit.button });
   }
 
   /**
@@ -3880,6 +4047,7 @@ export class Game {
       const tray = held.find((h) => h.name === 'bac à glaçons');
       const cup = held.find((h) => h !== tray && h.def.fill && !h.def.cookware && !h.def.mouth);
       if (tray && cup && !this.iced.has(cup)) add(`Glaçons dans ${the(cup.name)}`, () => this.addIce(this.ref(cup)));
+      if (held.some((h) => h.def.wipes) && this.puddles().length) add('Essuyer la flaque', () => this.cleanFloor());
       for (const h of new Set(held.map((i) => i.name))) add(`Poser : ${h}`, () => this.drop(h));
       if (can.seated) add('Se lever', () => this.standUp());
       return out;
@@ -3954,6 +4122,10 @@ export class Game {
     const dish = item.def.plate && held.find((h) => h.def.food);
     if (dish && !item.dirty && !this.foodOn(item)) add(`Servir ${the(dish.name)} ici`, () => this.serveOn(item, dish, false));
     if (item.def.plate && this.foodOn(item)) add('S’attabler', () => this.sitAtTable(ref));
+    // poser dessus ce qu'on tient (plateau, assiette vide : empiler)
+    const putable = held.find((h) => h !== item && !isTwoHanded(h.grip));
+    if (putable && (item.def.id === 'plateau' || (item.def.plate && putable.def.plate && !this.foodOn(item)))) add(`Poser ${the(putable.name)} dessus`, () => this.placeOn(putable, item));
+    if (item.def.plate && !held.length && !this.shelfOf(item) && this.items.filter((i) => i.def.plate && !i.dirty && !this.foodOn(i)).length > 1) add('Empiler les assiettes', () => this.stackPlates());
     // la table : mettre le couvert, débarrasser
     if (item.name === 'table' && !held.length) {
       add('Mettre la table', () => this.setTable());
@@ -4048,7 +4220,7 @@ export class Game {
   }
 
   /** Objet sous un pixel de l'écran, et si c'est sa porte ou l'un de ses boutons (n°) qui est touché. */
-  private hitAt(cx: number, cy: number): { item: WorldItem; door: boolean; button?: number } | null {
+  private hitAt(cx: number, cy: number): { item: WorldItem; door: boolean; button?: number; point: THREE.Vector3 } | null {
     this.aim(cx, cy);
     const carried = this.character.carried;
     const objects = this.items.filter((i) => !carried.includes(i)).map((i) => i.object);
@@ -4061,7 +4233,7 @@ export class Game {
       const knob = /^bouton-(\d+)$/.exec(o.name);
       if (knob) button = +knob[1];
       const item = this.items.find((i) => i.object === o);
-      if (item) return { item, door, button };
+      if (item) return { item, door, button, point: hit.point.clone() };
     }
     return null;
   }
