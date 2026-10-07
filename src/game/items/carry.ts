@@ -37,6 +37,8 @@ export class WorldItem {
   portion = 1;
   /** Vaisselle sale (voir ItemDef.dish) : sa pièce `sale` est montrée. */
   dirty = false;
+  /** Temps passé sur le feu (s, à pleine chaleur) d'un ingrédient : voir ItemDef.cook. */
+  cooking = 0;
 
   private closed: THREE.Object3D;
   private opened: THREE.Object3D | null = null;

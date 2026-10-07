@@ -110,6 +110,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "vaisselle", "objets": ["<ref>", ...]} : laver à l'évier la vaisselle sale (assiette, fourchette, couteau, tasse après un café ; liste vide = toute la vaisselle sale). Le perso la reprend propre
 - {"tache": "mettre", "objet": "<ref>", "dans": "<ref du frigo>"} : ranger dans le frigo une bouteille ou un aliment (entier ou coupé) (« objet » facultatif : ce qu'on tient)
 - {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte du frigo
+- {"tache": "cuire", "objet": "<ref>"} : faire cuire un ingrédient cru (steak à la poêle, pomme de terre à l'eau dans la casserole ; il y en a dans le frigo). Le perso fait tout : eau à l'évier, ustensile sur la gazinière, ingrédient dedans, feu allumé, puis éteint une fois cuit. Cru, ça ne se mange pas ; oublié sur le feu, ça brûle
+- {"tache": "mettre", "objet": "<ref>", "dans": "<ref>"} marche aussi pour poser une poêle ou une casserole sur la gazinière (« dans » : la gazinière) ou mettre un ingrédient dans un ustensile
+- {"tache": "allumer", "objet": "<ref>"} / {"tache": "eteindre", "objet": "<ref>"} : allumer ou éteindre la gazinière (les feux où un ustensile est posé) ou la machine à café
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
 - {"tache": "asseoir", "objet": "<ref>"} : s'asseoir sur un siège (sorte « siège », ex. la chaise ; « objet » facultatif : le plus proche). Assis, le perso peut boire, lire, parler ; il se lève tout seul pour marcher ou prendre un objet
@@ -121,7 +124,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
 Pour prendre plusieurs livres, enchaîne plusieurs « prendre » (6 livres au plus en pile).
 Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
-Si l'ordre demande une action que les tâches ne permettent pas (danser, dormir, cuisiner…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
+Si l'ordre demande une action que les tâches ne permettent pas (danser, dormir, faire la vaisselle…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour. Une seule tâche par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
 
@@ -177,6 +180,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'repas': return { kind: 'repas', ref: s('objet') || undefined };
     case 'vaisselle': return { kind: 'vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'lever': return { kind: 'lever' };
+    case 'cuire': return { kind: 'cuire', ref: s('objet') || undefined };
+    case 'allumer': return { kind: 'allumer', ref: s('objet') || undefined };
+    case 'eteindre': return { kind: 'eteindre', ref: s('objet') || undefined };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
     case 'manque': return s('action') || s('raison') ? 'manque' : null;

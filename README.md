@@ -43,7 +43,7 @@ ouvre le créateur, et « Jouer » ramène sur la map.
 
 Les ordres simples sont compris directement par le jeu, sans IA (`src/orders/parser.ts`) :
 prendre, poser (« pose la lettre sur la table »), ranger (les livres), aller (« va à la table »),
-café, boire (« bois de l'eau »), manger, couper (« coupe la pomme »), remplir la tasse d'eau, se laver (« lave-toi les mains », « fais ta toilette »), dire (« dis bonjour »), enchaînés avec « puis », « ensuite » ou « et ».
+café, boire (« bois de l'eau »), manger, couper (« coupe la pomme »), remplir la tasse d'eau, cuire (« fais cuire le steak »), allumer ou éteindre la gazinière, se laver (« lave-toi les mains », « fais ta toilette »), dire (« dis bonjour »), enchaînés avec « puis », « ensuite » ou « et ».
 
 Les autres (« mets un peu d'ordre ») passent par un modèle de chat via
 [OpenRouter](https://openrouter.ai), par défaut celui de Lumen (`qwen/qwen3.7-flash`). Il choisit
@@ -121,6 +121,7 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/items/grips.ts` | Types de prise : pose du bras et des doigts, place de l'objet dans la main |
 | `src/game/items/ik.ts` | Bras / jambe à deux os qui amène la main (le pied) sur un point |
 | `src/game/items/carry.ts` | Prendre, tenir en marchant, reposer, piles d'objets |
+| `src/game/items/cooking.ts` | Cuisson (cru, cuit, brûlé), fumée et vapeur |
 | `src/game/nav.ts` | Contourner les meubles |
 | `src/orders/ChatBar.tsx` | Zone de saisie parole / action |
 | `src/orders/AiSettingsForm.tsx` | Réglages de l'IA (clé, modèle), dans le menu |
@@ -228,6 +229,32 @@ et un concombre.
   tomate ». Console : `game.cut()` (ou `game.cut('pomme')` pour l'aliment tenu de ce nom).
 - Fiches : `cut` (l'id des morceaux que devient l'aliment), `board` (planche), `knife` (couteau).
   Ce qui manque encore (éplucher, cuire, servir dans une assiette) est noté dans Menu → Manques.
+
+Gazinière (après le plan de travail, dans l'alignement de l'évier ; fixe, raccordée au gaz) : quatre feux, une poêle et une
+casserole posées dessus au départ ; steaks et pommes de terre crus dans le frigo.
+- poêle ou casserole en main, clic sur la gazinière : le perso la pose sur un feu libre (ceux de
+  devant d'abord), le manche vers lui.
+- ingrédient en main, clic sur l'ustensile (ou sur la gazinière) : il le met dedans. Le steak va
+  dans la poêle, la pomme de terre dans la casserole ; deux par ustensile.
+- clic sur un bouton de la façade : allume ou éteint ce feu ; clic sur la gazinière mains vides :
+  allume les feux où un ustensile garni est posé, ou éteint tout. Les flammes bleues grandissent
+  le temps que le feu prenne.
+- sur le feu, l'ingrédient passe de cru à cuit (il change de couleur), puis, oublié, il fume et
+  brûle (« Ça sent le brûlé : retire le steak du feu ! »). Cru, ça ne se mange pas ; brûlé, ça
+  nourrit à peine. La casserole se remplit d'eau à l'évier (clic sur l'évier, casserole en main) :
+  dans l'eau qui bout (vapeur), ça cuit sans brûler, mais l'eau s'évapore peu à peu.
+- Ordres : « fais cuire le steak », « cuis les pommes de terre », « mets la poêle sur le feu »,
+  « mets le steak dans la poêle », « allume la gazinière », « éteins le feu », « mange la pomme de
+  terre » (cuite d'abord si besoin). Console : `game.switchOn()`, `game.switchOff()`,
+  `game.putOnFire()`, `game.putInPan('poele')`.
+- La machine à café marche de la même façon : son bouton rouge l'allume (voyant orange), elle
+  chauffe quelques secondes avant que le café coule, et se met en veille si on l'oublie. Un café
+  demandé machine éteinte l'allume d'abord.
+- Fiches : `heat` pour les appareils (feux, pièce allumée, temps pour chauffer), `cookware` pour
+  les ustensiles (ce qu'ils reçoivent, où), `cook` pour les ingrédients (temps de cuisson, couleurs
+  cru / cuit / brûlé) ; la mécanique est dans `src/game/items/cooking.ts`. Ce qui manque encore
+  (geste pour tourner le bouton, four, recettes, égoutter, retourner le steak) est noté dans
+  Menu → Manques.
 
 Les meubles (objets non portables) sont des rectangles au sol que le perso contourne
 (`src/game/nav.ts`) : il glisse le long au clavier, et un clic de l'autre côté passe par leurs coins.

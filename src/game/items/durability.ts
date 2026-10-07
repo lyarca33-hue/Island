@@ -29,7 +29,7 @@ export function gradeName(ratio: number, feminine = false): string {
 }
 
 /** Pièces qui ne s'usent pas (le café, le jet de la machine). */
-const NO_WEAR = new Set(['liquide', 'jet']);
+const NO_WEAR = new Set(['liquide', 'jet', 'flamme', 'voyant']);
 
 const textures: Array<THREE.CanvasTexture | null> = [];
 

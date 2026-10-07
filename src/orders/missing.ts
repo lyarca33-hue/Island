@@ -140,7 +140,11 @@ const KNOWN: Array<{ id: string } & Omit<Missing, 'at'>> = [
   { id: 'vaisselle-ranger', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'ranger la vaisselle', detail: 'Pas encore de placard ni d’égouttoir : la vaisselle propre revient en main, à reposer où l’on veut.' },
   { id: 'vaisselle-couper', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'couper avec le couteau', detail: 'Le couteau se tient et se salit pendant le repas, mais ne coupe rien.' },
   { id: 'vaisselle-chaise', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'approcher la chaise de la table', detail: 'Le perso s’assoit là où est la chaise, sans la rapprocher : il mange un peu loin de la table.' },
-  { id: 'vaisselle-cuisiner', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'cuisiner un plat', detail: 'On sert dans l’assiette ce qui sort du frigo (pomme, sandwich) : pas encore de plaque ni de casserole.' },
+  { id: 'gaziniere-bouton', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'tourner le bouton du feu', detail: 'Le feu s’allume quand le perso arrive devant la gazinière : pas encore de geste de la main pour tourner le bouton.' },
+  { id: 'gaziniere-four', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'utiliser le four', detail: 'La gazinière a un four dessiné, mais sa porte ne s’ouvre pas et on ne peut rien y cuire.' },
+  { id: 'cuisine-recettes', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'cuisiner une recette', detail: 'Un seul ingrédient à la fois cuit tel quel (steak, pomme de terre) : pas de recette qui mélange plusieurs ingrédients, pas d’assaisonnement : on sert ensuite dans l’assiette ce qui a cuit, sans plat composé.' },
+  { id: 'cuisine-vider', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'égoutter la casserole', detail: 'L’eau de la casserole ne se vide qu’en la remplissant à nouveau à l’évier, ou en s’évaporant sur le feu : pas de geste pour l’égoutter.' },
+  { id: 'cuisine-retourner', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'retourner le steak', detail: 'Le steak cuit tout seul des deux côtés : pas de spatule ni de geste pour le retourner.' },
 ];
 const KNOWN_KEY = 'rp-island.manques.connus';
 

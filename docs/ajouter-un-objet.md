@@ -86,7 +86,10 @@ Fichier : `src/game/items/catalog.ts`. Repère de l'objet : posé au sol, base �
 | `slots` | Meuble de rangement : places où poser un objet debout (repère du meuble, base de l'objet). | non |
 | `buildOpen` | Se lit : modèle ouvert montré pendant la lecture (pages vers +Z). | non |
 | `fill` | Récipient : hauteur du liquide vide → plein. Il lui faut une pièce nommée `liquide`. | non |
-| `pour` | Machine qui remplit un récipient : `at` (où poser le récipient), `fills` (nom du récipient), `liquid`, `seconds`. Pièce `jet` cachée au repos. | non |
+| `pour` | Machine qui remplit un récipient : `at` (où poser le récipient), `fills` (noms des récipients, le premier est celui qu'on cite), `liquid`, `seconds`. Pièce `jet` cachée au repos. | non |
+| `heat` | Appareil qui chauffe (gazinière, machine à café) : `spots` (feux où poser un ustensile), `lit` (pièces `${lit}-N` montrées allumées), `warmup` (s pour chauffer), `autoOff` (veille). Un clic sur la pièce `bouton-N` allume ou éteint le feu N. | non |
+| `cookware` | Ustensile qui va sur le feu : `holds` (noms des ingrédients qu'il reçoit), `places` (où les poser dedans). Avec `fill`, il se remplit d'eau à l'évier (casserole). | non |
+| `cook` | Ingrédient qui cuit : `seconds` pour être cuit, `burn` de plus pour brûler, couleurs cru / cuit / brûlé des pièces nommées `cuit` (`cooking.ts`). | non |
 | `food` | Aliment : `hunger` (faim rendue pour l'objet entier), `bites` (bouchées), `color` (la bouchée sur la fourchette). | non |
 | `dish` | Vaisselle : se salit à l'usage (pièce `sale`, cachée quand propre), se lave à l'évier. | non |
 | `plate` | Assiette : hauteur du fond où l'on sert un aliment. | non |
@@ -151,6 +154,10 @@ de profil, des deux mains.
 | machine à café | non portable | — | 250 | `movable`, `pour` (remplit la tasse de café en 2,6 s) |
 | table | non portable | — | 300 | `movable`, hauteur du plateau `TABLE_H` = 0,74 m |
 | bibliothèque | non portable | — | 400 | `movable`, `slots` (3 rayons × 20 livres serrés) |
+| gazinière | non portable | 8 | 300 | fixe, `heat` (4 feux, boutons en façade) |
+| poêle | `fist` par le manche | 10 | 200 | `cookware` (steak) |
+| casserole | `fist` par le manche | 9 | 180 | `cookware` (pomme de terre), `fill` (eau de l'évier, s'évapore sur le feu) |
+| steak, pomme de terre | `fist` | 10, 9 | 20 | `food`, `cook` (cru → cuit → brûlé) |
 
 Repères pour un nouvel objet : verre / porcelaine 1-3 ; bois léger, carton 4-6 ; livre, métal
 8-9 ; papier, tissu 10. Durabilité : petit objet du quotidien 30-60, objet solide 100-150, meuble
@@ -273,6 +280,9 @@ Si l'écran est noir en mode sans écran, lancer Chromium avec WebGL logiciel
   `build()`. Une pièce qui dépasse (ou cachée mais présente) fausse tout ; le modèle ouvert
   (`buildOpen`) est ajouté après, il ne compte pas.
 - **Perso par défaut** : il ne peut rien porter. Pour tester, créer un perso dans le créateur.
+- **Ce qui est dessous n'est pas « posé dessus »** : en prenant un steak dans la poêle, la poêle
+  (dont le bas touchait presque le haut du steak) partait avec lui. `ridersOf` ignore maintenant
+  tout objet dont le bas est sous celui de l'objet pris.
 - **Animation faite main** : pour le perso, les animations écrites à la main ont été
   rejetées (pose de repos). Pour un geste vraiment nouveau, chercher d'abord une animation libre
   de droits, ou rester sur le placement des bras par calcul (IK) comme les prises.
