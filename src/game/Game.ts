@@ -618,6 +618,7 @@ export class Game {
 
     // au moment de la prise, l'objet est encore posé : on note ce qui est dessus ; les livres
     // posés sur un livre forment la pile qu'on emporte
+    this.character.onStuck = () => this.onNotice?.('Je n’arrive pas à passer : quelque chose bloque le chemin.');
     this.character.onGrab = (item, hand) => {
       this.wearItem(item, WEAR_GRAB);
       const riders = this.ridersOf(item);
@@ -1100,7 +1101,8 @@ export class Game {
         const surf = this.surfaceAt(o.position.x, o.position.z, f.item);
         const lift = f.item.restLift(o.quaternion);
         if (o.position.y - lift >= surf) continue;
-        if (prevBottom < surf - 0.02) {
+        // parti de plus bas que la surface sous lui : il ne s'enfonce pas au-delà du sol
+        if (prevBottom < surf - 0.02 && o.position.y - lift > -0.05) {
           // heurte le flanc d'un meuble : repart en arrière, ralenti
           o.position.set(prev.x, o.position.y, prev.z);
           f.vel.x *= -0.3;
@@ -5692,8 +5694,11 @@ export class Game {
     if (s.fall) {
       // à côté : elle tombe par terre
       this.riders = this.riders.filter((x) => x !== r);
+      // part d'au-dessus de la gazinière (pas de dedans : il passerait au travers)
+      const o = s.food.object;
+      o.position.y = Math.max(o.position.y, this.surfaceAt(o.position.x, o.position.z, s.food) + s.food.restLift(o.quaternion) + 0.03);
       this.launch(s.food, new THREE.Vector3(0, 0.5, 0).add(new THREE.Vector3(0, 0, -0.6).applyQuaternion(s.pan.object.quaternion)));
-      this.onNotice?.(`Raté ! ${name} est tombé${agree(s.food.name)} par terre.`);
+      this.onNotice?.(`Raté ! ${name} est tombé${agree(s.food.name)} à côté de la poêle.`);
       return;
     }
     // retournée : à plat de nouveau dans la poêle

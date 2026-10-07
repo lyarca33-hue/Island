@@ -323,17 +323,12 @@ const cookingIn = (game: Game, pan: string, nom: string) => world(game).objets.f
 async function cookAndServe(game: Game, act: Act, pan: string, stove: string, nom: string, toss: boolean): Promise<void> {
   const food = cookingIn(game, pan, nom);
   if (!food) throw new Failed(`Pas de ${nom} dans la poêle.`);
-  // le saladier sur le plan de travail (pas sur la gazinière, devant soi)
-  const w0 = world(game);
-  const bowl = w0.objets.find((o) => o.nom === 'saladier' && w0.enMain.includes(o.ref));
-  const top = w0.objets.filter((o) => o.nom === 'plan de travail').sort((a, b) => a.distance - b.distance)[0];
-  if (bowl && top) {
-    await act('aller', { objet: top.ref });
-    await act('poser', { objet: bowl.ref });
-  }
   await freeHands(game, act, () => false);
   await act('allumer', { objet: stove, ustensile: pan });
-  if (toss) await act('faire_sauter', { objet: pan });
+  if (toss) {
+    await act('faire_sauter', { objet: pan });
+    if (!cookingIn(game, pan, nom)) throw new Failed(`Raté, ${nom === 'crêpe' ? 'la crêpe est tombée' : 'c’est tombé'} à côté de la poêle : recommence.`);
+  }
   else if (nom === 'omelette') {
     await takeTool(game, act, ['spatule', 'cuillère en bois']);
     await act('remuer', { objet: pan });
@@ -848,7 +843,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const jar = await takeTool(game, act, [intent.epice], (ref) => ref === intent.ref);
       await act('assaisonner', intent.ref ? { objet: intent.ref } : {});
       // le pot retourne sur l'étagère
-      return act('ranger_place', { objet: jar }).then(() => {}, () => {});
+      const shelf = world(game).objets.find((o) => o.nom === 'étagère à épices');
+      return shelf ? act('ranger', { meuble: shelf.ref, objet: jar }).then(() => {}, () => {}) : undefined;
     }
     case 'tartiner': {
       const w = world(game);

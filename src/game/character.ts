@@ -98,6 +98,10 @@ export class Character {
   private seat: { phase: 'enter' | 'sit' | 'exit'; t: number; from: THREE.Vector3; at: THREE.Vector3; y: number; yaw: number; up?: () => void; talk: number } | null = null;
   /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
   private approach: { face: THREE.Vector3; then: () => void } | null = null;
+  /** Temps passé à marcher vers un point sans avancer (bloqué contre un meuble). */
+  private stuckFor = 0;
+  /** Appelé quand le perso renonce à une marche bloquée. */
+  onStuck?: () => void;
 
   /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
   async load(recipe?: Recipe | null): Promise<void> {
@@ -533,7 +537,9 @@ export class Character {
     else if (this.target) {
       dir.subVectors(this.target, this.root.position).setY(0);
       // point de passage atteint : le suivant (on coupe un peu les virages)
-      if (dir.length() < (this.path.length ? 0.15 : 0.08)) {
+      // (seulement si la ligne droite vers le suivant est libre : sinon on va jusqu'au point)
+      const cut = this.path.length && (!this.nav || this.nav.clear(this.root.position, this.path[0])) ? 0.15 : 0.08;
+      if (dir.length() < cut) {
         this.target = this.path.shift() ?? null;
         if (this.target) dir.subVectors(this.target, this.root.position).setY(0);
       }
@@ -544,9 +550,21 @@ export class Character {
     const speed = this.running ? RUN_SPEED : WALK_SPEED;
     if (moving) {
       const step = this.target ? Math.min(speed * dt, this.root.position.distanceTo(this.target)) : speed * dt;
+      const before = this.root.position.clone();
       this.root.position.addScaledVector(dir, step);
       // au clavier, on glisse le long des meubles au lieu d'y entrer
       this.nav?.pushOut(this.root.position);
+      // vers un point, bloqué sur place : on renonce au bout de 2 s (plutôt que de piétiner sans fin)
+      if (this.target && this.move.lengthSq() === 0) {
+        this.stuckFor = this.root.position.distanceTo(before) < step * 0.2 ? this.stuckFor + dt : 0;
+        if (this.stuckFor > 2) {
+          this.stuckFor = 0;
+          this.target = null;
+          this.path = [];
+          this.approach = null;
+          this.onStuck?.();
+        }
+      }
       this.root.position.x = THREE.MathUtils.clamp(this.root.position.x, -bounds, bounds);
       this.root.position.z = THREE.MathUtils.clamp(this.root.position.z, -bounds, bounds);
       const want = Math.atan2(dir.x, dir.z);
