@@ -42,7 +42,7 @@ function parquet(r: Rect): THREE.Material {
 
 /** Tapis, tableau au mur, plante dans le coin. */
 function salonDecor(room: Room): void {
-  const { x1, z0 } = room.rect;
+  const { x1, z1 } = room.rect;
   // grand tapis sous la table basse, bordure et centre
   room.group.add(
     box(3.0, 0.01, 2.6, toon(0x34506e), 6.6, 0.008, -0.15, false),
@@ -58,7 +58,7 @@ function salonDecor(room: Room): void {
     box(0.012, 0.08, 0.08, toon(0xf3d36b), 0.034, 0.18, -0.2, false),
   );
   room.wallGroup('ouest').add(pic);
-  // plante en pot dans le coin nord-est
+  // plante en pot dans le coin sud-est (le coin nord-est reste libre pour un passage vers le nord)
   const plant = new THREE.Group();
   const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.13, 0.36, 18), toon(0xb5653a));
   pot.position.y = 0.18;
@@ -69,7 +69,7 @@ function salonDecor(room: Room): void {
     plant.add(leaf);
   }
   plant.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
-  plant.position.set(x1 - 0.3, 0, z0 + 0.3);
+  plant.position.set(x1 - 0.3, 0, z1 - 0.3);
   room.group.add(plant);
   room.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.2, 0, -0.2), new THREE.Vector3(0.2, 1.2, 0.2)), pos: plant.position.clone(), yaw: 0, wall: false });
 }
