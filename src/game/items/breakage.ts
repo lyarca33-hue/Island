@@ -57,7 +57,7 @@ export class Debris {
     // les pièces visibles de l'objet, et leur part de la taille : chacune donne des éclats
     const parts: THREE.Mesh[] = [];
     item.object.traverseVisible((o) => {
-      if ((o as THREE.Mesh).isMesh && o.name !== 'liquide') parts.push(o as THREE.Mesh);
+      if ((o as THREE.Mesh).isMesh && o.name !== 'liquide' && o.name !== 'gouttes') parts.push(o as THREE.Mesh);
     });
     const count = shatter ? THREE.MathUtils.clamp(Math.round(span * 90), 8, 22) : 0;
     for (let i = 0; i < count; i++) {

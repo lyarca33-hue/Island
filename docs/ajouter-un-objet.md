@@ -102,8 +102,14 @@ Fichier : `src/game/items/catalog.ts`. Repère de l'objet : posé au sol, base �
 | `bin` | Poubelle : nombre d'objets jetés avant qu'il faille la vider ; pièce `dechets`. | non |
 | `food` | Aliment : `hunger` (faim rendue pour l'objet entier), `bites` (bouchées), `color` (la bouchée sur la fourchette). | non |
 | `dish` | Vaisselle : se salit à l'usage (pièce `sale`, cachée quand propre), se lave à l'évier. | non |
-| `plate` | Assiette : hauteur du fond où l'on sert un aliment. | non |
-| `utensil` | Couvert pour manger dans l'assiette (fourchette) : pièce `bouchee`, point `mouth` au bout. | non |
+| `plate` | Assiette, bol : hauteur du fond où l'on sert un aliment. | non |
+| `deep` | Creux (le bol) : ne s'empile pas avec les assiettes plates. | non |
+| `utensil` | Couvert pour manger dans l'assiette ou le bol (fourchette, cuillère) : pièce `bouchee`, point `mouth` au bout. | non |
+| `lip` | Bord où l'on boit (verre sans goulot) : la main l'amène à la bouche. | non |
+| `jug` | Carafe : se verse dans un verre, on n'y boit pas. | non |
+| `slotHolds` | Pour chaque place de `slots`, les noms qu'elle accepte (égouttoir : verres au fond, couverts au panier). | non |
+| `rack` | Égouttoir : la vaisselle mouillée y sèche en `minutes` de jeu ; « Ranger à sa place » y envoie la vaisselle mouillée. | non |
+| `towel` | Torchon : essuie la vaisselle mouillée et les mains. | non |
 | `wash.dishes` | Évier : places au fond de la cuve où poser la vaisselle à laver (une par main). | non |
 | `build()` | Construit le modèle 3D. | obligatoire |
 

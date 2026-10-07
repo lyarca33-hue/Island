@@ -116,7 +116,16 @@ export const RUNS: Array<{ wall: WallName; from: number; items: Array<string | n
 ];
 
 /** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
-export const ON_TOP: Array<[string, string]> = [['micro-ondes', 'placard'], ['bouilloire', 'tiroir'], ['grille-pain', 'lave-vaisselle'], ['mixeur', 'four'], ['frigo', 'congelateur']];
+export const ON_TOP: Array<[string, string, number?, number?, number?]> = [
+  ['micro-ondes', 'placard'],
+  ['bouilloire', 'tiroir'],
+  // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
+  ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
+  ['egouttoir', 'lave-vaisselle', 0.145, 0],
+  ['torchon', 'lave-vaisselle', -0.15, 0.17, 0.1],
+  ['mixeur', 'four'],
+  ['frigo', 'congelateur'],
+];
 
 /**
  * Range les meubles des rangées (RUNS) contre leurs murs. `pick(id)` donne le prochain objet de

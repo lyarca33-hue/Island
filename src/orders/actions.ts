@@ -268,6 +268,18 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.cleanFloor(),
   },
   {
+    name: 'essuyer_vaisselle',
+    description: 'Essuyer au torchon tenu la vaisselle mouillée `objet` (tenue dans l’autre main, ou posée ; sinon la plus proche). Sortie de l’évier, la vaisselle est mouillée ; sur l’égouttoir elle sèche seule.',
+    params: { objet: 'ref de la pièce mouillée' },
+    run: (g, a) => g.dryDish(a.objet),
+  },
+  {
+    name: 'essuyer_mains',
+    description: 'S’essuyer les mains au torchon tenu, après les avoir lavées.',
+    params: {},
+    run: (g) => g.dryHands(),
+  },
+  {
     name: 'mettre_table',
     description: 'Mettre la table devant la chaise : une assiette, une fourchette et un couteau de table propres, pris au placard et au tiroir, posés chacun à sa place. Les mains doivent être vides.',
     params: {},

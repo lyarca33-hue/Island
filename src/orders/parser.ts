@@ -54,7 +54,7 @@ const VERBS: Record<string, string[]> = {
   debarrasser: ['debarrasse', 'debarrasser', 'dessers', 'desservir'],
   tirer: ['tire', 'tirer', 'recule', 'reculer'],
   pousser: ['pousse', 'pousser', 'glisse', 'glisser', 'rentre', 'rentrer'],
-  essuyer: ['essuie', 'essuyer', 'nettoie', 'nettoyer', 'eponge', 'eponger'],
+  essuyer: ['essuie', 'essuyer', 'nettoie', 'nettoyer', 'eponge', 'eponger', 'seche', 'secher', 'seches'],
   empiler: ['empile', 'empiler'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
@@ -62,9 +62,20 @@ const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
 /** Meubles qu'on ouvre et ferme (porte, tiroir, couvercle). */
 const OPENS = new Set(['frigo', 'placard', 'appareil', 'poubelle']);
 /** Meubles où l'on range (et où l'on peut regarder ce qu'il y a). */
-const STORES = new Set(['frigo', 'placard', 'rangement']);
+const STORES = new Set(['frigo', 'placard', 'rangement', 'égouttoir']);
 /** Où se range un objet qui ne va ni au frais ni dans la bibliothèque. */
-const STORED_IN: Record<string, string> = { tasse: 'placard', assiette: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir' };
+const STORED_IN: Record<string, string> = { tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'tiroir' };
+/** Les couverts (« lave les couverts », « range les couverts »). */
+const COUVERTS = ['fourchette', 'couteau de table', 'cuillère'];
+/** Où l'on sert un plat (et mange assis) ; le couvert qui va avec. */
+const BOWLS: Record<string, string> = { assiette: 'fourchette', bol: 'cuillère' };
+/** Vaisselle (fiche `dish`) : la tasse, le verre et la carafe sont des « récipient » pour describe(). */
+const isDish = (o: WorldObject) => o.sorte === 'vaisselle' || ['tasse', 'verre', 'carafe'].includes(o.nom);
+/** On ne boit pas à la carafe : on s'en sert un verre. */
+const JUGS = new Set(['carafe']);
+/** Le verre (ou la tasse) à servir : tenu, puis qui traîne, puis sec, puis le plus proche. */
+const byUse = (enMain: string[]) => (a: WorldObject, b: WorldObject) =>
+  +!enMain.includes(a.ref) - +!enMain.includes(b.ref) || +!isLoose(a) - +!isLoose(b) || +a.ou.includes('mouill') - +b.ou.includes('mouill') || a.distance - b.distance;
 const VERB_OF = new Map(Object.entries(VERBS).flatMap(([k, vs]) => vs.map((v) => [v, k] as const)));
 
 /** Formules de politesse et tournures à ignorer en tête d'ordre. */
@@ -74,7 +85,7 @@ const FILLERS = [
   'allez', 'bon', 'alors', 'maintenant', 'et',
 ];
 /** Petits mots sans importance pour reconnaître un objet. */
-const STOP = new Set(['le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'd', 'a', 'au', 'aux', 'toi', 'moi', 'te', 'me', 'm', 't', 'se', 's', 'y', 'en', 'vers', 'jusqu', 'jusque', 'sur', 'dans', 'tous', 'toutes', 'tout', 'toute', 'ce', 'cette', 'ces', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'qui', 'trainent', 'traine', 'piece', 'ici', 'et', 'aussi', 'stp', 'svp', 'ouvert', 'ouverte', 'ouverts', 'place', 'sous', 'dessous']);
+const STOP = new Set(['le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'd', 'a', 'au', 'aux', 'toi', 'moi', 'te', 'me', 'm', 't', 'se', 's', 'y', 'en', 'vers', 'avec', 'propre', 'propres', 'sale', 'sales', 'mouille', 'mouillee', 'mouilles', 'mouillees', 'jusqu', 'jusque', 'sur', 'dans', 'tous', 'toutes', 'tout', 'toute', 'ce', 'cette', 'ces', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'qui', 'trainent', 'traine', 'piece', 'ici', 'et', 'aussi', 'stp', 'svp', 'ouvert', 'ouverte', 'ouverts', 'place', 'sous', 'dessous']);
 
 /** Autres noms donnés aux objets (forme normalisée). */
 const ALIASES: Record<string, string[]> = {
@@ -106,6 +117,12 @@ const ALIASES: Record<string, string[]> = {
   casserole: ['casserole', 'casseroles'],
   steak: ['steak', 'steaks', 'steack', 'viande', 'bifteck'],
   'pomme de terre': ['patate', 'patates', 'terre'],
+  verre: ['verre', 'verres'],
+  bol: ['bol', 'bols'],
+  cuillere: ['cuillere', 'cuilleres', 'cuiller', 'cuillers', 'couverts'],
+  carafe: ['carafe', 'carafes', 'pichet', 'broc'],
+  egouttoir: ['egouttoir', 'egouttoirs', 'egouttoire'],
+  torchon: ['torchon', 'torchons', 'linge'],
   'plan de travail': ['plan', 'comptoir', 'paillasse'],
   'planche a decouper': ['planche', 'planches'],
   couteau: ['couteau', 'couteaux'],
@@ -236,7 +253,7 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const portable = found.filter((o) => o.portable && !world.enMain.includes(o.ref)).sort((a, b) => +!isLoose(a) - +!isLoose(b));
       if (!portable.length) return null;
       // « prends 2 livres », « prends les livres » : une pile (6 au plus) ; sinon un seul objet
-      const n = portable[0].nom === 'livre' ? Math.min(6, count(rest) ?? (all ? 6 : 1)) : 1;
+      const n = portable[0].nom === 'livre' ? Math.min(6, count(rest) ?? (all ? 6 : 1)) : portable[0].deuxMains ? 1 : Math.min(2, count(rest) ?? (all ? 2 : 1));
       return portable.filter((o) => o.nom === portable[0].nom).slice(0, n).map((o) => ({ kind: 'prendre', ref: o.ref }));
     }
     case 'poser': {
@@ -255,13 +272,19 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const item = what.find((o) => world.enMain.includes(o.ref)) ?? what[0];
       const target = where >= 0 ? findObjects(rest.slice(where + 1), world.objets).found.find((o) => o.ref !== item?.ref) : undefined;
       if (where >= 0 && !target) return null;
+      // « mets la vaisselle dans l'égouttoir » : la vaisselle propre (mouillée d'abord) qu'on tient ou qui traîne
+      if (target?.sorte === 'égouttoir') {
+        if (item) return [{ kind: 'mettre', ref: item.ref, dans: target.ref }];
+        const wet = world.objets.filter((o) => isDish(o) && !o.ou.includes('sale') && (world.enMain.includes(o.ref) || (isLoose(o) && o.ou.includes('mouill'))));
+        return wet.length ? wet.map((o): Intent => ({ kind: 'mettre', ref: o.ref, dans: target.ref })) : null;
+      }
       if (target?.sorte === 'rangement' && (item?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: item ? [item.ref] : [], onlyHeld: !item }];
       // « mets la pomme dans le frigo », « mets la poêle sur le feu », « mets le steak dans la poêle »,
       // « mets la tasse au lave-vaisselle », « mets la bouteille à la poubelle »
       if (target && (target.sorte === 'ustensile' || target.sorte === 'gazinière' || (OPENS.has(target.sorte ?? '') && target.sorte !== 'poubelle'))) return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
       if (target?.sorte === 'poubelle') return [{ kind: 'jeter', ref: item?.ref }];
       // « mets le sandwich dans l'assiette »
-      if (target?.nom === 'assiette' && (item ?? held[0])?.sorte === 'nourriture') return [{ kind: 'servir', ref: (item ?? held[0]).ref, sur: target.ref }];
+      if (target && target.nom in BOWLS && (item ?? held[0])?.sorte === 'nourriture') return [{ kind: 'servir', ref: (item ?? held[0]).ref, sur: target.ref }];
       return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
     case 'ranger': {
@@ -270,9 +293,13 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « range la chaise (sous la table) »
       const chair = found.find((o) => o.sorte === 'siège');
       if (chair && found.every((o) => o.sorte === 'siège' || o.nom === 'table')) return [{ kind: 'chaise', ref: chair.ref, sous: true }];
+      // « range la vaisselle dans l'égouttoir » : comme « mets … dans l'égouttoir »
+      if (found.some((o) => o.sorte === 'égouttoir') && rest.includes('dans')) return parseClause('poser', rest, original, world, word);
       // « range la vaisselle », « range les couverts » : chaque pièce propre qui traîne, à sa place
       if (rest.includes('vaisselle') || rest.includes('couverts')) {
-        const dishes = world.objets.filter((o) => (o.sorte === 'vaisselle' || o.nom === 'tasse') && isLoose(o) && !o.ou.includes('sale') && !o.ou.includes('contient') && (rest.includes('vaisselle') || o.sorte === 'vaisselle' && o.nom !== 'assiette'));
+        const rack = world.objets.find((o) => o.sorte === 'égouttoir');
+        const dry = (o: WorldObject) => (isLoose(o) || (!!rack && o.ou.startsWith(`rangé dans ${rack.ref}`))) && !o.ou.includes('mouill');
+        const dishes = world.objets.filter((o) => isDish(o) && dry(o) && !o.ou.includes('sale') && !o.ou.includes('contient') && (rest.includes('vaisselle') || COUVERTS.includes(o.nom)));
         return dishes.length ? dishes.map((o): Intent => ({ kind: 'ranger_place', ref: o.ref })) : null;
       }
       // « range-le à sa place », « range tout ça »
@@ -285,8 +312,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « range la tasse » (au placard), « range la lettre » (dans le tiroir)
       const other = things.find((o) => o.nom !== 'livre');
       if (other) {
-        const where = found.find((o) => OPENS.has(o.sorte ?? '') && o.sorte !== 'poubelle') ?? world.objets.find((o) => o.nom === STORED_IN[other.nom]);
-        return where && things.every((o) => o.nom === other.nom) ? [{ kind: 'mettre', ref: (things.find(isLoose) ?? other).ref, dans: where.ref }] : null;
+        const where = found.find((o) => (OPENS.has(o.sorte ?? '') && o.sorte !== 'poubelle') || o.sorte === 'égouttoir') ?? world.objets.find((o) => o.nom === STORED_IN[other.nom]);
+        if (!where || !things.every((o) => o.nom === other.nom)) return null;
+        // « range les verres » : chacun de ceux qui traînent
+        const loose = things.filter(isLoose);
+        return (all && loose.length ? loose : [things.find(isLoose) ?? other]).map((o): Intent => ({ kind: 'mettre', ref: o.ref, dans: where.ref }));
       }
       // « range » tout court, « range les livres », « range le livre rouge »
       if (all || !things.length) return [{ kind: 'ranger', refs: [] }];
@@ -310,10 +340,16 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       }
       // « fais-toi un jus de pomme », « prépare un smoothie » : au mixeur
       if (rest.includes('jus') || rest.includes('smoothie')) return juice(world, found, true);
+      // « sers de l'eau dans le verre (avec la carafe) », « sers-moi un verre d'eau »
+      {
+        const { tool, rest: r } = withTool(rest, world.objets);
+        const glass = findObjects(r, world.objets).found.filter((o) => o.sorte === 'récipient' && !JUGS.has(o.nom)).sort(byUse(world.enMain))[0];
+        if (glass && (r.includes('eau') || tool)) return pourOrFill(glass, tool, world);
+      }
       // « sers le sandwich (dans l'assiette) », « sers-toi une pomme »
       {
         const food = found.find((o) => o.sorte === 'nourriture');
-        const plate = found.find((o) => o.nom === 'assiette');
+        const plate = found.find((o) => o.nom in BOWLS);
         if (food || plate) return [{ kind: 'servir', ref: food?.ref, sur: plate?.ref }];
       }
       // « fais-toi un thé »
@@ -332,8 +368,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const drink = found.filter((o) => o.sorte === 'récipient');
       if (found.length && !drink.length) return null;
       const full = (o: WorldObject) => o.ou.includes('contient');
-      const named = drink.find((o) => world.enMain.includes(o.ref)) ?? drink[0];
-      const bottles = world.objets.filter((o) => o.sorte === 'récipient' && o.nom !== 'tasse' && full(o));
+      // on ne boit pas à la carafe : on s'en sert un verre
+      const glasses = drink.filter((o) => !JUGS.has(o.nom)).sort((a, b) => +!world.enMain.includes(a.ref) - +!world.enMain.includes(b.ref) || +!full(a) - +!full(b) || +!isLoose(a) - +!isLoose(b));
+      if (drink.length && !glasses.length) return null;
+      const named = glasses[0];
+      const bottles = world.objets.filter((o) => o.sorte === 'récipient' && !['tasse', 'verre'].includes(o.nom) && !JUGS.has(o.nom) && full(o));
       const bottle = liquide === 'eau' && !named ? (bottles.find((o) => world.enMain.includes(o.ref)) ?? bottles[0]) : undefined;
       return [{ kind: 'boire', ref: (named ?? bottle)?.ref, liquide }];
     }
@@ -341,10 +380,10 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « mange une pomme », « mange » (ce qu'on tient, sinon ce qu'il y a)
       const food = found.filter((o) => o.sorte === 'nourriture');
       // « mange à table », « mange dans l'assiette », « mange le sandwich à table »
-      if (rest.some((x) => ['table', 'assiette', 'fourchette'].includes(x))) return [{ kind: 'repas', ref: food[0]?.ref }];
+      if (rest.some((x) => ['table', 'assiette', 'assiettes', 'fourchette', 'bol', 'bols', 'cuillere', 'cuiller'].includes(x))) return [{ kind: 'repas', ref: food[0]?.ref, dans: found.find((o) => o.nom in BOWLS)?.ref }];
       if (found.length && !food.length) return null;
       // « mange » sans rien en main, un plat servi dans l'assiette : on mange à table
-      const served = world.objets.find((o) => o.sorte === 'nourriture' && o.ou.startsWith('posé sur assiette'));
+      const served = world.objets.find((o) => o.sorte === 'nourriture' && /^posé sur (assiette|bol)/.test(o.ou));
       if (!food.length && served && !held.some((o) => o.sorte === 'nourriture')) return [{ kind: 'repas', ref: served.ref }];
       return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
     }
@@ -362,13 +401,25 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « remplis la bouilloire » : de l'eau versée dedans
       const kettle = found.find((o) => o.nom === 'bouilloire');
       if (kettle && !rest.includes('tasse')) return [{ kind: 'remplir_bouilloire', ref: kettle.ref }];
+      // « remplis le verre avec la carafe », « remplis le verre à la carafe » : verser
+      {
+        const { tool, rest: r } = withTool(rest, world.objets);
+        const src = tool ?? (() => { const i = r.findIndex((x, k) => (x === 'a' || x === 'au') && k > 0); return i > 0 ? findObjects(r.slice(i + 1), world.objets).found.find((o) => o.sorte === 'récipient') : undefined; })();
+        const glass = findObjects(r, world.objets).found.filter((o) => o.sorte === 'récipient' && o !== src).sort(byUse(world.enMain))[0];
+        if (src && glass) return pourOrFill(glass, src, world);
+      }
       // « remplis la tasse (d'eau / de café) », « remplis la bouteille, la casserole » ; d'eau si rien n'est dit
       if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine' && o.nom !== 'casserole')) return null;
-      const vessel = found.find((o) => o.sorte === 'récipient' || o.nom === 'casserole');
+      const vessel = found.filter((o) => o.sorte === 'récipient' || o.nom === 'casserole').sort(byUse(world.enMain))[0];
       return [rest.includes('cafe') ? { kind: 'cafe' } : rest.includes('the') ? { kind: 'the' } : { kind: 'eau', ref: vessel?.nom === 'tasse' ? undefined : vessel?.ref }];
     }
     case 'verser': {
       // « verse la bouteille dans la tasse », « verse l'eau dans la bouilloire », « verse » (ce qu'on tient)
+      const t = withTool(rest, world.objets);
+      if (t.tool) {
+        const glass = findObjects(t.rest, world.objets).found.filter((o) => o.sorte === 'récipient' && o !== t.tool).sort(byUse(world.enMain))[0];
+        if (glass) return pourOrFill(glass, t.tool, world);
+      }
       const cut = rest.indexOf('dans');
       const from = findObjects(cut < 0 ? rest : rest.slice(0, cut), world.objets).found.find((o) => o.sorte === 'récipient' || o.sorte === 'ustensile');
       const into = cut < 0 ? undefined : findObjects(rest.slice(cut + 1), world.objets).found[0];
@@ -388,11 +439,24 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'empiler':
       // « empile les assiettes »
       return !found.length || found.every((o) => o.nom === 'assiette') ? [{ kind: 'empiler' }] : null;
-    case 'essuyer':
+    case 'essuyer': {
+      const { tool, rest: r } = withTool(rest, world.objets);
+      // « essuie-toi les mains (avec le torchon) »
+      if (r.some((x) => x === 'mains' || x === 'main')) return [{ kind: 'essuyer_mains' }];
+      // « essuie la vaisselle (avec le torchon) », « sèche le bol », « essuie les verres »
+      const wet = findObjects(r, world.objets).found.filter(isDish);
+      if (r.includes('vaisselle') || wet.length) {
+        // « nettoie l'assiette » (sale) : c'est la laver
+        if (['nettoie', 'nettoyer'].includes(word) && wet.some((o) => o.ou.includes('sale'))) return parseClause('laver', rest, original, world, word);
+        const damp = wet.filter((o) => o.ou.includes('mouill'));
+        return [{ kind: 'essuyer_vaisselle', refs: r.includes('vaisselle') ? [] : (all ? damp : damp.slice(0, 1)).map((o) => o.ref) }];
+      }
       // « essuie la flaque », « nettoie par terre », « éponge l'eau »
-      if (rest.some((x) => ['flaque', 'flaques', 'sol', 'terre', 'eau'].includes(x))) return [{ kind: 'essuyer_sol' }];
-      // « essuie la table », « nettoie la table »
-      return found.length && found.every((o) => o.nom === 'table' || o.nom === 'éponge') ? [{ kind: 'essuyer', ref: found.find((o) => o.nom === 'table')?.ref }] : null;
+      if (r.some((x) => ['flaque', 'flaques', 'sol', 'terre', 'eau'].includes(x))) return [{ kind: 'essuyer_sol' }];
+      // « essuie la table (avec l'éponge / le torchon) », « nettoie la table »
+      const f2 = [...findObjects(r, world.objets).found, ...(tool ? [tool] : [])];
+      return f2.length && f2.every((o) => o.nom === 'table' || o.nom === 'éponge' || o.nom === 'torchon') ? [{ kind: 'essuyer', ref: f2.find((o) => o.nom === 'table')?.ref }] : null;
+    }
     case 'debarrasser':
       // « débarrasse la table », « débarrasse »
       return [{ kind: 'debarrasser' }];
@@ -414,19 +478,19 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return rest.includes('bouchon') ? [{ kind: 'bouchon', mettre: false }] : null;
     case 'laver': {
       // « lave la tasse au lave-vaisselle » : on la range dedans et on le lance
-      if (machineWash(original) && found.every((o) => o.sorte === 'appareil' || o.sorte === 'vaisselle' || o.nom === 'tasse') && appliance('lave-vaisselle')) {
-        const cups = found.filter((o) => o.sorte === 'vaisselle' || o.nom === 'tasse');
+      if (machineWash(original) && found.every((o) => o.sorte === 'appareil' || isDish(o)) && appliance('lave-vaisselle')) {
+        const cups = found.filter(isDish);
         if (!cups.length) return machineDishes(world);
         const lv = appliance('lave-vaisselle')!;
         return [...cups.slice(0, all ? cups.length : 1).map((o): Intent => ({ kind: 'mettre', ref: o.ref, dans: lv.ref })), ...tablet(lv), { kind: 'allumer', ref: lv.ref }];
       }
       // « lave la vaisselle », « lave l'assiette », « lave les couverts », « rince la tasse » : à l'évier
       const sink = found.filter((o) => o.nom !== 'lave-vaisselle');
-      const dishes = sink.filter((o) => o.sorte === 'vaisselle' || o.nom === 'tasse');
+      const dishes = sink.filter(isDish);
       if (rest.includes('vaisselle') || rest.includes('couverts') || dishes.length) {
         if (sink.some((o) => o.sorte !== 'évier' && !dishes.includes(o))) return null;
         // « lave les couverts » : fourchettes et couteaux
-        if (!dishes.length && rest.includes('couverts')) return [{ kind: 'vaisselle', refs: world.objets.filter((o) => o.nom === 'fourchette' || o.nom === 'couteau de table').map((o) => o.ref) }];
+        if (!dishes.length && rest.includes('couverts')) return [{ kind: 'vaisselle', refs: world.objets.filter((o) => COUVERTS.includes(o.nom)).map((o) => o.ref) }];
         if (all || !dishes.length) return [{ kind: 'vaisselle', refs: dishes.map((o) => o.ref) }];
         return [{ kind: 'vaisselle', refs: [(dishes.find((o) => o.ou.includes('sale')) ?? dishes[0]).ref] }];
       }
@@ -451,7 +515,7 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'asseoir': {
       // « assieds-toi à table »
-      if (rest.includes('table') || found.some((o) => o.nom === 'assiette')) return [{ kind: 'attabler' }];
+      if (rest.includes('table') || found.some((o) => o.nom in BOWLS)) return [{ kind: 'attabler' }];
       // « assieds-toi », « assieds-toi sur la chaise » (sinon le siège le plus proche)
       const seat = found.find((o) => o.sorte === 'siège');
       if (found.length && !seat) return null;
@@ -527,6 +591,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'vider': {
       // « vide le lave-vaisselle » : la vaisselle propre rangée à sa place
       if (machineWash(original) && appliance('lave-vaisselle')) return [{ kind: 'vider_lv' }];
+      // « vide l'égouttoir » : la vaisselle sèche à sa place
+      const rack = found.find((o) => o.sorte === 'égouttoir');
+      if (rack) {
+        const dry = world.objets.filter((o) => o.ou.startsWith(`rangé dans ${rack.ref}`) && !o.ou.includes('mouill'));
+        return dry.length ? dry.map((o): Intent => ({ kind: 'ranger_place', ref: o.ref })) : null;
+      }
       // « vide la tasse », « vide la casserole » (dans l'évier)
       const vessel = found.find((o) => o.sorte === 'récipient' || o.sorte === 'ustensile');
       if (vessel) return [{ kind: 'vider_recipient', ref: vessel.ref }];
@@ -557,6 +627,23 @@ function count(words: string[]): number | null {
 }
 
 const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rangé');
+
+/** « … avec la carafe » : l'objet nommé après « avec », et l'ordre sans ce morceau. */
+function withTool(rest: string[], objets: WorldObject[]): { tool?: WorldObject; rest: string[] } {
+  const i = rest.indexOf('avec');
+  if (i < 0) return { rest };
+  return { tool: findObjects(rest.slice(i + 1), objets).found[0], rest: rest.slice(0, i) };
+}
+
+/**
+ * De l'eau dans le verre `glass` : versée de `src` (carafe, bouteille) s'il est nommé, sinon d'une
+ * carafe ou bouteille pleine (tenue d'abord), sinon remplie à l'évier.
+ */
+function pourOrFill(glass: WorldObject, src: WorldObject | undefined, world: { enMain: string[]; objets: WorldObject[] }): Intent[] {
+  const full = (o: WorldObject) => o.ou.includes('contient de l’eau');
+  const jug = src ?? world.objets.filter((o) => o.sorte === 'récipient' && o.ref !== glass.ref && !['tasse', 'verre'].includes(o.nom) && full(o)).sort((a, b) => +!world.enMain.includes(a.ref) - +!world.enMain.includes(b.ref) || a.distance - b.distance)[0];
+  return jug ? [{ kind: 'verser', ref: jug.ref, dans: glass.ref }] : [{ kind: 'eau', ref: glass.ref }];
+}
 
 /** Faire la vaisselle : les tasses sales au lave-vaisselle, puis le lancer. */
 /** L'ordre nomme le lave-vaisselle (« … au lave-vaisselle ») : sinon la vaisselle se fait à l'évier. */
