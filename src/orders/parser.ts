@@ -102,6 +102,11 @@ const ALIASES: Record<string, string[]> = {
   'rondelles de carotte': ['rondelles', 'rondelle'],
   'tranches de tomate': ['tranches', 'tranche'],
   'rondelles de concombre': ['rondelles', 'rondelle'],
+  // les plats des recettes
+  'salade composee': ['salade', 'salades', 'crudites'],
+  'tartine a la tomate': ['tartine', 'tartines'],
+  'sandwich au steak': ['sandwich', 'sandwichs', 'burger', 'hamburger'],
+  'steak aux pommes de terre': ['plat', 'steak', 'patates'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */

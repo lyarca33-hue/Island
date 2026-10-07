@@ -144,7 +144,7 @@ export const DISHES: ItemDef[] = [
     slice(g, 0.033, 0.12);
     return g;
   }),
-  dish('steak-pommes-de-terre', 'steak et pommes de terre', { hunger: 68, bites: 6, color: 0xc89a5a }, () => {
+  dish('steak-pommes-de-terre', 'steak aux pommes de terre', { hunger: 68, bites: 6, color: 0xc89a5a }, () => {
     const g = new THREE.Group();
     const steak = mesh(new THREE.CylinderGeometry(0.04, 0.042, 0.016, 16), 0x7b4a2c, -0.025, 0.008, 0);
     steak.scale.set(1.25, 1, 0.9);
