@@ -299,6 +299,8 @@ export class Room {
   private lamps: THREE.PointLight[] = [];
   /** Lumières qui entrent par les fenêtres. */
   private winLights: THREE.SpotLight[] = [];
+  /** Lumières éteintes qui complètent le compte d'ombres de la pièce (voir padShadows). */
+  private spares: Array<THREE.PointLight | THREE.SpotLight> = [];
   /** Les lumières de la pièce font-elles des ombres (dernière pièce où était le perso) ? */
   private shadowsOn = true;
   /**
@@ -573,6 +575,38 @@ export class Room {
   }
 
   /**
+   * Complète la pièce jusqu'à `lamps` lampes et `windows` fenêtres à ombre, avec des lumières
+   * éteintes à la carte d'ombre minuscule : toutes les pièces ont ainsi le même nombre de lumières
+   * à ombre, et passer d'une pièce à l'autre ne fait recompiler aucun shader.
+   */
+  padShadows(lamps: number, windows: number): void {
+    const { x0, x1, z0, z1 } = this.rect;
+    const c = new THREE.Vector3((x0 + x1) / 2, WALL_H - 0.2, (z0 + z1) / 2);
+    const setup = (l: THREE.PointLight | THREE.SpotLight) => {
+      lightAllPasses(l);
+      l.position.copy(c);
+      l.castShadow = this.shadowsOn;
+      l.shadow.mapSize.set(16, 16);
+      l.shadow.autoUpdate = false;
+      l.shadow.needsUpdate = true;
+      this.spares.push(l);
+      this.group.add(l);
+    };
+    for (let i = this.lamps.length; i < lamps; i++) setup(new THREE.PointLight(LAMP_COLOR, 0, 0.5, 2));
+    for (let i = this.winLights.length; i < windows; i++) {
+      const l = new THREE.SpotLight(WIN_DAY, 0, 0.5, 0.55, 0.15, 1.2);
+      l.map = this.shadowsOn ? windowCookie() : null;
+      l.target.position.copy(c).setY(0);
+      this.group.add(l.target);
+      setup(l);
+    }
+  }
+
+  get shadowCounts(): { lamps: number; windows: number } {
+    return { lamps: this.lamps.length, windows: this.winLights.length };
+  }
+
+  /**
    * Toit à deux pentes (faîtage le long de x) et pignons, au-dessus des murs. Côté mitoyen
    * (spec.joined), ni débord ni pignon : il rejoint le toit de la pièce voisine.
    */
@@ -794,13 +828,13 @@ export class Room {
     // saccade à chaque sortie.
     if (shadowRoom !== this.shadowsOn) {
       this.shadowsOn = shadowRoom;
-      for (const l of [...this.lamps, ...this.winLights]) {
+      for (const l of [...this.lamps, ...this.winLights, ...this.spares]) {
         l.castShadow = shadowRoom;
         l.shadow.needsUpdate = true;
       }
       // une fenêtre sans ombre perd aussi sa forme de carreaux : les matériaux des persos (MToon)
       // ne s'affichent plus si des projecteurs ont une forme sans avoir d'ombre
-      for (const l of this.winLights) l.map = shadowRoom ? windowCookie() : null;
+      for (const l of [...this.winLights, ...this.spares]) if (l instanceof THREE.SpotLight) l.map = shadowRoom ? windowCookie() : null;
     }
     const hides = (w: Wall) => rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
     for (const w of this.walls) {

@@ -643,6 +643,9 @@ export class Game {
       this.rooms.push(room);
       this.scene.add(room.group);
     }
+    // même nombre de lumières à ombre dans chaque pièce (pas de recompilation en changeant de pièce)
+    const most = (k: 'lamps' | 'windows') => Math.max(...this.rooms.map((r) => r.shadowCounts[k]));
+    for (const r of this.rooms) r.padShadows(most('lamps'), most('windows'));
     // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item), keep: false });
