@@ -47,7 +47,7 @@ fenêtre au-dessus de l'évier et une au-dessus de la table. Les murs tournés v
 s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra.
 
 - Au fond : lave-vaisselle, évier, plan de travail (planche, couteau), gazinière (hotte
-  au-dessus), tiroir à couverts, frigo, puis la bibliothèque des livres de cuisine.
+  au-dessus), tiroir à couverts (la bouilloire dessus), frigo, puis la bibliothèque des livres de cuisine.
 - Le long du mur de la porte : machine à café, placard à vaisselle avec le micro-ondes dessus, four,
   poubelle ; l'horloge au-dessus du coin café donne l'heure du jeu.
 - Au milieu : la table mise (assiette, couverts, tasse), sa chaise, sur un tapis.
@@ -289,6 +289,9 @@ plan de travail (on y pose ce qu'on tient).
   l'arrête.
 - Vaisselle sale : la machine à café refuse une tasse sale (il faut la laver à l'évier d'abord) ; le
   lave-vaisselle lave tasse, assiette et couverts d'un coup.
+- Bouilloire (posée sur le tiroir) : comme la machine à café, tasse en main, clic dessus ; son
+  bouton rouge l'allume, l'eau chauffe, puis le thé coule dans la tasse posée sous le bec. Le thé
+  désaltère comme le café et réveille moitié moins. « fais-toi un thé », « bois un thé ».
 - Poubelle : objet en main, clic dessus : le couvercle se lève, l'objet y tombe et disparaît. Elle
   tient 8 objets ; pas vide, un clic sur le côté mains vides sort le sac.
 - Ordres : « cuis le steak au four », « réchauffe le sandwich », « allume le four », « éteins le four »,

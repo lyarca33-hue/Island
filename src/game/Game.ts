@@ -37,9 +37,10 @@ const ZOOM_MAX = 2.5;
 /** Hauteur du point suivi au-dessus des pieds du perso (m). */
 const FOCUS_HEIGHT = 0.9;
 
-/** Soif rendue par une tasse pleine bue en entier, et regain d'énergie si c'est du café. */
+/** Soif rendue par une tasse pleine bue en entier, et regain d'énergie si c'est du café (moitié moins pour le thé). */
 const DRINK_THIRST = 35;
 const COFFEE_ENERGY = 12;
+const TEA_ENERGY = 6;
 /** L'eau désaltère plus que le café : soif en plus pour une bouteille entière. */
 const WATER_EXTRA = 15;
 
@@ -197,7 +198,7 @@ export interface WorldObject {
 }
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette']);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire']);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre']);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -1811,6 +1812,13 @@ export class Game {
     return machine ? this.pourAt(machine, running) : false;
   }
 
+  /** Se fait un thé à la bouilloire la plus proche (il faut tenir la tasse). */
+  makeTea(running = false): boolean {
+    const kettle = this.nearest((i) => i.def.pour?.liquid === 'thé');
+    if (!kettle) this.onNotice?.('Il n’y a pas de bouilloire.');
+    return kettle ? this.pourAt(kettle, running) : false;
+  }
+
   /** Remplit d'eau la tasse tenue à l'évier le plus proche (ce qu'elle contenait est vidé dans l'évier). */
   fillWater(running = false): boolean {
     const sink = this.nearest((i) => i.def.pour?.liquid === 'eau');
@@ -1839,7 +1847,11 @@ export class Game {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
     // contre l'évier pour atteindre le robinet, contre la gazinière pour atteindre les feux du fond (le perso se penche un peu)
     const gap = item.def.wash ? 0.22 : item.def.heat && !item.def.pour ? 0.16 : 0.26;
-    return item.object.position.clone().addScaledVector(fwd, item.box.max.z + gap);
+    // posé sur un meuble (la bouilloire sur le tiroir) : devant le meuble, pas dedans
+    const p = item.object.position;
+    const under = p.y > 0.05 ? this.items.find((o) => o !== item && o.object.position.y < p.y && this.isAbove(item, o)) : undefined;
+    const depth = under ? Math.max(item.box.max.z, under.box.max.z + fwd.dot(under.object.position.clone().sub(p))) : item.box.max.z;
+    return p.clone().addScaledVector(fwd, depth + gap).setY(0);
   }
 
   /**
@@ -2759,8 +2771,9 @@ export class Game {
         this.needs.restore('soif', drunk * DRINK_THIRST);
         if (last?.contents === 'eau') this.needs.restore('soif', drunk * WATER_EXTRA);
         if (last?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
-        // un café bu jusqu'au bout laisse un fond dans la tasse
-        if (last?.contents === 'café' && !held.contents && held.def.dish) held.setDirty(true);
+        if (last?.contents === 'thé') this.needs.restore('fatigue', drunk * TEA_ENERGY);
+        // un café ou un thé bu jusqu'au bout laisse un fond dans la tasse
+        if ((last?.contents === 'café' || last?.contents === 'thé') && !held.contents && held.def.dish) held.setDirty(true);
       }
       sips.set(held, { level: held.level, contents: held.contents });
     }
