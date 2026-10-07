@@ -15,9 +15,6 @@ export type Intent =
   | { kind: 'ranger'; refs: string[]; onlyHeld?: boolean }
   /** Mettre l'objet `ref` (ou ce qu'on tient) dans le meuble `dans` (frigo, placard, four…). */
   | { kind: 'mettre'; ref?: string; dans: string }
-  /** Mettre en marche l'appareil `ref` (four, micro-ondes, lave-vaisselle), ou l'arrêter. */
-  | { kind: 'allumer'; ref: string }
-  | { kind: 'eteindre'; ref: string }
   /** Jeter à la poubelle l'objet `ref` (pris d'abord si besoin), sinon ce qu'on tient. */
   | { kind: 'jeter'; ref?: string }
   /** Vider la poubelle `ref`. */
@@ -44,7 +41,15 @@ export type Intent =
   | { kind: 'dire'; texte: string }
   /** S'asseoir sur le siège `ref` (sinon le plus proche). */
   | { kind: 'asseoir'; ref?: string }
-  | { kind: 'lever' };
+  | { kind: 'lever' }
+  /**
+   * Faire cuire l'ingrédient `ref` (sinon celui qu'on tient, sinon le plus proche) : ustensile
+   * (rempli d'eau pour la casserole) sur le feu, ingrédient dedans, feu allumé, puis éteint une fois cuit.
+   */
+  | { kind: 'cuire'; ref?: string }
+  /** Allumer ou éteindre un appareil (la gazinière la plus proche sans `ref`). */
+  | { kind: 'allumer'; ref?: string }
+  | { kind: 'eteindre'; ref?: string };
 
 /** La tâche en quelques mots (« prendre tasse »), pour le journal des manques. */
 export function intentLabel(i: Intent): string {
@@ -211,10 +216,14 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'manger': {
       const w = world(game);
       const foods = w.objets.filter((o) => o.sorte === 'nourriture');
+      // ce qui se mange tel quel (ou déjà cuit) d'abord
+      const raw = (o: WorldObject) => +(o.cuisson === 'cru');
       const food = intent.ref
         ? foods.find((o) => o.ref === intent.ref)
-        : (foods.find((o) => w.enMain.includes(o.ref)) ?? [...foods].sort((a, b) => +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0]);
+        : (foods.find((o) => w.enMain.includes(o.ref) && !raw(o)) ?? [...foods].sort((a, b) => raw(a) - raw(b) || +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0]);
       if (!food) throw new Failed('Il n’y a rien à manger.');
+      // cru : on le fait cuire d'abord
+      if (food.cuisson === 'cru') await runOne(game, { kind: 'cuire', ref: food.ref }, act);
       await take(game, act, food.ref);
       // bouchée après bouchée jusqu'à la fin (l'aliment disparaît)
       for (let i = 0; i < 12 && world(game).enMain.includes(food.ref); i++) await act('manger');
@@ -230,14 +239,50 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await take(game, act, food.ref);
       return act('couper', { objet: food.ref });
     }
-    case 'mettre':
+    case 'mettre': {
       if (intent.ref) await take(game, act, intent.ref);
       if (!held(game).length) throw new Failed('Rien en main à ranger.');
+      // « mets la poêle sur le feu », « mets le steak dans la poêle »
+      const into = world(game).objets.find((o) => o.ref === intent.dans)?.sorte;
+      if (into === 'gazinière') return act('mettre_sur_feu', { objet: intent.dans });
+      if (into === 'ustensile') return act('mettre_dans', { ustensile: intent.dans });
       return act('ranger', intent.ref ? { meuble: intent.dans, objet: intent.ref } : { meuble: intent.dans });
+    }
+    case 'cuire': {
+      const w = world(game);
+      const foods = w.objets.filter((o) => o.cuisson);
+      const food = intent.ref
+        ? foods.find((o) => o.ref === intent.ref)
+        : (foods.find((o) => w.enMain.includes(o.ref) && o.cuisson === 'cru') ?? foods.filter((o) => o.cuisson === 'cru').sort((a, b) => a.distance - b.distance)[0]);
+      if (!food) throw new Failed('Il n’y a rien à faire cuire.');
+      if (food.cuisson !== 'cru') return;
+      let plan = game.cookPlan(food.ref);
+      if (!plan) throw new Failed(`Pas d’ustensile pour faire cuire : ${food.nom}.`);
+      if (!plan.gaziniere) throw new Failed('Il n’y a pas de gazinière.');
+      // la casserole : de l'eau d'abord, à l'évier
+      if (!plan.dedans && plan.eau) {
+        await take(game, act, plan.ustensile);
+        await act('eau');
+        plan = game.cookPlan(food.ref)!;
+      }
+      if (!plan.surLeFeu) {
+        await take(game, act, plan.ustensile);
+        await act('mettre_sur_feu', { objet: plan.gaziniere! });
+      }
+      if (!plan.dedans) {
+        await take(game, act, food.ref);
+        await act('mettre_dans', { ustensile: plan.ustensile });
+      }
+      await act('allumer', { objet: plan.gaziniere!, ustensile: plan.ustensile });
+      await act('attendre_cuisson', { objet: food.ref });
+      return act('eteindre', { objet: plan.gaziniere!, ustensile: plan.ustensile });
+    }
     case 'allumer':
-      return act('allumer', { objet: intent.ref });
-    case 'eteindre':
-      return act('eteindre', { objet: intent.ref });
+    case 'eteindre': {
+      const ref = intent.ref ?? world(game).objets.filter((o) => o.sorte === 'gazinière').sort((a, b) => a.distance - b.distance)[0]?.ref;
+      if (!ref) throw new Failed('Il n’y a pas de gazinière.');
+      return act(intent.kind, { objet: ref });
+    }
     case 'jeter': {
       if (intent.ref) await take(game, act, intent.ref);
       const load = intent.ref ? world(game).mains.find((l) => l.includes(intent.ref!)) : undefined;

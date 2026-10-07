@@ -107,8 +107,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
 - {"tache": "mettre", "objet": "<ref>", "dans": "<ref du meuble>"} : ranger un objet dans un meuble qui a une porte ou un tiroir (« objet » facultatif : ce qu'on tient) : frigo (bouteille, aliments entiers ou coupés), placard (tasse, bouteille, pomme), tiroir (lettre), four et micro-ondes (pomme, sandwich), lave-vaisselle (tasse)
 - {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte d'un meuble (frigo, placard, four…), un tiroir ou le couvercle de la poubelle
-- {"tache": "allumer", "objet": "<ref>"} : mettre en marche un appareil (sorte « appareil ») ; il faut d'abord y « mettre » quelque chose. Le four cuit (une deuxième fois : brûlé, ça nourrit moins), le micro-ondes réchauffe sans brûler, le lave-vaisselle rend propre la vaisselle sale. La tâche finit quand l'appareil sonne
-- {"tache": "eteindre", "objet": "<ref>"} : arrêter un appareil en marche
+- {"tache": "cuire", "objet": "<ref>"} : faire cuire un ingrédient cru (steak à la poêle, pomme de terre à l'eau dans la casserole ; il y en a dans le frigo). Le perso fait tout : eau à l'évier, ustensile sur la gazinière, ingrédient dedans, feu allumé, puis éteint une fois cuit. Cru, ça ne se mange pas ; oublié sur le feu, ça brûle
+- {"tache": "mettre", "objet": "<ref>", "dans": "<ref>"} marche aussi pour poser une poêle ou une casserole sur la gazinière (« dans » : la gazinière) ou mettre un ingrédient dans un ustensile
+- {"tache": "allumer", "objet": "<ref>"} / {"tache": "eteindre", "objet": "<ref>"} : allumer ou éteindre la gazinière (les feux où un ustensile est posé) ou la machine à café. Le four et le micro-ondes (sorte « appareil ») : il faut d'abord y « mettre » ce qu'il faut cuire (steak, pomme de terre) ; le four cuit d'un cran à chaque fois (cru → cuit → brûlé), le micro-ondes cuit sans brûler ; le lave-vaisselle rend propre la vaisselle sale. La tâche finit quand l'appareil sonne
 - {"tache": "jeter", "objet": "<ref>"} : jeter un objet à la poubelle (« objet » facultatif : ce qu'on tient) ; il disparaît
 - {"tache": "vider", "objet": "<ref>"} : vider la poubelle quand elle est pleine
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
@@ -170,8 +171,6 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };
     case 'mettre': return s('dans') ? { kind: 'mettre', ref: s('objet') || undefined, dans: s('dans') } : null;
     case 'ouvrir': return s('objet') ? { kind: 'ouvrir', ref: s('objet') } : null;
-    case 'allumer': return s('objet') ? { kind: 'allumer', ref: s('objet') } : null;
-    case 'eteindre': return s('objet') ? { kind: 'eteindre', ref: s('objet') } : null;
     case 'jeter': return { kind: 'jeter', ref: s('objet') || undefined };
     case 'vider': return s('objet') ? { kind: 'vider', ref: s('objet') } : null;
     case 'fermer': return s('objet') ? { kind: 'fermer', ref: s('objet') } : null;
@@ -179,6 +178,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'asseoir': return { kind: 'asseoir', ref: s('objet') || undefined };
     case 'lever': return { kind: 'lever' };
+    case 'cuire': return { kind: 'cuire', ref: s('objet') || undefined };
+    case 'allumer': return { kind: 'allumer', ref: s('objet') || undefined };
+    case 'eteindre': return { kind: 'eteindre', ref: s('objet') || undefined };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
     case 'manque': return s('action') || s('raison') ? 'manque' : null;

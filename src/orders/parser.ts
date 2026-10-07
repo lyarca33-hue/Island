@@ -1,8 +1,8 @@
 /**
  * Ordres simples en français, compris sans IA : « prends la tasse », « range tous les livres »,
  * « va à la table puis pose la lettre », « fais-toi un café », « lis le livre rouge », « dis bonjour »,
- * « assieds-toi sur la chaise », « lève-toi », « cuis la pomme », « jette la bouteille », « fais la
- * vaisselle ». Rend null dès
+ * « assieds-toi sur la chaise », « lève-toi », « fais cuire le steak », « éteins le feu », « cuis la
+ * pomme de terre au four », « jette la bouteille », « fais la vaisselle ». Rend null dès
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
@@ -35,9 +35,10 @@ const VERBS: Record<string, string[]> = {
   laver: ['lave', 'laver', 'lavez', 'rince', 'rincer', 'debarbouille', 'debarbouiller'],
   asseoir: ['assieds', 'assied', 'assois', 'assoit', 'asseoir', 'assoir', 'assoie', 'rassieds', 'rassois'],
   lever: ['leve', 'lever', 'releve', 'relever', 'debout'],
-  arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse', 'eteins', 'eteint', 'eteindre'],
-  allumer: ['allume', 'allumer', 'lance', 'lancer', 'demarre', 'demarrer', 'active', 'activer'],
-  cuire: ['cuis', 'cuit', 'cuire', 'rechauffe', 'rechauffer', 'chauffe', 'chauffer', 'grille', 'griller'],
+  cuire: ['cuis', 'cuit', 'cuire', 'cuisine', 'cuisiner', 'grille', 'griller', 'rechauffe', 'rechauffer', 'chauffe', 'chauffer'],
+  allumer: ['allume', 'allumer', 'rallume', 'rallumer', 'lance', 'lancer', 'demarre', 'demarrer', 'active', 'activer'],
+  eteindre: ['eteins', 'eteint', 'eteindre', 'coupe', 'couper'],
+  arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
   jeter: ['jette', 'jeter', 'balance', 'balancer'],
   vider: ['vide', 'vider'],
 };
@@ -79,6 +80,11 @@ const ALIASES: Record<string, string[]> = {
   'micro ondes': ['micro', 'microondes', 'ondes'],
   'lave vaisselle': ['vaisselle'],
   poubelle: ['poubelle', 'poubelles', 'corbeille'],
+  gaziniere: ['gaziniere', 'cuisiniere', 'feu', 'feux', 'gaz', 'plaque', 'plaques'],
+  poele: ['poele', 'poeles'],
+  casserole: ['casserole', 'casseroles'],
+  steak: ['steak', 'steaks', 'steack', 'viande', 'bifteck'],
+  'pomme de terre': ['patate', 'patates', 'terre'],
   'plan de travail': ['plan', 'comptoir', 'paillasse'],
   'planche a decouper': ['planche', 'planches'],
   couteau: ['couteau', 'couteaux'],
@@ -107,6 +113,8 @@ function findObjects(clause: string[], objets: WorldObject[]): { found: WorldObj
     const { kind, detail } = words(o);
     const i = clause.findIndex((w) => kind.includes(w));
     if (i < 0) return false;
+    // « pomme de terre » n'est pas une pomme
+    if (clause[i] === 'pomme' && clause[i + 1] === 'de' && clause[i + 2] === 'terre') return normalize(o.nom) === 'pomme de terre';
     // une couleur juste après le nom (« le livre rouge ») restreint aux livres de cette couleur
     const colour = clause[i + 1];
     if (colour && !STOP.has(colour) && !VERB_OF.has(colour) && !Object.values(ALIASES).flat().includes(colour)) return detail.includes(colour);
@@ -212,8 +220,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const target = where >= 0 ? findObjects(rest.slice(where + 1), world.objets).found.find((o) => o.ref !== item?.ref) : undefined;
       if (where >= 0 && !target) return null;
       if (target?.sorte === 'rangement' && (item?.nom ?? held[0]?.nom) === 'livre') return [{ kind: 'ranger', refs: item ? [item.ref] : [], onlyHeld: !item }];
-      // « mets la pomme dans le frigo », « mets la tasse au lave-vaisselle », « mets la bouteille à la poubelle »
-      if (target && OPENS.has(target.sorte ?? '') && target.sorte !== 'poubelle') return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
+      // « mets la pomme dans le frigo », « mets la poêle sur le feu », « mets le steak dans la poêle »,
+      // « mets la tasse au lave-vaisselle », « mets la bouteille à la poubelle »
+      if (target && (target.sorte === 'ustensile' || target.sorte === 'gazinière' || (OPENS.has(target.sorte ?? '') && target.sorte !== 'poubelle'))) return [{ kind: 'mettre', ref: item?.ref, dans: target.ref }];
       if (target?.sorte === 'poubelle') return [{ kind: 'jeter', ref: item?.ref }];
       return [{ kind: 'poser', ref: item?.ref, sur: target?.ref }];
     }
@@ -307,8 +316,35 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'lever':
       return [{ kind: 'lever' }];
+    case 'cuire': {
+      // au four ou au micro-ondes : « cuis la pomme de terre au four », « réchauffe le steak »
+      const oven = found.find((o) => o.sorte === 'appareil' && o.nom !== 'lave-vaisselle') ?? (REHEAT.has(word) ? appliance('micro-ondes') : undefined);
+      if (oven) {
+        if (found.some((o) => o.sorte !== 'nourriture' && o.sorte !== 'appareil' && !o.cuisson)) return null;
+        const food = found.filter((o) => o.sorte === 'nourriture' || o.cuisson);
+        const item = food.find((o) => world.enMain.includes(o.ref)) ?? food.find(isLoose) ?? food[0] ?? world.objets.find((o) => world.enMain.includes(o.ref) && o.cuisson);
+        // rien de nommé : on lance l'appareil avec ce qu'il contient
+        if (!item) return [{ kind: 'allumer', ref: oven.ref }];
+        return [{ kind: 'mettre', ref: item.ref, dans: oven.ref }, { kind: 'allumer', ref: oven.ref }];
+      }
+      // « cuis le steak », « fais cuire les pommes de terre », « cuisine » (un ingrédient cru)
+      const foods = found.filter((o) => o.cuisson);
+      if (found.some((o) => !o.cuisson && o.sorte !== 'ustensile' && o.sorte !== 'gazinière')) return null;
+      if (all && foods.length) return foods.filter((o) => o.cuisson === 'cru').map((o) => ({ kind: 'cuire', ref: o.ref }));
+      return [{ kind: 'cuire', ref: (foods.find((o) => o.cuisson === 'cru') ?? foods[0])?.ref }];
+    }
+    case 'allumer':
+    case 'eteindre': {
+      // « allume le four », « lance le lave-vaisselle »
+      const app = found.find((o) => o.sorte === 'appareil');
+      if (app) return [{ kind: verb, ref: app.ref }];
+      // « allume la gazinière », « éteins le feu », « allume la machine à café »
+      const target = found.find((o) => o.sorte === 'gazinière' || o.sorte === 'machine');
+      if (found.length && !target) return null;
+      return [{ kind: verb, ref: target?.ref }];
+    }
     case 'arreter': {
-      // « éteins le four », « arrête le lave-vaisselle » ; « ferme le four » : la porte
+      // « arrête le lave-vaisselle » ; « ferme le four » : la porte
       const closes = ['ferme', 'fermer', 'referme', 'refermer'].includes(word);
       const app = found.find((o) => o.sorte === 'appareil');
       if (app && !closes) return [{ kind: 'eteindre', ref: app.ref }];
@@ -316,22 +352,6 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (OPENS.has(found[0]?.sorte ?? '')) return [{ kind: 'fermer', ref: found[0].ref }];
       // « arrête de lire », « ferme le livre », « stop »
       return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;
-    }
-    case 'allumer': {
-      // « allume le four », « lance le lave-vaisselle »
-      const app = found.find((o) => o.sorte === 'appareil');
-      return app ? [{ kind: 'allumer', ref: app.ref }] : null;
-    }
-    case 'cuire': {
-      // « cuis la pomme (au four) », « réchauffe le sandwich (au micro-ondes) »
-      const app = found.find((o) => o.sorte === 'appareil' && o.nom !== 'lave-vaisselle') ?? appliance(REHEAT.has(word) ? 'micro-ondes' : 'four') ?? appliance('four') ?? appliance('micro-ondes');
-      const food = found.filter((o) => o.sorte === 'nourriture');
-      if (!app || found.some((o) => o.sorte !== 'nourriture' && o.sorte !== 'appareil')) return null;
-      const held = world.objets.filter((o) => world.enMain.includes(o.ref) && o.sorte === 'nourriture');
-      const item = food.find((o) => world.enMain.includes(o.ref)) ?? food.find(isLoose) ?? food[0] ?? held[0];
-      // rien de nommé : on lance l'appareil avec ce qu'il contient
-      if (!item) return [{ kind: 'allumer', ref: app.ref }];
-      return [{ kind: 'mettre', ref: item.ref, dans: app.ref }, { kind: 'allumer', ref: app.ref }];
     }
     case 'jeter': {
       // « jette la bouteille », « jette ça » (ce qu'on tient)

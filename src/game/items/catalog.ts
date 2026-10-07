@@ -61,7 +61,8 @@ export interface ItemDef {
    */
   pour?: {
     at: [number, number, number];
-    fills: string;
+    /** Récipients qu'on y remplit (le premier est celui qu'on cite : « prends la tasse »). */
+    fills: string[];
     liquid: string;
     seconds: number;
     /** Couleur du liquide dans le récipient (et de la flaque s'il se renverse). */
@@ -114,6 +115,21 @@ export interface ItemDef {
   washes?: { seconds: number };
   /** Poubelle : nombre d'objets jetés avant qu'il faille la vider. La pièce `dechets` monte avec. */
   bin?: number;
+  /**
+   * Appareil qui chauffe (gazinière, machine à café) : il s'allume et s'éteint. `spots` : les feux
+   * où poser un ustensile (repère de l'appareil, base de l'ustensile) ; la pièce `${lit}-${i}`
+   * (flamme, voyant) se montre quand le feu n° i est allumé, et un clic sur la pièce `bouton-${i}`
+   * l'allume ou l'éteint. Il lui faut `warmup` secondes pour chauffer ; `autoOff` : s'éteint seul
+   * après autant de secondes sans servir.
+   */
+  heat?: { spots: Array<[number, number, number]>; lit: string; warmup: number; autoOff?: number };
+  /** Ustensile qui va sur le feu (poêle, casserole) : ce qu'on y met (noms), et où (repère de l'ustensile, base de l'ingrédient). */
+  cookware?: { holds: string[]; places: Array<[number, number, number]> };
+  /**
+   * Ingrédient qui cuit (cooking.ts) : `seconds` sur un feu bien chaud pour être cuit, puis `burn`
+   * de plus pour brûler ; couleurs cru, cuit et brûlé des pièces nommées `cuit`.
+   */
+  cook?: { seconds: number; burn: number; colors: [THREE.ColorRepresentation, THREE.ColorRepresentation, THREE.ColorRepresentation] };
   /** Aliment qui se coupe sur la planche : l'id de l'objet qu'il devient (ses morceaux). */
   cut?: string;
   /** Planche à découper : on y pose l'aliment pour le couper. */
@@ -212,6 +228,21 @@ const FRIDGE_DOOR_T = 0.05;
 const FRIDGE_SHELVES = [FRIDGE_T + 0.03, 0.55, 0.98];
 const FRIDGE_SLOTS = FRIDGE_SHELVES.flatMap((y) => [-0.19, -0.065, 0.065, 0.19].map((x): [number, number, number] => [x, y, 0.13]));
 
+/** Gazinière : largeur, profondeur ; feux (avant gauche, avant droit, arrière gauche, arrière droit), dessus des grilles. */
+const STOVE_W = 0.6;
+const STOVE_D = 0.58;
+const GRATE_H = 0.03;
+const STOVE_SPOTS: Array<[number, number, number]> = [[-0.14, 0.1], [0.14, 0.1], [-0.14, -0.13], [0.14, -0.13]].map(([x, z]): [number, number, number] => [x, COUNTER_H + GRATE_H, z]);
+/** Boutons des feux, de gauche à droite : arrière gauche, avant gauche, avant droit, arrière droit. */
+const STOVE_KNOBS = [-0.07, 0.07, -0.21, 0.21];
+/** Poêle et casserole : rayon, hauteur du bord, longueur du manche (m). */
+const PAN_R = 0.1;
+const PAN_H = 0.04;
+const POT_R = 0.085;
+const POT_H = 0.11;
+const HANDLE_L = 0.17;
+/** Épaisseur du fond des ustensiles : les ingrédients reposent dessus. */
+const PAN_FLOOR = 0.008;
 /** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier. */
 const WORKTOP_W = 0.9;
 const WORKTOP_D = 0.5;
@@ -383,7 +414,10 @@ export const ITEMS: ItemDef[] = [
     movable: true,
     durability: 250,
     // la tasse se pose sur la grille, sous le bec, l'anse vers l'avant
-    pour: { at: [0, COUNTER_H + 0.016, 0.1], fills: 'tasse', liquid: 'café', seconds: 2.6, color: 0x4a2c1a },
+    pour: { at: [0, COUNTER_H + 0.016, 0.1], fills: ['tasse'], liquid: 'café', seconds: 2.6, color: 0x4a2c1a },
+    // comme un feu de la gazinière : le bouton rouge l'allume, il chauffe, puis le café coule ;
+    // le voyant reste allumé, et elle se met en veille si on l'oublie
+    heat: { spots: [[0, COUNTER_H + 0.016, 0.1]], lit: 'voyant', warmup: 3, autoOff: 45 },
     build: () => {
       const H = COUNTER_H;
       const body = 0x2e3135, metal = 0xb9bfc6;
@@ -398,8 +432,17 @@ export const ITEMS: ItemDef[] = [
         mesh(new THREE.CylinderGeometry(0.014, 0.01, 0.03, 12), metal, 0, H + 0.265, 0.1),
         mesh(new THREE.BoxGeometry(0.2, 0.016, 0.16), metal, 0, H + 0.008, 0.08),
         mesh(new THREE.BoxGeometry(0.07, 0.3, 0.12), 0x7fb2c9, 0.155, H + 0.16, -0.1),
-        mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.01, 14).rotateX(Math.PI / 2), 0xd0463a, 0.07, H + 0.32, 0.142),
       );
+      // bouton marche / arrêt, et son voyant (allumé quand la machine chauffe)
+      const button = group(mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.01, 14).rotateX(Math.PI / 2), 0xd0463a, 0.07, H + 0.32, 0.142));
+      button.name = 'bouton-0';
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.007, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb347 }));
+      lamp.name = 'voyant';
+      lamp.position.set(-0.07, H + 0.32, 0.142);
+      const lit = group(lamp);
+      lit.name = 'voyant-0';
+      lit.visible = false;
+      g.add(button, lit);
       // café qui coule du bec dans la tasse
       const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 6), toon(0x3b2213));
       jet.name = 'jet';
@@ -419,7 +462,8 @@ export const ITEMS: ItemDef[] = [
     fragility: 7,
     durability: 300,
     // la tasse se pose au fond de la cuve, sous le robinet, l'anse vers l'avant
-    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: 'tasse', liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
+    // la tasse, ou la casserole pour faire cuire à l'eau
+    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'casserole'], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
     wash: { hands: [0, COUNTER_H + 0.08, TAP_Z + 0.05] },
     build: () => {
       const H = COUNTER_H, top = 0.04;
@@ -470,7 +514,7 @@ export const ITEMS: ItemDef[] = [
     durability: 350,
     door: THREE.MathUtils.degToRad(105),
     cold: true,
-    holds: ["bouteille d'eau", 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'concombre', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre'],
+    holds: ["bouteille d'eau", 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'concombre', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', 'steak', 'pomme de terre'],
     slots: FRIDGE_SLOTS,
     build: () => {
       const W = FRIDGE_W, D = FRIDGE_D, H = FRIDGE_H, t = FRIDGE_T;
@@ -679,6 +723,138 @@ export const ITEMS: ItemDef[] = [
         g.add(cutMark);
       }
       return g;
+    },
+  },
+  {
+    id: 'gaziniere',
+    name: 'gazinière',
+    portable: false,
+    // raccordée au gaz : elle ne se déplace pas
+    movable: false,
+    fragility: 8,
+    durability: 300,
+    heat: { spots: STOVE_SPOTS, lit: 'flamme', warmup: 2.5 },
+    build: () => {
+      const H = COUNTER_H, W = STOVE_W, D = STOVE_D;
+      const enamel = 0xe6e2d8, top = 0x2a2b2e, iron = 0x1e1f21, steel = 0xb9bfc6;
+      const g = group(
+        // caisse émaillée, dessus noir, four : porte vitrée et barre
+        mesh(new THREE.BoxGeometry(W, H - 0.02, D), enamel, 0, (H - 0.02) / 2, 0),
+        mesh(new THREE.BoxGeometry(W + 0.01, 0.02, D + 0.01), top, 0, H - 0.01, 0),
+        mesh(new THREE.BoxGeometry(W - 0.1, 0.42, 0.01), 0x2d3034, 0, 0.4, D / 2 + 0.005),
+        mesh(new THREE.BoxGeometry(W - 0.18, 0.02, 0.02), steel, 0, 0.68, D / 2 + 0.03),
+        mesh(new THREE.BoxGeometry(W, 0.012, 0.01), 0xc9c4b8, 0, H - 0.1, D / 2 + 0.005),
+      );
+      STOVE_SPOTS.forEach(([x, , z], i) => {
+        // brûleur (couronne et chapeau), grille en croix où se pose l'ustensile
+        g.add(mesh(new THREE.CylinderGeometry(0.05, 0.052, 0.012, 20), 0x3a3b3e, x, H + 0.006, z));
+        g.add(mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.008, 16), iron, x, H + 0.016, z));
+        g.add(mesh(new THREE.BoxGeometry(0.22, 0.01, 0.012), iron, x, H + GRATE_H - 0.005, z));
+        g.add(mesh(new THREE.BoxGeometry(0.012, 0.01, 0.22), iron, x, H + GRATE_H - 0.005, z));
+        // flammes bleues autour de la couronne (montrées quand le feu est allumé)
+        const flame = new THREE.Group();
+        flame.name = `flamme-${i}`;
+        flame.position.set(x, H + 0.016, z);
+        flame.visible = false;
+        const mat = new THREE.MeshBasicMaterial({ color: 0x4d8bff, transparent: true, opacity: 0.85, depthWrite: false });
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * Math.PI * 2;
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.026, 6), mat);
+          cone.name = 'flamme';
+          cone.position.set(Math.cos(a) * 0.05, 0.013, Math.sin(a) * 0.05);
+          flame.add(cone);
+        }
+        g.add(flame);
+        // bouton du feu, sur la façade
+        const knob = group(
+          mesh(new THREE.CylinderGeometry(0.022, 0.024, 0.022, 16).rotateX(Math.PI / 2), 0x2a2b2e, 0, 0, 0.011),
+          mesh(new THREE.BoxGeometry(0.004, 0.026, 0.004), 0xf2efe6, 0, 0.004, 0.023),
+        );
+        knob.name = `bouton-${i}`;
+        knob.position.set(STOVE_KNOBS[i], H - 0.055, D / 2);
+        g.add(knob);
+      });
+      return g;
+    },
+  },
+  {
+    id: 'poele',
+    name: 'poêle',
+    portable: true,
+    grip: 'fist',
+    // tenue par le bout du manche
+    gripPoint: [0, PAN_H, PAN_R + 0.015 + HANDLE_L * 0.7],
+    cookware: { holds: ['steak'], places: [[-0.045, PAN_FLOOR, 0], [0.045, PAN_FLOOR, 0]] },
+    // fonte : ne casse pas
+    fragility: 10,
+    durability: 200,
+    build: () => {
+      const iron = 0x2f3134;
+      const floor = mesh(new THREE.CylinderGeometry(PAN_R, PAN_R, PAN_FLOOR, 24), iron, 0, PAN_FLOOR / 2, 0);
+      const wall = mesh(new THREE.CylinderGeometry(PAN_R + 0.015, PAN_R, PAN_H, 24, 1, true), iron, 0, PAN_H / 2, 0);
+      (wall.material as THREE.Material).side = THREE.DoubleSide;
+      // manche en bois, un peu relevé, vers l'avant (+Z)
+      const handle = mesh(new THREE.BoxGeometry(0.024, 0.016, HANDLE_L).rotateX(-0.12), 0x5b3b22, 0, PAN_H - 0.005, PAN_R + 0.015 + HANDLE_L / 2);
+      return group(floor, wall, handle);
+    },
+  },
+  {
+    id: 'casserole',
+    name: 'casserole',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, POT_H - 0.02, POT_R + HANDLE_L * 0.7],
+    // se remplit d'eau à l'évier ; sur le feu, l'eau bout puis s'évapore
+    fill: [PAN_FLOOR + 0.004, POT_H - 0.025],
+    cookware: { holds: ['pomme de terre'], places: [[-0.033, PAN_FLOOR, 0], [0.033, PAN_FLOOR, 0]] },
+    fragility: 9,
+    durability: 180,
+    build: () => {
+      const steel = 0xb9bfc6;
+      const floor = mesh(new THREE.CylinderGeometry(POT_R, POT_R, PAN_FLOOR, 24), 0x98a1aa, 0, PAN_FLOOR / 2, 0);
+      const wall = mesh(new THREE.CylinderGeometry(POT_R, POT_R, POT_H, 24, 1, true), steel, 0, POT_H / 2, 0);
+      (wall.material as THREE.Material).side = THREE.DoubleSide;
+      const water = mesh(new THREE.CircleGeometry(POT_R * 0.98, 24).rotateX(-Math.PI / 2), 0x9fcde6, 0, PAN_FLOOR + 0.004, 0);
+      water.name = 'liquide';
+      const handle = mesh(new THREE.BoxGeometry(0.022, 0.014, HANDLE_L), 0x2a2b2e, 0, POT_H - 0.02, POT_R + HANDLE_L / 2);
+      return group(floor, wall, water, handle);
+    },
+  },
+  {
+    id: 'steak',
+    name: 'steak',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.01, 0.035],
+    mouth: [0, 0.012, -0.035],
+    food: { hunger: 35, bites: 4 },
+    cook: { seconds: 18, burn: 30, colors: [0xc0475a, 0x7b4a2c, 0x231c17] },
+    fragility: 10,
+    durability: 20,
+    breakWord: 'écrasé',
+    build: () => {
+      const meat = mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.018, 18).scale(1, 1, 0.8), 0xc0475a, 0, 0.009, 0);
+      meat.name = 'cuit';
+      const fat = mesh(new THREE.BoxGeometry(0.05, 0.016, 0.008), 0xf0dccb, 0, 0.009, -0.037);
+      return group(meat, fat);
+    },
+  },
+  {
+    id: 'pomme-de-terre',
+    name: 'pomme de terre',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.025, 0.03],
+    mouth: [0, 0.03, -0.03],
+    food: { hunger: 25, bites: 3 },
+    cook: { seconds: 25, burn: 25, colors: [0xb08a52, 0xe6cf8a, 0x2e2419] },
+    fragility: 9,
+    durability: 20,
+    breakWord: 'écrasé',
+    build: () => {
+      const potato = mesh(new THREE.SphereGeometry(0.03, 14, 10).scale(1.25, 0.85, 1), 0xb08a52, 0, 0.0255, 0);
+      potato.name = 'cuit';
+      return group(potato);
     },
   },
   {

@@ -93,18 +93,6 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.closeDoor(a.objet),
   },
   {
-    name: 'allumer',
-    description: 'Mettre en marche un appareil : le four cuit ce qu’il contient (deux fois de suite : brûlé), le micro-ondes le réchauffe, le lave-vaisselle lave la vaisselle. Le perso ferme la porte ; l’action finit quand l’appareil sonne.',
-    params: { objet: 'ref de l’appareil' },
-    run: (g, a) => g.startAppliance(a.objet),
-  },
-  {
-    name: 'eteindre',
-    description: 'Arrêter un appareil en marche.',
-    params: { objet: 'ref de l’appareil' },
-    run: (g, a) => g.stopAppliance(a.objet),
-  },
-  {
     name: 'jeter',
     description: 'Jeter à la poubelle l’objet tenu `objet` (ou le dernier pris) : il disparaît.',
     params: {},
@@ -125,6 +113,37 @@ export const ACTIONS: ActionDef[] = [
     description: 'Remplir d’eau la tasse tenue à l’évier (ce qu’elle contenait est vidé dans l’évier) ; le perso la reprend pleine. Une tasse sale est seulement rincée.',
     params: {},
     run: (g) => g.fillWater(),
+  },
+  {
+    name: 'allumer',
+    description: 'Allumer un appareil : la gazinière (les feux où une poêle ou une casserole est posée), la machine à café, ou mettre en marche le four, le micro-ondes, le lave-vaisselle (ils cuisent ou lavent ce qui est dedans ; l’action finit quand ils sonnent).',
+    params: { objet: 'ref de l’appareil' },
+    // `ustensile` (facultatif) : seulement le feu sous lui
+    run: (g, a) => (g.isAppliance(a.objet) ? g.startAppliance(a.objet) : g.switchOn(a.objet, false, a.ustensile)),
+  },
+  {
+    name: 'eteindre',
+    description: 'Éteindre un appareil (tous les feux de la gazinière, la machine à café, le four…).',
+    params: { objet: 'ref de l’appareil' },
+    run: (g, a) => (g.isAppliance(a.objet) ? g.stopAppliance(a.objet) : g.switchOff(a.objet, false, a.ustensile)),
+  },
+  {
+    name: 'mettre_sur_feu',
+    description: 'Poser la poêle ou la casserole tenue sur un feu libre de la gazinière.',
+    params: { objet: 'ref de la gazinière' },
+    run: (g, a) => g.putOnFire(a.objet),
+  },
+  {
+    name: 'mettre_dans',
+    description: 'Mettre l’ingrédient tenu dans un ustensile posé : le steak dans la poêle, la pomme de terre dans la casserole.',
+    params: { ustensile: 'ref de l’ustensile' },
+    run: (g, a) => g.putInPan(a.ustensile),
+  },
+  {
+    name: 'attendre_cuisson',
+    description: 'Attendre qu’un ingrédient sur le feu allumé soit cuit.',
+    params: { objet: 'ref de l’ingrédient' },
+    run: (g, a) => g.waitCooked(a.objet),
   },
   {
     name: 'laver_mains',

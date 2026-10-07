@@ -138,6 +138,11 @@ const KNOWN: Array<{ id: string } & Omit<Missing, 'at'>> = [
   { id: 'planche-cuire', kind: 'action', ordre: '(ajout de la planche et du couteau)', quoi: 'cuisiner les morceaux', detail: 'Les morceaux se mangent tels quels : pas encore de plaque de cuisson, de poêle ni de recette qui les assemble.' },
   { id: 'planche-assiette', kind: 'action', ordre: '(ajout de la planche et du couteau)', quoi: 'servir dans une assiette', detail: 'Les morceaux restent sur la planche ou se prennent à la main : pas encore d’assiette ni de bol.' },
   { id: 'evier-douche', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'se laver entièrement', detail: 'À l’évier, la toilette est faite d’eau sur les mains et le visage (hygiène +40) : pas de douche ni de bain, ni de geste de toilette du corps.' },
+  { id: 'gaziniere-bouton', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'tourner le bouton du feu', detail: 'Le feu s’allume quand le perso arrive devant la gazinière : pas encore de geste de la main pour tourner le bouton.' },
+  { id: 'gaziniere-four', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'utiliser le four', detail: 'La gazinière a un four dessiné, mais sa porte ne s’ouvre pas et on ne peut rien y cuire.' },
+  { id: 'cuisine-recettes', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'cuisiner une recette', detail: 'Un seul ingrédient à la fois cuit tel quel (steak, pomme de terre) : pas de recette qui mélange plusieurs ingrédients, pas d’assaisonnement, pas d’assiette ni de couverts.' },
+  { id: 'cuisine-vider', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'égoutter la casserole', detail: 'L’eau de la casserole ne se vide qu’en la remplissant à nouveau à l’évier, ou en s’évaporant sur le feu : pas de geste pour l’égoutter.' },
+  { id: 'cuisine-retourner', kind: 'action', ordre: '(ajout de la gazinière)', quoi: 'retourner le steak', detail: 'Le steak cuit tout seul des deux côtés : pas de spatule ni de geste pour le retourner.' },
 ];
 const KNOWN_KEY = 'rp-island.manques.connus';
 

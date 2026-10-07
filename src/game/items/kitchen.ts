@@ -58,7 +58,7 @@ export const DISHES = ['tasse'];
 /** Petits objets qui vont dans le tiroir (les couverts viendront s'y ajouter). */
 export const DRAWER_THINGS = ['lettre'];
 /** Ce qui se met au four et au micro-ondes (les aliments à cuire viendront s'y ajouter). */
-export const OVEN_FOOD = ['pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte'];
+export const OVEN_FOOD = ['steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte'];
 
 /** Caisson de meuble bas (côtés, fond, socle) et son plan de travail, ouvert à l'avant. */
 function carcass(w: number, d: number, color: THREE.ColorRepresentation = WOOD): THREE.Group {
