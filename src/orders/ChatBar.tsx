@@ -87,7 +87,7 @@ export function ChatBar({ game, onNeedSettings }: { game: Game | null; onNeedSet
       let msg: string;
       if (intents) {
         const r = await runIntents(game, intents, setStep, ctrl.signal);
-        if (!r.ok && r.failed) note({ kind: r.failed.kind === 'manque' ? 'action' : 'echec', ordre: t, quoi: intentLabel(r.failed), detail: r.message });
+        if (!r.ok && r.failed) note({ kind: 'echec', ordre: t, quoi: intentLabel(r.failed), detail: r.message });
         msg = r.message;
       } else msg = await runAi(game, claudeChat ?? openRouterChat(settings), t, setStep, ctrl.signal, (m) => note({ ...m, ordre: t }));
       setResult(noted ? `${msg} (noté dans Menu → Manques)` : msg);
