@@ -40,8 +40,19 @@ export type Intent =
   | { kind: 'preparer'; plat?: string }
   | { kind: 'ouvrir'; ref: string }
   | { kind: 'fermer'; ref: string }
-  /** Remplir la tasse d'eau à l'évier. */
-  | { kind: 'eau' }
+  /** Remplir d'eau à l'évier le récipient `ref` (sinon la tasse). */
+  | { kind: 'eau'; ref?: string }
+  /** Verser le récipient `ref` (sinon celui qu'on tient) dans `dans` (sinon le plus proche qui peut le recevoir). */
+  | { kind: 'verser'; ref?: string; dans?: string }
+  /** Vider dans l'évier le récipient `ref` (sinon celui qu'on tient). */
+  | { kind: 'vider_recipient'; ref?: string }
+  /** Remplir d'eau la bouilloire `ref` : un récipient d'eau (rempli à l'évier s'il le faut), versé dedans. */
+  | { kind: 'remplir_bouilloire'; ref: string }
+  /** Ouvrir ou fermer le robinet de l'évier. */
+  | { kind: 'robinet'; ouvrir: boolean }
+  /** Boucher l'évier ou enlever le bouchon. */
+  | { kind: 'bouchon'; mettre: boolean }
+  | { kind: 'boire_robinet' }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
   | { kind: 'laver'; visage: boolean }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
@@ -375,13 +386,39 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'fermer':
       return act('fermer', { objet: intent.ref });
     case 'eau': {
-      const cup = world(game).objets.find((o) => o.nom === 'tasse');
+      const cup = world(game).objets.find((o) => (intent.ref ? o.ref === intent.ref : o.nom === 'tasse'));
       if (!cup) throw new Failed('Il n’y a pas de tasse.');
       await take(game, act, cup.ref);
       // sale : lavée d'abord, puis remplie
       if (isDirty(game, cup.ref)) await act('vaisselle');
       return act('eau');
     }
+    case 'verser': {
+      if (intent.ref) await take(game, act, intent.ref);
+      return act('verser', intent.dans ? { dans: intent.dans } : {});
+    }
+    case 'vider_recipient': {
+      if (intent.ref) await take(game, act, intent.ref);
+      return act('vider_recipient');
+    }
+    case 'remplir_bouilloire': {
+      // de l'eau déjà en main, sinon une bouteille pleine, sinon la casserole ou la tasse remplie à l'évier
+      const w = world(game);
+      const water = (o: WorldObject) => o.ou.includes('contient de l’eau');
+      const vessels = w.objets.filter((o) => o.sorte === 'récipient' || (o.sorte === 'ustensile' && o.nom === 'casserole'));
+      const src = vessels.find((o) => w.enMain.includes(o.ref) && water(o)) ?? vessels.find(water) ?? vessels.find((o) => o.nom === 'casserole') ?? vessels.find((o) => o.nom === 'tasse');
+      if (!src) throw new Failed('Rien pour porter de l’eau jusqu’à la bouilloire.');
+      await take(game, act, src.ref);
+      if (!water(src)) await act('eau');
+      return act('verser', { dans: intent.ref });
+    }
+    case 'robinet':
+      return act('robinet', { etat: intent.ouvrir ? 'ouvrir' : 'fermer' });
+    case 'bouchon':
+      return act('bouchon', { etat: intent.mettre ? 'mettre' : 'enlever' });
+    case 'boire_robinet':
+      await freeHands(game, act);
+      return act('boire_robinet');
     case 'laver':
       // les mains doivent être libres
       await freeHands(game, act);

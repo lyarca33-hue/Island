@@ -11,7 +11,7 @@ import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { applySky, GameClock } from './clock';
 import { createGround, GROUND_HALF } from './ground';
-import { breakChance, Debris } from './items/breakage';
+import { breakChance, Debris, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
@@ -60,6 +60,22 @@ const WEAR_BIN = 0.3;
  * la toilette au lavabo (visage, mains, trois tours) : un vrai regain, sans valoir une douche.
  */
 const WASH_HANDS = { seconds: 3, hygiene: 12 };
+/** Boire au robinet, dans le creux des mains : soif rendue en tout. */
+const TAP_DRINK = { seconds: 3 * SPLASH_CYCLE, thirst: 25 };
+/** Verser : litres par seconde quand le récipient est incliné. */
+const POUR_RATE = 0.45;
+/** Ce que prend une tasse servie au réservoir d'une bouilloire (litres). */
+const SERVING = 0.25;
+/** Évier bouché, robinet ouvert : temps pour remplir la cuve (s), puis une flaque toutes les OVERFLOW secondes. */
+const SINK_FILL = 20;
+const OVERFLOW = 1.4;
+/** Évier débouché : temps pour que la cuve pleine se vide (s). */
+const SINK_DRAIN = 4;
+/** Couleur de chaque liquide (celle du jet de la machine qui le donne). */
+const LIQUID_COLOR = new Map(Object.values(ITEM_BY_ID).flatMap((d) => (d.pour ? [[d.pour.liquid, d.pour.color] as const] : [])));
+const liquidColor = (liquid: string): THREE.ColorRepresentation => LIQUID_COLOR.get(liquid) ?? 0x9fcde6;
+/** Contenance d'un récipient (litres). */
+const volumeOf = (item: WorldItem) => item.def.tank ?? item.def.volume ?? 0.25;
 const WASH_FACE = { seconds: 3 * SPLASH_CYCLE, hygiene: 40 };
 /** Vaisselle : temps à frotter sous l'eau par pièce (s). */
 const DISH_SECONDS = 2.5;
@@ -310,7 +326,7 @@ export class Game {
   private moving: { item: WorldItem; riders: Array<{ item: WorldItem; rel: THREE.Matrix4 }> } | null = null;
   /** Objets lancés en vol, et éclats des objets brisés. */
   private flying: Flying[] = [];
-  private debris: Debris[] = [];
+  private debris: Array<Debris | Spill> = [];
   /** Café en train de couler : la machine, la tasse posée dessous, le temps écoulé (s). */
   private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
   /**
@@ -325,13 +341,22 @@ export class Game {
   /** Part de chaque aliment tenu à l'image précédente : ce qui a été mangé depuis. */
   private lastBite = new Map<WorldItem, number>();
   /** En train de se laver à l'évier : temps écoulé, durée, hygiène rendue en tout. */
-  private washing: { sink: WorldItem; t: number; seconds: number; hygiene: number; face: boolean; dishes?: WorldItem[] } | null = null;
+  private washing: { sink: WorldItem; t: number; seconds: number; hygiene: number; face: boolean; dishes?: WorldItem[]; thirst?: number } | null = null;
   /** Vaisselle lavée à reprendre en main, une pièce après l'autre (et d'où la prendre). */
   private pickQueue: Array<{ item: WorldItem; from: THREE.Vector3 }> = [];
   /** Appareils qui chauffent (gazinière, machine à café) : feux allumés, chaleur de chaque feu (0 à 1), temps allumé sans servir (s). */
   private heaters = new Map<WorldItem, { on: boolean[]; warm: number[]; unused: number }>();
   /** Fumée (ça brûle) et vapeur (l'eau bout) au-dessus des ustensiles. */
   private puffs = new Puffs();
+  /**
+   * Liquide versé du récipient tenu `from` : dans `into` (autre récipient, réservoir de la
+   * bouilloire), ou dans l'évier `sink` (vider). Le filet tombe de `from` vers `at()`.
+   */
+  private pouring: { from: WorldItem; into: WorldItem | null; sink: WorldItem | null; at: () => THREE.Vector3; liquid: string } | null = null;
+  /** Le filet de liquide qu'on verse (caché sinon). */
+  private stream: THREE.Mesh;
+  /** Évier : bouchon mis, robinet ouvert, eau dans la cuve (0 à 1), temps avant la prochaine flaque (s). */
+  private sinks = new Map<WorldItem, { plug: boolean; tap: boolean; water: number; spill: number; warned: boolean }>();
   /** Ingrédient dont on attend la cuisson (ordre « cuire »). */
   private cookWait: WorldItem | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
@@ -431,6 +456,13 @@ export class Game {
     // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item) });
+    for (const item of this.items) if (item.def.wash) this.sinks.set(item, { plug: false, tap: false, water: 0, spill: 0, warned: false });
+    // la bouilloire a de quoi faire deux tasses au départ
+    for (const item of this.items) {
+      if (!item.def.tank) continue;
+      item.level = 0.5;
+      item.contents = 'eau';
+    }
     for (const item of this.items) {
       const n = item.def.heat?.spots.length ?? 0;
       if (n) this.heaters.set(item, { on: Array(n).fill(false), warm: Array(n).fill(0), unused: 0 });
@@ -479,6 +511,9 @@ export class Game {
     this.motes = createMotes();
     this.scene.add(this.motes.points);
     this.scene.add(this.puffs.group);
+    this.stream = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.005, 1, 8), new THREE.MeshBasicMaterial({ color: 0x9fcde6, transparent: true, opacity: 0.85 }));
+    this.stream.visible = false;
+    this.scene.add(this.stream);
 
     this.bubble = document.createElement('div');
     this.bubble.className = 'speech-bubble';
@@ -975,7 +1010,7 @@ export class Game {
     return true;
   }
 
-  private addDebris(d: Debris): void {
+  private addDebris(d: Debris | Spill): void {
     this.debris.push(d);
     this.scene.add(d.group);
   }
@@ -1025,7 +1060,10 @@ export class Game {
         ou += n >= item.def.bin ? ', pleine' : n ? `, ${n} objet${n > 1 ? 's' : ''} jeté${n > 1 ? 's' : ''}` : ', vide';
       }
       if (item.def.food && item.portion < 1) ou += `, entamé${agree(item.name)}`;
-      if (item.contents) ou += `, contient ${someLiquid(item.contents)}`;
+      if (item.def.tank) {
+        const cups = Math.floor((item.level * item.def.tank) / SERVING + 0.2);
+        ou += cups ? `, assez d’eau pour ${cups} tasse${cups > 1 ? 's' : ''}` : ', vide (verser de l’eau dedans)';
+      } else if (item.contents) ou += `, contient ${someLiquid(item.contents)}`;
       else if (item.def.startFull || (item.def.cookware && !this.inPan(item).length)) ou += ', vide';
       const heat = this.heaters.get(item);
       if (heat) {
@@ -1039,6 +1077,9 @@ export class Game {
       const cuisson = doneness(item.def, item.cooking) ?? undefined;
       if (cuisson) ou += `, ${donenessWord(cuisson, FEMININE.has(item.name))}`;
       if (item.dirty) ou += ', sale';
+      const sink = this.sinks.get(item);
+      if (sink?.tap) ou += ', robinet ouvert';
+      if (sink?.plug) ou += sink.water > 0.98 ? ', bouché, la cuve déborde' : ', bouché';
       const sorte: WorldObject['sorte'] = item.def.bin ? 'poubelle' : item.def.heats || item.def.washes ? 'appareil' : item.def.cold ? 'frigo'
         : item.def.door || item.def.drawer ? 'placard' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.heat ? 'gazinière' : item.def.cookware ? 'ustensile' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : item.def.board ? 'planche' : item.def.knife ? 'couteau' : item.def.dish ? 'vaisselle' : undefined;
       if (item === this.sitting) ou += ', le perso est assis dessus';
@@ -2030,7 +2071,7 @@ export class Game {
    * Va à l'évier et met les mains sous le robinet : l'eau coule, les mains se frottent (et
    * montent au visage pour la toilette) ; l'hygiène remonte pendant ce temps (tickWash).
    */
-  private washAt(sink: WorldItem | undefined, face: boolean, running: boolean): boolean {
+  private washAt(sink: WorldItem | undefined, face: boolean, running: boolean, drink = false): boolean {
     const c = this.character;
     const held = c.heldItems;
     if (!sink) this.onNotice?.('Il n’y a pas d’évier.');
@@ -2041,12 +2082,271 @@ export class Game {
     else if (held.length) this.onNotice?.(`Pose d’abord ce que tu tiens (${held.map((h) => h.name).join(' et ')}) pour te laver.`);
     else if (c.busy || c.bracing) return false;
     else {
-      const how = face ? WASH_FACE : WASH_HANDS;
+      // boire : les mains en coupe sous l'eau, puis à la bouche (même geste que la toilette)
+      const how = drink ? { seconds: TAP_DRINK.seconds, hygiene: 0 } : face ? WASH_FACE : WASH_HANDS;
       return c.startWash(this.frontOf(sink), sink.object.position, this.handsUnderTap(sink), face, () => {
-        this.washing = { sink, t: 0, seconds: how.seconds, hygiene: how.hygiene, face };
+        this.washing = { sink, t: 0, seconds: how.seconds, hygiene: how.hygiene, face, thirst: drink ? TAP_DRINK.thirst : undefined };
       }, running);
     }
     return false;
+  }
+
+  /** Récipient tenu dont on peut verser le contenu (le dernier pris d'abord). */
+  private pourable(): WorldItem | undefined {
+    const c = this.character;
+    return [c.held, ...c.heldItems].find((i): i is WorldItem => !!i && !!i.contents && i.level > 0.01 && !!i.def.fill && !c.handOf(i)?.stacked);
+  }
+
+  /** Peut-on verser `liquid` dans `into` (récipient ou réservoir) ? Sinon, pourquoi. */
+  private pourRefusal(from: WorldItem, into: WorldItem): string | null {
+    const liquid = from.contents!;
+    if (into === from) return 'On ne verse pas un récipient dans lui-même.';
+    if (into.def.tank) return liquid === 'eau' ? (into.level > 0.98 ? `${cap(the(into.name))} est déjà pleine.` : null) : `On ne met que de l’eau dans ${the(into.name)}.`;
+    if (!into.def.fill || !into.def.portable) return `On ne verse rien dans ${the(into.name)}.`;
+    if (into.dirty) return `${cap(the(into.name))} est sale : lave-la d’abord.`;
+    if (into.contents && into.contents !== liquid) return `${cap(the(into.name))} contient déjà ${someLiquid(into.contents)}.`;
+    if (into.level > 0.98) return `${cap(the(into.name))} est déjà pleine.`;
+    if (this.inPan(into).length && liquid !== 'eau') return `Il y a déjà ${this.inPan(into).map((i) => i.name).join(' et ')} dans ${the(into.name)}.`;
+    return null;
+  }
+
+  /** Où tombe le liquide dans `into` (monde) : la surface du liquide, ou le haut du réservoir. */
+  private pourPoint(into: WorldItem): THREE.Vector3 {
+    into.object.updateMatrixWorld(true);
+    if (into.def.tank) {
+      const box = new THREE.Box3().setFromObject(into.object);
+      // le couvercle de la bouilloire, au-dessus de la verseuse (pas le socle où va la tasse)
+      return box.getCenter(new THREE.Vector3()).setY(box.max.y);
+    }
+    const fill = into.def.fill!;
+    return new THREE.Vector3(0, THREE.MathUtils.lerp(fill[0], fill[1], into.level), 0).applyMatrix4(into.object.matrixWorld);
+  }
+
+  /**
+   * Verse le récipient tenu (bouteille, tasse, casserole) dans `ref` : un autre récipient, posé ou
+   * tenu dans l'autre main, ou la bouilloire (de l'eau seulement). Sans `ref` : dans l'autre main,
+   * sinon dans le récipient le plus proche qui peut le recevoir.
+   */
+  pourInto(ref?: string, running = false): boolean {
+    const c = this.character;
+    const from = this.pourable();
+    if (!from) {
+      this.onNotice?.('Prends un récipient plein (bouteille, tasse, casserole) pour verser.');
+      return false;
+    }
+    let into = ref ? this.byRef(ref) : undefined;
+    if (ref && !into) {
+      this.onNotice?.(`Aucun objet « ${ref} ».`);
+      return false;
+    }
+    if (!into) {
+      const other = c.heldItems.find((h) => h !== from && !this.pourRefusal(from, h));
+      into = other ?? this.nearest((i) => i !== from && !c.carried.includes(i) && (!!i.def.tank || (!!i.def.fill && i.def.portable)) && !this.pourRefusal(from, i));
+    }
+    if (!into) {
+      this.onNotice?.(`Rien où verser ${theLiquid(from.contents!)}.`);
+      return false;
+    }
+    // l'évier : c'est vider
+    if (into.def.wash) return this.emptyInto(into, running);
+    const no = this.pourRefusal(from, into);
+    if (no) {
+      this.onNotice?.(no);
+      return false;
+    }
+    const target = into;
+    return this.pourThen(from, target, null, () => this.pourPoint(target), c.carried.includes(target) ? null : this.frontOf(target), target.object.position, running);
+  }
+
+  /** Vide le récipient tenu dans l'évier le plus proche (dans la casserole, les pommes de terre restent : on égoutte). */
+  emptyHeld(running = false): boolean {
+    const sink = this.nearest((i) => !!i.def.wash);
+    if (!sink) {
+      this.onNotice?.('Il n’y a pas d’évier.');
+      return false;
+    }
+    return this.emptyInto(sink, running);
+  }
+
+  private emptyInto(sink: WorldItem, running: boolean): boolean {
+    const from = this.pourable();
+    if (!from) {
+      this.onNotice?.('Rien à vider : le récipient tenu est vide.');
+      return false;
+    }
+    const at = () => {
+      sink.object.updateMatrixWorld(true);
+      const [x, y, z] = sink.def.pour?.at ?? sink.def.wash!.hands;
+      const st = this.sinks.get(sink);
+      const top = sink.part('cuve')?.userData;
+      const surface = st && top ? top.floor + st.water * top.depth : y;
+      return new THREE.Vector3(x + 0.08, surface, z + 0.05).applyMatrix4(sink.object.matrixWorld);
+    };
+    return this.pourThen(from, null, sink, at, this.frontOf(sink), sink.object.position, running);
+  }
+
+  /** Va devant `stand` (si besoin), puis incline le récipient au-dessus de `at()` ; tickPour fait couler. */
+  private pourThen(from: WorldItem, into: WorldItem | null, sink: WorldItem | null, at: () => THREE.Vector3, stand: THREE.Vector3 | null, face: THREE.Vector3, running: boolean): boolean {
+    const c = this.character;
+    if (this.pouring) this.onNotice?.('Tu verses déjà.');
+    else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    else if (this.washing || c.washing) this.onNotice?.('Tu te laves, un instant.');
+    else if (c.busy || c.bracing) return false;
+    else if (this.closeBookThen(() => this.pourThen(from, into, sink, at, stand, face, running))) return true;
+    else {
+      const start = () => {
+        const hand = c.handOf(from);
+        if (!hand?.pour(at, () => this.endPour())) return;
+        this.pouring = { from, into, sink, at, liquid: from.contents! };
+        (this.stream.material as THREE.MeshBasicMaterial).color.set(liquidColor(from.contents!));
+      };
+      if (stand) c.approachThen(stand, face, start, running);
+      else start();
+      return true;
+    }
+    return false;
+  }
+
+  /** Le liquide passe du récipient incliné à l'autre (ou part dans l'évier), le filet tombe entre les deux. */
+  private tickPour(dt: number): void {
+    const p = this.pouring;
+    if (!p) return;
+    const k = this.character.handOf(p.from)?.pouring ?? 0;
+    const room = p.into ? (1 - p.into.level) * volumeOf(p.into) : Infinity;
+    const flowing = k > 0.85 && p.from.level > 0.001 && room > 0.001;
+    if (flowing) {
+      const litres = Math.min(POUR_RATE * dt, p.from.level * volumeOf(p.from), room);
+      p.from.setLevel(p.from.level - litres / volumeOf(p.from));
+      if (p.from.level <= 0.001) p.from.contents = null;
+      if (p.into) {
+        const level = p.into.level + litres / volumeOf(p.into);
+        if (p.into.def.fill) p.into.setLevel(level);
+        else p.into.level = Math.min(1, level);
+        if (!p.into.contents) p.into.setLiquidColor(liquidColor(p.liquid));
+        p.into.contents = p.liquid;
+      }
+      if (p.sink) {
+        // évier bouché : l'eau versée monte dans la cuve
+        const st = this.sinks.get(p.sink);
+        if (st?.plug) st.water = Math.min(1, st.water + litres / 8);
+      }
+    }
+    this.stream.visible = flowing;
+    if (!flowing) return;
+    // le filet tombe du goulot (ou du bord) du récipient incliné jusqu'à la surface en dessous
+    const def = p.from.def;
+    p.from.object.updateMatrixWorld(true);
+    const lip = new THREE.Vector3(...(def.mouth ?? [0, def.fill![1], 0])).applyMatrix4(p.from.object.matrixWorld);
+    const to = p.at();
+    const len = Math.max(0.01, lip.y - to.y);
+    this.stream.position.set(lip.x, lip.y - len / 2, lip.z);
+    this.stream.scale.set(1, len, 1);
+  }
+
+  private endPour(): void {
+    const p = this.pouring;
+    this.pouring = null;
+    this.stream.visible = false;
+    if (!p) return;
+    const what = theLiquid(p.liquid);
+    if (p.sink) {
+      const kept = this.inPan(p.from);
+      this.onNotice?.(kept.length ? `${cap(what)} est égoutté${elides(p.liquid) ? 'e' : ''} : ${kept.map((i) => the(i.name)).join(' et ')} reste${kept.length > 1 ? 'nt' : ''} dans ${the(p.from.name)}.` : `${cap(the(p.from.name))} est vidé${FEMININE.has(p.from.name) ? 'e' : ''} dans l’évier.`);
+    } else if (p.into) {
+      const full = p.into.level > 0.98;
+      this.onNotice?.(`${cap(what)} est versé${elides(p.liquid) ? 'e' : ''} dans ${the(p.into.name)}${full ? ' (pleine)' : ''}.`);
+    }
+  }
+
+  /** Évier `ref` (sinon le plus proche). */
+  private sinkItem(ref?: string): WorldItem | undefined {
+    const item = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.wash);
+    if (!item?.def.wash) this.onNotice?.(ref ? `${ref} n’est pas un évier.` : 'Il n’y a pas d’évier.');
+    return item?.def.wash ? item : undefined;
+  }
+
+  /** Ouvre (ou ferme) le robinet de l'évier : il coule jusqu'à ce qu'on le ferme. */
+  setTap(open: boolean, ref?: string, running = false): boolean {
+    const sink = this.sinkItem(ref);
+    const st = sink && this.sinks.get(sink);
+    if (!sink || !st) return false;
+    if (st.tap === open) {
+      this.onNotice?.(open ? 'Le robinet coule déjà.' : 'Le robinet est déjà fermé.');
+      return false;
+    }
+    if (this.character.busy || this.washing) return false;
+    this.character.approachThen(this.frontOf(sink), sink.object.position, () => {
+      st.tap = open;
+      if (!open) st.warned = false;
+      this.wearItem(sink, WEAR_TAP);
+      this.onNotice?.(open ? (st.plug ? 'Le robinet coule : la cuve se remplit.' : 'Le robinet coule.') : 'Robinet fermé.');
+    }, running);
+    return true;
+  }
+
+  /** Met (ou enlève) le bouchon de l'évier : bouché, l'eau du robinet monte dans la cuve ; débouché, elle s'écoule. */
+  setPlug(on: boolean, ref?: string, running = false): boolean {
+    const sink = this.sinkItem(ref);
+    const st = sink && this.sinks.get(sink);
+    if (!sink || !st) return false;
+    if (st.plug === on) {
+      this.onNotice?.(on ? 'L’évier est déjà bouché.' : 'Il n’y a pas de bouchon.');
+      return false;
+    }
+    if (this.character.busy || this.washing) return false;
+    this.character.approachThen(this.frontOf(sink), sink.object.position, () => {
+      st.plug = on;
+      const plug = sink.part('bouchon');
+      if (plug) plug.visible = on;
+      this.onNotice?.(on ? 'Évier bouché.' : st.water > 0.02 ? 'Bouchon enlevé : l’eau s’écoule.' : 'Bouchon enlevé.');
+    }, running);
+    return true;
+  }
+
+  /** Robinet ouvert : le filet coule ; bouché, la cuve se remplit puis déborde (flaques par terre). */
+  private tickSinks(dt: number): void {
+    for (const [sink, st] of this.sinks) {
+      const busy = this.brew?.machine === sink || this.washing?.sink === sink;
+      if (st.tap && st.plug) st.water = Math.min(1, st.water + dt / SINK_FILL);
+      else if (!st.plug) st.water = Math.max(0, st.water - dt / SINK_DRAIN);
+      const pool = sink.part('cuve');
+      if (pool) {
+        pool.visible = st.water > 0.01;
+        const { floor, depth } = pool.userData as { floor: number; depth: number };
+        const h = Math.max(0.002, st.water * depth);
+        pool.scale.y = h;
+        pool.position.y = floor + h / 2;
+      }
+      const jet = sink.part('jet');
+      if (jet && st.tap && !busy) {
+        // le filet du robinet jusqu'au fond de la cuve (ou jusqu'à l'eau)
+        jet.userData.top ??= jet.position.y;
+        const top: number = jet.userData.top;
+        const bottom = (pool?.userData.floor ?? 0) + st.water * (pool?.userData.depth ?? 0);
+        const len = Math.max(0.001, top - bottom);
+        jet.visible = true;
+        jet.scale.y = len;
+        jet.position.y = top - len / 2;
+      } else if (jet && !busy) jet.visible = false;
+      if (!(st.tap && st.plug && st.water >= 1)) continue;
+      // la cuve déborde : l'eau coule par terre devant l'évier
+      if (!st.warned) {
+        st.warned = true;
+        this.onNotice?.('L’évier déborde ! Ferme le robinet ou enlève le bouchon.');
+      }
+      st.spill -= dt;
+      if (st.spill > 0) continue;
+      st.spill = OVERFLOW;
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(sink.object.quaternion);
+      const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+      const at = sink.object.position.clone().addScaledVector(fwd, sink.box.max.z + 0.12 + Math.random() * 0.25).addScaledVector(side, (Math.random() - 0.5) * 0.5).setY(0);
+      this.addDebris(new Spill(at, 0x9fcde6, 0.18 + Math.random() * 0.14));
+    }
+  }
+
+  /** Boit au robinet, l'eau dans le creux des mains (les mains doivent être libres). */
+  drinkAtTap(running = false): boolean {
+    return this.washAt(this.nearest((i) => !!i.def.wash), true, running, true);
   }
 
   /** Où vont les mains sous le robinet de l'évier (monde), de part et d'autre du filet d'eau. */
@@ -2069,6 +2369,7 @@ export class Game {
     w.t += dt;
     const done = Math.min(1, w.t / w.seconds);
     this.needs.restore('hygiene', (done - before) * w.hygiene);
+    if (w.thirst) this.needs.restore('soif', (done - before) * w.thirst);
     if (jet) {
       // l'eau tombe du robinet jusqu'aux mains
       jet.userData.top ??= jet.position.y;
@@ -2094,7 +2395,7 @@ export class Game {
       return;
     }
     this.character.stopWash();
-    this.onNotice?.(w.face ? 'Toilette faite : visage et mains propres.' : 'Mains lavées.');
+    this.onNotice?.(w.thirst ? 'Tu as bu au robinet.' : w.face ? 'Toilette faite : visage et mains propres.' : 'Mains lavées.');
   }
 
   /**
@@ -2114,6 +2415,7 @@ export class Game {
     else if (cup.dirty && !pour.drain) this.onNotice?.(`${cap(the(cup.name))} est sale : lave-la à l’évier ou passe-la au lave-vaisselle.`);
     else if (other && !pour.drain) this.onNotice?.(`${cap(the(cup.name))} contient encore ${someLiquid(other)} : bois-la ou vide-la à l’évier d’abord.`);
     else if (!other && cup.level > 0.99) this.onNotice?.(`${cap(the(cup.name))} est déjà pleine.`);
+    else if (machine.def.tank && machine.level * machine.def.tank < SERVING * 0.8) this.onNotice?.(`${cap(the(machine.name))} est vide : verses-y de l’eau (casserole, bouteille ou tasse remplie à l’évier).`);
     else if (this.closeBookThen(() => this.pourAt(machine, running))) return true;
     else {
       this.character.approachThen(this.frontOf(machine), machine.object.position, () => {
@@ -2173,6 +2475,8 @@ export class Game {
     b.cup.setLevel(1);
     b.cup.contents = pour.liquid;
     if (jet) jet.visible = false;
+    // la bouilloire : l'eau de la tasse est prise au réservoir
+    if (b.machine.def.tank) b.machine.level = Math.max(0, b.machine.level - SERVING / b.machine.def.tank);
     this.brew = null;
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(b.machine.object.quaternion);
     const stand = this.frontOf(b.machine);
@@ -2820,6 +3124,11 @@ export class Game {
       if (can.cut) add('Couper', () => this.cut());
       if (can.prepare) add('Préparer le plat', () => this.prepare());
       if (can.dishes) add('Faire la vaisselle', () => this.washDishes());
+      const full = this.pourable();
+      if (full) {
+        add(`Verser ${theLiquid(full.contents!)}`, () => this.pourInto());
+        if (this.sinks.size) add(`Vider ${the(full.name)} dans l’évier`, () => this.emptyHeld());
+      }
       if (can.read) add('Lire', () => this.read());
       if (can.reading) add('Fermer le livre', () => this.stopReading());
       if (can.throw) add(`Lancer : ${c.held!.name}`, () => this.throwItem());
@@ -2860,11 +3169,23 @@ export class Game {
     const cup = item.def.pour && held.find((h) => item.def.pour!.fills.includes(h.name));
     if (cup) {
       const liquid = item.def.pour!.liquid;
-      add(liquid === 'eau' ? `Remplir ${the(cup.name)} d’eau` : `Faire un ${liquid}`, () => this.pourAt(item, false));
+      add(liquid === 'eau' ? (cup.name.includes('eau') ? `Remplir ${the(cup.name)}` : `Remplir ${the(cup.name)} d’eau`) : `Faire un ${liquid}`, () => this.pourAt(item, false));
     }
     if (item.def.wash && !held.length) {
       add('Se laver les mains', () => this.washAt(item, false, false));
       add('Faire sa toilette', () => this.washAt(item, true, false));
+    }
+    // verser ce qu'on tient dedans (récipient, bouilloire) ; le vider dans l'évier
+    const full = this.pourable();
+    if (full && !item.def.wash && (item.def.tank || item.def.fill) && !this.pourRefusal(full, item)) {
+      add(item.def.tank ? `Remplir ${the(item.name)}` : `Verser ${theLiquid(full.contents!)} dedans`, () => this.pourInto(ref));
+    }
+    const sink = this.sinks.get(item);
+    if (sink) {
+      if (full) add(`Vider ${the(full.name)}`, () => this.emptyInto(item, false));
+      add(sink.tap ? 'Fermer le robinet' : 'Ouvrir le robinet', () => this.setTap(!sink.tap, ref));
+      add(sink.plug ? 'Enlever le bouchon' : 'Boucher l’évier', () => this.setPlug(!sink.plug, ref));
+      if (!held.length) add('Boire au robinet', () => this.washAt(item, true, false, true));
     }
     // ustensile : y mettre l'ingrédient tenu
     const food = item.def.cookware && held.find((h) => this.cookFits(item, h));
@@ -2893,7 +3214,10 @@ export class Game {
     const cuisson = doneness(item.def, item.cooking);
     if (cuisson) words.push(donenessWord(cuisson, FEMININE.has(item.name)) + (PLURAL.has(item.name) ? 's' : ''));
     if (item.def.food && item.portion < 1) words.push(`entamé${a}`);
-    if (item.contents) words.push(item.level >= 0.95 ? `plein${FEMININE.has(item.name) ? 'e' : ''} ${ofLiquid(item.contents)}` : `un reste ${ofLiquid(item.contents)}`);
+    if (item.def.tank) {
+      const cups = Math.floor((item.level * item.def.tank) / SERVING + 0.2);
+      words.push(cups ? `eau pour ${cups} tasse${cups > 1 ? 's' : ''}` : 'vide');
+    } else if (item.contents) words.push(item.level >= 0.95 ? `plein${FEMININE.has(item.name) ? 'e' : ''} ${ofLiquid(item.contents)}` : `un reste ${ofLiquid(item.contents)}`);
     else if (item.def.fill && !item.def.pour) words.push(`vide${PLURAL.has(item.name) ? 's' : ''}`);
     if (item.def.cookware) {
       const inside = this.inPan(item);
@@ -2908,6 +3232,9 @@ export class Game {
       const n = this.binFill.get(item) ?? 0;
       words.push(n >= item.def.bin ? 'pleine' : n ? `${n} déchet${n > 1 ? 's' : ''}` : 'vide');
     }
+    const sink = this.sinks.get(item);
+    if (sink?.tap) words.push('robinet ouvert');
+    if (sink?.plug) words.push(sink.water > 0.98 ? 'bouché, déborde' : 'bouché');
     if (this.shelfOf(item)?.shelf.def.cold) words.push('au frais');
     return words.join(' · ');
   }
@@ -3013,6 +3340,8 @@ export class Game {
     this.tickAppliances(dt);
     this.tickEating();
     this.tickWash(dt);
+    this.tickPour(dt);
+    this.tickSinks(dt);
     this.tickPickQueue();
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));

@@ -43,6 +43,9 @@ const VERBS: Record<string, string[]> = {
   arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
   jeter: ['jette', 'jeter', 'balance', 'balancer'],
   vider: ['vide', 'vider'],
+  verser: ['verse', 'verser', 'transvase', 'transvaser'],
+  boucher: ['bouche', 'boucher', 'rebouche', 'reboucher'],
+  enlever: ['enleve', 'enlever', 'retire', 'retirer'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
@@ -283,6 +286,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
     case 'boire': {
       // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »
+      // « bois au robinet »
+      if (rest.includes('robinet')) return [{ kind: 'boire_robinet' }];
       const liquide = rest.includes('eau') ? 'eau' : rest.includes('cafe') ? 'café' : rest.includes('the') ? 'thé' : undefined;
       const drink = found.filter((o) => o.sorte === 'récipient');
       if (found.length && !drink.length) return null;
@@ -309,10 +314,30 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (found.length && !food.length) return null;
       return [{ kind: 'couper', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food.find(isLoose) ?? food[0])?.ref }];
     }
-    case 'remplir':
-      // « remplis la tasse (d'eau / de café) » ; d'eau si rien n'est dit
-      if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine')) return null;
-      return [rest.includes('cafe') ? { kind: 'cafe' } : rest.includes('the') ? { kind: 'the' } : { kind: 'eau' }];
+    case 'remplir': {
+      // « remplis la bouilloire » : de l'eau versée dedans
+      const kettle = found.find((o) => o.nom === 'bouilloire');
+      if (kettle && !rest.includes('tasse')) return [{ kind: 'remplir_bouilloire', ref: kettle.ref }];
+      // « remplis la tasse (d'eau / de café) », « remplis la bouteille, la casserole » ; d'eau si rien n'est dit
+      if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine' && o.nom !== 'casserole')) return null;
+      const vessel = found.find((o) => o.sorte === 'récipient' || o.nom === 'casserole');
+      return [rest.includes('cafe') ? { kind: 'cafe' } : rest.includes('the') ? { kind: 'the' } : { kind: 'eau', ref: vessel?.nom === 'tasse' ? undefined : vessel?.ref }];
+    }
+    case 'verser': {
+      // « verse la bouteille dans la tasse », « verse l'eau dans la bouilloire », « verse » (ce qu'on tient)
+      const cut = rest.indexOf('dans');
+      const from = findObjects(cut < 0 ? rest : rest.slice(0, cut), world.objets).found.find((o) => o.sorte === 'récipient' || o.sorte === 'ustensile');
+      const into = cut < 0 ? undefined : findObjects(rest.slice(cut + 1), world.objets).found[0];
+      if (cut >= 0 && !into) return null;
+      if (into?.sorte === 'évier') return [{ kind: 'vider_recipient', ref: from?.ref }];
+      return [{ kind: 'verser', ref: from?.ref, dans: into?.ref }];
+    }
+    case 'boucher':
+      // « bouche l'évier »
+      return found.every((o) => o.sorte === 'évier') ? [{ kind: 'bouchon', mettre: true }] : null;
+    case 'enlever':
+      // « enlève le bouchon »
+      return rest.includes('bouchon') ? [{ kind: 'bouchon', mettre: false }] : null;
     case 'laver': {
       // « lave la tasse au lave-vaisselle » : on la range dedans et on le lance
       if (machineWash(original) && found.every((o) => o.sorte === 'appareil' || o.sorte === 'vaisselle' || o.nom === 'tasse') && appliance('lave-vaisselle')) {
@@ -339,6 +364,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'laver', visage: !handsOnly }];
     }
     case 'lire': {
+      // « ouvre le robinet »
+      if (rest.includes('robinet') || (rest.includes('eau') && found.some((o) => o.sorte === 'évier'))) return [{ kind: 'robinet', ouvrir: true }];
       // « ouvre le frigo », « ouvre le four », « ouvre le tiroir »
       const door = found.find((o) => OPENS.has(o.sorte ?? ''));
       if (door) return [{ kind: 'ouvrir', ref: door.ref }];
@@ -386,6 +413,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: verb, ref: target?.ref }];
     }
     case 'arreter': {
+      // « ferme le robinet », « arrête l'eau »
+      if (rest.includes('robinet') || (rest.includes('eau') && !found.some((o) => o.sorte !== 'évier'))) return [{ kind: 'robinet', ouvrir: false }];
       // « arrête le lave-vaisselle » ; « ferme le four » : la porte
       const closes = ['ferme', 'fermer', 'referme', 'refermer'].includes(word);
       const app = found.find((o) => o.sorte === 'appareil');
@@ -402,6 +431,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'jeter', ref: (thing.find((o) => world.enMain.includes(o.ref)) ?? thing[0])?.ref }];
     }
     case 'vider': {
+      // « vide la tasse », « vide la casserole » (dans l'évier)
+      const vessel = found.find((o) => o.sorte === 'récipient' || o.sorte === 'ustensile');
+      if (vessel) return [{ kind: 'vider_recipient', ref: vessel.ref }];
       // « vide la poubelle »
       const bin = found.find((o) => o.sorte === 'poubelle') ?? (!found.length ? world.objets.find((o) => o.sorte === 'poubelle') : undefined);
       return bin ? [{ kind: 'vider', ref: bin.ref }] : null;
