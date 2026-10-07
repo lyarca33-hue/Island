@@ -6,6 +6,9 @@
  * Lumière jour et nuit, réglée par l'horloge du jeu : les suspensions s'allument au crépuscule
  * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit. L'interrupteur à côté
  * de la porte allume ou éteint à la main ; l'horloge reprend la main au prochain lever ou coucher.
+ * Un toit et des murs invisibles, qui ne font que de l'ombre, gardent le soleil et la lune dehors
+ * (sauf par les fenêtres, même quand un mur est abaissé en coupe) : dedans, ce sont les lampes
+ * qui éclairent et projettent les ombres.
  *
  * Murs « en coupe » comme dans les Sims : les murs tournés vers la caméra s'abaissent à hauteur
  * de plinthe pour qu'on voie dedans ; ils se relèvent quand la caméra tourne. Le perso hors de la
@@ -52,6 +55,8 @@ const LAMP_I = 7;
 const LAMP_RANGE = 7;
 /** Les lampes s'allument sur cette durée (h) avant le coucher, s'éteignent après le lever. */
 const LAMP_FADE = 1.5;
+/** Taille de la carte d'ombre des lampes (par face du cube). */
+const LAMP_SHADOW = 512;
 /** Vitesse du fondu quand on appuie sur l'interrupteur (part de lumière par seconde). */
 const SWITCH_FADE = 4;
 /** Interrupteur : sur le mur ouest, à côté de la porte (côté sud), hauteur. */
@@ -195,6 +200,8 @@ export class Room {
   readonly obstacles: Array<{ box: THREE.Box3; pos: THREE.Vector3; yaw: number; wall: boolean }> = [];
   private walls: Wall[] = [];
   private door: THREE.Group;
+  /** Ombre du battant, gardée même quand le mur ouest est abaissé en coupe. */
+  private doorGhost = new THREE.Group();
   private doorOpen = 0;
   private hands: { hour: THREE.Object3D; minute: THREE.Object3D };
   private wallMat = toon(PLASTER);
@@ -213,6 +220,8 @@ export class Room {
   /** L'interrupteur (plaque et bascule), et sa bascule qui montre s'il est allumé. */
   readonly lightSwitch = new THREE.Group();
   private rocker = new THREE.Group();
+  /** Ombre seule : invisible à l'écran, mais arrête la lumière (toit, murs gardés en coupe). */
+  private shadowMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
   /** Matériau partagé des vitres, teinté selon l'heure. */
   private glassMat = new THREE.MeshBasicMaterial({ color: PANE_DAY.color, transparent: true, opacity: PANE_DAY.opacity, depthWrite: false });
 
@@ -234,6 +243,11 @@ export class Room {
     floor.name = 'carrelage';
     this.group.add(floor);
     this.group.add(box(WALL_T, 0.012, DOOR.z1 - DOOR.z0, toon(DARK_WOOD), x0 - WALL_T / 2, 0.006, (DOOR.z0 + DOOR.z1) / 2, false));
+    // toit invisible : le soleil et la lune n'entrent que par les fenêtres
+    const roof = box(x1 - x0 + 2 * WALL_T, 0.05, z1 - z0 + 2 * WALL_T, this.shadowMat, (x0 + x1) / 2, WALL_H + 0.03, (z0 + z1) / 2);
+    roof.receiveShadow = false;
+    roof.name = 'toit-ombre';
+    this.group.add(roof);
 
     // les murs (nord et sud couvrent les coins)
     const winNorth: Opening = { u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH };
@@ -269,6 +283,12 @@ export class Room {
       box(0.04, 0.03, 0.12, toon(0xc9a24a), -0.045, 1.0, leafW - 0.1),
     );
     west.full.add(this.door);
+    this.doorGhost.position.copy(this.door.position);
+    // un peu plus large que le battant : pas de filet de soleil autour quand la porte est fermée
+    const ghostLeaf = box(0.08, DOOR.h + 0.04, leafW + 0.08, this.shadowMat, 0, (DOOR.h + 0.04) / 2, leafW / 2);
+    ghostLeaf.receiveShadow = false;
+    this.doorGhost.add(ghostLeaf);
+    this.group.add(this.doorGhost);
     // paillasson devant la porte
     this.group.add(box(0.5, 0.012, 0.8, toon(0x9b6b3d), x0 + 0.32, 0.008, zc, false));
 
@@ -418,6 +438,15 @@ export class Room {
     // la lumière part juste sous l'ampoule, pour éclairer sous l'abat-jour
     const light = lightAllPasses(new THREE.PointLight(LAMP_COLOR, 0, LAMP_RANGE, 2));
     light.position.set(x, LAMP_Y - 0.08, z);
+    light.castShadow = true;
+    light.shadow.mapSize.set(LAMP_SHADOW, LAMP_SHADOW);
+    light.shadow.camera.near = 0.05;
+    light.shadow.camera.far = LAMP_RANGE;
+    light.shadow.bias = -0.003;
+    light.shadow.radius = 3;
+    // carte d'ombre calculée au moins une fois, même si la lampe démarre éteinte (sinon rien ne s'affiche)
+    light.shadow.autoUpdate = false;
+    light.shadow.needsUpdate = true;
     this.lamps.push(light);
     this.group.add(lamp, light);
   }
@@ -430,6 +459,8 @@ export class Room {
     if (this.manual) this.lampK = THREE.MathUtils.clamp(this.lampK + (this.manual.on ? 1 : -1) * SWITCH_FADE * dt, 0, 1);
     else this.lampK = Math.abs(auto - this.lampK) < SWITCH_FADE * dt ? auto : this.lampK + Math.sign(auto - this.lampK) * SWITCH_FADE * dt;
     const k = this.lampK;
+    // lampe éteinte : sa carte d'ombre n'est plus recalculée
+    for (const l of this.lamps) l.shadow.autoUpdate = k > 0.001;
     this.rocker.rotation.z = this.lightsOn ? 0.25 : -0.25;
     for (const l of this.lamps) l.intensity = LAMP_I * k;
     // ampoule éteinte grise, allumée au-dessus de 1 : le bloom la fait briller
@@ -461,6 +492,14 @@ export class Room {
       const u = (u0 + u1) / 2, len = u1 - u0;
       const m = alongX ? box(len, y1 - y0, t, mat, u, (y0 + y1) / 2, c + off) : box(t, y1 - y0, len, mat, c + off, (y0 + y1) / 2, u);
       to.add(m);
+      // le mur haut garde son ombre même abaissé en coupe : le soleil ne rentre pas par là
+      if (to === full) {
+        const ghost = new THREE.Mesh(m.geometry, this.shadowMat);
+        ghost.position.copy(m.position);
+        ghost.castShadow = true;
+        ghost.receiveShadow = false;
+        this.group.add(ghost);
+      }
       return m;
     };
     const sorted = [...openings].sort((p, q) => p.u0 - q.u0);
@@ -552,6 +591,7 @@ export class Room {
     const near = Math.hypot(player.x - x0, player.z - zc) < DOOR_NEAR;
     this.doorOpen = THREE.MathUtils.clamp(this.doorOpen + (near ? 1 : -1) * DOOR_SPEED * dt, 0, 1);
     this.door.rotation.y = -THREE.MathUtils.smootherstep(this.doorOpen, 0, 1) * THREE.MathUtils.degToRad(100);
+    this.doorGhost.rotation.y = this.door.rotation.y;
     const m = ((hour % 12) + 12) % 12;
     this.hands.hour.rotation.x = -(m / 12) * Math.PI * 2;
     this.hands.minute.rotation.x = -(hour % 1) * Math.PI * 2;
