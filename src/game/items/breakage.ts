@@ -138,3 +138,42 @@ export class Debris {
     this.group.removeFromParent();
   }
 }
+
+/**
+ * Flaque d'eau seule, sans objet brisé (l'évier qui déborde) : elle s'étale, reste un moment,
+ * puis sèche. Même usage que Debris (group, update, dispose).
+ */
+export class Spill {
+  readonly group = new THREE.Group();
+  private mesh: THREE.Mesh;
+  private t = 0;
+  private size: number;
+
+  constructor(at: THREE.Vector3, color: THREE.ColorRepresentation, size: number) {
+    this.size = size;
+    this.mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false }),
+    );
+    this.mesh.position.set(at.x, at.y + 0.004, at.z);
+    this.mesh.scale.setScalar(0.01);
+    this.group.add(this.mesh);
+  }
+
+  update(dt: number): boolean {
+    this.t += dt;
+    const grow = 1 - Math.pow(1 - Math.min(1, this.t / 1.5), 3);
+    this.mesh.scale.setScalar(Math.max(0.01, this.size * grow));
+    const mat = this.mesh.material as THREE.MeshBasicMaterial;
+    mat.opacity = 0.8 * THREE.MathUtils.clamp((LIFE * 3 - this.t) / 2, 0, 1);
+    const alive = this.t < LIFE * 3;
+    if (!alive) this.dispose();
+    return alive;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+    this.group.removeFromParent();
+  }
+}

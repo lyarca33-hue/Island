@@ -63,7 +63,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'the',
-    description: 'Se faire un thé : il faut tenir la tasse ; le perso la pose sous le bec de la bouilloire puis la reprend pleine.',
+    description: 'Se faire un thé : il faut tenir la tasse ; le perso la pose sous le bec de la bouilloire puis la reprend pleine. La bouilloire doit avoir de l’eau (sinon : verser de l’eau dedans).',
     params: {},
     run: (g) => g.makeTea(),
   },
@@ -141,7 +141,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'eau',
-    description: 'Remplir d’eau la tasse tenue à l’évier (ce qu’elle contenait est vidé dans l’évier) ; le perso la reprend pleine. Une tasse sale est seulement rincée.',
+    description: 'Remplir d’eau à l’évier le récipient tenu (tasse, bouteille, casserole ; ce qu’il contenait est vidé dans l’évier) ; le perso le reprend plein. Une tasse sale est seulement rincée.',
     params: {},
     run: (g) => g.fillWater(),
   },
@@ -175,6 +175,37 @@ export const ACTIONS: ActionDef[] = [
     description: 'Attendre qu’un ingrédient sur le feu allumé soit cuit.',
     params: { objet: 'ref de l’ingrédient' },
     run: (g, a) => g.waitCooked(a.objet),
+  },
+  {
+    name: 'verser',
+    description: 'Verser le contenu du récipient tenu (bouteille d’eau, tasse, casserole) dans `dans` : un autre récipient (posé, ou tenu dans l’autre main), ou la bouilloire (de l’eau seulement, pour la remplir). Sans `dans` : l’autre main, sinon le récipient le plus proche.',
+    params: {},
+    // `dans` (facultatif) : ref du récipient ou de la bouilloire
+    run: (g, a) => g.pourInto(a.dans),
+  },
+  {
+    name: 'vider_recipient',
+    description: 'Vider dans l’évier ce que contient le récipient tenu (tasse, bouteille, casserole ; dans la casserole, les pommes de terre restent : on égoutte).',
+    params: {},
+    run: (g) => g.emptyHeld(),
+  },
+  {
+    name: 'robinet',
+    description: 'Ouvrir (`etat` = ouvrir) ou fermer (`etat` = fermer) le robinet de l’évier. Ouvert, il coule jusqu’à ce qu’on le ferme ; évier bouché, la cuve se remplit puis déborde.',
+    params: { etat: 'ouvrir ou fermer' },
+    run: (g, a) => g.setTap(a.etat !== 'fermer', a.objet),
+  },
+  {
+    name: 'bouchon',
+    description: 'Boucher l’évier (`etat` = mettre) ou enlever le bouchon (`etat` = enlever, l’eau de la cuve s’écoule).',
+    params: { etat: 'mettre ou enlever' },
+    run: (g, a) => g.setPlug(a.etat !== 'enlever', a.objet),
+  },
+  {
+    name: 'boire_robinet',
+    description: 'Boire au robinet de l’évier, dans le creux des mains (les mains doivent être libres).',
+    params: {},
+    run: (g) => g.drinkAtTap(),
   },
   {
     name: 'laver_mains',

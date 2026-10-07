@@ -80,6 +80,13 @@ export interface ItemDef {
     /** Où poser la vaisselle à laver au fond de la cuve (repère du meuble), une place par main. */
     dishes?: Array<[number, number, number]>;
   };
+  /** Contenance d'un récipient (litres) : ce qui passe de l'un à l'autre quand on verse. Défaut : 0,25. */
+  volume?: number;
+  /**
+   * Réservoir d'eau d'un appareil fixe (bouilloire) : contenance (litres). Il se remplit en y
+   * versant de l'eau ; chaque tasse servie en prend 0,25 l.
+   */
+  tank?: number;
   /** Récipient déjà plein au départ (bouteille d'eau) : ce qu'il contient. */
   startFull?: string;
   /**
@@ -496,8 +503,8 @@ export const ITEMS: ItemDef[] = [
     fragility: 7,
     durability: 300,
     // la tasse se pose au fond de la cuve, sous le robinet, l'anse vers l'avant
-    // la tasse, ou la casserole pour faire cuire à l'eau
-    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'casserole'], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
+    // la tasse, la bouteille, ou la casserole pour faire cuire à l'eau
+    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'casserole', "bouteille d'eau"], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
     // la vaisselle au fond de la cuve, de part et d'autre du filet d'eau
     wash: { hands: [0, COUNTER_H + 0.08, TAP_Z + 0.05], dishes: [[-0.11, COUNTER_H - BASIN_H, BASIN_Z + 0.02], [0.11, COUNTER_H - BASIN_H, BASIN_Z - 0.04]] },
     build: () => {
@@ -530,6 +537,16 @@ export const ITEMS: ItemDef[] = [
         mesh(new THREE.CylinderGeometry(0.012, 0.01, 0.04, 12), steel, 0, TAP_Y + 0.02, TAP_Z),
         mesh(new THREE.BoxGeometry(0.016, 0.016, 0.08).rotateX(-0.5), steel, 0, H + 0.33, -0.225),
       );
+      // l'eau qui monte dans la cuve bouchée (Game.tickSinks), et le bouchon sur la bonde
+      const pool = new THREE.Mesh(new THREE.BoxGeometry(BASIN_W - 0.012, 1, BASIN_D - 0.012), new THREE.MeshBasicMaterial({ color: 0x8fc3e0, transparent: true, opacity: 0.7, depthWrite: false }));
+      pool.name = 'cuve';
+      pool.visible = false;
+      pool.position.set(0, H - BASIN_H, BASIN_Z);
+      pool.userData = { floor: H - BASIN_H, depth: BASIN_H - 0.01 };
+      const plug = mesh(new THREE.CylinderGeometry(0.034, 0.03, 0.012, 16), 0x2a2b2e, 0.12, H - BASIN_H + 0.008, BASIN_Z + 0.04);
+      plug.name = 'bouchon';
+      plug.visible = false;
+      g.add(pool, plug);
       // l'eau qui coule du robinet
       const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1, 8), toon(0x9fd3ef));
       jet.name = 'jet';
@@ -592,6 +609,7 @@ export const ITEMS: ItemDef[] = [
     gripPoint: [0, 0.1, BOTTLE_R],
     mouth: [0, BOTTLE_H, 0],
     fill: [0.008, 0.18],
+    volume: 0.5,
     startFull: 'eau',
     // plastique : se cabosse plus qu'il ne casse
     fragility: 9,
@@ -841,6 +859,7 @@ export const ITEMS: ItemDef[] = [
     gripPoint: [0, POT_H - 0.02, POT_R + HANDLE_L * 0.7],
     // se remplit d'eau à l'évier ; sur le feu, l'eau bout puis s'évapore
     fill: [PAN_FLOOR + 0.004, POT_H - 0.025],
+    volume: 1.5,
     cookware: { holds: ['pomme de terre'], places: [[-0.033, PAN_FLOOR, 0], [0.033, PAN_FLOOR, 0]] },
     fragility: 9,
     durability: 180,

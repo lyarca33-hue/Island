@@ -103,6 +103,13 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "the"} : se faire un thé à la bouilloire (prend la tasse si besoin) ; le thé réveille moitié moins que le café
 - {"tache": "boire", "objet": "<ref>", "liquide": "eau"} : boire une gorgée (« objet » facultatif : une bouteille d'eau du frigo, la tasse… ; sans objet, la tasse ; « liquide » facultatif, "eau", "café" ou "thé" : si la tasse est vide, elle est d'abord remplie, de café par défaut). Boire fait baisser la soif
 - {"tache": "eau"} : remplir la tasse d'eau à l'évier (prend la tasse si besoin). Une tasse « sale » (bue jusqu'au bout) est seulement rincée : la machine à café refuse une tasse sale
+- {"tache": "eau", "objet": "<ref>"} marche aussi pour remplir d'eau la bouteille ou la casserole (« objet » : son ref)
+- {"tache": "verser", "objet": "<ref>", "dans": "<ref>"} : verser le contenu d'un récipient (bouteille, tasse, casserole) dans un autre récipient, ou de l'eau dans la bouilloire (« objet » facultatif : ce qu'on tient ; « dans » facultatif : le récipient le plus proche)
+- {"tache": "vider_recipient", "objet": "<ref>"} : vider dans l'évier ce que contient un récipient (« objet » facultatif : ce qu'on tient) ; dans la casserole, les pommes de terre restent (égoutter)
+- {"tache": "remplir_bouilloire", "objet": "<ref>"} : remplir d'eau la bouilloire (elle n'a pas de robinet : le perso remplit un récipient à l'évier et le verse dedans). Sans eau, la bouilloire ne fait pas de thé
+- {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier ; il coule jusqu'à ce qu'on le ferme
+- {"tache": "bouchon", "mettre": true} : boucher l'évier (ou enlever le bouchon, « mettre » faux). Bouché avec le robinet ouvert, la cuve se remplit puis déborde
+- {"tache": "boire_robinet"} : boire au robinet, dans le creux des mains (pose d'abord ce que le perso tient)
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
@@ -171,7 +178,13 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'cafe': return { kind: 'cafe' };
     case 'the': return { kind: 'the' };
     case 'boire': return { kind: 'boire', ref: s('objet') || undefined, liquide: s('liquide') === 'eau' ? 'eau' : s('liquide') === 'café' || s('liquide') === 'cafe' ? 'café' : s('liquide') === 'thé' || s('liquide') === 'the' ? 'thé' : undefined };
-    case 'eau': return { kind: 'eau' };
+    case 'eau': return { kind: 'eau', ref: s('objet') || undefined };
+    case 'verser': return { kind: 'verser', ref: s('objet') || undefined, dans: s('dans') || undefined };
+    case 'vider_recipient': return { kind: 'vider_recipient', ref: s('objet') || undefined };
+    case 'remplir_bouilloire': return s('objet') ? { kind: 'remplir_bouilloire', ref: s('objet') } : null;
+    case 'robinet': return { kind: 'robinet', ouvrir: o.ouvrir !== false };
+    case 'bouchon': return { kind: 'bouchon', mettre: o.mettre !== false };
+    case 'boire_robinet': return { kind: 'boire_robinet' };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };

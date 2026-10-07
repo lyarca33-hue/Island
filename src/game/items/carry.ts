@@ -162,9 +162,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let' | 'cut';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let' | 'cut' | 'pour';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.9, store: 0.9, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45, cut: 2.6 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.9, store: 0.9, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45, cut: 2.6, pour: 2.4 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s) : la main l'y ramène (moitié de DURATION.add). */
 const STACK_BLEND = 0.45;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -301,6 +301,12 @@ const CUT_SPEED = 11;
 /** Temps pour amener le couteau au-dessus de l'aliment, et pour le ramener (s). */
 const CUT_EASE = 0.35;
 
+/** Verser : le récipient au-dessus de l'autre, incliné (rad), le temps d'y aller et d'en revenir (s). */
+const POUR_TILT = THREE.MathUtils.degToRad(95);
+const POUR_EASE = 0.55;
+/** Hauteur du poing au-dessus du point où l'on verse (m). */
+const POUR_ABOVE = 0.16;
+
 /** Pencher la tête vers le livre pendant la lecture (rad). */
 const READ_NOD = THREE.MathUtils.degToRad(16);
 
@@ -348,6 +354,8 @@ export class Carry {
   private washT = 0;
   /** Couper : le point de l'aliment (monde) au-dessus duquel va la lame. */
   private cutAt: (() => THREE.Vector3) | null = null;
+  /** Verser : au-dessus de quel point (monde) on incline le récipient tenu. */
+  private pourAt: (() => THREE.Vector3) | null = null;
   /** Main imposée par un geste (lancer) : position depuis l'épaule et coude. */
   private swing: { reach: THREE.Vector3; pole: THREE.Vector3 } | null = null;
   /** Pose de l'objet dans la main au moment où elle le touche (voir SETTLE). */
@@ -553,6 +561,25 @@ export class Carry {
     return true;
   }
 
+  /**
+   * Verse le contenu du récipient tenu : la main l'amène au-dessus du point `at()` (monde) et
+   * l'incline, puis le ramène ; `onDone` une fois revenu en main. Le niveau, c'est Game qui le règle.
+   */
+  pour(at: () => THREE.Vector3, onDone?: () => void): boolean {
+    if (!this.item || this.phase !== 'hold' || this.stack.length) return false;
+    this.pourAt = at;
+    this.target.copy(at());
+    this.start('pour', onDone);
+    return true;
+  }
+
+  /** Part du geste « verser » : 0 tenu normalement, 1 incliné au-dessus (fondu au début et à la fin). */
+  get pouring(): number {
+    if (this.phase !== 'pour') return 0;
+    const t = this.t, T = DURATION.pour;
+    return ease(THREE.MathUtils.clamp(Math.min(t / POUR_EASE, (T - t) / POUR_EASE), 0, 1));
+  }
+
   /** Saisit un objet à portée (le perso doit déjà lui faire face). */
   pickUp(item: WorldItem, onDone?: () => void): boolean {
     if (this.item || this.busy || !item.def.portable) return false;
@@ -590,7 +617,7 @@ export class Carry {
     if (!DURATION[this.phase]) return;
     this.t += dt;
     if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', cut: 'hold', drink: 'hold', eat: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', cut: 'hold', pour: 'hold', drink: 'hold', eat: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
     const n = next[this.phase]!;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
@@ -598,6 +625,7 @@ export class Carry {
       this.heldRot.copy(this.item.object.quaternion);
     }
     if (this.phase === 'cut') this.cutAt = null;
+    if (this.phase === 'pour') this.pourAt = null;
     if (this.phase === 'store') {
       const top = this.stack.pop()!;
       top.item.object.position.copy(top.leaving!.pos);
@@ -643,6 +671,7 @@ export class Carry {
       case 'unbrace': return { w: 1 - k, r: 0, c: this.braceGrip === 'wash' ? 1 - k : 0 };
       // au-dessus de la planche, le buste se penche un peu
       case 'cut': return { w: 1, r: 0, c: this.cutAmount() };
+      case 'pour': return { w: 1, r: 0, c: 0.5 * this.pouring };
       // l'objet s'est brisé en main : le bras retombe
       case 'let': return { w: 1 - k, r: 0, c: 0 };
       case 'throw': return { w: 1 - ease(THREE.MathUtils.clamp((this.t - THROW_SWING) / (DURATION.throw - THROW_SWING), 0, 1)), r: 0, c: 0 };
@@ -964,6 +993,21 @@ export class Carry {
         palmTarget.lerp(at, cutting);
         const cutRot = basisRotation(rest.fingers, PALM_REST, vec(flip(CUT_HAND.fingers, side)).normalize().applyQuaternion(this.chestRot), vec(flip(CUT_HAND.palm, side)).normalize().applyQuaternion(this.chestRot));
         handRot.slerp(cutRot, cutting);
+      }
+      const pouring = side === this.side && this.pourAt ? this.pouring : 0;
+      if (pouring > 0) {
+        // le récipient au-dessus de l'autre, basculé vers l'avant
+        const at = this.pourAt!();
+        palmTarget.lerp(at.clone().setY(at.y + POUR_ABOVE), pouring);
+        const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chestRot).setY(0).normalize();
+        const axis = new THREE.Vector3(0, 1, 0).cross(fwd).normalize();
+        handRot.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, POUR_TILT * pouring));
+        // le goulot (ou le bord) au-dessus du point, pas le poing
+        const item = this.item!;
+        const lip = item.def.mouth ? vec(item.def.mouth) : new THREE.Vector3(0, item.def.fill?.[1] ?? item.size.y, 0);
+        const off = lip.sub(item.gripPoint).applyQuaternion(handRot.clone().multiply(gripRotation(spec)));
+        palmTarget.x -= off.x * pouring;
+        palmTarget.z -= off.z * pouring;
       }
       if (sipping) {
         palmTarget.lerp(this.mouthHold(scale, side), this.sip);
