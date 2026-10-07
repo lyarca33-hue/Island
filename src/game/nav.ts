@@ -19,6 +19,8 @@ export interface Rect {
   s: number;
   hx: number;
   hz: number;
+  /** Un mur (mince) : on en sort par le côté où l'on est, même si un meuble s'y trouve. */
+  wall?: boolean;
 }
 
 /** Rectangle au sol d'un meuble (sa boîte tournée comme lui), élargi de `grow`. */
@@ -48,9 +50,9 @@ export function overlaps(a: Rect, b: Rect): boolean {
 export class Nav {
   private rects: Rect[] = [];
 
-  /** Ajoute un meuble : sa boîte (repère du meuble), sa position et sa rotation (lacet). */
-  add(box: THREE.Box3, pos: THREE.Vector3, yaw: number): void {
-    this.rects.push(footprint(box, pos, yaw, RADIUS));
+  /** Ajoute un meuble (ou un mur) : sa boîte (repère du meuble), sa position et sa rotation (lacet). */
+  add(box: THREE.Box3, pos: THREE.Vector3, yaw: number, wall = false): void {
+    this.rects.push({ ...footprint(box, pos, yaw, RADIUS), wall });
   }
 
   /** Point dans le repère du rectangle. */
@@ -76,15 +78,28 @@ export class Nav {
     return null;
   }
 
-  /** Sort `p` des meubles (vers le bord le plus proche). Modifie et renvoie `p`. */
+  /**
+   * Sort `p` des meubles : vers le bord le plus proche qui donne sur un endroit libre (pas dans
+   * le meuble d'à côté ni derrière, dans le mur). D'un mur, on sort du côté où l'on est (dans la
+   * pièce, quitte à sortir ensuite du meuble qui s'y adosse). Modifie et renvoie `p`.
+   */
   pushOut(p: THREE.Vector3): THREE.Vector3 {
     for (let k = 0; k < 3; k++) {
       const r = this.inside(p);
       if (!r) break;
-      let [lx, lz] = this.local(r, p.x, p.z);
-      if (r.hx - Math.abs(lx) < r.hz - Math.abs(lz)) lx = Math.sign(lx || 1) * (r.hx + 1e-3);
-      else lz = Math.sign(lz || 1) * (r.hz + 1e-3);
-      const w = this.world(r, lx, lz);
+      const [lx, lz] = this.local(r, p.x, p.z);
+      const e = 1e-3;
+      if (r.wall) {
+        const w = r.hx < r.hz ? this.world(r, Math.sign(lx || 1) * (r.hx + e), lz) : this.world(r, lx, Math.sign(lz || 1) * (r.hz + e));
+        p.x = w.x;
+        p.z = w.z;
+        continue;
+      }
+      const exits = [
+        this.world(r, r.hx + e, lz), this.world(r, -r.hx - e, lz),
+        this.world(r, lx, r.hz + e), this.world(r, lx, -r.hz - e),
+      ].sort((a, b) => a.distanceToSquared(p) - b.distanceToSquared(p));
+      const w = exits.find((q) => !this.inside(q)) ?? exits[0];
       p.x = w.x;
       p.z = w.z;
     }

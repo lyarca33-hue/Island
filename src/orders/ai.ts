@@ -100,7 +100,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
 - {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
-- {"tache": "boire", "objet": "<ref>", "liquide": "eau"} : boire une gorgée (« objet » facultatif : une bouteille d'eau du frigo, la tasse… ; sans objet, la tasse ; « liquide » facultatif, "eau" ou "café" : si la tasse est vide, elle est d'abord remplie, de café par défaut). Boire fait baisser la soif
+- {"tache": "the"} : se faire un thé à la bouilloire (prend la tasse si besoin) ; le thé réveille moitié moins que le café
+- {"tache": "boire", "objet": "<ref>", "liquide": "eau"} : boire une gorgée (« objet » facultatif : une bouteille d'eau du frigo, la tasse… ; sans objet, la tasse ; « liquide » facultatif, "eau", "café" ou "thé" : si la tasse est vide, elle est d'abord remplie, de café par défaut). Boire fait baisser la soif
 - {"tache": "eau"} : remplir la tasse d'eau à l'évier (prend la tasse si besoin). Une tasse « sale » (bue jusqu'au bout) est seulement rincée : la machine à café refuse une tasse sale
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
@@ -168,7 +169,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'aller': return s('objet') ? { kind: 'aller', ref: s('objet') } : null;
     case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
     case 'cafe': return { kind: 'cafe' };
-    case 'boire': return { kind: 'boire', ref: s('objet') || undefined, liquide: s('liquide') === 'eau' ? 'eau' : s('liquide') === 'café' || s('liquide') === 'cafe' ? 'café' : undefined };
+    case 'the': return { kind: 'the' };
+    case 'boire': return { kind: 'boire', ref: s('objet') || undefined, liquide: s('liquide') === 'eau' ? 'eau' : s('liquide') === 'café' || s('liquide') === 'cafe' ? 'café' : s('liquide') === 'thé' || s('liquide') === 'the' ? 'thé' : undefined };
     case 'eau': return { kind: 'eau' };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };

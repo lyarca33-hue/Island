@@ -1,6 +1,6 @@
 /**
  * La cuisine : meubles de rangement (placard, tiroir), gros appareils (four, micro-ondes,
- * lave-vaisselle) et poubelle. Mêmes fiches que le reste du catalogue (catalog.ts) ; les portes,
+ * lave-vaisselle), poubelle et petits appareils (bouilloire). Mêmes fiches que le reste du catalogue (catalog.ts) ; les portes,
  * le tiroir, la cuisson et le lavage sont joués par Game.ts.
  *
  * Tous sont posés au sol, l'avant vers +Z, et font la hauteur du plan de travail (sauf le
@@ -37,6 +37,8 @@ function glow(w: number, h: number, d: number, color: THREE.ColorRepresentation,
   return m;
 }
 
+/** Où se pose la tasse à côté de la bouilloire, sous son bec (x, m). */
+const KETTLE_CUP = 0.1;
 /** Hauteur du plan de travail (m), comme sous la machine à café et l'évier. */
 const COUNTER_H = 0.9;
 /** Épaisseur du plan de travail, des parois des meubles et des portes (m). */
@@ -307,6 +309,52 @@ export const KITCHEN_ITEMS: ItemDef[] = [
         box(0.016, h - 0.08, 0.016, 0x9ea4aa, dw - 0.02, h / 2, 0.03),
       );
       g.add(door);
+      return g;
+    },
+  },
+  {
+    id: 'bouilloire',
+    name: 'bouilloire',
+    portable: false,
+    movable: false,
+    durability: 200,
+    fragility: 5,
+    // comme la machine à café : la tasse se pose à côté, sous le bec, et le thé y coule
+    pour: { at: [KETTLE_CUP, 0, 0.03], fills: ['tasse'], liquid: 'thé', seconds: 2.4, color: 0x9a5a22 },
+    // le bouton du socle l'allume ; l'eau chauffe, puis le thé coule ; elle s'éteint seule si on l'oublie
+    heat: { spots: [[KETTLE_CUP, 0, 0.03]], lit: 'voyant', warmup: 4, autoOff: 45 },
+    build: () => {
+      const body = 0xe7e3da, dark = 0x3b3f44;
+      const x = -0.06;
+      const g = group(
+        // socle, verseuse, couvercle
+        mesh(new THREE.CylinderGeometry(0.085, 0.09, 0.025, 24), dark, x, 0.0125, 0),
+        mesh(new THREE.CylinderGeometry(0.065, 0.078, 0.17, 24), body, x, 0.11, 0),
+        mesh(new THREE.CylinderGeometry(0.045, 0.065, 0.02, 24), body, x, 0.205, 0),
+        mesh(new THREE.SphereGeometry(0.014, 12, 8), dark, x, 0.222, 0),
+        // poignée derrière
+        box(0.02, 0.13, 0.02, dark, x - 0.085, 0.13, 0),
+        box(0.03, 0.02, 0.02, dark, x - 0.072, 0.195, 0),
+        box(0.03, 0.02, 0.02, dark, x - 0.072, 0.065, 0),
+      );
+      // bec, penché au-dessus de la tasse
+      const spout = mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.13, 12), body, (x + 0.06 + KETTLE_CUP) / 2, 0.15, 0.015);
+      spout.rotation.z = -Math.PI / 3;
+      g.add(spout);
+      const button = group(mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.01, 14).rotateX(Math.PI / 2), 0xd0463a, x - 0.03, 0.0125, 0.088));
+      button.name = 'bouton-0';
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.006, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb347 }));
+      lamp.position.set(x + 0.03, 0.0125, 0.09);
+      const lit = group(lamp);
+      lit.name = 'voyant-0';
+      lit.visible = false;
+      g.add(button, lit);
+      // thé qui coule du bec dans la tasse
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 6), toon(0x7a4519));
+      jet.name = 'jet';
+      jet.visible = false;
+      jet.position.set(KETTLE_CUP, 0.18, 0.03);
+      g.add(jet);
       return g;
     },
   },

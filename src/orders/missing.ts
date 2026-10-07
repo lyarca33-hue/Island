@@ -120,6 +120,16 @@ export function setMissingNote(key: string, text: string): void {
   writeNotes(notes);
 }
 
+/** Retire du journal un manque (toutes ses occurrences) et son commentaire. */
+export function removeMissing(key: string): void {
+  const notes = { ...missingNotes() };
+  if (key in notes) {
+    delete notes[key];
+    writeNotes(notes);
+  }
+  write(read().filter((m) => groupKey(m) !== key));
+}
+
 export function clearMissing(): void {
   writeNotes({});
   write([]);

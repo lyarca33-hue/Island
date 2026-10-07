@@ -273,10 +273,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
         const plate = found.find((o) => o.nom === 'assiette');
         if (food || plate) return [{ kind: 'servir', ref: food?.ref, sur: plate?.ref }];
       }
+      // « fais-toi un thé »
+      if (rest.includes('the')) return [{ kind: 'the' }];
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
     case 'boire': {
       // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »
-      const liquide = rest.includes('eau') ? 'eau' : rest.includes('cafe') ? 'café' : undefined;
+      const liquide = rest.includes('eau') ? 'eau' : rest.includes('cafe') ? 'café' : rest.includes('the') ? 'thé' : undefined;
       const drink = found.filter((o) => o.sorte === 'récipient');
       if (found.length && !drink.length) return null;
       const full = (o: WorldObject) => o.ou.includes('contient');
@@ -305,7 +307,7 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'remplir':
       // « remplis la tasse (d'eau / de café) » ; d'eau si rien n'est dit
       if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine')) return null;
-      return [rest.includes('cafe') ? { kind: 'cafe' } : { kind: 'eau' }];
+      return [rest.includes('cafe') ? { kind: 'cafe' } : rest.includes('the') ? { kind: 'the' } : { kind: 'eau' }];
     case 'laver': {
       // « lave la tasse au lave-vaisselle » : on la range dedans et on le lance
       if (machineWash(original) && found.every((o) => o.sorte === 'appareil' || o.sorte === 'vaisselle' || o.nom === 'tasse') && appliance('lave-vaisselle')) {
