@@ -15,7 +15,7 @@ import { breakChance, Debris, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
-import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
+import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/catalog';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { createMotes } from './motes';
@@ -42,6 +42,8 @@ const FOCUS_HEIGHT = 0.9;
 const DRINK_THIRST = 35;
 const COFFEE_ENERGY = 12;
 const TEA_ENERGY = 6;
+/** Un jus de fruits (mixeur) nourrit un peu : faim rendue par tasse pleine. */
+const JUICE_HUNGER = 12;
 /** L'eau désaltère plus que le café : soif en plus pour une bouteille entière. */
 const WATER_EXTRA = 15;
 
@@ -232,6 +234,9 @@ export interface WorldObject {
   distance: number;
 }
 
+/** Programme d'un appareil qu'on met en marche (four, micro-ondes, grille-pain, lave-vaisselle, mixeur), ou undefined. */
+const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
+
 /** Noms féminins (accord des messages). */
 const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', ...DISH_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
@@ -356,6 +361,8 @@ export class Game {
   private doors = new Map<WorldItem, { open: number; target: 0 | 1; then: (() => void) | null; reach: number; keep: boolean }>();
   /** Appareils en marche (four, micro-ondes, lave-vaisselle) : temps écoulé (s), cuisson de départ de ce qui est dedans. */
   private appliances = new Map<WorldItem, { t: number; start: Map<WorldItem, number> }>();
+  /** Mixeur : tasses de jus prêtes dans le bol. */
+  private blended = new Map<WorldItem, number>();
   /** Objets jetés dans chaque poubelle. */
   private binFill = new Map<WorldItem, number>();
   /** Part de chaque aliment tenu à l'image précédente : ce qui a été mangé depuis. */
@@ -1091,6 +1098,10 @@ export class Game {
       if (this.appliances.has(item)) ou += ', en marche';
       if (this.crumbs.has(item)) ou += ', des miettes (à essuyer)';
       if (item.def.seat && this.tucked(item)) ou += ', rangée sous la table';
+      if (item.def.blends) {
+        const n = this.blended.get(item) ?? 0;
+        ou += n ? `, ${item.def.pour!.liquid} prêt (${n} tasse${n > 1 ? 's' : ''})` : this.storedIn(item).length ? '' : ', vide';
+      }
       if (item.def.washes) ou += this.tabletIn.has(item) ? ', pastille mise' : ', sans pastille';
       if (this.tablets.has(item)) ou += `, ${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`;
       if (item.def.bin) {
@@ -1118,7 +1129,7 @@ export class Game {
       const sink = this.sinks.get(item);
       if (sink?.tap) ou += ', robinet ouvert';
       if (sink?.plug) ou += sink.water > 0.98 ? ', bouché, la cuve déborde' : ', bouché';
-      const sorte: WorldObject['sorte'] = item.def.bin ? 'poubelle' : item.def.heats || item.def.washes ? 'appareil' : item.def.cold ? 'frigo'
+      const sorte: WorldObject['sorte'] = item.def.bin ? 'poubelle' : program(item.def) ? 'appareil' : item.def.cold ? 'frigo'
         : item.def.door || item.def.drawer ? 'placard' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.heat ? 'gazinière' : item.def.cookware ? 'ustensile' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : item.def.board ? 'planche' : item.def.knife ? 'couteau' : item.def.dish ? 'vaisselle' : undefined;
       if (item === this.sitting) ou += ', le perso est assis dessus';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
@@ -2092,7 +2103,7 @@ export class Game {
   /** Four, micro-ondes ou lave-vaisselle : ce qu'on allume par startAppliance. */
   isAppliance(ref?: string): boolean {
     const item = ref ? this.byRef(ref) : null;
-    return !!(item?.def.heats || item?.def.washes);
+    return !!(item && program(item.def));
   }
 
   /**
@@ -2100,9 +2111,9 @@ export class Game {
    * le perso va devant, ferme la porte et le lance. Il cuit ou lave ce qui est rangé dedans.
    */
   startAppliance(ref?: string, running = false): boolean {
-    const item = ref ? this.byRef(ref) : this.nearest((i) => !!(i.def.heats || i.def.washes));
+    const item = ref ? this.byRef(ref) : this.nearest((i) => !!program(i.def));
     if (!item) this.onNotice?.(ref ? `Aucun objet « ${ref} ».` : 'Il n’y a pas d’appareil à mettre en marche.');
-    else if (!item.def.heats && !item.def.washes) this.onNotice?.(`On ne met pas en marche ${the(item.name)}.`);
+    else if (!program(item.def)) this.onNotice?.(`On ne met pas en marche ${the(item.name)}.`);
     else if (this.appliances.has(item)) return true;
     else return this.runAppliance(item, running);
     return false;
@@ -2121,7 +2132,7 @@ export class Game {
 
   private runAppliance(item: WorldItem, running: boolean): boolean {
     if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-    else if (!this.storedIn(item).length) this.onNotice?.(`${cap(the(item.name))} est vide : mets-y d’abord quelque chose ${item.def.heats?.turns ? 'à griller' : item.def.heats ? 'à cuire' : 'à laver'}.`);
+    else if (!this.storedIn(item).length) this.onNotice?.(`${cap(the(item.name))} est vide : mets-y d’abord quelque chose ${item.def.blends ? 'à mixer' : item.def.heats?.turns ? 'à griller' : item.def.heats ? 'à cuire' : 'à laver'}.`);
     else {
       this.character.approachThen(this.doorStand(item), item.object.position, () => {
         // on ferme la porte ; il démarre une fois fermée (tickAppliances)
@@ -2170,9 +2181,9 @@ export class Game {
       if (d && d.open > 0) continue;
       const light = item.part('lumiere');
       if (light) light.visible = true;
-      const program = (item.def.heats ?? item.def.washes)!;
+      const prog = program(item.def)!;
       r.t += Math.max(0, dt);
-      const k = Math.min(1, r.t / program.seconds);
+      const k = Math.min(1, r.t / prog.seconds);
       const heats = item.def.heats;
       if (heats) {
         for (const [it, c0] of r.start) {
@@ -2195,6 +2206,14 @@ export class Game {
           it.contents = null;
         }
         this.endAppliance(item, tablet ? 'Ding ! La vaisselle est propre.' : 'Ding ! Lavage raté : sans pastille, la vaisselle est encore sale.');
+        continue;
+      }
+      // mixeur : les fruits deviennent du jus, une tasse par fruit
+      if (item.def.blends) {
+        for (const it of inside) this.removeItem(it);
+        this.blended.set(item, (this.blended.get(item) ?? 0) + inside.length);
+        this.showBlend(item);
+        this.endAppliance(item, `Ding ! ${cap(theLiquid(item.def.pour!.liquid))} est prêt : apporte une tasse.`);
         continue;
       }
       // grille-pain : les tranches ressortent en pain grillé
@@ -2221,13 +2240,24 @@ export class Game {
     made.object.position.copy(item.object.position);
     made.object.quaternion.copy(item.object.quaternion);
     made.setCondition(item.condition);
+    this.removeItem(item);
+    this.items.push(made);
+    this.scene.add(made.object);
+    return made;
+  }
+
+  /** L'objet quitte la pièce (mixé, transformé). */
+  private removeItem(item: WorldItem): void {
     this.items = this.items.filter((i) => i !== item);
     this.riders = this.riders.filter((r) => r.item !== item && r.base !== item);
     this.lastBite.delete(item);
     item.object.removeFromParent();
-    this.items.push(made);
-    this.scene.add(made.object);
-    return made;
+  }
+
+  /** Le bol du mixeur montre le jus tant qu'il en reste. */
+  private showBlend(mixer: WorldItem): void {
+    const juice = mixer.part('liquide');
+    if (juice) juice.visible = (this.blended.get(mixer) ?? 0) > 0;
   }
 
   /** Jette l'objet tenu (le dernier pris, ou celui nommé) dans la poubelle la plus proche. */
@@ -2597,6 +2627,13 @@ export class Game {
     return machine ? this.pourAt(machine, running) : false;
   }
 
+  /** Se sert un jus de fruits au mixeur le plus proche (il faut tenir la tasse ; le jus doit être prêt). */
+  makeJuice(running = false): boolean {
+    const mixer = this.nearest((i) => !!i.def.blends);
+    if (!mixer) this.onNotice?.('Il n’y a pas de mixeur.');
+    return mixer ? this.pourAt(mixer, running) : false;
+  }
+
   /** Se fait un thé à la bouilloire la plus proche (il faut tenir la tasse). */
   makeTea(running = false): boolean {
     const kettle = this.nearest((i) => i.def.pour?.liquid === 'thé');
@@ -2715,7 +2752,7 @@ export class Game {
    * au frais ce qui se mange et se boit, sinon le meuble qui le prend (placard, tiroir, bibliothèque).
    */
   private homeOf(item: WorldItem): WorldItem | undefined {
-    const ok = (s: WorldItem) => !!s.def.slots && this.fits(s, item) && this.freeSlots(s).length > 0 && !(s.def.heats || s.def.washes);
+    const ok = (s: WorldItem) => !!s.def.slots && this.fits(s, item) && this.freeSlots(s).length > 0 && !program(s.def);
     const p = this.character.position;
     const near = (a: WorldItem, b: WorldItem) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p);
     const all = this.items.filter(ok).sort(near);
@@ -3140,6 +3177,7 @@ export class Game {
     else if (cup.dirty && !pour.drain) this.onNotice?.(`${cap(the(cup.name))} est sale : lave-la à l’évier ou passe-la au lave-vaisselle.`);
     else if (other && !pour.drain) this.onNotice?.(`${cap(the(cup.name))} contient encore ${someLiquid(other)} : bois-la ou vide-la à l’évier d’abord.`);
     else if (!other && cup.level > 0.99) this.onNotice?.(`${cap(the(cup.name))} est déjà pleine.`);
+    else if (machine.def.blends && !this.blended.get(machine)) this.onNotice?.(`${cap(the(machine.name))} est vide : mets-y des fruits et lance-le.`);
     else if (machine.def.tank && machine.level * machine.def.tank < SERVING * 0.8) this.onNotice?.(`${cap(the(machine.name))} est vide : verses-y de l’eau (casserole, bouteille ou tasse remplie à l’évier).`);
     else if (this.closeBookThen(() => this.pourAt(machine, running))) return true;
     else {
@@ -3202,6 +3240,11 @@ export class Game {
     if (jet) jet.visible = false;
     // la bouilloire : l'eau de la tasse est prise au réservoir
     if (b.machine.def.tank) b.machine.level = Math.max(0, b.machine.level - SERVING / b.machine.def.tank);
+    // le mixeur : une tasse de moins dans le bol
+    if (b.machine.def.blends) {
+      this.blended.set(b.machine, Math.max(0, (this.blended.get(b.machine) ?? 0) - 1));
+      this.showBlend(b.machine);
+    }
     this.brew = null;
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(b.machine.object.quaternion);
     const stand = this.frontOf(b.machine);
@@ -3561,9 +3604,11 @@ export class Game {
     // un aliment à couper en main : clic sur la planche, ou sur le meuble où elle est posée
     else if (held.some((h) => h.def.cut) && (item.def.board || this.boardOn(item))) return this.cutOn(item.def.board ? item : this.boardOn(item), running);
     // appareil sans porte (grille-pain) : on y met ce qu'on tient
-    else if (item.def.heats && !door && held.some((h) => this.fits(item, h))) return this.storeIn(item, running);
+    else if (program(item.def) && !door && held.some((h) => this.fits(item, h))) return this.storeIn(item, running);
+    // mixeur prêt, tasse en main : on la remplit
+    else if (item.def.blends && item.def.pour && held.some((h) => item.def.pour!.fills.includes(h.name))) return this.pourAt(item, running);
     // appareil (four, micro-ondes, lave-vaisselle) : clic sur le côté, on le met en marche ou on l'arrête
-    else if (item.def.heats || item.def.washes) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
+    else if (program(item.def)) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
     else if (item.def.bin && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
     // mains vides : un gros meuble s'agrippe pour le déplacer
@@ -3895,7 +3940,7 @@ export class Game {
     }
     // ranger ce qu'on tient
     if (item.def.slots && held.some((h) => this.fits(item, h))) add('Ranger ici ce que je tiens', () => this.storeIn(item, false));
-    if (item.def.slots && !item.def.heats && !item.def.washes) add('Regarder dedans', () => this.lookInside(ref));
+    if (item.def.slots && !program(item.def)) add('Regarder dedans', () => this.lookInside(ref));
     if (door && (door.target || door.open > 0) && !door.keep) add('Laisser ouvert', () => this.keepOpen(ref));
     // glaçons (bac tenu) dans une tasse
     if (held.some((h) => h.name === 'bac à glaçons') && item.def.fill && !item.def.cookware && !item.def.mouth && !this.iced.has(item)) add('Mettre des glaçons', () => this.addIce(ref));
@@ -3906,8 +3951,8 @@ export class Game {
       if (heat.on.some(Boolean)) add('Éteindre', () => this.switchOff(ref));
       else add('Allumer', () => this.switchOn(ref));
     }
-    // four, micro-ondes, lave-vaisselle
-    if (item.def.heats || item.def.washes) {
+    // four, micro-ondes, lave-vaisselle, grille-pain, mixeur
+    if (program(item.def)) {
       if (this.appliances.has(item)) add('Arrêter', () => this.stopAppliance(ref));
       else add(item.def.washes ? 'Lancer un lavage' : 'Mettre en marche', () => this.startAppliance(ref));
     }
@@ -4198,8 +4243,9 @@ export class Game {
         if (last?.contents === 'eau') this.needs.restore('soif', drunk * WATER_EXTRA);
         if (last?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
         if (last?.contents === 'thé') this.needs.restore('fatigue', drunk * TEA_ENERGY);
+        if (last?.contents === 'jus de fruits') this.needs.restore('faim', drunk * JUICE_HUNGER);
         // un café ou un thé bu jusqu'au bout laisse un fond dans la tasse
-        if ((last?.contents === 'café' || last?.contents === 'thé') && !held.contents && held.def.dish) held.setDirty(true);
+        if ((last?.contents === 'café' || last?.contents === 'thé' || last?.contents === 'jus de fruits') && !held.contents && held.def.dish) held.setDirty(true);
       }
       sips.set(held, { level: held.level, contents: held.contents });
     }
