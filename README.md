@@ -80,7 +80,8 @@ ratée (message du jeu), un ordre non compris sans IA. Chaque manque porte un di
 (`src/orders/diagnose.ts`) : sa cause probable (mains prises, objet absent de la pièce, verbe
 inconnu, geste absent du jeu…) et la situation du perso à ce moment (ce qu'il tient, l'étape en
 cours). Le crayon ✎ remplace ce commentaire automatique par le sien (gardé dans le navigateur ;
-« Texte auto » le rétablit). « Copier » ou « Télécharger » donne la liste en Markdown, à coller
+« Effacer mon commentaire » rétablit le commentaire auto). La corbeille 🗑 retire une ligne et son
+commentaire (second clic pour confirmer). « Copier » ou « Télécharger » donne la liste en Markdown, à coller
 dans la discussion du projet.
 
 Les tâches (`src/orders/tasks.ts`) traduisent un ordre en actions de base selon l'état de la
