@@ -275,7 +275,7 @@ export const BATHROOM_ITEMS: ItemDef[] = [
     fragility: 10,
     durability: 120,
     layFlat: true,
-    towel: true,
+    bathTowel: true,
     build: () => {
       // pliée en deux sur la barre : deux pans et le pli arrondi en haut ; bande claire en bas
       const color = 0x4f8fb8;

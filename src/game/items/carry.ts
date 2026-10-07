@@ -37,6 +37,11 @@ export class WorldItem {
   portion = 1;
   /** Vaisselle sale (voir ItemDef.dish) : sa pièce `sale` est montrée. */
   dirty = false;
+  /**
+   * Vaisselle lavée à la main, encore mouillée (1 sortie de l'eau, 0 sèche) : des gouttes perlent
+   * dessus. Elle sèche toute seule (vite à l'égouttoir) ou d'un coup de torchon.
+   */
+  wet = 0;
   /** Temps passé sur le feu (s, à pleine chaleur) d'un ingrédient : voir ItemDef.cook. */
   cooking = 0;
 
@@ -132,6 +137,36 @@ export class WorldItem {
     if (stain) stain.visible = dirty;
   }
 
+  /** Mouille (1) ou sèche (0) la vaisselle : les gouttes se montrent tant qu'il en reste. */
+  setWet(wet: number): void {
+    this.wet = THREE.MathUtils.clamp(wet, 0, 1);
+    let drops = this.part('gouttes');
+    if (!drops && this.wet > 0) drops = this.addDrops();
+    if (drops) drops.visible = this.wet > 0;
+  }
+
+  /** Gouttes d'eau sur le bord et le fond (créées à la première vaisselle, hors de la boîte de l'objet). */
+  private addDrops(): THREE.Object3D {
+    const g = new THREE.Group();
+    g.name = 'gouttes';
+    const b = this.box, c = b.getCenter(new THREE.Vector3());
+    const rx = (b.max.x - b.min.x) / 2, rz = (b.max.z - b.min.z) / 2;
+    const mat = new THREE.MeshBasicMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.8, depthWrite: false });
+    const geo = new THREE.SphereGeometry(1, 8, 6);
+    for (let i = 0; i < 7; i++) {
+      // réparties en spirale (angle d'or), entre le bord et le haut de l'objet
+      const a = i * 2.39996, k = 0.55 + 0.4 * ((i * 0.618) % 1);
+      const drop = new THREE.Mesh(geo, mat);
+      drop.name = 'gouttes';
+      const r = 0.0035 + 0.0015 * (i % 3);
+      drop.scale.set(r, r * 1.3, r);
+      drop.position.set(c.x + Math.cos(a) * rx * k, b.min.y + (b.max.y - b.min.y) * (0.35 + 0.6 * ((i * 0.382) % 1)), c.z + Math.sin(a) * rz * k);
+      g.add(drop);
+    }
+    this.object.add(g);
+    return g;
+  }
+
   /** Une bouchée : l'aliment rétrécit (autour du point tenu, il reste dans la main). */
   bite(): void {
     if (!this.def.food) return;
@@ -198,7 +233,8 @@ const SIP_TILT = THREE.MathUtils.degToRad(55);
 const BITE_TILT = THREE.MathUtils.degToRad(12);
 /**
  * Bord de la tasse qui touche les lèvres, depuis l'anse (repère de la tasse) : SIP_MOUTH est
- * réglé pour lui. Un objet qui a son propre point `mouth` (goulot) est décalé d'autant.
+ * réglé pour lui. Un objet qui a son propre point `mouth` (goulot) ou `lip` (bord du verre) est
+ * décalé d'autant.
  */
 const CUP_LIP = new THREE.Vector3(0, 0.045, -0.104);
 /** Goulot (bouteille) : plus près des lèvres que le bord large d'une tasse (repère du buste), et plus incliné. */
@@ -554,7 +590,7 @@ export class Carry {
    * le couteau revenu en main.
    */
   cut(at: () => THREE.Vector3, onDone?: () => void): boolean {
-    if (!(this.item?.def.knife || this.item?.def.wipes || this.item?.def.towel || this.item?.name === 'couteau de table') || this.phase !== 'hold' || this.stack.length) return false;
+    if (!(this.item?.def.knife || this.item?.def.wipes || this.item?.def.towel || this.item?.def.bathTowel || this.item?.name === 'couteau de table') || this.phase !== 'hold' || this.stack.length) return false;
     this.cutAt = at;
     // le buste se penche vers la planche (voir weights)
     this.target.copy(at());
@@ -1013,11 +1049,13 @@ export class Carry {
       if (sipping) {
         palmTarget.lerp(this.mouthHold(scale, side), this.sip);
         // le goulot (ou le bord croqué) aux lèvres plutôt que le bord de la tasse
-        const mouth = this.item?.def.mouth;
+        // un verre sans anse : son bord (ItemDef.lip) aux lèvres, incliné comme une tasse
+        const neck = this.item?.def.mouth;
+        const mouth = neck ?? (this.phase === 'drink' ? this.item?.def.lip : undefined);
         if (mouth) {
           const extra = vec(mouth).sub(this.item!.gripPoint).sub(CUP_LIP).applyQuaternion(handRot.clone().multiply(gripRotation(spec)));
           palmTarget.addScaledVector(extra, -this.sip);
-          if (this.phase === 'drink') palmTarget.addScaledVector(vec(flip(NECK_IN, side)).multiplyScalar(scale).applyQuaternion(this.chestRot), this.sip);
+          if (this.phase === 'drink' && neck) palmTarget.addScaledVector(vec(flip(NECK_IN, side)).multiplyScalar(scale).applyQuaternion(this.chestRot), this.sip);
         }
       }
     }

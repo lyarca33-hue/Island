@@ -161,7 +161,7 @@ export interface RoomSpec {
   /** Meubles rangés contre les murs. */
   runs: Run[];
   /** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
-  onTop?: Array<[string, string]>;
+  onTop?: Array<[string, string, number?, number?, number?]>;
   /** Objets posés au départ, hors des rangées : [id, x, y, z, rotation (rad)]. */
   items?: Array<[string, number, number, number, number]>;
   /** Décor fixe (accroché aux murs, tapis…). */
@@ -365,10 +365,10 @@ export class Room {
     this.wallGroup(spec.lightSwitch.wall).add(swAt);
   }
 
-  /** Le point (x, z) est-il dans la pièce ? */
-  contains(p: THREE.Vector3): boolean {
+  /** Le point (x, z) est-il dans la pièce (agrandie de `margin` m de chaque côté) ? */
+  contains(p: THREE.Vector3, margin = 0): boolean {
     const { x0, x1, z0, z1 } = this.rect;
-    return p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1;
+    return p.x > x0 - margin && p.x < x1 + margin && p.z > z0 - margin && p.z < z1 + margin;
   }
 
   /** Mur haut `name` : y accrocher du décor, caché avec le mur quand il est abaissé en coupe. */
@@ -738,12 +738,18 @@ export class Room {
   }
 
   /**
-   * À chaque image : murs abaissés côté caméra quand le perso est dans une pièce (`indoors`, celle-ci
-   * ou une autre ; relevés quand il sort, sauf un mur qui le cacherait), portes qui s'ouvrent
-   * devant le perso, décor animé, lampes et vitres selon l'heure.
+   * À chaque image : murs abaissés quand le perso est dans une pièce (`active`, celle-ci ou une
+   * autre) : ceux tournés vers la caméra, et tous ceux qui se trouvent entre la caméra et la pièce
+   * du perso ; relevés quand il sort, sauf un mur qui le cacherait. Portes qui s'ouvrent devant le
+   * perso, décor animé, lampes et vitres selon l'heure.
    */
-  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3, indoors: boolean): void {
+  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, toCamera: THREE.Vector3, active: Rect | null): void {
+    const indoors = active !== null;
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
+    // bord de la pièce du perso le plus proche de la caméra (mesuré le long de la vue)
+    const edge = active ? Math.max(...[active.x0, active.x1].flatMap((x) => [active.z0, active.z1].map((z) => x * view.x + z * view.y))) : 0;
+    // un mur passe devant la pièce du perso si son bout côté caméra dépasse ce bord
+    const inFront = (w: Wall) => w.boxes.some((b) => Math.max(b.min.x * view.x, b.max.x * view.x) + Math.max(b.min.z * view.y, b.max.z * view.y) > edge + 0.01);
     let anyCut = false;
     // perso hors de cette pièce : rayons du perso (jambes, buste, tête) vers la caméra
     const here = this.contains(player);
@@ -765,7 +771,7 @@ export class Room {
     for (const w of this.walls) {
       // dans une pièce : les murs côté caméra s'abaissent, et celui qui cache le perso dans la pièce
       // voisine (le mur mitoyen) ; dehors, ils restent pleins, sauf celui qui cache le perso
-      const cut = indoors ? w.n.dot(view) < -0.1 || hides(w) : hides(w);
+      const cut = indoors ? w.n.dot(view) < -0.1 || inFront(w) || hides(w) : hides(w);
       anyCut ||= cut;
       if (cut !== w.cut) {
         w.cut = cut;
@@ -975,6 +981,15 @@ export const KITCHEN: RoomSpec = {
     { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur'] },
     { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
   ],
-  onTop: [['micro-ondes', 'placard'], ['bouilloire', 'tiroir'], ['grille-pain', 'lave-vaisselle'], ['mixeur', 'four'], ['frigo', 'congelateur']],
+  onTop: [
+    ['micro-ondes', 'placard'],
+    ['bouilloire', 'tiroir'],
+    // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
+    ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
+    ['egouttoir', 'lave-vaisselle', 0.145, 0],
+    ['torchon', 'lave-vaisselle', -0.15, 0.17, 0.1],
+    ['mixeur', 'four'],
+    ['frigo', 'congelateur'],
+  ],
   decor: kitchenDecor,
 };

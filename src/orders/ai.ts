@@ -118,6 +118,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "essuyer", "objet": "<ref>"} : essuyer les miettes de la table avec l'éponge (« objet » facultatif)
 - {"tache": "empiler"} : empiler les assiettes propres (prendre celle du dessous emporte la pile)
 - {"tache": "essuyer_sol"} : essuyer les flaques d'eau par terre avec l'éponge
+- {"tache": "essuyer_vaisselle", "objets": ["<ref>", ...]} : essuyer au torchon la vaisselle mouillée (sortie de l'évier ; liste vide = toute). Sinon « mettre » la vaisselle mouillée dans l'égouttoir, où elle sèche seule
+- {"tache": "essuyer_mains"} : s'essuyer les mains au torchon après les avoir lavées
+- La carafe (sur la table) est pleine d'eau : on ne boit pas à la carafe, on la « verse » dans un verre (« objet » : la carafe, « dans » : le verre)
 - Le plateau : « poser » un objet avec « sur »: le plateau, puis prendre le plateau emporte tout ce qui est dessus
 - {"tache": "mettre_table"} : mettre le couvert devant la chaise (assiette, fourchette, couteau de table pris au placard et au tiroir)
 - {"tache": "debarrasser"} : débarrasser la table (vaisselle sale au lave-vaisselle, propre à sa place)
@@ -137,7 +140,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
 - {"tache": "preparer", "plat": "<id du plat>"} : préparer un plat d'une recette ; le perso coupe et fait cuire ce qu'il faut, réunit les ingrédients sur la planche à découper et les assemble. Plats : "salade-composee" (tomate et concombre coupés, carotte en plus), "tartine-tomate" (pain et tomate coupés), "sandwich-steak" (pain coupé et steak cuit, tomate ou concombre en plus), "steak-pommes-de-terre" (steak et pomme de terre cuits). Le plat se mange comme le sandwich, ou se sert dans l'assiette pour un repas à table
 - {"tache": "servir", "objet": "<ref>", "assiette": "<ref>"} : servir un aliment (pomme, sandwich) dans une assiette propre et vide (« objet » et « assiette » facultatifs : ce qu'on tient, ou le plus proche ; la plus proche)
-- {"tache": "repas", "objet": "<ref>"} : un vrai repas à table : sert l'aliment dans l'assiette si elle est vide, prend la fourchette, s'assoit devant l'assiette et mange tout le plat (rassasie un peu plus que manger debout). Assiette et couverts sont ensuite sales
+- {"tache": "repas", "objet": "<ref>"} : un vrai repas à table : sert l'aliment dans l'assiette si elle est vide, prend la fourchette, s'assoit devant l'assiette et mange tout le plat (rassasie un peu plus que manger debout). Assiette et couverts sont ensuite sales. « dans » facultatif : un bol (on y mange à la cuillère)
 - {"tache": "vaisselle", "objets": ["<ref>", ...]} : laver à l'évier la vaisselle sale (pour le lave-vaisselle : « mettre » chaque pièce dedans puis « allumer » le lave-vaisselle) (assiette, fourchette, couteau, tasse après un café ; liste vide = toute la vaisselle sale). Le perso la reprend propre
 - {"tache": "mettre", "objet": "<ref>", "dans": "<ref du meuble>"} : ranger un objet dans un meuble qui a une porte ou un tiroir (« objet » facultatif : ce qu'on tient) : frigo (bouteille, aliments entiers ou coupés), placard (tasse, assiette, bouteille, pomme), tiroir (couverts, lettre), four et micro-ondes (steak, pomme de terre, pain, sandwich), lave-vaisselle (tasse, assiette, couverts), grille-pain (tranches de pain), mixeur (pomme, quartiers de pomme)
 - {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte d'un meuble (frigo, placard, four…), un tiroir ou le couvercle de la poubelle
@@ -218,6 +221,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'essuyer': return { kind: 'essuyer', ref: s('objet') || undefined };
     case 'empiler': return { kind: 'empiler' };
     case 'essuyer_sol': return { kind: 'essuyer_sol' };
+    case 'essuyer_vaisselle': return { kind: 'essuyer_vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
+    case 'essuyer_mains': return { kind: 'essuyer_mains' };
     case 'mettre_table': return { kind: 'mettre_table' };
     case 'debarrasser': return { kind: 'debarrasser' };
     case 'couper_assiette': return { kind: 'couper_assiette' };
@@ -243,7 +248,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'asseoir': return { kind: 'asseoir', ref: s('objet') || undefined };
     case 'servir': return { kind: 'servir', ref: s('objet') || undefined, sur: s('assiette') || undefined };
-    case 'repas': return { kind: 'repas', ref: s('objet') || undefined };
+    case 'repas': return { kind: 'repas', ref: s('objet') || undefined, dans: s('dans') || undefined };
     case 'vaisselle': return { kind: 'vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'lever': return { kind: 'lever' };
     case 'dormir': return { kind: 'dormir', ref: s('objet') || undefined };

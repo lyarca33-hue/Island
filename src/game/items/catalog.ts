@@ -49,6 +49,8 @@ export interface ItemDef {
    * l'objet tourné vers l'avant du meuble (+Z).
    */
   slots?: Array<[number, number, number]>;
+  /** Ce qui va à chaque place (noms ; absent = tout ce que le meuble accepte) : l'assiette devant, les couverts au panier. */
+  slotHolds?: Array<string[] | undefined>;
   /**
    * Se lit : le modèle du livre ouvert (pages vers +Z, haut vers +Y, centré), montré à la place
    * du livre fermé pendant la lecture.
@@ -98,20 +100,30 @@ export interface ItemDef {
    */
   mouth?: [number, number, number];
   /**
+   * Récipient sans anse (verre) : le bord qui va aux lèvres pour boire, comme la tasse (sans
+   * basculer comme au goulot) ; absent = le bord de la tasse, à l'opposé de l'anse.
+   */
+  lip?: [number, number, number];
+  /** Carafe : on la remplit et on verse avec, on ne boit pas dedans. */
+  jug?: boolean;
+  /**
    * Se mange en `bites` bouchées ; la faim remonte de `hunger` points pour l'objet entier.
    * `color` : la bouchée piquée sur la fourchette quand on le mange dans l'assiette.
    */
   food?: { hunger: number; bites: number; color?: THREE.ColorRepresentation };
   /**
-   * Vaisselle (assiette, couverts, tasse) : se salit quand on s'en sert et se lave à l'évier. Sa
-   * pièce nommée `sale` (taches) n'est montrée que sale.
+   * Vaisselle (assiette, bol, couverts, tasse, verre, carafe) : se salit quand on s'en sert et se
+   * lave à l'évier (elle en ressort mouillée : voir `rack` et `towel`). Sa pièce nommée `sale`
+   * (taches) n'est montrée que sale.
    */
   dish?: boolean;
-  /** Assiette : hauteur (m) où se pose un plat qu'on y sert. */
+  /** Assiette, bol : hauteur (m) où se pose un plat qu'on y sert. */
   plate?: number;
+  /** Creux (le bol) : ne s'empile pas avec les assiettes plates. */
+  deep?: boolean;
   /**
-   * Couvert pour manger dans l'assiette (fourchette) : sa pièce `bouchee` porte la bouchée jusqu'à
-   * la bouche (le point `mouth`).
+   * Couvert pour manger dans l'assiette ou le bol (fourchette, cuillère) : sa pièce `bouchee` porte
+   * la bouchée jusqu'à la bouche (le point `mouth`).
    */
   utensil?: boolean;
   /**
@@ -154,8 +166,15 @@ export interface ItemDef {
    * `pour` (une tasse par fruit) ; la pièce `liquide` du bol se montre tant qu'il en reste.
    */
   blends?: { seconds: number };
-  /** Éponge : essuie la table (le geste va et vient comme un couteau). */
+  /** Éponge, torchon : essuie la table et les flaques (le geste va et vient comme un couteau). */
   wipes?: boolean;
+  /** Torchon : sèche la vaisselle mouillée (lavée à la main) et les mains. */
+  towel?: boolean;
+  /**
+   * Égouttoir : la vaisselle mouillée qu'on y range sèche en `minutes` de jeu (ailleurs, deux fois
+   * plus lentement). Il n'est pas « sa place » quand on range : elle va au placard une fois sèche.
+   */
+  rack?: { minutes: number };
   /** Poubelle : nombre d'objets jetés avant qu'il faille la vider. La pièce `dechets` monte avec. */
   bin?: number;
   /**
@@ -202,8 +221,8 @@ export interface ItemDef {
   shower?: { seconds: number; stand: [number, number]; head: [number, number, number] };
   /** Toilettes : on s'y assoit pour se soulager (besoin « vessie »), puis on tire la chasse. Pièces `couvercle` et `eau`. */
   toilet?: boolean;
-  /** Serviette : sert à se sécher après la douche ; sa pièce `mouillee` se montre ensuite, le temps qu'elle sèche. */
-  towel?: boolean;
+  /** Serviette de bain : sert à se sécher après la douche ; sa pièce `mouillee` se montre ensuite, le temps qu'elle sèche. */
+  bathTowel?: boolean;
   build(): THREE.Object3D;
 }
 
@@ -331,6 +350,20 @@ const CUTLERY_L = 0.19;
 const CUTLERY_T = 0.004;
 /** Taches de repas sur la vaisselle sale. */
 const STAIN = 0x8a5a2b;
+/** Verre : rayon du bord, du pied, hauteur (m). */
+const GLASS_R = 0.036;
+const GLASS_RB = 0.031;
+const GLASS_H = 0.11;
+/** Bol : rayon du bord, du pied, hauteur, fond où l'on sert (m). */
+const BOWL_R = 0.072;
+const BOWL_RB = 0.04;
+const BOWL_H = 0.065;
+const BOWL_IN = 0.01;
+/** Carafe : rayon, haut de la partie droite, rayon du col, hauteur (m). */
+const CARAFE_R = 0.048;
+const CARAFE_BODY = 0.17;
+const CARAFE_NECK = 0.028;
+const CARAFE_H = 0.24;
 /** Chaise en bois : assise (hauteur, largeur, profondeur), haut du dossier, section des pieds (m). */
 const SEAT_H = 0.45;
 const SEAT_W = 0.42;
@@ -545,7 +578,7 @@ export const ITEMS: ItemDef[] = [
     durability: 300,
     // la tasse se pose au fond de la cuve, sous le robinet, l'anse vers l'avant
     // la tasse, la bouteille, ou la casserole pour faire cuire à l'eau
-    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'casserole', "bouteille d'eau"], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
+    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'verre', 'carafe', 'casserole', "bouteille d'eau"], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
     // la vaisselle au fond de la cuve, de part et d'autre du filet d'eau
     wash: { hands: [0, COUNTER_H + 0.08, TAP_Z + 0.05], dishes: [[-0.11, COUNTER_H - BASIN_H, BASIN_Z + 0.02], [0.11, COUNTER_H - BASIN_H, BASIN_Z - 0.04]] },
     build: () => {
@@ -1139,6 +1172,150 @@ export const ITEMS: ItemDef[] = [
         mesh(new THREE.BoxGeometry(T, 0.095, 0.016), 0xc3c8ce, 0, 0.1425, 0.001),
         stain,
       );
+    },
+  },
+  {
+    id: 'verre',
+    name: 'verre',
+    portable: true,
+    // sans anse : tenu par le corps, côté +Z dans le poing ; on boit au bord opposé
+    grip: 'fist',
+    gripPoint: [0, GLASS_H * 0.45, GLASS_R],
+    lip: [0, GLASS_H, -GLASS_R],
+    fill: [0.006, GLASS_H - 0.012],
+    volume: 0.25,
+    dish: true,
+    // verre fin : se brise facilement
+    fragility: 2,
+    durability: 35,
+    build: () => {
+      // verre transparent : on voit l'eau dedans
+      const body = mesh(new THREE.CylinderGeometry(GLASS_R, GLASS_RB, GLASS_H, 20, 1, true), 0xdcecf2, 0, GLASS_H / 2, 0);
+      const bm = body.material as THREE.MeshToonMaterial;
+      bm.transparent = true;
+      bm.opacity = 0.35;
+      bm.depthWrite = false;
+      bm.side = THREE.DoubleSide;
+      const foot = mesh(new THREE.CylinderGeometry(GLASS_RB, GLASS_RB, 0.006, 20), 0xc9e0e8, 0, 0.003, 0);
+      // colonne de liquide (comme la bouteille), étroite pour ne pas sortir du verre évasé
+      const water = mesh(new THREE.CylinderGeometry(GLASS_RB * 0.93, GLASS_RB * 0.93, 1, 20).translate(0, 0.5, 0), 0x9fcde6, 0, 0.006, 0);
+      water.name = 'liquide';
+      water.userData.column = true;
+      water.renderOrder = -1;
+      // garde la boîte de l'objet à sa vraie hauteur (setLevel la règle ensuite)
+      water.scale.y = 0.001;
+      // dépôt au fond et trace sur le bord où l'on a bu
+      const stain = group(
+        mesh(new THREE.RingGeometry(GLASS_RB * 0.4, GLASS_RB * 0.85, 20).rotateX(-Math.PI / 2), 0xb9b2a0, 0, 0.0065, 0),
+        mesh(new THREE.CylinderGeometry(GLASS_R + 0.0006, GLASS_R + 0.0006, 0.012, 12, 1, true, Math.PI - 0.35, 0.7), 0xc98a8a, 0, GLASS_H - 0.008, 0),
+      );
+      stain.name = 'sale';
+      return group(water, foot, body, stain);
+    },
+  },
+  {
+    id: 'bol',
+    name: 'bol',
+    portable: true,
+    // tenu par le bord, comme l'assiette
+    grip: 'fist',
+    gripPoint: [0, BOWL_H - 0.012, BOWL_R - 0.004],
+    dish: true,
+    plate: BOWL_IN,
+    deep: true,
+    fragility: 2,
+    durability: 60,
+    build: () => {
+      const wall = mesh(new THREE.CylinderGeometry(BOWL_R, BOWL_RB, BOWL_H, 28, 1, true), 0xf2efe8, 0, BOWL_H / 2, 0);
+      (wall.material as THREE.Material).side = THREE.DoubleSide;
+      const floor = mesh(new THREE.CylinderGeometry(BOWL_RB, BOWL_RB * 0.92, BOWL_IN, 28), 0xe8e3d8, 0, BOWL_IN / 2, 0);
+      // le même liseré bleu que l'assiette
+      const band = mesh(new THREE.TorusGeometry(BOWL_R - 0.002, 0.0025, 6, 32).rotateX(Math.PI / 2), 0x3e6f9e, 0, BOWL_H - 0.008, 0);
+      const stain = group(
+        mesh(new THREE.CircleGeometry(0.022, 14).rotateX(-Math.PI / 2), STAIN, -0.008, BOWL_IN + 0.0015, 0.006),
+        mesh(new THREE.CircleGeometry(0.01, 10).rotateX(-Math.PI / 2), STAIN, 0.018, BOWL_IN + 0.0015, -0.012),
+      );
+      stain.name = 'sale';
+      return group(wall, floor, band, stain);
+    },
+  },
+  {
+    id: 'cuillere',
+    name: 'cuillère',
+    portable: true,
+    // par le bout du manche, le creux vers le haut ; le cuilleron va aux lèvres
+    grip: 'fist',
+    gripPoint: [0, 0.035, 0],
+    mouth: [0, CUTLERY_L - 0.022, 0],
+    layFlat: true,
+    dish: true,
+    utensil: true,
+    fragility: 10,
+    durability: 200,
+    breakWord: 'tordu',
+    build: () => {
+      const steel = 0xc3c8ce;
+      const T = CUTLERY_T, L = CUTLERY_L;
+      const g = group(
+        // manche et col (dans le plan YZ, comme la fourchette)
+        mesh(new THREE.BoxGeometry(T, 0.12, 0.014), steel, 0, 0.06, 0),
+        mesh(new THREE.BoxGeometry(T, 0.025, 0.007), steel, 0, 0.1325, 0),
+      );
+      // cuilleron : un ovale aplati au bout
+      const bowl = mesh(new THREE.SphereGeometry(0.5, 16, 10).scale(0.008, 0.045, 0.034), steel, 0.001, L - 0.0225, 0);
+      const stain = mesh(new THREE.SphereGeometry(0.5, 12, 8).scale(0.006, 0.03, 0.022), STAIN, -0.002, L - 0.0225, 0);
+      stain.name = 'sale';
+      // la bouchée dans le creux (montrée pendant qu'on mange dans le bol)
+      const morsel = mesh(new THREE.SphereGeometry(0.5, 12, 8).scale(0.008, 0.03, 0.024), 0xe2b871, -0.004, L - 0.0225, 0);
+      morsel.name = 'bouchee';
+      g.add(bowl, stain, morsel);
+      return g;
+    },
+  },
+  {
+    id: 'carafe',
+    name: 'carafe',
+    portable: true,
+    // tenue par l'anse (côté +Z) ; on verse par le bec (côté -Z), on ne boit pas dedans
+    grip: 'fist',
+    gripPoint: [0, CARAFE_H * 0.55, CARAFE_R + 0.03],
+    mouth: [0, CARAFE_H, -CARAFE_NECK - 0.012],
+    jug: true,
+    fill: [0.006, CARAFE_BODY - 0.01],
+    volume: 1,
+    dish: true,
+    fragility: 2,
+    durability: 50,
+    build: () => {
+      const R = CARAFE_R, N = CARAFE_NECK;
+      const clear = (m: THREE.Mesh, opacity: number) => {
+        const mat = m.material as THREE.MeshToonMaterial;
+        mat.transparent = true;
+        mat.opacity = opacity;
+        mat.depthWrite = false;
+        mat.side = THREE.DoubleSide;
+        return m;
+      };
+      // verre transparent : corps droit, épaule qui se resserre, col
+      const body = clear(mesh(new THREE.CylinderGeometry(R, R, CARAFE_BODY, 22, 1, true), 0xdcecf2, 0, CARAFE_BODY / 2, 0), 0.35);
+      const shoulder = clear(mesh(new THREE.CylinderGeometry(N, R, CARAFE_H - CARAFE_BODY - 0.02, 22, 1, true), 0xdcecf2, 0, (CARAFE_BODY + CARAFE_H - 0.02) / 2, 0), 0.4);
+      const neck = clear(mesh(new THREE.CylinderGeometry(N * 1.05, N, 0.02, 22, 1, true), 0xdcecf2, 0, CARAFE_H - 0.01, 0), 0.45);
+      const bottom = mesh(new THREE.CircleGeometry(R, 22).rotateX(-Math.PI / 2), 0xc9e0e8, 0, 0.003, 0);
+      // le bec, à l'avant
+      const spout = clear(mesh(new THREE.BoxGeometry(0.018, 0.006, 0.024), 0xdcecf2, 0, CARAFE_H - 0.002, -N - 0.008), 0.6);
+      // l'anse : un demi-anneau à l'arrière, ses deux bouts sur le corps
+      const handle = mesh(new THREE.TorusGeometry(0.05, 0.007, 8, 16, Math.PI), 0xc9e0e8, 0, CARAFE_H * 0.55, R - 0.004);
+      handle.rotation.set(0, -Math.PI / 2, Math.PI / 2);
+      // colonne d'eau (comme la bouteille) dans la partie droite
+      const water = mesh(new THREE.CylinderGeometry(R * 0.92, R * 0.92, 1, 22).translate(0, 0.5, 0), 0x9fcde6, 0, 0.006, 0);
+      water.name = 'liquide';
+      water.userData.column = true;
+      water.renderOrder = -1;
+      water.scale.y = 0.001;
+      // trace de calcaire au fond
+      const stain = mesh(new THREE.RingGeometry(R * 0.5, R * 0.9, 22).rotateX(-Math.PI / 2), 0xb9b2a0, 0, 0.007, 0);
+      stain.name = 'sale';
+      return group(water, bottom, body, shoulder, neck, spout, handle, stain);
     },
   },
   {
