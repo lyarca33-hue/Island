@@ -1207,8 +1207,10 @@ export class Game {
     else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
     // frigo : on y range ce qu'on tient ; mains vides, on l'ouvre (clic sur le côté : on le pousse)
     else if (door && held.length) return this.storeIn(item, running);
+    // porte ouverte (ou pas encore refermée) : tout clic sur le frigo la ferme, même là où la porte
+    // n'est plus (l'intérieur, le côté) ; sinon ce clic agrippait le frigo pour le pousser
+    else if (door && (door.target === 1 || door.open > 0)) return this.closeDoor(this.ref(item));
     else if (door && !opts.body) {
-      if (door.target === 1) return this.closeDoor(this.ref(item));
       return this.withDoorOpen(item, () => {}, running);
     }
     // mains vides : un gros meuble s'agrippe pour le déplacer

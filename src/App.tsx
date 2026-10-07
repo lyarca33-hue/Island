@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe } from './creator/Creator';
-import type { Recipe } from './creator/recipe';
+import { defaultRecipe, type Recipe } from './creator/recipe';
 import { Game, type HandActions } from './game/Game';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
@@ -8,10 +8,13 @@ import { Menu, MenuSection, SHORTCUTS } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
 
-/** On commence par le créateur de personnage, puis « Jouer » ouvre la map avec ce perso. */
+/**
+ * On entre directement dans le monde avec le dernier perso créé (un perso par défaut sinon) ;
+ * Menu → Personnage ouvre le créateur, et « Jouer » y revient.
+ */
 export function App() {
-  const [mode, setMode] = useState<'creator' | 'game'>('creator');
-  const [recipe, setRecipe] = useState<Recipe | null>(() => loadSavedRecipe());
+  const [mode, setMode] = useState<'creator' | 'game'>('game');
+  const [recipe, setRecipe] = useState<Recipe>(() => loadSavedRecipe() ?? defaultRecipe('f'));
 
   if (mode === 'creator') {
     return <Creator initial={recipe} onDone={(r) => { setRecipe(r); setMode('game'); }} />;
@@ -20,7 +23,7 @@ export function App() {
 }
 
 /** Scène 3D plein écran + interface minimale (menu, rotation de caméra, saisie). */
-function World({ recipe, onEdit }: { recipe: Recipe | null; onEdit: () => void }) {
+function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
   const [ready, setReady] = useState<Game | null>(null);
