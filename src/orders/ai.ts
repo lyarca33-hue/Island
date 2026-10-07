@@ -134,7 +134,12 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "laisser_ouvert", "objet": "<ref>"} : ouvrir un meuble et laisser sa porte ouverte (elle ne se referme plus seule)
 - {"tache": "glacons", "dans": "<ref>"} : mettre des glaçons (bac au congélateur) dans une tasse (« dans » facultatif)
 - La lasagne du congélateur est congelée : il faut la « mettre » au micro-ondes (ou au four) et l'« allumer » avant de la manger
-- {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
+- {"tache": "laver", "visage": true} : se laver à l'évier ou au lavabo (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
+- {"tache": "douche"} : prendre une douche dans la salle de bain (hygiène à fond) ; le perso en sort mouillé
+- {"tache": "secher"} : se sécher avec la serviette (sur le porte-serviettes), puis la remettre à sa place
+- {"tache": "toilettes"} : aller aux toilettes quand la vessie est basse (s'asseoir, se soulager, tirer la chasse)
+- {"tache": "chasse"} : tirer la chasse d'eau
+- {"tache": "miroir"} : se regarder dans le miroir du lavabo
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
 - {"tache": "preparer", "plat": "<id du plat>"} : préparer un plat d'une recette ; le perso coupe et fait cuire ce qu'il faut, réunit les ingrédients sur la planche à découper et les assemble. Plats : "salade-composee" (tomate et concombre coupés, carotte en plus), "tartine-tomate" (pain et tomate coupés), "sandwich-steak" (pain coupé et steak cuit, tomate ou concombre en plus), "steak-pommes-de-terre" (steak et pomme de terre cuits). Le plat se mange comme le sandwich, ou se sert dans l'assiette pour un repas à table
@@ -233,6 +238,11 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'laisser_ouvert': return s('objet') ? { kind: 'laisser_ouvert', ref: s('objet') } : null;
     case 'glacons': return { kind: 'glacons', dans: s('dans') || undefined };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
+    case 'douche': return { kind: 'douche' };
+    case 'secher': return { kind: 'secher' };
+    case 'toilettes': return { kind: 'toilettes' };
+    case 'chasse': return { kind: 'chasse' };
+    case 'miroir': return { kind: 'miroir' };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };
     case 'preparer': return { kind: 'preparer', plat: s('plat') || undefined };

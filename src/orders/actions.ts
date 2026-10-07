@@ -352,6 +352,36 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.wash(),
   },
   {
+    name: 'douche',
+    description: 'Prendre une douche (les mains doivent être libres) : l’hygiène remonte à fond. On en sort mouillé : se sécher ensuite avec la serviette.',
+    params: {},
+    run: (g) => g.takeShower(),
+  },
+  {
+    name: 'secher',
+    description: 'Se sécher avec la serviette (prise sur le porte-serviettes si on ne la tient pas). Mouillé et pas séché, le perso laisse des gouttes par terre.',
+    params: {},
+    run: (g) => g.dryOff(),
+  },
+  {
+    name: 'toilettes',
+    description: 'Aller aux toilettes : le perso s’assoit, la vessie se vide, puis il tire la chasse. Penser à se laver les mains ensuite.',
+    params: {},
+    run: (g) => g.useToilet(),
+  },
+  {
+    name: 'chasse',
+    description: 'Tirer la chasse d’eau des toilettes.',
+    params: {},
+    run: (g) => g.flush(),
+  },
+  {
+    name: 'miroir',
+    description: 'Se regarder dans le miroir du lavabo : le perso dit de quoi il a l’air.',
+    params: {},
+    run: (g) => g.lookInMirror(),
+  },
+  {
     name: 'asseoir',
     description: 'Aller s’asseoir sur un siège (chaise posée debout par terre, rien dessus). Les objets tenus d’une main restent en main. Le perso se lève tout seul pour toute autre action qui le fait bouger.',
     params: { siege: 'ref du siège' },

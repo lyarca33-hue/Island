@@ -1,9 +1,11 @@
 /**
- * La chambre, au nord du salon : on y entre par le passage du mur nord du salon. Parquet clair,
+ * La chambre, au nord du salon : on y entre par le passage du mur nord du salon ; la porte du mur
+ * ouest mène à la salle de bain. Parquet clair,
  * le lit tête contre le mur du fond entre deux tables de nuit (la lampe de chevet sur l'une),
  * l'armoire contre le mur est, un tapis au pied du lit, une suspension au plafond.
  */
 import * as THREE from 'three';
+import { BATHROOM_DOOR } from './salle-de-bain';
 import { box, DARK_WOOD, toon, WALL_T, WIN_HIGH, type Rect, type Room, type RoomSpec } from './room';
 import { SALON } from './salon';
 
@@ -86,7 +88,8 @@ export const CHAMBRE_SPEC: RoomSpec = {
   name: 'chambre',
   rect: CHAMBRE,
   floor: () => parquet(CHAMBRE),
-  doors: [{ wall: 'sud', u0: CHAMBRE_PASS.x0, u1: CHAMBRE_PASS.x1 }],
+  // passage vers le salon (sud) et porte de la salle de bain (ouest : voir salle-de-bain.ts)
+  doors: [{ wall: 'sud', u0: CHAMBRE_PASS.x0, u1: CHAMBRE_PASS.x1 }, { wall: 'ouest', u0: BATHROOM_DOOR.z0, u1: BATHROOM_DOOR.z1 }],
   joined: ['sud'],
   windows: (anchor) => {
     const bx = anchor('lit')?.x ?? 5.5;
