@@ -340,10 +340,14 @@ export class Carry {
    * L'objet tenu disparaît de la main (il s'est brisé) : le bras retombe. Seulement quand il est
    * simplement tenu (pas en plein geste, pas de pile).
    */
+  /** Objet brisé en main (phase `let`) : les mains gardent son écartement en retombant. */
+  private lost: WorldItem | null = null;
+
   lose(): WorldItem | null {
     const item = this.item;
     if (!item || this.phase !== 'hold' || this.stack.length) return null;
     this.throwGrip = item.grip;
+    this.lost = item;
     this.item = null;
     this.start('let');
     return item;
@@ -690,7 +694,7 @@ export class Carry {
       // les mains sur les flancs de l'objet : son axe qui va de gauche à droite une fois en main
       const inHands = gripRotation(spec);
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(inHands.clone().invert());
-      const half = spec.width ? spec.width / 2 : Math.abs(this.item!.size.clone().applyQuaternion(inHands).x) / 2 + 0.015;
+      const half = spec.width ? spec.width / 2 : Math.abs((this.item ?? this.lost)!.size.clone().applyQuaternion(inHands).x) / 2 + 0.015;
       let sideDir = new THREE.Vector3(side === 'left' ? 1 : -1, 0, 0).applyQuaternion(this.chestRot);
       if (r > 0.5) {
         // objet encore posé : ses flancs, s'ils sont à peu près verticaux

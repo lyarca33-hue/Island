@@ -130,6 +130,13 @@ const COUNTER_H = 0.9;
 const CUP_R = 0.042;
 const CUP_H = 0.1;
 
+/** Chaise en bois : assise (hauteur, largeur, profondeur), haut du dossier, section des pieds (m). */
+const SEAT_H = 0.45;
+const SEAT_W = 0.42;
+const SEAT_D = 0.4;
+const CHAIR_H = 0.9;
+const LEG = 0.036;
+
 export const ITEMS: ItemDef[] = [
   {
     id: 'tasse',
@@ -193,6 +200,32 @@ export const ITEMS: ItemDef[] = [
           g.add(p);
         }
       }
+      return g;
+    },
+  },
+  {
+    id: 'chaise',
+    name: 'chaise',
+    portable: true,
+    // à deux mains, par les montants du dossier : la chaise devant soi, l'assise vers l'avant
+    grip: 'twoHands',
+    gripPoint: [0, 0.66, -SEAT_D / 2 + LEG / 2],
+    fragility: 6,
+    durability: 150,
+    build: () => {
+      // l'avant de l'assise vers +Z, le dossier côté -Z
+      const wood = 0x8a5a34, seat = 0xa26e40;
+      const x = SEAT_W / 2 - LEG / 2, z = SEAT_D / 2 - LEG / 2;
+      const g = group(mesh(new THREE.BoxGeometry(SEAT_W, 0.035, SEAT_D), seat, 0, SEAT_H - 0.0175, 0));
+      // pieds avant ; pieds arrière prolongés en montants du dossier
+      for (const sx of [-1, 1]) {
+        g.add(mesh(new THREE.BoxGeometry(LEG, SEAT_H - 0.035, LEG), wood, sx * x, (SEAT_H - 0.035) / 2, z));
+        g.add(mesh(new THREE.BoxGeometry(LEG, CHAIR_H, LEG), wood, sx * x, CHAIR_H / 2, -z));
+      }
+      // traverses sous l'assise, haut du dossier et barreau du milieu
+      g.add(mesh(new THREE.BoxGeometry(SEAT_W - 2 * LEG, 0.05, 0.02), wood, 0, SEAT_H - 0.06, z));
+      g.add(mesh(new THREE.BoxGeometry(SEAT_W - 2 * LEG, 0.1, 0.022), wood, 0, CHAIR_H - 0.07, -z));
+      g.add(mesh(new THREE.BoxGeometry(SEAT_W - 2 * LEG, 0.045, 0.02), wood, 0, SEAT_H + 0.17, -z));
       return g;
     },
   },
