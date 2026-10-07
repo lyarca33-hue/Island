@@ -67,6 +67,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.drink(),
   },
   {
+    name: 'eau',
+    description: 'Remplir d’eau la tasse tenue à l’évier (ce qu’elle contenait est vidé dans l’évier) ; le perso la reprend pleine.',
+    params: {},
+    run: (g) => g.fillWater(),
+  },
+  {
+    name: 'laver_mains',
+    description: 'Se laver les mains à l’évier (les mains doivent être libres).',
+    params: {},
+    run: (g) => g.washHands(),
+  },
+  {
+    name: 'se_laver',
+    description: 'Faire sa toilette à l’évier : de l’eau sur les mains et le visage (les mains doivent être libres).',
+    params: {},
+    run: (g) => g.wash(),
+  },
+  {
     name: 'asseoir',
     description: 'Aller s’asseoir sur un siège (chaise posée debout par terre, rien dessus). Les objets tenus d’une main restent en main. Le perso se lève tout seul pour toute autre action qui le fait bouger.',
     params: { siege: 'ref du siège' },

@@ -28,6 +28,8 @@ const VERBS: Record<string, string[]> = {
   boire: ['bois', 'boit', 'boire'],
   dire: ['dis', 'dit', 'dire', 'crie', 'crier'],
   lire: ['lis', 'lit', 'lire', 'ouvre', 'ouvrir', 'feuillette', 'feuilleter', 'bouquine'],
+  remplir: ['remplis', 'remplir', 'remplit', 'rempli'],
+  laver: ['lave', 'laver', 'lavez', 'rince', 'rincer', 'debarbouille', 'debarbouiller'],
   asseoir: ['assieds', 'assied', 'assois', 'assoit', 'asseoir', 'assoir', 'assoie', 'rassieds', 'rassois'],
   lever: ['leve', 'lever', 'releve', 'relever', 'debout'],
   arreter: ['arrete', 'arreter', 'stop', 'stoppe', 'ferme', 'fermer', 'referme', 'refermer', 'cesse'],
@@ -53,6 +55,7 @@ const ALIASES: Record<string, string[]> = {
   table: ['table'],
   chaise: ['chaise', 'chaises', 'siege'],
   'machine a cafe': ['machine', 'cafetiere'],
+  evier: ['evier', 'lavabo', 'robinet'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -128,6 +131,8 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
   for (const original of parts) {
     let w = stripFillers(normalize(original).split(' '));
     // « va prendre la tasse » : aller + autre verbe → seulement l'autre verbe
+    // « va te laver » : le pronom entre les deux
+    if (VERB_OF.get(w[0]) === 'aller' && ['te', 't'].includes(w[1]) && VERB_OF.has(w[2])) w = [w[0], ...w.slice(2)];
     if (VERB_OF.get(w[0]) === 'aller' && w[1] && VERB_OF.has(w[1]) && VERB_OF.get(w[1]) !== 'aller') w = w.slice(1);
     // « fais-toi un café », « sers-moi » : le pronom suit le verbe
     const verb = VERB_OF.get(w[0]);
@@ -176,9 +181,24 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return target ? [{ kind: 'aller', ref: target.ref }] : null;
     }
     case 'cafe':
+      // « fais ta toilette »
+      if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
     case 'boire':
-      return [{ kind: 'boire' }];
+      // « bois de l'eau », « bois un café » : de quoi remplir la tasse si elle est vide
+      return [{ kind: 'boire', liquide: rest.includes('eau') ? 'eau' : rest.includes('cafe') ? 'café' : undefined }];
+    case 'remplir':
+      // « remplis la tasse (d'eau / de café) » ; d'eau si rien n'est dit
+      if (found.some((o) => o.sorte !== 'récipient' && o.sorte !== 'évier' && o.sorte !== 'machine')) return null;
+      return [rest.includes('cafe') ? { kind: 'cafe' } : { kind: 'eau' }];
+    case 'laver': {
+      // « lave-toi les mains », « lave-toi », « rince-toi le visage » ; « lave la tasse » : pas encore
+      if (found.some((o) => o.sorte !== 'évier')) return null;
+      const self = rest.some((x) => ['toi', 'te', 't', 'mains', 'main', 'visage', 'figure', 'corps'].includes(x)) || !rest.length;
+      if (!self) return null;
+      const handsOnly = rest.some((x) => x === 'mains' || x === 'main') && !rest.some((x) => x === 'visage' || x === 'figure');
+      return [{ kind: 'laver', visage: !handsOnly }];
+    }
     case 'lire': {
       // « lis le livre rouge », « lis un livre », « lis » (celui qu'on tient)
       const books = found.filter((o) => o.nom === 'livre');

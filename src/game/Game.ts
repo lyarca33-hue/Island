@@ -13,7 +13,7 @@ import { applySky, GameClock } from './clock';
 import { createGround, GROUND_HALF } from './ground';
 import { breakChance, Debris } from './items/breakage';
 import { gradeName } from './items/durability';
-import { LAY_FLAT, WorldItem } from './items/carry';
+import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H } from './items/catalog';
 import { createMotes } from './motes';
@@ -38,6 +38,13 @@ const FOCUS_HEIGHT = 0.9;
 const DRINK_THIRST = 35;
 const COFFEE_ENERGY = 12;
 
+/**
+ * Se laver à l'évier : durée (s, mains sous l'eau) et hygiène rendue. Les mains : un petit plus ;
+ * la toilette au lavabo (visage, mains, trois tours) : un vrai regain, sans valoir une douche.
+ */
+const WASH_HANDS = { seconds: 3, hygiene: 12 };
+const WASH_FACE = { seconds: 3 * SPLASH_CYCLE, hygiene: 40 };
+
 /** Objets de test posés autour du point de départ : [id, x, y, z, rotation (rad)]. */
 const START_ITEMS: Array<[string, number, number, number, number]> = [
   // table côté caméra : le perso lui fait face en prenant la tasse ou la lettre
@@ -49,6 +56,8 @@ const START_ITEMS: Array<[string, number, number, number, number]> = [
   ['chaise', -0.71, 0, -1.48, Math.PI / 4],
   ['bibliotheque', -1.7, 0, -1.2, Math.PI / 4],
   ['machine-a-cafe', 2.1, 0, -0.8, -Math.PI / 4],
+  // l'évier à côté de la machine à café, dos alignés : un coin cuisine
+  ['evier', 2.56, 0, -0.24, -Math.PI / 4],
 ];
 
 /** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
@@ -61,6 +70,15 @@ const WEAR_PUSH = 2;
 /** Usure en prenant un objet, et à chaque café (machine, tasse). */
 const WEAR_GRAB = 0.3;
 const WEAR_BREW = { machine: 1.5, cup: 0.5 };
+/** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
+const WEAR_TAP = 0.4;
+
+/** « le café », « l'eau » ; « de café », « d'eau » ; « du café », « de l'eau ». */
+const elides = (w: string) => /^[aeiouyéèêh]/i.test(w);
+const theLiquid = (w: string) => (elides(w) ? `l’${w}` : `le ${w}`);
+const ofLiquid = (w: string) => (elides(w) ? `d’${w}` : `de ${w}`);
+const someLiquid = (w: string) => (elides(w) ? `de l’${w}` : `du ${w}`);
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 /** Usure d'un siège chaque fois qu'on s'y assoit. */
 const WEAR_SIT = 0.5;
 
@@ -83,8 +101,8 @@ export interface WorldObject {
   portable: boolean;
   /** Se porte à deux mains (caisse). */
   deuxMains?: boolean;
-  /** Meuble de rangement, machine (à café), récipient (tasse) ou siège (chaise). */
-  sorte?: 'rangement' | 'machine' | 'récipient' | 'siège';
+  /** Meuble de rangement, machine (à café), évier (eau, se laver), récipient (tasse) ou siège (chaise). */
+  sorte?: 'rangement' | 'machine' | 'évier' | 'récipient' | 'siège';
   ou: string;
   /** Grade d'usure et durabilité restante (« usé (52 %) »). */
   etat: string;
@@ -171,6 +189,8 @@ export class Game {
   private debris: Debris[] = [];
   /** Café en train de couler : la machine, la tasse posée dessous, le temps écoulé (s). */
   private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
+  /** En train de se laver à l'évier : temps écoulé, durée, hygiène rendue en tout. */
+  private washing: { sink: WorldItem; t: number; seconds: number; hygiene: number; face: boolean } | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
   /** Objet sous la souris (nom, grade, durabilité de 0 à 1, position à l'écran), ou null. */
@@ -365,7 +385,7 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    return this.character.idle && !this.brew && !this.flying.length;
+    return this.character.idle && !this.brew && !this.washing && !this.flying.length;
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
@@ -439,7 +459,7 @@ export class Game {
       return false;
     }
     if (this.brew?.machine === item) {
-      this.onNotice?.(`Le ${item.def.pour!.liquid} coule encore.`);
+      this.onNotice?.(`${cap(theLiquid(item.def.pour!.liquid))} coule encore.`);
       return false;
     }
     // le côté du meuble le plus proche du perso (repère du meuble)
@@ -731,9 +751,9 @@ export class Game {
         const under = this.items.find((o) => o !== item && !carried.includes(o) && o.object.position.y < item.object.position.y && this.isAbove(item, o));
         ou = under ? `posé sur ${this.ref(under)}` : 'posé en hauteur';
       }
-      if (item === this.brew?.cup) ou += ' (le café coule dedans)';
-      if (item.contents) ou += `, contient du ${item.contents}`;
-      const sorte: WorldObject['sorte'] = item.def.slots ? 'rangement' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : item.def.seat ? 'siège' : undefined;
+      if (item === this.brew?.cup) ou += ` (${theLiquid(this.brew.machine.def.pour!.liquid)} coule dedans)`;
+      if (item.contents) ou += `, contient ${someLiquid(item.contents)}`;
+      const sorte: WorldObject['sorte'] = item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.fill ? 'récipient' : item.def.seat ? 'siège' : undefined;
       if (item === this.sitting) ou += ', le perso est assis dessus';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
@@ -853,11 +873,94 @@ export class Game {
 
   /** Se fait un café à la machine la plus proche (il faut tenir la tasse). */
   makeCoffee(running = false): boolean {
-    const p = this.character.position;
-    const machine = this.items
-      .filter((i) => i.def.pour)
-      .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    const machine = this.nearest((i) => i.def.pour?.liquid === 'café');
+    if (!machine) this.onNotice?.('Il n’y a pas de machine à café.');
     return machine ? this.pourAt(machine, running) : false;
+  }
+
+  /** Remplit d'eau la tasse tenue à l'évier le plus proche (ce qu'elle contenait est vidé dans l'évier). */
+  fillWater(running = false): boolean {
+    const sink = this.nearest((i) => i.def.pour?.liquid === 'eau');
+    if (!sink) this.onNotice?.('Il n’y a pas d’évier.');
+    return sink ? this.pourAt(sink, running) : false;
+  }
+
+  /** Se lave les mains à l'évier le plus proche (il faut les mains libres). */
+  washHands(running = false): boolean {
+    return this.washAt(this.nearest((i) => !!i.def.wash), false, running);
+  }
+
+  /** Fait sa toilette à l'évier : de l'eau sur les mains et le visage (il faut les mains libres). */
+  wash(running = false): boolean {
+    return this.washAt(this.nearest((i) => !!i.def.wash), true, running);
+  }
+
+  /** L'objet le plus proche du perso qui vérifie `ok`. */
+  private nearest(ok: (i: WorldItem) => boolean): WorldItem | undefined {
+    const p = this.character.position;
+    return this.items.filter(ok).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+  }
+
+  /** Où se tenir devant un meuble (machine, évier) pour s'en servir. */
+  private frontOf(item: WorldItem): THREE.Vector3 {
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
+    // contre l'évier pour atteindre le robinet (le perso se penche un peu)
+    return item.object.position.clone().addScaledVector(fwd, item.box.max.z + (item.def.wash ? 0.22 : 0.26));
+  }
+
+  /**
+   * Va à l'évier et met les mains sous le robinet : l'eau coule, les mains se frottent (et
+   * montent au visage pour la toilette) ; l'hygiène remonte pendant ce temps (tickWash).
+   */
+  private washAt(sink: WorldItem | undefined, face: boolean, running: boolean): boolean {
+    const c = this.character;
+    const held = c.heldItems;
+    if (!sink) this.onNotice?.('Il n’y a pas d’évier.');
+    else if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir te laver.');
+    else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    else if (this.washing) this.onNotice?.('Tu te laves déjà.');
+    else if (this.brew?.machine === sink) this.onNotice?.(`${cap(theLiquid(sink.def.pour!.liquid))} coule déjà.`);
+    else if (held.length) this.onNotice?.(`Pose d’abord ce que tu tiens (${held.map((h) => h.name).join(' et ')}) pour te laver.`);
+    else if (c.busy || c.bracing) return false;
+    else {
+      const o = sink.object;
+      const mid = new THREE.Vector3(...sink.def.wash!.hands);
+      const at = () => {
+        o.updateMatrixWorld(true);
+        // mains de part et d'autre du filet d'eau ; la droite du perso est du côté -X de l'évier
+        return { right: mid.clone().setX(mid.x - 0.05).applyMatrix4(o.matrixWorld), left: mid.clone().setX(mid.x + 0.05).applyMatrix4(o.matrixWorld) };
+      };
+      const how = face ? WASH_FACE : WASH_HANDS;
+      return c.startWash(this.frontOf(sink), o.position, at, face, () => {
+        this.washing = { sink, t: 0, seconds: how.seconds, hygiene: how.hygiene, face };
+      }, running);
+    }
+    return false;
+  }
+
+  /** L'eau coule sur les mains ; l'hygiène remonte peu à peu ; à la fin, le perso se redresse. */
+  private tickWash(dt: number): void {
+    const w = this.washing;
+    if (!w) return;
+    const jet = w.sink.part('jet');
+    const before = Math.min(1, w.t / w.seconds);
+    w.t += dt;
+    const done = Math.min(1, w.t / w.seconds);
+    this.needs.restore('hygiene', (done - before) * w.hygiene);
+    if (jet) {
+      // l'eau tombe du robinet jusqu'aux mains
+      jet.userData.top ??= jet.position.y;
+      const top: number = jet.userData.top;
+      const len = Math.max(0.001, top - w.sink.def.wash!.hands[1] - 0.02);
+      jet.visible = done < 1;
+      jet.scale.y = len;
+      jet.position.y = top - len / 2;
+    }
+    if (done < 1) return;
+    this.washing = null;
+    this.wearItem(w.sink, WEAR_TAP);
+    this.character.stopWash();
+    this.onNotice?.(w.face ? 'Toilette faite : visage et mains propres.' : 'Mains lavées.');
   }
 
   /**
@@ -867,20 +970,28 @@ export class Game {
   private pourAt(machine: WorldItem, running: boolean): boolean {
     const pour = machine.def.pour!;
     const cup = this.character.heldItems.find((i) => i.name === pour.fills);
-    if (this.brew) this.onNotice?.(`Le ${pour.liquid} coule déjà.`);
-    else if (!cup) this.onNotice?.(`Prends la ${pour.fills} pour te faire un ${pour.liquid}.`);
-    else if (cup.level > 0.99) this.onNotice?.(`La ${cup.name} est déjà pleine.`);
+    // autre chose dedans : vidé dans l'évier, sinon il faut d'abord le boire
+    const other = cup?.contents && cup.contents !== pour.liquid ? cup.contents : null;
+    if (this.brew) this.onNotice?.(`${cap(theLiquid(this.brew.machine.def.pour!.liquid))} coule déjà.`);
+    else if (this.washing) this.onNotice?.('Tu te laves.');
+    else if (!cup) this.onNotice?.(`Prends la ${pour.fills} pour la remplir ${ofLiquid(pour.liquid)}.`);
+    else if (other && !pour.drain) this.onNotice?.(`La ${cup.name} contient encore ${someLiquid(other)} : bois-la ou vide-la à l’évier d’abord.`);
+    else if (!other && cup.level > 0.99) this.onNotice?.(`La ${cup.name} est déjà pleine.`);
     else if (this.closeBookThen(() => this.pourAt(machine, running))) return true;
     else {
-      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(machine.object.quaternion);
-      const stand = machine.object.position.clone().addScaledVector(fwd, 0.47);
-      this.character.approachThen(stand, machine.object.position, () => {
+      this.character.approachThen(this.frontOf(machine), machine.object.position, () => {
         machine.object.updateMatrixWorld(true);
         const spot = new THREE.Vector3(...pour.at).applyMatrix4(machine.object.matrixWorld);
         // la tasse sous le bec, l'anse vers le perso
         this.character.drop(spot, machine.object.rotation.y, () => {
+          if (other) {
+            cup.setLevel(0);
+            cup.contents = null;
+            this.onNotice?.(`${cap(theLiquid(other))} est vidé${elides(other) ? 'e' : ''} dans l’${machine.name}.`);
+          }
+          cup.setLiquidColor(pour.color);
           this.brew = { machine, cup, t: 0 };
-          this.wearItem(machine, WEAR_BREW.machine);
+          this.wearItem(machine, machine.def.wash ? WEAR_TAP : WEAR_BREW.machine);
           this.wearItem(cup, WEAR_BREW.cup);
         }, true, cup);
       }, running);
@@ -917,7 +1028,7 @@ export class Game {
     if (jet) jet.visible = false;
     this.brew = null;
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(b.machine.object.quaternion);
-    const stand = b.machine.object.position.clone().addScaledVector(fwd, 0.47);
+    const stand = this.frontOf(b.machine);
     if (this.character.freeHand(b.cup) && this.character.position.distanceTo(stand) < 0.8) this.character.pickUp(b.cup, false, fwd);
   }
 
@@ -930,11 +1041,14 @@ export class Game {
     const from = this.shelfOf(item)?.forward;
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
     // mains vides : un gros meuble s'agrippe pour le déplacer
     else if (item.def.movable && !held.length) return this.grabFurniture(item, running);
+    // évier : la tasse en main se remplit d'eau, sinon on se lave les mains
+    else if (item.def.wash && !held.some((h) => h.name === item.def.pour?.fills)) return this.washAt(item, false, running);
     else if (item.def.pour) return this.pourAt(item, running);
     else if (this.flying.some((f) => f.item === item)) return false;
-    else if (item === this.brew?.cup) this.onNotice?.(`Le ${this.brew.machine.def.pour!.liquid} coule encore.`);
+    else if (item === this.brew?.cup) this.onNotice?.(`${cap(theLiquid(this.brew.machine.def.pour!.liquid))} coule encore.`);
     else if (item.def.slots && held.length) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
     else if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
@@ -1132,6 +1246,7 @@ export class Game {
       this.release();
       return;
     }
+    if (this.washing || this.character.washing) return;
     if (this.character.held) {
       this.drop();
       return;
@@ -1206,6 +1321,7 @@ export class Game {
     this.prevHeld = held;
     this.updateNav();
     this.tickBrew(dt);
+    this.tickWash(dt);
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));
     this.tickNeeds(dt);
@@ -1215,11 +1331,11 @@ export class Game {
     // avec le grade d'usure de chacun (« tasse de café, usée »)
     const grade = (i: WorldItem) => gradeName(i.condition, FEMININE.has(i.name));
     const names = held.map((h) => {
-      const n = h.contents ? `${h.name} de ${h.contents}` : h.name;
+      const n = h.contents ? `${h.name} ${ofLiquid(h.contents)}` : h.name;
       const count = c.handOf(h)?.carried.length ?? 1;
       return count > 1 ? `${n} ×${count}` : `${n}, ${grade(h)}`;
     });
-    if (this.sitting && !c.seated && c.idle) this.sitting = null;
+    if (this.sitting && !c.seated && (c.idle || c.washing)) this.sitting = null;
     const label = this.moving ? `${this.moving.item.name}, ${grade(this.moving.item)}` : names.length ? names.join(' et ') : null;
     const bookHand = book ? c.handOf(book) : null;
     const last = c.held;
