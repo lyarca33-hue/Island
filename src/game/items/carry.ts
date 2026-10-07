@@ -35,6 +35,10 @@ export class WorldItem {
   durability: number;
   /** Part qui reste d'un aliment (1 entier, 0 mangé ; voir ItemDef.food). */
   portion = 1;
+  /** Cuisson d'un aliment : 0 cru, 1 cuit, 2 brûlé (entre les deux : en train de cuire). */
+  cooked = 0;
+  /** Vaisselle sale (une tasse bue jusqu'au bout) : à rincer à l'évier ou au lave-vaisselle. */
+  dirty = false;
 
   private closed: THREE.Object3D;
   private opened: THREE.Object3D | null = null;
@@ -116,6 +120,23 @@ export class WorldItem {
     liquid.position.y = THREE.MathUtils.lerp(this.def.fill[0], this.def.fill[1], this.level);
     const r = THREE.MathUtils.lerp(0.87, 1, this.level);
     liquid.scale.set(r, 1, r);
+  }
+
+  /** Cuit l'aliment (0 cru, 1 cuit, 2 brûlé) : ses couleurs dorent puis noircissent. */
+  setCooked(level: number): void {
+    this.cooked = THREE.MathUtils.clamp(level, 0, 2);
+    const k = this.cooked;
+    // doré (un peu plus sombre et plus chaud) jusqu'à cuit, puis presque noir
+    const light = k <= 1 ? 1 - 0.2 * k : 0.8 - 0.55 * (k - 1);
+    this.closed.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.MeshToonMaterial | undefined;
+      if (!(o as THREE.Mesh).isMesh || !mat?.color) return;
+      const raw: THREE.Color = (mat.userData.rawColor ??= (mat.userData.baseColor ?? mat.color).clone());
+      const c = raw.clone().multiplyScalar(light);
+      if (k > 0) c.lerp(new THREE.Color(0x8a4a1c), Math.min(k, 1) * 0.15);
+      mat.userData.baseColor = c;
+    });
+    showWear(this.object, this.condition);
   }
 
   /** Une bouchée : l'aliment rétrécit (autour du point tenu, il reste dans la main). */

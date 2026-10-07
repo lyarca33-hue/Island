@@ -22,7 +22,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ranger',
-    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, pomme, sandwich dans le frigo (le perso ouvre la porte).',
+    description: 'Aller ranger dans un meuble de rangement ce qu’on tient, un par un : les livres dans la bibliothèque ; bouteille, pomme, sandwich dans le frigo ; la tasse au placard ou au lave-vaisselle ; la lettre dans le tiroir ; pomme, sandwich au four ou au micro-ondes (le perso ouvre la porte ou le tiroir).',
     params: { meuble: 'ref du meuble' },
     // `objet` (facultatif) : ne ranger que lui
     run: (g, a) => g.store(a.meuble, a.objet),
@@ -75,19 +75,47 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ouvrir',
-    description: 'Aller ouvrir la porte d’un meuble (frigo).',
+    description: 'Aller ouvrir la porte d’un meuble (frigo, placard, four, micro-ondes, lave-vaisselle), un tiroir, ou le couvercle de la poubelle.',
     params: { objet: 'ref du meuble' },
     run: (g, a) => g.openDoor(a.objet),
   },
   {
     name: 'fermer',
-    description: 'Fermer la porte d’un meuble (frigo).',
+    description: 'Fermer la porte d’un meuble, un tiroir ou le couvercle de la poubelle.',
     params: { objet: 'ref du meuble' },
     run: (g, a) => g.closeDoor(a.objet),
   },
   {
+    name: 'allumer',
+    description: 'Mettre en marche un appareil : le four cuit ce qu’il contient (deux fois de suite : brûlé), le micro-ondes le réchauffe, le lave-vaisselle lave la vaisselle. Le perso ferme la porte ; l’action finit quand l’appareil sonne.',
+    params: { objet: 'ref de l’appareil' },
+    run: (g, a) => g.startAppliance(a.objet),
+  },
+  {
+    name: 'eteindre',
+    description: 'Arrêter un appareil en marche.',
+    params: { objet: 'ref de l’appareil' },
+    run: (g, a) => g.stopAppliance(a.objet),
+  },
+  {
+    name: 'jeter',
+    description: 'Jeter à la poubelle l’objet tenu `objet` (ou le dernier pris) : il disparaît.',
+    params: {},
+    run: (g, a) => {
+      if (!a.objet) return g.throwAway();
+      const nom = g.describe().objets.find((o) => o.ref === a.objet)?.nom;
+      return nom ? g.throwAway(nom) : false;
+    },
+  },
+  {
+    name: 'vider_poubelle',
+    description: 'Vider la poubelle (sortir le sac).',
+    params: { objet: 'ref de la poubelle' },
+    run: (g, a) => g.emptyBin(a.objet),
+  },
+  {
     name: 'eau',
-    description: 'Remplir d’eau la tasse tenue à l’évier (ce qu’elle contenait est vidé dans l’évier) ; le perso la reprend pleine.',
+    description: 'Remplir d’eau la tasse tenue à l’évier (ce qu’elle contenait est vidé dans l’évier) ; le perso la reprend pleine. Une tasse sale est seulement rincée.',
     params: {},
     run: (g) => g.fillWater(),
   },
