@@ -131,6 +131,30 @@ function isInside(o: THREE.Object3D, roots: Set<THREE.Object3D>): boolean {
   return false;
 }
 
+/**
+ * Morceau du corps posé sur le crâne (certains modèles VRoid ont un « cuir chevelu » couleur
+ * peau sous leurs cheveux) : presque tous ses sommets suivent la tête.
+ */
+function onHead(mesh: THREE.SkinnedMesh, head: THREE.Object3D): boolean {
+  const g = mesh.geometry;
+  const si = g.getAttribute('skinIndex');
+  const sw = g.getAttribute('skinWeight');
+  if (!si || !sw) return false;
+  const used = g.index ? new Set(Array.from(g.index.array)) : null;
+  const roots = new Set([head]);
+  let n = 0;
+  let inside = 0;
+  for (let v = 0; v < si.count; v++) {
+    if (used && !used.has(v)) continue;
+    let best = 0;
+    for (let k = 1; k < 4; k++) if (sw.getComponent(v, k) > sw.getComponent(v, best)) best = k;
+    const bone = mesh.skeleton.bones[si.getComponent(v, best)];
+    n++;
+    if (bone && isInside(bone, roots)) inside++;
+  }
+  return n > 0 && inside / n > 0.9;
+}
+
 /** Couleur d'origine d'un matériau MToon (multipliée par les teintes). */
 interface Tintable extends THREE.Material {
   color: THREE.Color;
@@ -233,6 +257,9 @@ export class Avatar {
     if (r.hair !== r.outfit) {
       const hairVrm = vrms.get(r.hair)!;
       for (const m of meshes(base, 'hair')) m.removeFromParent();
+      // cuir chevelu du modèle de la tenue : fait pour sa propre coiffure, il dépasserait de l'autre
+      const head = base.humanoid.getRawBoneNode('head');
+      if (head) for (const m of meshes(base, 'body')) if (onHead(m, head)) m.removeFromParent();
       const springs = base.springBoneManager;
       if (springs) for (const j of [...springs.joints]) if (j.bone.name.startsWith('HairJoint')) springs.deleteJoint(j);
       const roots = graft(meshes(hairVrm, 'hair'), hairVrm, base, (n) => n.startsWith('HairJoint'));
