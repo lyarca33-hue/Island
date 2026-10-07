@@ -5,7 +5,7 @@
 }
 .hud-clock { font-size: 13px; margin-bottom: 2px; white-space: nowrap; }
 .hud-clock b { font-variant-numeric: tabular-nums; }
-.hud-date { font-size: 11px; opacity: 0.85; margin: -3px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-date { display: block; font-size: 11px; opacity: 0.85; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .need { display: flex; flex-direction: column; gap: 2px; }
 .need-label { opacity: 0.9; }
 .need-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }

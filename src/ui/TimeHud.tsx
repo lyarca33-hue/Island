@@ -26,9 +26,9 @@ export function NeedsHud({ game }: { game: Game | null }) {
       <div className="hud-clock">
         <span aria-hidden>{clock.isNight ? '🌙' : '☀️'}</span> <b>{clock.label}</b>
         {clock.speed === 0 && <span className="hud-paused"> ⏸</span>}
-      </div>
-      <div className="hud-date" title={`Jour ${clock.day} · lever ${hhmm(sun.rise)}, coucher ${hhmm(sun.set)}`}>
-        <span aria-hidden>{season.icon}</span> {clock.dateLabel}
+        <span className="hud-date" title={`Jour ${clock.day} · lever ${hhmm(sun.rise)}, coucher ${hhmm(sun.set)}`}>
+          <span aria-hidden>{season.icon}</span> {clock.dateLabel}
+        </span>
       </div>
       <div className="need need-health" title={`Santé : ${Math.round(needs.health)} / 100`}>
         <span className="need-label"><span aria-hidden>❤️</span> Santé</span>
