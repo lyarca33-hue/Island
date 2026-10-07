@@ -22,6 +22,7 @@ import { Needs } from './needs';
 import { lightAllPasses, PostFx } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
+const UP = new THREE.Vector3(0, 1, 0);
 const ISO_ELEVATION = Math.PI / 6;
 /** Lacet de départ (45°), comme Arena Tactic. */
 const BASE_YAW = Math.PI / 4;
@@ -473,6 +474,18 @@ export class Game {
     return this.character.stopPush();
   }
 
+  /**
+   * Fait pivoter le meuble qu'on déplace de `degrees` (positif : vers la droite, sens des
+   * aiguilles d'une montre vu du dessus). Au clavier : R et F.
+   */
+  turnMoving(degrees = 90): boolean {
+    if (!this.moving) {
+      this.onNotice?.('Aucun meuble agrippé à faire pivoter.');
+      return false;
+    }
+    return this.character.turnPushed(-THREE.MathUtils.degToRad(degrees));
+  }
+
   /** Nom du meuble qu'on déplace (ou null). */
   get movingName(): string | null {
     return this.moving?.item.name ?? null;
@@ -554,7 +567,29 @@ export class Game {
       }
       return true;
     };
-    const ok = c.startPush(stand, faceAt, at, move, running);
+    // pivoter de `angle` autour du centre du meuble ; le perso tourne autour avec lui
+    const turn = (angle: number): THREE.Vector3 | null => {
+      const pivot = o.localToWorld(ctr.clone()).setY(0);
+      const yaw = o.rotation.y + angle;
+      const next = o.position.clone().sub(pivot).applyAxisAngle(UP, angle).add(pivot);
+      const rect = footprint(b, next, yaw);
+      const blocked = this.items.some((it) => it !== item && (!it.def.portable || isTwoHanded(it.grip)) && !riders.some((r) => r.item === it)
+        && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)));
+      const stand = c.position.clone().sub(pivot).applyAxisAngle(UP, angle).add(pivot);
+      const bound = GROUND_HALF - 14;
+      if (blocked || others.blocked(stand) || Math.abs(stand.x) >= bound || Math.abs(stand.z) >= bound) return null;
+      o.position.copy(next);
+      o.rotation.y = yaw;
+      this.wearItem(item, Math.abs(angle) * half.length() * WEAR_PUSH);
+      o.updateMatrixWorld(true);
+      for (const r of riders) {
+        const ro = r.item.object;
+        ro.matrix.multiplyMatrices(o.matrixWorld, r.rel);
+        ro.matrix.decompose(ro.position, ro.quaternion, ro.scale);
+      }
+      return pivot;
+    };
+    const ok = c.startPush(stand, faceAt, at, move, turn, running);
     if (ok) this.moving = { item, riders };
     return ok;
   }
@@ -1387,7 +1422,7 @@ export class Game {
       const p = this.groundPoint(e.clientX, e.clientY);
       if (!p) return;
       if (this.moving) {
-        this.onNotice?.('Z Q S D pour déplacer le meuble, E pour le lâcher.');
+        this.onNotice?.('Z Q S D pour déplacer le meuble, R / F pour le pivoter, E pour le lâcher.');
         return;
       }
       this.character.goTo(p, e.shiftKey);
@@ -1503,6 +1538,8 @@ export class Game {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.character.setMoveInput(this.keyboardDir(), this.shift);
+    // R : pivoter le meuble vers la droite, F : vers la gauche
+    this.character.setTurnInput((this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
     this.character.update(dt, GROUND_HALF - 14);
     const c = this.character;
     const held = c.heldItems;

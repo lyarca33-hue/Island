@@ -44,7 +44,10 @@ const SIT_ROOM = 0.27;
 
 const SIDES_: Side[] = ['right', 'left'];
 /** Vitesse en poussant un gros meuble (m/s). */
+const UP = new THREE.Vector3(0, 1, 0);
 const PUSH_SPEED = 0.9;
+/** Vitesse à laquelle on fait pivoter un meuble (radians par seconde). */
+const PUSH_TURN_SPEED = 1.2;
 
 export class Character {
   readonly root = new THREE.Group();
@@ -73,7 +76,11 @@ export class Character {
    * Gros meuble agrippé : les touches le déplacent avec le perso ; `move` dit si le pas est
    * possible (et déplace le meuble).
    */
-  private pushing: { move(step: THREE.Vector3): boolean } | null = null;
+  private pushing: { move(step: THREE.Vector3): boolean; turn(angle: number): THREE.Vector3 | null } | null = null;
+  /** Sens dans lequel on fait pivoter le meuble au clavier (-1 horaire, 1 antihoraire, 0 rien). */
+  private turnInput = 0;
+  /** Angle qu'il reste à faire pivoter au meuble (demande par le jeu ou l'IA), en radians. */
+  private turnLeft = 0;
   /** Agripper toujours voulu (faux si lâché avant d'avoir posé les mains). */
   private pushWanted = false;
   /** Mains sous le robinet (en train de se laver) : le perso reste sur place. */
@@ -138,6 +145,24 @@ export class Character {
   }
 
   /** Direction voulue au clavier (repère monde, plan XZ) ; annule la destination de clic. */
+  /** Pivoter le meuble qu'on déplace au clavier : -1 sens horaire, 1 sens inverse, 0 rien. */
+  setTurnInput(dir: number): void {
+    this.turnInput = dir;
+    if (dir) this.turnLeft = 0;
+  }
+
+  /** Fait pivoter le meuble qu'on déplace de `angle` radians (positif : sens inverse des aiguilles). */
+  turnPushed(angle: number): boolean {
+    if (!this.pushing) return false;
+    this.turnLeft = angle;
+    return true;
+  }
+
+  /** Le meuble est en train de pivoter (au clavier ou sur demande). */
+  get turningPushed(): boolean {
+    return !!this.pushing && (this.turnInput !== 0 || this.turnLeft !== 0);
+  }
+
   setMoveInput(dir: THREE.Vector3, running: boolean): void {
     this.move.copy(dir);
     if (dir.lengthSq() > 0) {
@@ -317,7 +342,14 @@ export class Character {
    * Va se placer en `stand`, face à `face`, pose les mains sur le meuble aux points `at()`, puis
    * les touches le déplacent (`move`). Les mains doivent être vides.
    */
-  startPush(stand: THREE.Vector3, face: THREE.Vector3, at: () => Record<Side, THREE.Vector3>, move: (step: THREE.Vector3) => boolean, running = false): boolean {
+  startPush(
+    stand: THREE.Vector3,
+    face: THREE.Vector3,
+    at: () => Record<Side, THREE.Vector3>,
+    move: (step: THREE.Vector3) => boolean,
+    turn: (angle: number) => THREE.Vector3 | null,
+    running = false,
+  ): boolean {
     const c = this.carries;
     if (!c || c.right.held || c.left.held || this.busy || this.bracing) return false;
     this.pushWanted = true;
@@ -325,7 +357,7 @@ export class Character {
       if (!this.pushWanted) return;
       c.right.brace(at, () => {
         // lâché pendant que les mains se posaient : on relâche tout de suite
-        if (this.pushWanted) this.pushing = { move };
+        if (this.pushWanted) this.pushing = { move, turn };
         else c.right.unbrace();
       });
     }, running);
@@ -367,6 +399,7 @@ export class Character {
       return true;
     }
     this.pushing = null;
+    this.turnLeft = 0;
     return this.carries.right.unbrace(onDone);
   }
 
@@ -414,6 +447,20 @@ export class Character {
           this.root.position.copy(next);
           moved = true;
         }
+      }
+      // pivoter : le meuble tourne sur lui-même et le perso tourne autour, les mains toujours dessus
+      const want = this.turnInput || Math.sign(this.turnLeft);
+      if (want && !this.busy) {
+        let angle = want * PUSH_TURN_SPEED * dt;
+        if (!this.turnInput && Math.abs(angle) > Math.abs(this.turnLeft)) angle = this.turnLeft;
+        const pivot = this.pushing.turn(angle);
+        if (pivot) {
+          this.root.position.sub(pivot).applyAxisAngle(UP, angle).add(pivot);
+          this.heading += angle;
+          this.root.rotation.y = this.heading;
+          if (!this.turnInput) this.turnLeft -= angle;
+          moved = true;
+        } else this.turnLeft = 0;
       }
       this.setGait(moved ? 'walk' : 'idle');
       this.mixer?.update(dt);
