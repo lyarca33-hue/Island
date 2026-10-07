@@ -6,9 +6,9 @@ import * as THREE from 'three';
 import { Avatar } from './avatar';
 import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
-import { retargetClips } from './retarget';
+import { retargetClips, UAL_TO_VRM, type AnimationSource } from './retarget';
 import { PoseLayer } from './pose';
-import { loadAnimationSource } from './source';
+import { loadAnimationSource, loadSitAnimations } from './source';
 
 /** Retouche de pose par-dessus les clips (ex. porter un objet, voir game/items/carry.ts). */
 export interface PoseHook {
@@ -49,8 +49,9 @@ export class Puppet {
   }
 
   static async create(recipe: Recipe): Promise<Puppet> {
-    const [avatar, source] = await Promise.all([Avatar.build(recipe), loadAnimationSource()]);
+    const [avatar, source, sit] = await Promise.all([Avatar.build(recipe), loadAnimationSource(), loadSitAnimations()]);
     const p = new Puppet(avatar, recipe);
+    p.sit = sit && { ...sit, bones: UAL_TO_VRM };
     p.loadClips(source);
     p.play('idle', 0);
     return p;
@@ -106,19 +107,47 @@ export class Puppet {
     this.avatar.applyLook(this.wanted);
   }
 
-  private loadClips(source: Parameters<typeof retargetClips>[0]): void {
+  private loadClips(source: AnimationSource): void {
     this.actions.clear();
     for (const clip of retargetClips(source, this.avatar.base)) this.actions.set(clip.name, this.mixer.clipAction(clip));
+    if (this.sit) for (const clip of retargetClips(this.sit, this.avatar.base)) this.actions.set(clip.name, this.mixer.clipAction(clip));
+  }
+
+  /** Clips pour s'asseoir (Quaternius), s'ils ont pu être chargés. */
+  private sit: AnimationSource | null = null;
+
+  /**
+   * Déplacement du bassin entre le début et la fin d'un clip (repère du perso, m) et hauteur du
+   * bassin à la fin (au-dessus des pieds) : où le perso finit assis par rapport à où il était.
+   */
+  hipsMotion(name: string): { shift: THREE.Vector3; endY: number } | null {
+    const hips = this.avatar.base.humanoid.getNormalizedBoneNode('hips');
+    const track = hips && this.actions.get(name)?.getClip().tracks.find((t) => t.name === `${hips.name}.position`);
+    if (!hips?.parent || !track) return null;
+    const v = track.values;
+    const first = new THREE.Vector3().fromArray(v, 0), last = new THREE.Vector3().fromArray(v, v.length - 3);
+    // repère du parent du bassin → repère du perso (rotation et échelle)
+    this.root.updateMatrixWorld(true);
+    const toRoot = this.root.matrixWorld.clone().invert().multiply(hips.parent.matrixWorld);
+    const a = first.applyMatrix4(toRoot), b = last.applyMatrix4(toRoot);
+    return { shift: b.clone().sub(a), endY: b.y };
+  }
+
+  /** Durée d'un clip (s), 0 s'il manque. */
+  clipDuration(name: string): number {
+    return this.actions.get(name)?.getClip().duration ?? 0;
   }
 
   get clips(): string[] {
     return [...this.actions.keys()];
   }
 
-  /** Joue un clip en fondu enchaîné depuis le clip courant. */
-  play(name: string, fade: number): void {
+  /** Joue un clip en fondu enchaîné depuis le clip courant (`once` : une fois, arrêté sur la fin). */
+  play(name: string, fade: number, once = false): void {
     const next = this.actions.get(name);
     if (!next || next === this.current) return;
+    next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
+    next.clampWhenFinished = once;
     next.reset().setEffectiveWeight(1).play();
     if (this.current) this.current.crossFadeTo(next, fade, false);
     this.current = next;

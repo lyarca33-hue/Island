@@ -67,6 +67,18 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.drink(),
   },
   {
+    name: 'asseoir',
+    description: 'Aller s’asseoir sur un siège (chaise posée debout par terre, rien dessus). Les objets tenus d’une main restent en main. Le perso se lève tout seul pour toute autre action qui le fait bouger.',
+    params: { siege: 'ref du siège' },
+    run: (g, a) => g.sit(a.siege),
+  },
+  {
+    name: 'lever',
+    description: 'Se lever quand on est assis.',
+    params: {},
+    run: (g) => g.standUp(),
+  },
+  {
     name: 'dire',
     description: 'Le perso dit une phrase (bulle au-dessus de sa tête).',
     params: { texte: 'la phrase' },

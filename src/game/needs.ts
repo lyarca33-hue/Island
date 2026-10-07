@@ -27,6 +27,9 @@ export const NEEDS: NeedDef[] = [
   { key: 'hygiene', label: 'Hygiène', icon: '🧼', perHour: 100 / 24, walk: 1.1, run: 1.6 },
 ];
 
+/** Assis, on se fatigue deux fois moins vite. */
+const SIT_FATIGUE = 0.5;
+
 /** La nuit (heure du coucher passée), la fatigue se fait sentir plus vite. */
 const NIGHT_FATIGUE = 1.4;
 
@@ -48,11 +51,12 @@ export class Needs {
   health = 100;
 
   /** Fait passer `hours` heures de jeu ; `gait` : ce que fait le perso pendant ce temps. */
-  tick(hours: number, gait: 'idle' | 'walk' | 'run', night: boolean): void {
+  tick(hours: number, gait: 'idle' | 'walk' | 'run' | 'sit', night: boolean): void {
     if (hours <= 0) return;
     for (const n of NEEDS) {
       let rate = n.perHour * (gait === 'run' ? n.run : gait === 'walk' ? n.walk : 1);
       if (n.key === 'fatigue' && night) rate *= NIGHT_FATIGUE;
+      if (n.key === 'fatigue' && gait === 'sit') rate *= SIT_FATIGUE;
       this.values[n.key] = Math.max(0, this.values[n.key] - rate * hours);
     }
     let harm = 0;

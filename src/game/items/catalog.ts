@@ -31,6 +31,8 @@ export interface ItemDef {
    * Défaut : 100.
    */
   durability?: number;
+  /** Siège : hauteur de l'assise (m). Le perso peut s'y asseoir, dos au dossier (-Z), face à +Z. */
+  seat?: number;
   /** Gros meuble qu'on peut déplacer : le perso l'agrippe et le pousse au clavier. */
   movable?: boolean;
   /** Objets d'une même sorte qui s'empilent (les livres) : on peut en porter plusieurs. */
@@ -212,6 +214,7 @@ export const ITEMS: ItemDef[] = [
     gripPoint: [0, 0.66, -SEAT_D / 2 + LEG / 2],
     fragility: 6,
     durability: 150,
+    seat: SEAT_H,
     build: () => {
       // l'avant de l'assise vers +Z, le dossier côté -Z
       const wood = 0x8a5a34, seat = 0xa26e40;
