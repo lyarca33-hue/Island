@@ -120,6 +120,10 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "essuyer_sol"} : essuyer les flaques d'eau par terre avec l'éponge
 - {"tache": "essuyer_vaisselle", "objets": ["<ref>", ...]} : essuyer au torchon la vaisselle mouillée (sortie de l'évier ; liste vide = toute). Sinon « mettre » la vaisselle mouillée dans l'égouttoir, où elle sèche seule
 - {"tache": "essuyer_mains"} : s'essuyer les mains au torchon après les avoir lavées
+- {"tache": "liste_courses"} : lire la liste de courses (ce qui manque à la maison)
+- {"tache": "courses"} : commander ce qui manque ; le sac de courses arrive devant la porte une demi-heure plus tard
+- {"tache": "ranger_courses"} : ranger le sac de courses (frigo, congélateur, garde-manger)
+- Provisions : épicerie au garde-manger (farine, sucre, chocolat, confiture, miel, pâte à tartiner, sauce tomate, vinaigre, levure, biscuits, chips, oignon, ail, banane, pommes de terre), frais et boissons au frigo (jambon, saucisses, poulet, poisson, yaourt, crème, salade, orange, fraises, citron, champignons, poivron, courgette, sauces, jus d'orange, soda, eau gazeuse, vin), surgelés au congélateur (frites, pizza, légumes surgelés : à passer au four). Poulet, poisson, saucisses et légumes se cuisent à la poêle
 - La carafe (sur la table) est pleine d'eau : on ne boit pas à la carafe, on la « verse » dans un verre (« objet » : la carafe, « dans » : le verre)
 - Le plateau : « poser » un objet avec « sur »: le plateau, puis prendre le plateau emporte tout ce qui est dessus
 - {"tache": "mettre_table"} : mettre le couvert devant la chaise (assiette, fourchette, couteau de table pris au placard et au tiroir)
@@ -218,6 +222,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'essuyer_sol': return { kind: 'essuyer_sol' };
     case 'essuyer_vaisselle': return { kind: 'essuyer_vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'essuyer_mains': return { kind: 'essuyer_mains' };
+    case 'liste_courses': return { kind: 'liste_courses' };
+    case 'courses': return { kind: 'courses' };
+    case 'ranger_courses': return { kind: 'ranger_courses' };
     case 'mettre_table': return { kind: 'mettre_table' };
     case 'debarrasser': return { kind: 'debarrasser' };
     case 'couper_assiette': return { kind: 'couper_assiette' };

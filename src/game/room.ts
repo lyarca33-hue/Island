@@ -945,7 +945,7 @@ function kitchenDecor(room: Room, anchor: Anchors): void {
  * l'évier et à côté de la table, suspension au-dessus de la table, interrupteur à côté de la porte.
  *
  * Le long du fond : lave-vaisselle à côté de l'évier (sous la fenêtre), plan de travail pour
- * couper entre l'évier et la gazinière, tiroir à couverts, puis le frigo au bout. Le long du mur
+ * couper entre l'évier et la gazinière, tiroir à couverts, le frigo, puis le garde-manger au bout. Le long du mur
  * ouest : le coin café, le placard à vaisselle (micro-ondes dessus), le four, la poubelle. Les deux
  * rangées partent du meuble d'angle.
  */
@@ -972,7 +972,7 @@ export const KITCHEN: RoomSpec = {
   },
   lightSwitch: { wall: 'ouest', u: DOOR.z1 + 0.2 },
   runs: [
-    { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur'] },
+    { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur', 0.04, 'garde-manger'] },
     { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
   ],
   onTop: [
