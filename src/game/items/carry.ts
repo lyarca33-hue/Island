@@ -35,6 +35,8 @@ export class WorldItem {
   durability: number;
   /** Part qui reste d'un aliment (1 entier, 0 mangé ; voir ItemDef.food). */
   portion = 1;
+  /** Vaisselle sale (voir ItemDef.dish) : sa pièce `sale` est montrée. */
+  dirty = false;
 
   private closed: THREE.Object3D;
   private opened: THREE.Object3D | null = null;
@@ -58,6 +60,9 @@ export class WorldItem {
     if (def.fill) this.setLevel(def.startFull ? 1 : 0);
     this.contents = def.startFull ?? null;
     this.durability = this.maxDurability;
+    if (def.dish) this.setDirty(false);
+    const morsel = this.part('bouchee');
+    if (morsel) morsel.visible = false;
   }
 
   get maxDurability(): number {
@@ -116,6 +121,13 @@ export class WorldItem {
     liquid.position.y = THREE.MathUtils.lerp(this.def.fill[0], this.def.fill[1], this.level);
     const r = THREE.MathUtils.lerp(0.87, 1, this.level);
     liquid.scale.set(r, 1, r);
+  }
+
+  /** Salit ou lave la vaisselle (assiette, couverts, tasse). */
+  setDirty(dirty: boolean): void {
+    this.dirty = dirty;
+    const stain = this.part('sale');
+    if (stain) stain.visible = dirty;
   }
 
   /** Une bouchée : l'aliment rétrécit (autour du point tenu, il reste dans la main). */
@@ -282,6 +294,8 @@ export class Carry {
   private sip = 0;
   /** La bouchée de ce geste « manger » est prise. */
   private bitten = false;
+  /** Bouchée prise avec un couvert (manger dans l'assiette) : appelée à la place de bite(). */
+  private onBite: (() => void) | null = null;
   /** Orientation de chaque main calculée à cette image. */
   private handRots: Partial<Record<Side, THREE.Quaternion>> = {};
   /** Pose de l'objet pendant l'ouverture / la fermeture du livre (fondu entre les deux prises). */
@@ -473,10 +487,15 @@ export class Carry {
     return true;
   }
 
-  /** Prend une bouchée de l'aliment tenu (pomme, sandwich). */
-  eat(onDone?: () => void): boolean {
-    if (!this.item?.def.food || this.phase !== 'hold' || this.stack.length || this.item.portion <= 0) return false;
+  /**
+   * Prend une bouchée de l'aliment tenu (pomme, sandwich) ; avec un couvert (fourchette),
+   * `onBite` est appelé quand il arrive à la bouche (la bouchée vient de l'assiette).
+   */
+  eat(onDone?: () => void, onBite?: () => void): boolean {
+    if (!this.item || this.phase !== 'hold' || this.stack.length) return false;
+    if (!onBite && (!this.item.def.food || this.item.portion <= 0)) return false;
     this.bitten = false;
+    this.onBite = onBite ?? null;
     this.start('eat', onDone);
     return true;
   }
@@ -594,7 +613,9 @@ export class Carry {
     // bouchée : une fois l'aliment à la bouche
     if (this.phase === 'eat' && this.sip > 0.95 && !this.bitten && this.item) {
       this.bitten = true;
-      this.item.bite();
+      if (this.onBite) this.onBite();
+      else this.item.bite();
+      this.onBite = null;
     }
     this.saved = this.touched.map((node) => ({ node, q: node.quaternion.clone(), p: node.position.clone() }));
     const root = this.rig.vrm.scene;

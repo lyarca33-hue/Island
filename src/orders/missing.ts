@@ -79,9 +79,12 @@ export function clearMissing(): void {
 const KNOWN: Array<{ id: string } & Omit<Missing, 'at'>> = [
   { id: 'evier-robinet', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'ouvrir le robinet', detail: 'L’eau coule toute seule quand les mains ou la tasse arrivent sous le robinet : pas encore de geste pour tourner la manette.' },
   { id: 'evier-boire', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'boire au robinet', detail: 'On boit l’eau de l’évier seulement avec la tasse : pas de geste pour boire dans ses mains ou au robinet.' },
-  { id: 'evier-vaisselle', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'laver la tasse', detail: 'Pas encore de vaisselle : la tasse ne se lave pas (son usure ne baisse pas avec ça non plus).' },
   { id: 'evier-vider', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'vider la tasse', detail: 'La tasse se vide dans l’évier seulement quand on la remplit d’eau : pas de geste pour la vider seule.' },
   { id: 'evier-douche', kind: 'action', ordre: '(ajout de l’évier)', quoi: 'se laver entièrement', detail: 'À l’évier, la toilette est faite d’eau sur les mains et le visage (hygiène +40) : pas de douche ni de bain, ni de geste de toilette du corps.' },
+  { id: 'vaisselle-ranger', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'ranger la vaisselle', detail: 'Pas encore de placard ni d’égouttoir : la vaisselle propre revient en main, à reposer où l’on veut.' },
+  { id: 'vaisselle-couper', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'couper avec le couteau', detail: 'Le couteau se tient et se salit pendant le repas, mais ne coupe rien.' },
+  { id: 'vaisselle-chaise', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'approcher la chaise de la table', detail: 'Le perso s’assoit là où est la chaise, sans la rapprocher : il mange un peu loin de la table.' },
+  { id: 'vaisselle-cuisiner', kind: 'action', ordre: '(ajout de la vaisselle)', quoi: 'cuisiner un plat', detail: 'On sert dans l’assiette ce qui sort du frigo (pomme, sandwich) : pas encore de plaque ni de casserole.' },
 ];
 const KNOWN_KEY = 'rp-island.manques.connus';
 

@@ -104,6 +104,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "eau"} : remplir la tasse d'eau à l'évier (prend la tasse si besoin)
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier, pomme ou sandwich (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
+- {"tache": "servir", "objet": "<ref>", "assiette": "<ref>"} : servir un aliment (pomme, sandwich) dans une assiette propre et vide (« objet » et « assiette » facultatifs : ce qu'on tient, ou le plus proche ; la plus proche)
+- {"tache": "repas", "objet": "<ref>"} : un vrai repas à table : sert l'aliment dans l'assiette si elle est vide, prend la fourchette, s'assoit devant l'assiette et mange tout le plat (rassasie un peu plus que manger debout). Assiette et couverts sont ensuite sales
+- {"tache": "vaisselle", "objets": ["<ref>", ...]} : laver à l'évier la vaisselle sale (assiette, fourchette, couteau, tasse après un café ; liste vide = toute la vaisselle sale). Le perso la reprend propre
 - {"tache": "mettre", "objet": "<ref>", "dans": "<ref du frigo>"} : ranger dans le frigo une bouteille, une pomme ou un sandwich (« objet » facultatif : ce qu'on tient)
 - {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte du frigo
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
@@ -168,6 +171,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'lire': return { kind: 'lire', ref: s('objet') || undefined };
     case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'asseoir': return { kind: 'asseoir', ref: s('objet') || undefined };
+    case 'servir': return { kind: 'servir', ref: s('objet') || undefined, sur: s('assiette') || undefined };
+    case 'repas': return { kind: 'repas', ref: s('objet') || undefined };
+    case 'vaisselle': return { kind: 'vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'lever': return { kind: 'lever' };
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';

@@ -69,9 +69,27 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'manger',
-    description: 'Prendre une bouchée de l’aliment tenu (pomme, sandwich) ; une fois fini, il disparaît et la faim remonte.',
+    description: 'Prendre une bouchée de l’aliment tenu (pomme, sandwich) ; une fois fini, il disparaît et la faim remonte. Sans aliment en main, assis devant une assiette servie avec la fourchette en main : une bouchée de l’assiette (un repas à table rassasie un peu plus).',
     params: {},
     run: (g) => g.eat(),
+  },
+  {
+    name: 'servir',
+    description: 'Servir l’aliment tenu (pomme, sandwich) dans une assiette propre et vide (`assiette` facultatif : sinon la plus proche) ; le perso va la poser dedans.',
+    params: {},
+    run: (g, a) => g.serve(a.assiette),
+  },
+  {
+    name: 'attabler',
+    description: 'S’asseoir à table sur la chaise la plus proche de l’assiette (`assiette` facultatif : sinon la plus proche).',
+    params: {},
+    run: (g, a) => g.sitAtTable(a.assiette),
+  },
+  {
+    name: 'vaisselle',
+    description: 'Laver à l’évier la vaisselle tenue (assiette, fourchette, couteau, tasse ; une pièce par main) : posée au fond de la cuve, frottée sous l’eau, puis reprise propre. Les mains ne doivent tenir que de la vaisselle.',
+    params: {},
+    run: (g) => g.washDishes(),
   },
   {
     name: 'ouvrir',
