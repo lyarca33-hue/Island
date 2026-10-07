@@ -87,6 +87,15 @@ Fichier : `src/game/items/catalog.ts`. Repère de l'objet : posé au sol, base �
 | `buildOpen` | Se lit : modèle ouvert montré pendant la lecture (pages vers +Z). | non |
 | `fill` | Récipient : hauteur du liquide vide → plein. Il lui faut une pièce nommée `liquide`. | non |
 | `pour` | Machine qui remplit un récipient : `at` (où poser le récipient), `fills` (nom du récipient), `liquid`, `seconds`. Pièce `jet` cachée au repos. | non |
+| `door` | Porte qui s'ouvre (pièce `porte`) : angle (rad) autour de sa charnière. | non |
+| `doorAxis` | `'x'` : charnière en bas, la porte s'abaisse (four) ; angle négatif : couvercle qui se relève. | `'y'` |
+| `drawer` | Tiroir : la pièce `porte` glisse vers l'avant de cette distance (m), avec ce qui est rangé dedans. | non |
+| `holds` | Noms des objets qu'on peut ranger dans le meuble. | les livres |
+| `cold` | Frigo (sorte `frigo` pour les ordres). | non |
+| `heats` | Four, micro-ondes : cuit ce qu'on y range (`seconds`, `burns`) ; pièce `lumiere` allumée en marche. | non |
+| `washes` | Lave-vaisselle : la vaisselle rangée dedans ressort propre. | non |
+| `bin` | Poubelle : nombre d'objets jetés avant qu'il faille la vider ; pièce `dechets`. | non |
+| `food` | Aliment : faim rendue et nombre de bouchées. | non |
 | `build()` | Construit le modèle 3D. | obligatoire |
 
 Pour construire le modèle, utiliser les aides `mesh()` et `group()` du fichier : elles donnent un
