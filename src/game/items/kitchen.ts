@@ -1,6 +1,6 @@
 /**
  * La cuisine : meubles de rangement (placard, tiroir), gros appareils (four, micro-ondes,
- * lave-vaisselle), poubelle et petits appareils (bouilloire). Mêmes fiches que le reste du catalogue (catalog.ts) ; les portes,
+ * lave-vaisselle), poubelle et petits appareils (bouilloire, grille-pain, mixeur). Mêmes fiches que le reste du catalogue (catalog.ts) ; les portes,
  * le tiroir, la cuisson et le lavage sont joués par Game.ts.
  *
  * Tous sont posés au sol, l'avant vers +Z, et font la hauteur du plan de travail (sauf le
@@ -37,6 +37,14 @@ function glow(w: number, h: number, d: number, color: THREE.ColorRepresentation,
   return m;
 }
 
+/** Fruits qui se mixent (les prochains fruits s'ajoutent ici). */
+export const FRUITS = ['pomme', 'quartiers de pomme'];
+/** Mixeur : hauteur du socle, du bol ; où se pose la tasse, à côté (x, m). */
+const MIXER_BASE = 0.1;
+const MIXER_JAR = 0.2;
+const MIXER_CUP = 0.13;
+/** Hauteur du grille-pain (m). */
+const TOASTER_H = 0.17;
 /** Où se pose la tasse à côté de la bouilloire, sous son bec (x, m). */
 const KETTLE_CUP = 0.1;
 /** Hauteur du plan de travail (m), comme sous la machine à café et l'évier. */
@@ -457,6 +465,82 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       jet.name = 'jet';
       jet.visible = false;
       jet.position.set(KETTLE_CUP, 0.18, 0.03);
+      g.add(jet);
+      return g;
+    },
+  },
+  {
+    id: 'grille-pain',
+    name: 'grille-pain',
+    portable: false,
+    movable: false,
+    durability: 200,
+    fragility: 5,
+    // les tranches se posent dans la fente, sur le dessus ; elles en ressortent grillées
+    holds: ['tranches de pain'],
+    slots: [[0, TOASTER_H - 0.05, 0]],
+    heats: { seconds: 5, burns: false, turns: { 'tranches de pain': 'pain-grille' } },
+    build: () => {
+      const w = 0.24, d = 0.14, h = TOASTER_H;
+      const body = 0xc8ccd0, dark = 0x2e3135;
+      const g = group(
+        box(w, h - 0.01, d, body, 0, (h - 0.01) / 2, 0),
+        box(w - 0.01, 0.012, d - 0.01, body, 0, h - 0.006, 0),
+        // la fente, sombre, et ses pieds
+        box(0.15, 0.002, 0.08, dark, 0, h + 0.001, 0),
+        box(w - 0.02, 0.01, d - 0.02, dark, 0, 0.005, 0),
+        // bouton du minuteur
+        mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 14).rotateZ(Math.PI / 2), dark, w / 2 + 0.006, 0.05, 0.03),
+        glow(0.14, 0.004, 0.07, 0xff8a3a, 0, h + 0.003, 0),
+      );
+      // levier sur le côté : il descend quand le grille-pain tourne
+      const lever = group(box(0.03, 0.012, 0.02, dark, w / 2 + 0.015, h - 0.04, -0.02));
+      lever.name = 'levier';
+      g.add(lever);
+      return g;
+    },
+  },
+  {
+    id: 'mixeur',
+    name: 'mixeur',
+    portable: false,
+    movable: false,
+    durability: 200,
+    fragility: 6,
+    // les fruits vont dans le bol ; mixés, ils donnent du jus qu'on verse dans la tasse posée à côté
+    holds: FRUITS,
+    slots: [[0, MIXER_BASE + 0.02, 0], [0, MIXER_BASE + 0.09, 0]],
+    blends: { seconds: 4 },
+    pour: { at: [MIXER_CUP, 0, 0.02], fills: ['tasse'], liquid: 'jus de fruits', seconds: 2.2, color: 0xe8b04a },
+    build: () => {
+      const dark = 0x2e3135;
+      const r = 0.065, h = MIXER_JAR, y0 = MIXER_BASE;
+      const jarMat = new THREE.MeshBasicMaterial({ color: 0xdff0f5, transparent: true, opacity: 0.28, depthWrite: false });
+      const jar = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.85, h, 20, 1, true), jarMat);
+      jar.position.set(0, y0 + h / 2, 0);
+      const g = group(
+        // socle et ses boutons
+        box(0.15, y0, 0.15, dark, 0, y0 / 2, 0),
+        mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.01, 14).rotateX(Math.PI / 2), 0xd0463a, -0.03, y0 / 2, 0.078),
+        mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.01, 14).rotateX(Math.PI / 2), 0x9ea4aa, 0.03, y0 / 2, 0.078),
+        // bol transparent, son fond, son couvercle, son bec côté tasse, sa poignée
+        jar,
+        mesh(new THREE.CylinderGeometry(r * 0.85, r * 0.85, 0.01, 20), 0xb9c6cc, 0, y0 + 0.005, 0),
+        mesh(new THREE.CylinderGeometry(r + 0.005, r + 0.005, 0.02, 20), dark, 0, y0 + h + 0.01, 0),
+        box(0.07, 0.015, 0.03, 0xdff0f5, r + 0.025, y0 + h - 0.01, 0.02),
+        box(0.02, 0.12, 0.025, dark, -r - 0.015, y0 + h / 2, 0),
+        glow(0.15, 0.01, 0.15, 0x9fd8ff, 0, y0 + 0.005, 0),
+      );
+      // le jus mixé dans le bol, caché tant qu'il est vide
+      const juice = mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.82, h * 0.55, 20), 0xe8b04a, 0, y0 + h * 0.28, 0);
+      juice.name = 'liquide';
+      juice.visible = false;
+      g.add(juice);
+      // jus qui coule du bec dans la tasse
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 1, 6), toon(0xe8b04a));
+      jet.name = 'jet';
+      jet.visible = false;
+      jet.position.set(MIXER_CUP, y0 + h - 0.02, 0.02);
       g.add(jet);
       return g;
     },

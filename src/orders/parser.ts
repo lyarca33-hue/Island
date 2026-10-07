@@ -8,6 +8,7 @@
  */
 import type { WorldObject } from '../game/Game';
 import { RECIPES } from '../game/items/recipes';
+import { FRUITS } from '../game/items/kitchen';
 import type { Intent } from './tasks';
 
 /** Minuscules, sans accents ni ponctuation, apostrophes et tirets en espaces. */
@@ -37,6 +38,7 @@ const VERBS: Record<string, string[]> = {
   laver: ['lave', 'laver', 'lavez', 'rince', 'rincer', 'debarbouille', 'debarbouiller'],
   asseoir: ['assieds', 'assied', 'assois', 'assoit', 'asseoir', 'assoir', 'assoie', 'rassieds', 'rassois'],
   lever: ['leve', 'lever', 'releve', 'relever', 'debout'],
+  mixer: ['mixe', 'mixer', 'mixes', 'mouline'],
   cuire: ['cuis', 'cuit', 'cuire', 'cuisine', 'cuisiner', 'grille', 'griller', 'rechauffe', 'rechauffer', 'chauffe', 'chauffer'],
   allumer: ['allume', 'allumer', 'rallume', 'rallumer', 'lance', 'lancer', 'demarre', 'demarrer', 'active', 'activer'],
   eteindre: ['eteins', 'eteint', 'eteindre', 'coupe', 'couper'],
@@ -112,6 +114,8 @@ const ALIASES: Record<string, string[]> = {
   concombre: ['concombre', 'concombres'],
   'quartiers de pomme': ['quartiers', 'quartier'],
   'tranches de pain': ['tranches', 'tranche', 'tartine', 'tartines'],
+  'pain grille': ['toast', 'toasts', 'grillees', 'grille'],
+  'grille pain': ['toaster', 'grille', 'grillepain'],
   'rondelles de carotte': ['rondelles', 'rondelle'],
   'tranches de tomate': ['tranches', 'tranche'],
   'rondelles de concombre': ['rondelles', 'rondelle'],
@@ -303,6 +307,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
         const recipe = RECIPES.find((r) => r.words.some((w) => w.split(' ').every((x) => rest.includes(x))));
         if (recipe) return [{ kind: 'preparer', plat: recipe.dish }];
       }
+      // « fais-toi un jus de pomme », « prépare un smoothie » : au mixeur
+      if (rest.includes('jus') || rest.includes('smoothie')) return juice(world, found, true);
       // « sers le sandwich (dans l'assiette) », « sers-toi une pomme »
       {
         const food = found.find((o) => o.sorte === 'nourriture');
@@ -316,6 +322,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »
       // « bois au robinet »
       if (rest.includes('robinet')) return [{ kind: 'boire_robinet' }];
+      // « bois un jus de pomme » : mixé d'abord s'il n'y en a pas de prêt
+      if (rest.includes('jus') || rest.includes('smoothie')) {
+        const prep = juice(world, found, false);
+        return prep ? [...prep, { kind: 'boire', liquide: 'jus de fruits' }] : null;
+      }
       const liquide = rest.includes('eau') ? 'eau' : rest.includes('cafe') ? 'café' : rest.includes('the') ? 'thé' : undefined;
       const drink = found.filter((o) => o.sorte === 'récipient');
       if (found.length && !drink.length) return null;
@@ -442,7 +453,25 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'lever':
       return [{ kind: 'lever' }];
+    case 'mixer': {
+      // « mixe la pomme », « mixe les quartiers de pomme »
+      const fruits = found.filter((o) => FRUITS.includes(o.nom));
+      if (found.some((o) => !fruits.includes(o) && o.nom !== 'mixeur')) return null;
+      const mixer = world.objets.find((o) => o.nom === 'mixeur');
+      if (!mixer) return null;
+      if (!fruits.length) return [{ kind: 'allumer', ref: mixer.ref }];
+      return [...fruits.slice(0, all ? 2 : 1).map((o): Intent => ({ kind: 'mettre', ref: o.ref, dans: mixer.ref })), { kind: 'allumer', ref: mixer.ref }];
+    }
     case 'cuire': {
+      // « grille le pain », « fais griller les tartines », « mets en marche le grille-pain » : au grille-pain
+      const toaster = appliance('grille-pain');
+      const bread = ['tranches de pain', 'pain', 'grille-pain'];
+      if (toaster && (['grille', 'griller'].includes(word) || found.some((o) => o.nom === 'grille-pain')) && found.every((o) => bread.includes(o.nom))) {
+        const slices = world.objets.filter((o) => o.nom === 'tranches de pain');
+        const item = slices.find((o) => world.enMain.includes(o.ref)) ?? slices.find(isLoose) ?? slices[0];
+        if (!item) return found.length ? null : [{ kind: 'allumer', ref: toaster.ref }];
+        return [{ kind: 'mettre', ref: item.ref, dans: toaster.ref }, { kind: 'allumer', ref: toaster.ref }];
+      }
       // au four ou au micro-ondes : « cuis la pomme de terre au four », « réchauffe le steak »
       const oven = found.find((o) => o.sorte === 'appareil' && o.nom !== 'lave-vaisselle') ?? (REHEAT.has(word) ? appliance('micro-ondes') : undefined);
       if (oven) {
@@ -527,6 +556,22 @@ const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rang
 /** L'ordre nomme le lave-vaisselle (« … au lave-vaisselle ») : sinon la vaisselle se fait à l'évier. */
 function machineWash(original: string): boolean {
   return normalize(original).includes('lave vaisselle');
+}
+
+/**
+ * Un jus au mixeur : déjà prêt, on le sert (`serve`) ; sinon un fruit (celui nommé, celui qu'on
+ * tient, sinon le plus proche) va dans le mixeur, qu'on lance. Null sans mixeur ni fruit.
+ */
+function juice(world: { enMain: string[]; objets: WorldObject[] }, found: WorldObject[], serve: boolean): Intent[] | null {
+  const mixer = world.objets.find((o) => o.nom === 'mixeur');
+  if (!mixer) return null;
+  const pour: Intent[] = serve ? [{ kind: 'jus' }] : [];
+  if (mixer.ou.includes(' prêt')) return pour;
+  const fruits = world.objets.filter((o) => FRUITS.includes(o.nom));
+  const named = found.filter((o) => FRUITS.includes(o.nom));
+  const fruit = named[0] ?? fruits.find((o) => world.enMain.includes(o.ref)) ?? [...fruits].sort((a, b) => a.distance - b.distance)[0];
+  if (!fruit) return null;
+  return [{ kind: 'mettre', ref: fruit.ref, dans: mixer.ref }, { kind: 'allumer', ref: mixer.ref }, ...pour];
 }
 
 function machineDishes(world: { objets: WorldObject[] }): Intent[] | null {
