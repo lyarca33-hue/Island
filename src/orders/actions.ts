@@ -156,13 +156,13 @@ export const ACTIONS: ActionDef[] = [
     description: 'Allumer un appareil : la gazinière (les feux où une poêle ou une casserole est posée), la machine à café, ou mettre en marche le four, le micro-ondes, le lave-vaisselle (ils cuisent ou lavent ce qui est dedans ; l’action finit quand ils sonnent).',
     params: { objet: 'ref de l’appareil' },
     // `ustensile` (facultatif) : seulement le feu sous lui
-    run: (g, a) => (g.isAppliance(a.objet) ? g.startAppliance(a.objet) : g.switchOn(a.objet, false, a.ustensile)),
+    run: (g, a) => (g.isLamp(a.objet) ? g.switchLamp(a.objet, true) : g.isAppliance(a.objet) ? g.startAppliance(a.objet) : g.switchOn(a.objet, false, a.ustensile)),
   },
   {
     name: 'eteindre',
     description: 'Éteindre un appareil (tous les feux de la gazinière, la machine à café, le four…).',
     params: { objet: 'ref de l’appareil' },
-    run: (g, a) => (g.isAppliance(a.objet) ? g.stopAppliance(a.objet) : g.switchOff(a.objet, false, a.ustensile)),
+    run: (g, a) => (g.isLamp(a.objet) ? g.switchLamp(a.objet, false) : g.isAppliance(a.objet) ? g.stopAppliance(a.objet) : g.switchOff(a.objet, false, a.ustensile)),
   },
   {
     name: 'mettre_sur_feu',
@@ -326,6 +326,18 @@ export const ACTIONS: ActionDef[] = [
     description: 'Aller s’asseoir sur un siège (chaise posée debout par terre, rien dessus). Les objets tenus d’une main restent en main. Le perso se lève tout seul pour toute autre action qui le fait bouger.',
     params: { siege: 'ref du siège' },
     run: (g, a) => g.sit(a.siege),
+  },
+  {
+    name: 'dormir',
+    description: 'Aller se coucher dans le lit (`lit` facultatif : sinon le plus proche) et dormir : l’écran passe au noir, le temps file et la fatigue remonte ; le perso se réveille seul une fois reposé. Les mains doivent être vides ; refusé si la fatigue est presque pleine.',
+    params: { lit: 'ref du lit' },
+    run: (g, a) => g.sleepIn(a.lit),
+  },
+  {
+    name: 'reveiller',
+    description: 'Se réveiller et sortir du lit quand on dort.',
+    params: {},
+    run: (g) => g.wakeUp(),
   },
   {
     name: 'lever',

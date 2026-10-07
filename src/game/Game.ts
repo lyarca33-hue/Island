@@ -43,6 +43,15 @@ const FOCUS_HEIGHT = 0.9;
 /** Soif rendue par une tasse pleine bue en entier, et regain d'énergie si c'est du café (moitié moins pour le thé). */
 const DRINK_THIRST = 35;
 const COFFEE_ENERGY = 12;
+/**
+ * Dormir : vitesse de l'horloge pendant le sommeil (minutes de jeu par minute réelle : une nuit de
+ * 8 h passe en une douzaine de secondes), durée des fondus au noir (s), noir de la chambre pendant
+ * le sommeil (opacité du voile), et au-dessus de quelle fatigue on n'a pas sommeil.
+ */
+const SLEEP_SPEED = 2400;
+const SLEEP_FADE = 0.7;
+const SLEEP_DIM = 0.55;
+const NOT_SLEEPY = 90;
 const TEA_ENERGY = 6;
 /** Un jus de fruits (mixeur) nourrit un peu : faim rendue par tasse pleine. */
 const JUICE_HUNGER = 12;
@@ -134,6 +143,10 @@ const START_ON_WORKTOP: Array<[string, number, number, number]> = [
 
 /** Rangés au départ dans un meuble : [id, meuble, place]. */
 const START_STORED: Array<[string, string, number]> = [
+  // les pulls pliés dans l'armoire de la chambre
+  ['pull', 'armoire', 0],
+  ['pull-bleu', 'armoire', 1],
+  ['pull-vert', 'armoire', 4],
   ['bouteille-eau', 'frigo', 8],
   ['bouteille-eau', 'frigo', 9],
   ['pomme', 'frigo', 5],
@@ -230,7 +243,7 @@ export interface WorldObject {
    * (chaise), planche (à découper), couteau (de cuisine) ou vaisselle (assiette, fourchette,
    * couteau de table).
    */
-  sorte?: 'rangement' | 'frigo' | 'placard' | 'appareil' | 'poubelle' | 'machine' | 'évier' | 'gazinière' | 'ustensile' | 'récipient' | 'nourriture' | 'siège' | 'planche' | 'couteau' | 'vaisselle';
+  sorte?: 'rangement' | 'frigo' | 'placard' | 'appareil' | 'poubelle' | 'machine' | 'évier' | 'gazinière' | 'ustensile' | 'récipient' | 'nourriture' | 'siège' | 'planche' | 'couteau' | 'vaisselle' | 'lit' | 'lampe';
   /** Ingrédient : cru, cuit ou brûlé. */
   cuisson?: 'cru' | 'cuit' | 'brûlé';
   /** Aliment entier qui se coupe en morceaux sur la planche (pomme, pain, légumes). */
@@ -309,6 +322,8 @@ export interface HandActions {
   reading: boolean;
   /** Assis : on peut se lever. */
   seated: boolean;
+  /** Couché dans le lit (endormi) : on peut se réveiller. */
+  sleeping: boolean;
 }
 
 export class Game {
@@ -514,6 +529,7 @@ export class Game {
     // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item), keep: false });
+    for (const item of this.items) if (item.def.lamp) this.addLampLight(item);
     for (const item of this.items) if (item.def.wash) this.sinks.set(item, { plug: false, tap: false, water: 0, spill: 0, warned: false });
     for (const item of this.items) {
       if (!item.def.screen) continue;
@@ -684,6 +700,8 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
+    // endormi, c'est fini : on ne bouge plus jusqu'au réveil
+    if (this.sleep) return this.sleep.phase === 'asleep';
     return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.cookWait && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
@@ -1157,9 +1175,12 @@ export class Game {
       const sink = this.sinks.get(item);
       if (sink?.tap) ou += ', robinet ouvert';
       if (sink?.plug) ou += sink.water > 0.98 ? ', bouché, la cuve déborde' : ', bouché';
-      const sorte: WorldObject['sorte'] = item.def.bin ? 'poubelle' : program(item.def) ? 'appareil' : item.def.cold ? 'frigo'
+      const sorte: WorldObject['sorte'] = item.def.bed ? 'lit' : item.def.lamp ? 'lampe' : item.def.bin ? 'poubelle' : program(item.def) ? 'appareil' : item.def.cold ? 'frigo'
         : item.def.door || item.def.drawer ? 'placard' : item.def.slots ? 'rangement' : item.def.wash ? 'évier' : item.def.pour ? 'machine' : item.def.heat ? 'gazinière' : item.def.cookware ? 'ustensile' : item.def.fill ? 'récipient' : item.def.food ? 'nourriture' : item.def.seat ? 'siège' : item.def.board ? 'planche' : item.def.knife ? 'couteau' : item.def.dish ? 'vaisselle' : undefined;
       if (item === this.sitting) ou += ', le perso est assis dessus';
+      if (item === this.sleep?.bed) ou += ', le perso dort dedans';
+      const lamp = this.lamps.get(item);
+      if (lamp) ou += lamp.on ? ', allumée' : ', éteinte';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
       const coupable = (!!item.def.cut && item.portion === 1) || undefined;
@@ -1167,7 +1188,7 @@ export class Game {
     });
     const perso = this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)';
     return {
-      perso: this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
+      perso: this.sleep ? `${perso}, endormi dans ${this.ref(this.sleep.bed)}` : this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
       mains: hands.loads.map((l) => l.map((i) => this.ref(i))),
       mainsLibres: hands.free,
@@ -1280,6 +1301,202 @@ export class Game {
     }
     this.character.approachThen(this.character.standFor(item), item.object.position, () => {});
     return true;
+  }
+
+  /** Lampes qu'on allume d'un clic (lampe de chevet) : leur lumière, allumée ou non. */
+  private lamps = new Map<WorldItem, { light: THREE.PointLight; on: boolean; bulb: THREE.MeshBasicMaterial | null; shade: THREE.MeshBasicMaterial | null }>();
+
+  /** Lumière d'une lampe (fiche `lamp`), éteinte au départ, qui suit la lampe si on la déplace. */
+  private addLampLight(item: WorldItem): void {
+    const def = item.def.lamp!;
+    const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 2));
+    light.position.y = def.y;
+    light.castShadow = true;
+    light.shadow.mapSize.set(256, 256);
+    light.shadow.camera.near = 0.05;
+    light.shadow.camera.far = def.range;
+    light.shadow.bias = -0.003;
+    // carte d'ombre calculée une fois au départ, puis seulement lampe allumée
+    light.shadow.autoUpdate = false;
+    light.shadow.needsUpdate = true;
+    item.object.add(light);
+    const part = (name: string) => {
+      const m = item.object.getObjectByName(name);
+      return m instanceof THREE.Mesh && m.material instanceof THREE.MeshBasicMaterial ? m.material : null;
+    };
+    this.lamps.set(item, { light, on: false, bulb: part('ampoule'), shade: part('abat-jour') });
+  }
+
+  private setLamp(item: WorldItem, on: boolean): void {
+    const lamp = this.lamps.get(item);
+    if (!lamp) return;
+    lamp.on = on;
+    lamp.light.intensity = on ? item.def.lamp!.intensity : 0;
+    lamp.light.shadow.autoUpdate = on;
+    // ampoule allumée au-dessus de 1 : le bloom la fait briller ; abat-jour éclairé par-dessous
+    lamp.bulb?.color.setRGB(on ? 2.6 : 0.23, on ? 2.1 : 0.2, on ? 1.3 : 0.17);
+    lamp.shade?.color.set(on ? 0xfff3d6 : 0xe9dcc0);
+  }
+
+  /** Va allumer (`on`) ou éteindre la lampe `ref` (sinon la plus proche) ; sans `on`, inverse. */
+  switchLamp(ref?: string, on?: boolean, running = false): boolean {
+    const item = ref ? this.byRef(ref) : this.nearest((i) => this.lamps.has(i));
+    const lamp = item && this.lamps.get(item);
+    if (!item || !lamp) {
+      this.onNotice?.(ref ? `${ref} ne s’allume pas.` : 'Pas de lampe à allumer.');
+      return false;
+    }
+    if (this.sleep) return this.wakeUp(() => this.switchLamp(this.ref(item), on, running));
+    const want = on ?? !lamp.on;
+    const c = this.character;
+    if (c.seated) return c.standUp(() => this.switchLamp(this.ref(item), want, running));
+    // tenue en main : on appuie sur l'interrupteur sans bouger
+    const press = () => {
+      this.setLamp(item, want);
+      this.onNotice?.(want ? 'Lampe allumée.' : 'Lampe éteinte.');
+    };
+    if (c.carried.includes(item)) press();
+    else c.approachThen(c.standFor(item), item.object.position, press, running);
+    return true;
+  }
+
+  /**
+   * Sommeil en cours : le lit, la phase (fondu vers le noir, endormi, fondu au réveil), le temps
+   * passé dans la phase, la vitesse de l'horloge à rendre au réveil, et quoi faire une fois levé.
+   */
+  private sleep: { bed: WorldItem; phase: 'down' | 'asleep' | 'up'; t: number; speed: number; then?: () => void } | null = null;
+  /** Voile noir devant la scène : s'endormir et se réveiller passent par le noir. */
+  private veil: HTMLDivElement | null = null;
+
+  /**
+   * Va se coucher dans le lit `ref` (sinon le plus proche) et dort : l'écran passe au noir, le perso
+   * est couché sous la couette, le temps file et la fatigue remonte. Il se réveille seul une fois
+   * reposé, ou quand on le demande (C, clic, touches de déplacement).
+   */
+  sleepIn(ref?: string, running = false): boolean {
+    const bed = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.bed);
+    const c = this.character;
+    const fail = (msg: string) => {
+      this.onNotice?.(msg);
+      return false;
+    };
+    if (!bed?.def.bed) return fail(ref ? `On ne dort pas dans : ${ref}.` : 'Il n’y a pas de lit.');
+    if (this.sleep) return fail('Le perso dort déjà.');
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (c.carried.length) return fail('Pose d’abord ce que tu tiens pour te coucher.');
+    if (this.needs.values.fatigue >= NOT_SLEEPY) return fail('Le perso n’a pas sommeil (fatigue presque pleine).');
+    if (c.seated) return c.standUp(() => this.sleepIn(this.ref(bed), running));
+    const side = this.bedSide(bed);
+    if (!side) return fail('Pas de place à côté du lit pour s’y coucher.');
+    c.approachThen(side.stand, side.feet.clone().setY(0), () => {
+      this.sleep = { bed, phase: 'down', t: 0, speed: this.clock.speed };
+    }, running);
+    return true;
+  }
+
+  /** Se réveille et sort du lit (puis `then`) ; faux si le perso ne dort pas. */
+  wakeUp(then?: () => void): boolean {
+    const s = this.sleep;
+    if (!s) return false;
+    if (then) s.then = then;
+    if (s.phase === 'asleep') {
+      s.phase = 'up';
+      s.t = 0;
+    }
+    return true;
+  }
+
+  /**
+   * Où se coucher dans le lit : le côté libre (droite ou gauche du lit, vu du pied), où se tenir à
+   * côté, les pieds du dormeur sur le matelas et la direction de l'oreiller.
+   */
+  private bedSide(bed: WorldItem): { stand: THREE.Vector3; feet: THREE.Vector3; head: THREE.Vector3 } | null {
+    const o = bed.object;
+    o.updateMatrixWorld(true);
+    const def = bed.def.bed!;
+    const b = bed.box;
+    const toWorld = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).applyMatrix4(o.matrixWorld);
+    const head = new THREE.Vector3(0, 0, -1).applyQuaternion(o.quaternion).setY(0).normalize();
+    // de préférence du côté de la lampe de chevet
+    const lamp = [...this.lamps.keys()].sort((a, c) => a.object.position.distanceTo(o.position) - c.object.position.distanceTo(o.position))[0];
+    const lampX = lamp ? o.worldToLocal(lamp.object.position.clone()).x : 1;
+    for (const sx of lampX < 0 ? [-1, 1] : [1, -1]) {
+      const edge = sx > 0 ? b.max.x : b.min.x;
+      const stand = toWorld(edge + sx * 0.38, 0, 0.1).setY(0);
+      if (this.character.nav?.blocked(stand)) continue;
+      // couché de son côté du lit, la tête sur l'oreiller (le haut du crâne à 25 cm de la tête de lit)
+      const feet = toWorld(sx * (b.max.x - b.min.x) * 0.22, def.top + 0.08, b.min.z + 0.25 + 1.62);
+      return { stand, feet, head };
+    }
+    return null;
+  }
+
+  /** Fondu au noir, coucher, nuit qui file, réveil. */
+  private tickSleep(dt: number): void {
+    const s = this.sleep;
+    if (!this.veil) {
+      const v = this.veil = document.createElement('div');
+      v.style.cssText = 'position:absolute;inset:0;background:#05070d;opacity:0;pointer-events:none;z-index:1';
+      this.container.appendChild(v);
+    }
+    if (!s) {
+      this.veil.style.opacity = '0';
+      return;
+    }
+    s.t += dt;
+    const c = this.character;
+    const night = (on: boolean) => {
+      const duvet = s.bed.object.getObjectByName('couette');
+      const cover = s.bed.object.getObjectByName('couette-dormeur');
+      if (duvet) duvet.visible = !on;
+      if (cover) cover.visible = on;
+    };
+    if (s.phase === 'down') {
+      // une envie de bouger avant d'être couché : on renonce
+      if (c.wantsToMove) {
+        this.sleep = null;
+        return;
+      }
+      this.veil.style.opacity = String(Math.min(1, s.t / SLEEP_FADE));
+      if (s.t < SLEEP_FADE) return;
+      const side = this.bedSide(s.bed);
+      if (!side || !c.lieDown(side.feet, side.head, side.stand)) {
+        this.sleep = null;
+        this.onNotice?.('Impossible de se coucher ici.');
+        return;
+      }
+      night(true);
+      // on éteint la lampe de chevet en se couchant
+      for (const [item, lamp] of this.lamps) if (lamp.on && item.object.position.distanceTo(s.bed.object.position) < 2.5) this.setLamp(item, false);
+      this.clock.speed = SLEEP_SPEED;
+      s.phase = 'asleep';
+      s.t = 0;
+      this.onNotice?.('Zzz… (C pour se réveiller)');
+    } else if (s.phase === 'asleep') {
+      // le noir s'éclaircit un peu : on voit le perso dormir
+      this.veil.style.opacity = String(Math.max(SLEEP_DIM, 1 - s.t / SLEEP_FADE));
+      const rested = this.needs.values.fatigue >= 100;
+      if (rested || c.wantsToMove) {
+        s.phase = 'up';
+        s.t = 0;
+        if (rested) this.onNotice?.(`Bien reposé : réveillé à ${this.clock.label}.`);
+      }
+    } else {
+      this.clock.speed = s.speed;
+      const k = Math.min(1, s.t / SLEEP_FADE);
+      if (c.lying) {
+        this.veil.style.opacity = String(Math.max(SLEEP_DIM, k));
+        if (k < 1) return;
+        c.getUp();
+        night(false);
+        s.t = 0;
+        return;
+      }
+      this.veil.style.opacity = String(1 - k);
+      if (k < 1) return;
+      this.sleep = null;
+      s.then?.();
+    }
   }
 
   /** Siège où le perso est assis (ou s'assoit). */
@@ -2300,6 +2517,12 @@ export class Game {
   }
 
   /** Four, micro-ondes ou lave-vaisselle : ce qu'on allume par startAppliance. */
+  /** L'objet `ref` est-il une lampe qu'on allume d'un clic (lampe de chevet) ? */
+  isLamp(ref?: string): boolean {
+    const item = ref ? this.byRef(ref) : undefined;
+    return !!item && this.lamps.has(item);
+  }
+
   isAppliance(ref?: string): boolean {
     const item = ref ? this.byRef(ref) : null;
     return !!(item && program(item.def));
@@ -3980,7 +4203,8 @@ export class Game {
       if (e.code === 'KeyK' && !e.repeat) this.cut();
       if (e.code === 'KeyG' && !e.repeat) this.prepare();
       if (e.code === 'KeyC' && !e.repeat) {
-        if (this.character.seated) this.standUp();
+        if (this.sleep) this.wakeUp();
+        else if (this.character.seated) this.standUp();
         else this.sit();
       }
       if (e.code === 'KeyL' && !e.repeat) {
@@ -4165,6 +4389,7 @@ export class Game {
       if (held.some((h) => h.def.wipes) && this.puddles().length) add('Essuyer la flaque', () => this.cleanFloor());
       for (const h of new Set(held.map((i) => i.name))) add(`Poser : ${h}`, () => this.drop(h));
       if (can.seated) add('Se lever', () => this.standUp());
+      if (can.sleeping) add('Se réveiller', () => this.wakeUp());
       return out;
     }
     const ref = this.ref(item);
@@ -4252,6 +4477,13 @@ export class Game {
       add('Mettre la table', () => this.setTable());
       add('Débarrasser', () => this.clearTable());
     }
+    // lit, lampe de chevet
+    if (item.def.bed) {
+      if (this.sleep?.bed === item) add('Se réveiller', () => this.wakeUp());
+      else if (!this.sleep) add('Dormir', () => this.sleepIn(ref));
+    }
+    const lamp = this.lamps.get(item);
+    if (lamp) add(lamp.on ? 'Éteindre la lampe' : 'Allumer la lampe', () => this.switchLamp(ref, !lamp.on));
     // siège
     if (item.def.seat && item !== this.sitting) add('S’asseoir', () => this.sit(ref));
     if (item.def.seat && item !== this.sitting && this.chairTable(item)) {
@@ -4422,6 +4654,7 @@ export class Game {
     this.tickPickQueue();
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));
+    this.tickSleep(dt);
     this.tickNeeds(dt);
     const book = held.find((h) => h.def.buildOpen);
     if (book && c.reading?.held === book) this.wearItem(book, dt * WEAR_READ);
@@ -4476,6 +4709,7 @@ export class Game {
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
       reading: !!c.reading,
       seated: !!this.sitting,
+      sleeping: !!this.sleep,
     };
   }
 
@@ -4483,7 +4717,7 @@ export class Game {
   private tickNeeds(dt: number): void {
     const hours = this.clock.tick(dt);
     const before = this.needs.health;
-    this.needs.tick(hours, this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
+    this.needs.tick(hours, this.character.lying ? 'sleep' : this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
     // prévenir le joueur quand la santé passe sous un seuil
     const after = this.needs.health;
     if (before > 0 && after <= 0) this.onNotice?.('Santé à zéro : le perso est à bout de forces.');
