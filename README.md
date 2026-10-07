@@ -261,20 +261,20 @@ Cuisine (`src/game/items/kitchen.ts`), alignée de l'autre côté de la machine 
 plan de travail (on y pose ce qu'on tient).
 - Clic sur une porte (ou le tiroir, ou le couvercle de la poubelle) mains vides : elle s'ouvre ;
   un deuxième clic la ferme. Objet en main, clic sur le meuble : le perso ouvre et range (placard :
-  tasse, bouteille, pomme ; tiroir : lettre ; four et micro-ondes : steak, pomme de terre, pain, sandwich ;
-  lave-vaisselle : tasse). Ce qui est dans le tiroir sort et rentre avec lui.
+  tasse, assiette, bouteille, pomme ; tiroir : couverts, lettre ; four et micro-ondes : steak, pomme de terre, pain, sandwich ;
+  lave-vaisselle : tasse, assiette, couverts). Ce qui est dans le tiroir sort et rentre avec lui.
 - Four, micro-ondes, lave-vaisselle : clic sur le côté (pas la porte) mains vides, le perso ferme
   la porte et le met en marche (la lumière s'allume) ; il sonne à la fin. Le four cuit d'un cran ce
   qu'il contient (steak, pomme de terre : la même cuisson que sur la gazinière, cru → cuit, une
   deuxième fois brûlé), le micro-ondes cuit sans jamais brûler, le lave-vaisselle rend la vaisselle propre. Ouvrir la porte
   l'arrête.
-- Vaisselle sale : une tasse bue jusqu'au bout est « sale » ; la machine à café la refuse. À l'évier,
-  elle est rincée (sans être remplie) ; au lave-vaisselle, lavée.
+- Vaisselle sale : la machine à café refuse une tasse sale (il faut la laver à l'évier d'abord) ; le
+  lave-vaisselle lave tasse, assiette et couverts d'un coup.
 - Poubelle : objet en main, clic dessus : le couvercle se lève, l'objet y tombe et disparaît. Elle
   tient 8 objets ; pas vide, un clic sur le côté mains vides sort le sac.
 - Ordres : « cuis le steak au four », « réchauffe le sandwich », « allume le four », « éteins le four »,
   « ouvre le tiroir », « range la tasse », « range la lettre », « mets la pomme au four »,
-  « jette la bouteille », « vide la poubelle », « fais la vaisselle ».
+  « jette la bouteille », « vide la poubelle », « fais la vaisselle au lave-vaisselle ».
   Console : `game.startAppliance('four')`, `game.stopAppliance()`, `game.throwAway()`,
   `game.emptyBin()`, `game.store('placard')`, `game.openDoor('tiroir')`.
 - Fiches : `door` + `doorAxis: 'x'` (porte qui s'abaisse, ou couvercle avec un angle négatif),

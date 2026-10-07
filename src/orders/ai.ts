@@ -105,7 +105,10 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
-- {"tache": "mettre", "objet": "<ref>", "dans": "<ref du meuble>"} : ranger un objet dans un meuble qui a une porte ou un tiroir (« objet » facultatif : ce qu'on tient) : frigo (bouteille, aliments entiers ou coupés), placard (tasse, bouteille, pomme), tiroir (lettre), four et micro-ondes (pomme, sandwich), lave-vaisselle (tasse)
+- {"tache": "servir", "objet": "<ref>", "assiette": "<ref>"} : servir un aliment (pomme, sandwich) dans une assiette propre et vide (« objet » et « assiette » facultatifs : ce qu'on tient, ou le plus proche ; la plus proche)
+- {"tache": "repas", "objet": "<ref>"} : un vrai repas à table : sert l'aliment dans l'assiette si elle est vide, prend la fourchette, s'assoit devant l'assiette et mange tout le plat (rassasie un peu plus que manger debout). Assiette et couverts sont ensuite sales
+- {"tache": "vaisselle", "objets": ["<ref>", ...]} : laver à l'évier la vaisselle sale (pour le lave-vaisselle : « mettre » chaque pièce dedans puis « allumer » le lave-vaisselle) (assiette, fourchette, couteau, tasse après un café ; liste vide = toute la vaisselle sale). Le perso la reprend propre
+- {"tache": "mettre", "objet": "<ref>", "dans": "<ref du meuble>"} : ranger un objet dans un meuble qui a une porte ou un tiroir (« objet » facultatif : ce qu'on tient) : frigo (bouteille, aliments entiers ou coupés), placard (tasse, assiette, bouteille, pomme), tiroir (couverts, lettre), four et micro-ondes (steak, pomme de terre, pain, sandwich), lave-vaisselle (tasse, assiette, couverts)
 - {"tache": "ouvrir", "objet": "<ref>"} / {"tache": "fermer", "objet": "<ref>"} : ouvrir ou fermer la porte d'un meuble (frigo, placard, four…), un tiroir ou le couvercle de la poubelle
 - {"tache": "cuire", "objet": "<ref>"} : faire cuire un ingrédient cru (steak à la poêle, pomme de terre à l'eau dans la casserole ; il y en a dans le frigo). Le perso fait tout : eau à l'évier, ustensile sur la gazinière, ingrédient dedans, feu allumé, puis éteint une fois cuit. Cru, ça ne se mange pas ; oublié sur le feu, ça brûle
 - {"tache": "mettre", "objet": "<ref>", "dans": "<ref>"} marche aussi pour poser une poêle ou une casserole sur la gazinière (« dans » : la gazinière) ou mettre un ingrédient dans un ustensile
@@ -177,6 +180,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'lire': return { kind: 'lire', ref: s('objet') || undefined };
     case 'arreter_lire': return { kind: 'arreter_lire' };
     case 'asseoir': return { kind: 'asseoir', ref: s('objet') || undefined };
+    case 'servir': return { kind: 'servir', ref: s('objet') || undefined, sur: s('assiette') || undefined };
+    case 'repas': return { kind: 'repas', ref: s('objet') || undefined };
+    case 'vaisselle': return { kind: 'vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'lever': return { kind: 'lever' };
     case 'cuire': return { kind: 'cuire', ref: s('objet') || undefined };
     case 'allumer': return { kind: 'allumer', ref: s('objet') || undefined };

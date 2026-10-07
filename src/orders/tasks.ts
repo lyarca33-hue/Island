@@ -41,6 +41,17 @@ export type Intent =
   | { kind: 'dire'; texte: string }
   /** S'asseoir sur le siège `ref` (sinon le plus proche). */
   | { kind: 'asseoir'; ref?: string }
+  /** S'asseoir à table, devant l'assiette. */
+  | { kind: 'attabler' }
+  /** Servir l'aliment `ref` (sinon celui qu'on tient, sinon le plus proche) dans l'assiette `sur`. */
+  | { kind: 'servir'; ref?: string; sur?: string }
+  /**
+   * Un repas à table : servir l'aliment `ref` (ou un autre) dans l'assiette si elle est vide,
+   * prendre la fourchette, s'asseoir devant et manger tout le plat.
+   */
+  | { kind: 'repas'; ref?: string }
+  /** Laver à l'évier ces pièces de vaisselle (toute la vaisselle sale si `refs` est vide). */
+  | { kind: 'vaisselle'; refs: string[] }
   | { kind: 'lever' }
   /**
    * Faire cuire l'ingrédient `ref` (sinon celui qu'on tient, sinon le plus proche) : ustensile
@@ -56,6 +67,8 @@ export function intentLabel(i: Intent): string {
   const what = 'ref' in i ? i.ref : 'refs' in i ? (i.refs.length ? i.refs.join(', ') : 'livres') : '';
   const sur = i.kind === 'poser' && i.sur ? ` sur ${i.sur}` : '';
   if (i.kind === 'laver') return i.visage ? 'se laver' : 'se laver les mains';
+  if (i.kind === 'vaisselle') return `faire la vaisselle${i.refs.length ? ` ${i.refs.join(', ')}` : ''}`;
+  if (i.kind === 'repas') return `manger à table${i.ref ? ` ${i.ref}` : ''}`;
   return `${i.kind.replace('_', ' ')}${what ? ` ${what}` : ''}${sur}`;
 }
 
@@ -97,8 +110,19 @@ const held = (game: Game) => {
   return w.objets.filter((o) => w.enMain.includes(o.ref));
 };
 const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rangé');
-/** La tasse est sale : on la rince d'abord à l'évier (sinon pas de café). */
+/** La tasse est sale : on la lave d'abord à l'évier (sinon pas de café). */
 const isDirty = (game: Game, ref: string) => !!world(game).objets.find((o) => o.ref === ref)?.ou.includes(', sale');
+/** L'aliment servi dans l'assiette `plate` (« posé sur assiette »), ou undefined. */
+const servedOn = (w: ReturnType<typeof world>, plate: string) => w.objets.find((o) => o.sorte === 'nourriture' && o.ou.split(',')[0] === `posé sur ${plate}`);
+/** L'aliment `ref`, sinon celui qu'on tient, sinon un qui traîne (hors assiette), sinon le plus proche (frigo). */
+function pickFood(w: ReturnType<typeof world>, ref?: string): WorldObject | undefined {
+  const all = w.objets.filter((o) => o.sorte === 'nourriture');
+  if (ref) return all.find((o) => o.ref === ref);
+  // pas d'ingrédient cru (steak, pomme de terre) : il faut d'abord le faire cuire
+  const foods = all.filter((o) => o.cuisson !== 'cru');
+  const onPlate = (o: WorldObject) => o.ou.startsWith('posé sur assiette');
+  return foods.find((o) => w.enMain.includes(o.ref)) ?? [...foods].filter((o) => !onPlate(o)).sort((a, b) => +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0];
+}
 
 /** Pose ce qu'on tient dans la main `load` (son objet du dessous, qui la désigne). */
 const dropLoad = (act: Act, load: string[]) => act('poser', { objet: load[0] });
@@ -189,7 +213,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const cup = world(game).objets.find((o) => o.nom === 'tasse');
       if (!cup) throw new Failed('Il n’y a pas de tasse.');
       await take(game, act, cup.ref);
-      if (isDirty(game, cup.ref)) await act('eau');
+      if (isDirty(game, cup.ref)) await act('vaisselle');
       return act('cafe');
     }
     case 'boire': {
@@ -207,7 +231,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       }
       // tasse vide : on la remplit d'abord (café par défaut) ; « bois de l'eau » avec du café dedans : on la remplit d'eau
       else if (isDirty(game, cup.ref)) {
-        await act('eau');
+        await act('vaisselle');
         await act(intent.liquide === 'eau' ? 'eau' : 'cafe');
       } else if (intent.liquide === 'eau' && !ou.includes('contient de l’eau')) await act('eau');
       else if (!ou.includes('contient')) await act(intent.liquide === 'eau' ? 'eau' : 'cafe');
@@ -299,8 +323,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const cup = world(game).objets.find((o) => o.nom === 'tasse');
       if (!cup) throw new Failed('Il n’y a pas de tasse.');
       await take(game, act, cup.ref);
-      // sale : rincée d'abord, puis remplie
-      if (isDirty(game, cup.ref)) await act('eau');
+      // sale : lavée d'abord, puis remplie
+      if (isDirty(game, cup.ref)) await act('vaisselle');
       return act('eau');
     }
     case 'laver':
@@ -329,6 +353,57 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       const big = w.mains.find((l) => l.length > 1 || w.objets.find((o) => o.ref === l[0])?.deuxMains);
       if (big) await dropLoad(act, big);
       return act('asseoir', { siege: seat });
+    }
+    case 'attabler':
+      return act('attabler');
+    case 'servir': {
+      const food = pickFood(world(game), intent.ref);
+      if (!food) throw new Failed('Il n’y a rien à servir.');
+      await take(game, act, food.ref);
+      return act('servir', intent.sur ? { assiette: intent.sur } : {});
+    }
+    case 'repas': {
+      let w = world(game);
+      const plates = w.objets.filter((o) => o.nom === 'assiette');
+      // l'assiette déjà servie, sinon une propre et posée
+      let plate = plates.find((p) => servedOn(w, p.ref) && (!intent.ref || servedOn(w, p.ref)!.ref === intent.ref));
+      if (!plate) {
+        plate = plates.filter((p) => !p.ou.includes('sale') && !servedOn(w, p.ref)).sort((a, b) => +w.enMain.includes(a.ref) - +w.enMain.includes(b.ref) || a.distance - b.distance)[0];
+        if (!plate) throw new Failed(plates.length ? 'L’assiette est sale : fais d’abord la vaisselle.' : 'Il n’y a pas d’assiette.');
+        if (w.enMain.includes(plate.ref)) throw new Failed('Pose d’abord l’assiette sur la table.');
+        const food = pickFood(w, intent.ref);
+        if (!food) throw new Failed('Il n’y a rien à manger.');
+        await take(game, act, food.ref);
+        await act('servir', { assiette: plate.ref });
+        w = world(game);
+      }
+      const dish = servedOn(w, plate.ref);
+      if (!dish) throw new Failed('Le plat n’est pas dans l’assiette.');
+      // la fourchette en main (une propre de préférence), rien de gros dans l'autre
+      const forks = w.objets.filter((o) => o.nom === 'fourchette').sort((a, b) => +a.ou.includes('sale') - +b.ou.includes('sale') || a.distance - b.distance);
+      const fork = forks.find((o) => w.enMain.includes(o.ref)) ?? forks[0];
+      if (!fork) throw new Failed('Il n’y a pas de fourchette.');
+      await freeHands(game, act, (ref) => ref === fork.ref || world(game).objets.find((o) => o.ref === ref)?.nom === 'couteau de table');
+      await take(game, act, fork.ref);
+      await act('attabler', { assiette: plate.ref });
+      // bouchée après bouchée jusqu'à la fin du plat
+      for (let i = 0; i < 12 && world(game).objets.some((o) => o.ref === dish.ref); i++) await act('manger');
+      return;
+    }
+    case 'vaisselle': {
+      const dirty = () => world(game).objets.filter((o) => o.ou.includes(', sale') && (!intent.refs.length || intent.refs.includes(o.ref)));
+      if (!dirty().length) throw new Failed(intent.refs.length ? 'C’est déjà propre.' : 'La vaisselle est déjà propre.');
+      // deux pièces par voyage, une par main
+      for (let round = 0; round < 8 && dirty().length; round++) {
+        const todo = dirty().sort((a, b) => +!world(game).enMain.includes(a.ref) - +!world(game).enMain.includes(b.ref) || a.distance - b.distance);
+        await freeHands(game, act, (ref) => todo.some((o) => o.ref === ref));
+        for (const d of todo.slice(0, 2)) {
+          const w = world(game);
+          if (!w.enMain.includes(d.ref) && w.mainsLibres > 0) await act('prendre', { objet: d.ref });
+        }
+        await act('vaisselle');
+      }
+      return;
     }
     case 'lever':
       if (!world(game).perso.includes('assis')) return;

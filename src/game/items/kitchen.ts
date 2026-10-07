@@ -50,14 +50,11 @@ const STEEL = 0xb9bfc6;
 const INOX = 0xd2d6da;
 const BLACK = 0x2e3135;
 
-/**
- * Vaisselle qui se range au placard et passe au lave-vaisselle. Les assiettes, verres, bols…
- * viendront s'ajouter ici.
- */
-export const DISHES = ['tasse'];
-/** Petits objets qui vont dans le tiroir (les couverts viendront s'y ajouter). */
-export const DRAWER_THINGS = ['lettre'];
-/** Ce qui se met au four et au micro-ondes (les aliments à cuire viendront s'y ajouter). */
+/** Vaisselle qui se range au placard et passe au lave-vaisselle (les verres, bols… viendront s'y ajouter). */
+export const DISHES = ['tasse', 'assiette', 'fourchette', 'couteau de table'];
+/** Petits objets qui vont dans le tiroir : les couverts, la lettre. */
+export const DRAWER_THINGS = ['fourchette', 'couteau de table', 'lettre'];
+/** Ce qui se met au four et au micro-ondes. */
 export const OVEN_FOOD = ['steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte'];
 
 /** Caisson de meuble bas (côtés, fond, socle) et son plan de travail, ouvert à l'avant. */
