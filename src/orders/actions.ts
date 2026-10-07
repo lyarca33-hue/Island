@@ -208,6 +208,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.drinkAtTap(),
   },
   {
+    name: 'mettre_table',
+    description: 'Mettre la table devant la chaise : une assiette, une fourchette et un couteau de table propres, pris au placard et au tiroir, posés chacun à sa place. Les mains doivent être vides.',
+    params: {},
+    run: (g) => g.setTable(),
+  },
+  {
+    name: 'debarrasser',
+    description: 'Débarrasser la table : la vaisselle sale part au lave-vaisselle, la propre à sa place, deux pièces par voyage. Une assiette où il reste à manger reste sur la table. Les mains doivent être vides.',
+    params: {},
+    run: (g) => g.clearTable(),
+  },
+  {
+    name: 'couper_assiette',
+    description: 'Assis à table devant l’assiette servie, le couteau de table en main : couper le plat en bouchées (elles se mangent ensuite deux fois plus vite).',
+    params: {},
+    run: (g) => g.cutInPlate(),
+  },
+  {
     name: 'regarder_dedans',
     description: 'Aller ouvrir un meuble (frigo, congélateur, placard, tiroir) et regarder ce qu’il contient (le compte rendu le dit).',
     params: { objet: 'ref du meuble' },

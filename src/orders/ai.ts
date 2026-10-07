@@ -110,6 +110,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier ; il coule jusqu'à ce qu'on le ferme
 - {"tache": "bouchon", "mettre": true} : boucher l'évier (ou enlever le bouchon, « mettre » faux). Bouché avec le robinet ouvert, la cuve se remplit puis déborde
 - {"tache": "boire_robinet"} : boire au robinet, dans le creux des mains (pose d'abord ce que le perso tient)
+- {"tache": "mettre_table"} : mettre le couvert devant la chaise (assiette, fourchette, couteau de table pris au placard et au tiroir)
+- {"tache": "debarrasser"} : débarrasser la table (vaisselle sale au lave-vaisselle, propre à sa place)
+- {"tache": "couper_assiette"} : assis devant l'assiette servie, couper le plat en bouchées avec le couteau de table
 - {"tache": "regarder", "objet": "<ref>"} : ouvrir un meuble (frigo, congélateur, placard, tiroir) et regarder ce qu'il contient
 - {"tache": "ranger_place", "objet": "<ref>"} : ranger un objet à sa place sans nommer le meuble (« objet » facultatif : ce qu'on tient) : aliments au frigo, glaçons et lasagne au congélateur, vaisselle au placard, couverts au tiroir
 - {"tache": "laisser_ouvert", "objet": "<ref>"} : ouvrir un meuble et laisser sa porte ouverte (elle ne se referme plus seule)
@@ -190,6 +193,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'robinet': return { kind: 'robinet', ouvrir: o.ouvrir !== false };
     case 'bouchon': return { kind: 'bouchon', mettre: o.mettre !== false };
     case 'boire_robinet': return { kind: 'boire_robinet' };
+    case 'mettre_table': return { kind: 'mettre_table' };
+    case 'debarrasser': return { kind: 'debarrasser' };
+    case 'couper_assiette': return { kind: 'couper_assiette' };
     case 'regarder': return s('objet') ? { kind: 'regarder', ref: s('objet') } : null;
     case 'ranger_place': return { kind: 'ranger_place', ref: s('objet') || undefined };
     case 'laisser_ouvert': return s('objet') ? { kind: 'laisser_ouvert', ref: s('objet') } : null;

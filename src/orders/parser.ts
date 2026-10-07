@@ -48,6 +48,7 @@ const VERBS: Record<string, string[]> = {
   enlever: ['enleve', 'enlever', 'retire', 'retirer'],
   regarder: ['regarde', 'regarder', 'inspecte', 'inspecter', 'fouille', 'fouiller', 'inventorie'],
   laisser: ['laisse', 'laisser'],
+  debarrasser: ['debarrasse', 'debarrasser', 'dessers', 'desservir'],
 };
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
@@ -229,6 +230,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return portable.filter((o) => o.nom === portable[0].nom).slice(0, n).map((o) => ({ kind: 'prendre', ref: o.ref }));
     }
     case 'poser': {
+      // « mets la table », « mets le couvert »
+      if (rest.includes('couvert') || (found.length === 1 && found[0].nom === 'table' && !rest.some((x) => ['sur', 'dans', 'a', 'au', 'pres'].includes(x)))) return [{ kind: 'mettre_table' }];
       // « mets des glaçons dans la tasse »
       if (rest.some((x) => x.startsWith('glacon'))) return [{ kind: 'glacons', dans: found.find((o) => o.nom === 'tasse')?.ref }];
       // « pose la tasse sur la caisse » : prendre la tasse si besoin, aller à la caisse, poser
@@ -322,6 +325,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'manger', ref: (food.find((o) => world.enMain.includes(o.ref)) ?? food[0])?.ref }];
     }
     case 'couper': {
+      // « coupe le steak dans l'assiette », « coupe ta viande » : en bouchées, à table
+      if (rest.includes('assiette') || rest.includes('bouchees') || rest.includes('viande')) return [{ kind: 'couper_assiette' }];
       // « coupe la pomme », « coupe le pain sur la planche », « coupe » (ce qu'on tient, sinon ce qu'il y a)
       const food = found.filter((o) => o.coupable);
       if (found.length && !food.length) return null;
@@ -345,6 +350,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (into?.sorte === 'évier') return [{ kind: 'vider_recipient', ref: from?.ref }];
       return [{ kind: 'verser', ref: from?.ref, dans: into?.ref }];
     }
+    case 'debarrasser':
+      // « débarrasse la table », « débarrasse »
+      return [{ kind: 'debarrasser' }];
     case 'regarder': {
       // « regarde dans le frigo », « fouille le placard »
       const store = found.find((o) => STORES.has(o.sorte ?? ''));
@@ -432,6 +440,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (app) return [{ kind: verb, ref: app.ref }];
       // « allume la gazinière », « éteins le feu », « allume la machine à café »
       const target = found.find((o) => o.sorte === 'gazinière' || o.sorte === 'machine');
+      // « coupe la pomme », « coupe dans l'assiette » : couper, pas éteindre
+      if (!target && ['coupe', 'couper'].includes(word) && (found.length || rest.length)) return parseClause('couper', rest, original, world, word);
       if (found.length && !target) return null;
       return [{ kind: verb, ref: target?.ref }];
     }
