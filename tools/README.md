@@ -28,4 +28,13 @@ python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public
     --clips Sitting_Enter Sitting_Idle_Loop Sitting_Talking_Loop Sitting_Exit
 ```
 
+Les poses du créateur (un fichier par volume de la bibliothèque) :
+
+```bash
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public/anim/ual_poses1.glb \
+    --clips Dance_Loop Idle_Talking_Loop Crouch_Idle_Loop Spell_Simple_Idle_Loop Walk_Formal_Loop
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL2_Standard.glb --out public/anim/ual_poses2.glb \
+    --clips Idle_FoldArms_Loop Idle_TalkingPhone_Loop Consume
+```
+
 Les os sont lus par `src/creator/retarget.ts` (`UAL_TO_VRM`).
