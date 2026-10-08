@@ -1577,6 +1577,7 @@ export class Game {
     if (this.gloved) perso += ', porte les gants de ménage';
     if (this.dirtyHands) perso += `, mains sales (${this.dirtyHands}) : se laver les mains au savon avant de cuisiner ou manger`;
     if (this.roughHands >= 1) perso += ', mains abîmées (vaisselle sans gants)';
+    perso += this.roomName ? `, dans la pièce : ${this.roomName}` : ', dehors';
     return {
       perso: this.sleep ? `${perso}, endormi dans ${this.ref(this.sleep.bed)}` : this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
@@ -1665,6 +1666,80 @@ export class Game {
       room.setLights(want);
       this.onNotice?.(want ? `Lumière allumée (${room.spec.name}).` : `Lumière éteinte (${room.spec.name}).`);
     }, running);
+    return true;
+  }
+
+  /** Comme switchLights, pour la pièce nommée `name` (cuisine, salon, chambre, salle de bain). */
+  switchLightsIn(on?: boolean, name?: string, running = false): boolean {
+    const room = name ? this.rooms.find((r) => r.spec.name === name) : this.hereRoom();
+    if (!room) {
+      this.onNotice?.(`Il n’y a pas de pièce « ${name} ».`);
+      return false;
+    }
+    return this.switchLights(on, running, room);
+  }
+
+  /** La pièce où est le perso (cuisine, salon, chambre, salle de bain), ou null dehors. */
+  get roomName(): string | null {
+    const p = this.character.position;
+    return this.rooms.find((r) => r.contains(p))?.spec.name ?? null;
+  }
+
+  /** Marche jusqu'à la pièce `name` : juste après l'entrée, devant l'interrupteur, tourné vers la pièce. */
+  walkToRoom(name: string, running = false): boolean {
+    const room = this.rooms.find((r) => r.spec.name === name);
+    if (!room) {
+      this.onNotice?.(`Il n’y a pas de pièce « ${name} ».`);
+      return false;
+    }
+    if (room.contains(this.character.position)) {
+      this.onNotice?.(`Déjà ici : ${name}.`);
+      return true;
+    }
+    if (this.moving) {
+      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+      return false;
+    }
+    const { x0, x1, z0, z1 } = room.rect;
+    this.character.approachThen(room.switchSpot().stand, new THREE.Vector3((x0 + x1) / 2, 0, (z0 + z1) / 2), () => {}, running);
+    return true;
+  }
+
+  /** Change de chaîne sur la télé `ref` : la suivante, ou `channel` (« météo ») ; allumée d'abord s'il le faut. */
+  zapTo(ref: string, channel?: string, running = false): boolean {
+    const item = this.byRef(ref);
+    const tv = item && this.tvs.get(item);
+    if (!item || !tv) {
+      this.onNotice?.(`${ref} n’est pas une télé.`);
+      return false;
+    }
+    if (channel !== undefined) {
+      const i = CHANNELS.indexOf(channel);
+      if (i < 0) {
+        this.onNotice?.(`Pas de chaîne « ${channel} » (il y a : ${CHANNELS.join(', ')}).`);
+        return false;
+      }
+      // allumée, zapTv passe à la suivante : on se place juste avant
+      tv.channel = (i - (tv.on ? 1 : 0) + CHANNELS.length) % CHANNELS.length;
+    }
+    return this.zapTv(item, running);
+  }
+
+  /** Va ouvrir (`open`) ou fermer le couvercle des toilettes `ref` (les plus proches sans ref). */
+  toiletLid(open: boolean, ref?: string, running = false): boolean {
+    const toilet = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.toilet);
+    if (!toilet?.def.toilet) {
+      this.onNotice?.('Il n’y a pas de toilettes.');
+      return false;
+    }
+    const c = this.character;
+    const done = () => {
+      this.setLid(toilet, open);
+      this.onNotice?.(open ? 'Couvercle levé.' : 'Couvercle baissé.');
+    };
+    if (p0(c.position).distanceTo(p0(toilet.object.position)) < 1) return done(), true;
+    if (c.busy || c.bracing || this.moving) return false;
+    c.approachThen(this.frontOf(toilet), toilet.object.position, done, running);
     return true;
   }
 

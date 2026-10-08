@@ -165,14 +165,14 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'allumer',
-    description: 'Allumer un appareil : la gazinière (les feux où une poêle ou une casserole est posée), la machine à café, ou mettre en marche le four, le micro-ondes, le lave-vaisselle (ils cuisent ou lavent ce qui est dedans ; l’action finit quand ils sonnent).',
+    description: 'Allumer un appareil : la télé, la lampe de chevet, la gazinière (les feux où une poêle ou une casserole est posée), la machine à café, ou mettre en marche le four, le micro-ondes, le lave-vaisselle (ils cuisent ou lavent ce qui est dedans ; l’action finit quand ils sonnent).',
     params: { objet: 'ref de l’appareil' },
     // `ustensile` (facultatif) : seulement le feu sous lui
     run: (g, a) => (g.isLamp(a.objet) ? g.switchLamp(a.objet, true) : g.isAppliance(a.objet) ? g.startAppliance(a.objet) : g.switchOn(a.objet, false, a.ustensile)),
   },
   {
     name: 'eteindre',
-    description: 'Éteindre un appareil (tous les feux de la gazinière, la machine à café, le four…).',
+    description: 'Éteindre un appareil (la télé, la lampe de chevet, tous les feux de la gazinière, la machine à café, le four…).',
     params: { objet: 'ref de l’appareil' },
     run: (g, a) => (g.isLamp(a.objet) ? g.switchLamp(a.objet, false) : g.isAppliance(a.objet) ? g.stopAppliance(a.objet) : g.switchOff(a.objet, false, a.ustensile)),
   },
@@ -434,6 +434,30 @@ export const ACTIONS: ActionDef[] = [
     description: 'Se regarder dans le miroir du lavabo : le perso dit de quoi il a l’air.',
     params: {},
     run: (g) => g.lookInMirror(),
+  },
+  {
+    name: 'couvercle',
+    description: 'Lever (`etat` = ouvrir) ou baisser (`etat` = fermer) le couvercle des toilettes.',
+    params: { etat: 'ouvrir ou fermer' },
+    run: (g, a) => g.toiletLid(a.etat !== 'fermer', a.objet),
+  },
+  {
+    name: 'aller_piece',
+    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre ou salle de bain (le perso s’arrête juste après l’entrée).',
+    params: { piece: 'cuisine, salon, chambre ou salle de bain' },
+    run: (g, a) => g.walkToRoom(a.piece),
+  },
+  {
+    name: 'lumiere',
+    description: 'Aller à l’interrupteur et allumer (`etat` = allumer) ou éteindre (`etat` = eteindre) la lumière (plafonnier, lampadaire) de la pièce `piece` (facultatif : sinon celle où est le perso).',
+    params: { etat: 'allumer ou eteindre' },
+    run: (g, a) => g.switchLightsIn(a.etat !== 'eteindre', a.piece),
+  },
+  {
+    name: 'zapper',
+    description: 'Changer de chaîne sur la télé `objet` (allumée d’abord s’il le faut) : la suivante, ou `chaine` (dessin animé, météo, aquarium). Assis, le perso a la télécommande ; debout, il va devant la télé.',
+    params: { objet: 'ref de la télé' },
+    run: (g, a) => g.zapTo(a.objet, a.chaine),
   },
   {
     name: 'asseoir',

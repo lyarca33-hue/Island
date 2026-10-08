@@ -108,7 +108,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "verser", "objet": "<ref>", "dans": "<ref>"} : verser le contenu d'un récipient (bouteille, tasse, casserole) dans un autre récipient, ou de l'eau dans la bouilloire (« objet » facultatif : ce qu'on tient ; « dans » facultatif : le récipient le plus proche)
 - {"tache": "vider_recipient", "objet": "<ref>"} : vider dans l'évier ce que contient un récipient (« objet » facultatif : ce qu'on tient) ; dans la casserole, les pommes de terre restent (égoutter)
 - {"tache": "remplir_bouilloire", "objet": "<ref>"} : remplir d'eau la bouilloire (elle n'a pas de robinet : le perso remplit un récipient à l'évier et le verse dedans). Sans eau, la bouilloire ne fait pas de thé
-- {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier ; il coule jusqu'à ce qu'on le ferme
+- {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier (ou du lavabo : « objet ») ; il coule jusqu'à ce qu'on le ferme
 - {"tache": "bouchon", "mettre": true} : boucher l'évier (ou enlever le bouchon, « mettre » faux). Bouché avec le robinet ouvert, la cuve se remplit puis déborde
 - {"tache": "boire_robinet"} : boire au robinet, dans le creux des mains (pose d'abord ce que le perso tient)
 - {"tache": "charger_lv"} : charger toute la vaisselle sale au lave-vaisselle
@@ -163,6 +163,10 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "toilettes"} : aller aux toilettes quand la vessie est basse (s'asseoir, se soulager, tirer la chasse)
 - {"tache": "chasse"} : tirer la chasse d'eau
 - {"tache": "miroir"} : se regarder dans le miroir du lavabo
+- {"tache": "couvercle", "ouvrir": true} : lever le couvercle des toilettes (« ouvrir » faux : le baisser)
+- {"tache": "piece", "piece": "salon"} : aller dans une autre pièce de la maison (cuisine, salon, chambre, salle de bain)
+- {"tache": "lumiere", "allumer": true, "piece": "salon"} : allumer la lumière d'une pièce à l'interrupteur (plafonnier, lampadaire du salon) ; « allumer » faux pour l'éteindre ; « piece » facultatif : celle où est le perso
+- {"tache": "tele", "objet": "<ref>", "assis": true, "zapper": true, "chaine": "météo"} : la télé du salon : s'asseoir d'abord sur le canapé (« assis »), puis l'allumer, ou changer de chaîne (« zapper », vers « chaine » s'il est dit : dessin animé, météo, aquarium). Tout est facultatif. Pour l'éteindre : « eteindre » avec la télé
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
 - {"tache": "preparer", "plat": "<id du plat>"} : préparer un plat d'une recette ; le perso coupe et fait cuire ce qu'il faut, réunit les ingrédients sur la planche à découper et les assemble. Plats : "salade-composee" (tomate et concombre coupés, carotte en plus), "tartine-tomate" (pain et tomate coupés), "sandwich-steak" (pain coupé et steak cuit, tomate ou concombre en plus), "steak-pommes-de-terre" (steak et pomme de terre cuits). Le plat se mange comme le sandwich, ou se sert dans l'assiette pour un repas à table
@@ -182,7 +186,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "lever"} : se lever quand on est assis (ou se réveiller quand on dort)
 - {"tache": "dormir", "objet": "<ref>"} : aller se coucher dans le lit et dormir (« objet » facultatif : le lit le plus proche). L'écran passe au noir, le temps file, la fatigue remonte ; le perso se réveille seul une fois reposé. Pas possible si la fatigue est presque pleine
 - {"tache": "reveiller"} : se réveiller et sortir du lit
-- La lampe de chevet (sorte « lampe ») s'allume et s'éteint avec « allumer » / « eteindre »
+- La lampe de chevet (sorte « lampe ») et la télé s'allument et s'éteignent avec « allumer » / « eteindre » ; l'armoire de la chambre (où se rangent les pulls) s'ouvre comme un placard
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
 - {"tache": "manque", "action": "<verbe court, ex. danser>", "sorte": "geste", "objet": "<nom>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore (« sorte » : "geste" si l'objet existe mais pas le geste, ex. laver la tasse ; "objet" si l'objet n'est pas dans la pièce, ex. une casserole ; "autre" sinon. « objet » facultatif : l'objet concerné)
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
@@ -238,7 +242,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'verser': return { kind: 'verser', ref: s('objet') || undefined, dans: s('dans') || undefined };
     case 'vider_recipient': return { kind: 'vider_recipient', ref: s('objet') || undefined };
     case 'remplir_bouilloire': return s('objet') ? { kind: 'remplir_bouilloire', ref: s('objet') } : null;
-    case 'robinet': return { kind: 'robinet', ouvrir: o.ouvrir !== false };
+    case 'robinet': return { kind: 'robinet', ouvrir: o.ouvrir !== false, ref: s('objet') || undefined };
     case 'bouchon': return { kind: 'bouchon', mettre: o.mettre !== false };
     case 'boire_robinet': return { kind: 'boire_robinet' };
     case 'charger_lv': return { kind: 'charger_lv' };
@@ -275,6 +279,10 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'toilettes': return { kind: 'toilettes' };
     case 'chasse': return { kind: 'chasse' };
     case 'miroir': return { kind: 'miroir' };
+    case 'couvercle': return { kind: 'couvercle', ouvrir: o.ouvrir !== false };
+    case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
+    case 'lumiere': return { kind: 'lumiere', on: o.allumer !== false, piece: s('piece') || undefined };
+    case 'tele': return { kind: 'tele', ref: s('objet') || undefined, assis: o.assis === true, zapper: o.zapper === true || !!s('chaine'), chaine: s('chaine') || undefined };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };
     case 'preparer': return { kind: 'preparer', plat: s('plat') || undefined };
@@ -321,7 +329,7 @@ export type OnMissing = (m: Omit<Missing, 'at' | 'ordre'>) => void;
 export async function runAi(game: Game, chat: Chat, order: string, onStep: (s: Step | null) => void, signal?: AbortSignal, onMissing?: OnMissing): Promise<string> {
   const state = () => {
     const w = game.describe();
-    return `État de la pièce : ${JSON.stringify({ mains: w.mains, mainsLibres: w.mainsLibres, lit: w.lit, objets: w.objets.map(({ ref, nom, ou, coupable }) => ({ ref, nom, ou, coupable })) })}`;
+    return `État de la pièce : ${JSON.stringify({ perso: w.perso, mains: w.mains, mainsLibres: w.mainsLibres, lit: w.lit, objets: w.objets.map(({ ref, nom, ou, coupable }) => ({ ref, nom, ou, coupable })) })}`;
   };
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM },
