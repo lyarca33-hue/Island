@@ -53,6 +53,7 @@ import { Needs } from './needs';
 import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
 import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
+import { CUISINE_SEULE } from './carte';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { CHANNELS, Tv } from './tv';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, type Quality } from './postfx';
@@ -818,6 +819,8 @@ export class Game {
   constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
     this.recipe = recipe;
+    // cuisine seule (carte.ts) : pas de lit, de douche ni de toilettes pour l'instant
+    if (CUISINE_SEULE) this.needs.pause(['fatigue', 'hygiene', 'vessie']);
     // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
@@ -856,10 +859,11 @@ export class Game {
       pouring: () => !!this.pouring,
       sitting: () => this.sitting,
     });
-    this.scene.add(this.garden.group);
+    // cuisine seule (carte.ts) : ni jardin ni paysage autour, juste le sol d'herbe
+    if (!CUISINE_SEULE) this.scene.add(this.garden.group);
     // les arbres et les plantes du pack nature, dès que le fichier est chargé (en attendant, ceux faits
     // par programme) ; en qualité basse, moins d'herbes et de fleurs au sol
-    loadNature()
+    if (!CUISINE_SEULE) loadNature()
       .then((kit) => this.garden.dress(kit, ROOMS.map((r) => r.rect), this.qualityLevel === 'basse' ? 0.4 : 1))
       .catch((e) => console.warn('pack nature non chargé', e));
     // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
@@ -911,7 +915,7 @@ export class Game {
       route: (from, to) => this.character.nav?.route(from, to) ?? [to],
       isFish: (id) => FISH_BY_ID.has(id),
     });
-    this.scene.add(this.paysage.group);
+    if (!CUISINE_SEULE) this.scene.add(this.paysage.group);
     this.laundry = new Buanderie({
       character: this.character,
       spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
@@ -954,7 +958,8 @@ export class Game {
       this.scene.add(item.object);
       return item;
     };
-    for (const [id, x, y, z, rot] of [...START_ITEMS, ...GARDEN_START, ...OUTDOOR_START, ...ANIMAL_START, ...ROOMS.flatMap((r) => r.items ?? [])]) {
+    const outside = CUISINE_SEULE ? [] : [...GARDEN_START, ...OUTDOOR_START, ...ANIMAL_START];
+    for (const [id, x, y, z, rot] of [...START_ITEMS, ...outside, ...ROOMS.flatMap((r) => r.items ?? [])]) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -1066,8 +1071,10 @@ export class Game {
         it.object.position.copy(at).setY(at.y + it.restLift(it.object.quaternion));
       }
     }
-    const shelf = this.items.find((i) => i.def.id === 'bibliotheque')!;
+    // les livres de la bibliothèque du salon (pas de salon dans la cuisine seule)
+    const shelf = this.items.find((i) => i.def.id === 'bibliotheque');
     for (const [id, at] of START_BOOKS) {
+      if (!shelf) break;
       const book = add(id);
       if (typeof at === 'number') {
         const slot = this.slot(shelf, at);
@@ -1278,7 +1285,8 @@ export class Game {
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
-    for (const o of [...this.garden.obstacles, ...this.loisirs.obstacles, ...this.paysage.obstacles]) nav.add(o.box, o.pos, o.yaw);
+    const around = CUISINE_SEULE ? [] : [...this.garden.obstacles, ...this.paysage.obstacles];
+    for (const o of [...around, ...this.loisirs.obstacles]) nav.add(o.box, o.pos, o.yaw);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
     // on entre dans la douche : seule sa paroi vitrée (côté +X) se contourne
     for (const it of this.items) if (it !== skip && it.def.shower) nav.add(new THREE.Box3(new THREE.Vector3(it.box.max.x - 0.04, 0, it.box.min.z), new THREE.Vector3(it.box.max.x, 2, it.box.max.z - 0.15)), it.object.position, it.object.rotation.y);
@@ -7078,7 +7086,7 @@ export class Game {
     this.garden.rain(w.rain, (dt * this.clock.speed) / 3600);
     this.loisirs.update(dt);
     this.chat.update(dt, (dt * this.clock.speed) / 60);
-    this.paysage.update(dt);
+    if (!CUISINE_SEULE) this.paysage.update(dt);
     this.laundry.update(dt, this.clock.speed / TIME_SPEED);
     this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
   }

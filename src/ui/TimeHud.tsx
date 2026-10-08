@@ -4,6 +4,7 @@ import type { Game } from '../game/Game';
 import { skillPerks } from '../game/items/freshness';
 import { gardenPerks } from '../game/jardin';
 import { NEEDS } from '../game/needs';
+import { CUISINE_SEULE } from '../game/carte';
 import { WEATHERS, type WeatherKind } from '../game/meteo';
 import { BODY_STATES, degrees, indoorTemp, NORMAL_TEMP } from '../game/temperature';
 import { forecast, type GaugeKey, type GaugeState, GaugeWatch } from './gauges';
@@ -298,7 +299,7 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
   return (
     <div className="hud-status">
       <div className="hud-gauges" role="group" aria-label="Besoins du perso">
-        {GAUGES.map(({ key, label }) => (
+        {GAUGES.filter(({ key }) => key === 'health' || !game.needs.paused.has(key)).map(({ key, label }) => (
           <Gauge
             key={key}
             label={label}
@@ -313,7 +314,7 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
         ))}
         <BodyGauge game={game} open={open === 'body'} onOpen={(o) => setOpen((cur) => (o ? 'body' : cur === 'body' ? null : cur))} />
         <SkillGauge game={game} kind="cuisine" open={open === 'skill'} onOpen={(o) => setOpen((cur) => (o ? 'skill' : cur === 'skill' ? null : cur))} />
-        <SkillGauge game={game} kind="jardinage" open={open === 'garden'} onOpen={(o) => setOpen((cur) => (o ? 'garden' : cur === 'garden' ? null : cur))} />
+        {!CUISINE_SEULE && <SkillGauge game={game} kind="jardinage" open={open === 'garden'} onOpen={(o) => setOpen((cur) => (o ? 'garden' : cur === 'garden' ? null : cur))} />}
         <MoodGauge game={game} open={open === 'mood'} onOpen={(o) => setOpen((cur) => (o ? 'mood' : cur === 'mood' ? null : cur))} />
       </div>
       <button className="hud-clock" onClick={onClock} title="Régler l’heure (Menu → Heure)">

@@ -73,3 +73,16 @@ test('le jeu se lance : prendre la tasse, faire un café, s’asseoir', async ({
 
   expect(erreurs, erreurs.join('\n')).toEqual([]);
 });
+
+test('l’ancienne maison se charge encore (réglage carte)', async ({ page }) => {
+  const erreurs: string[] = [];
+  page.on('pageerror', (e) => erreurs.push(`exception : ${e.message}`));
+  page.on('console', (m) => {
+    if (m.type() === 'error') erreurs.push(`console : ${m.text()}`);
+  });
+  await page.goto('/?carte=ancienne');
+  await expect(page.getByText('Chargement…')).toHaveCount(0, { timeout: 120_000 });
+  const pieces = await page.evaluate(() => (window as unknown as { game: { rooms: unknown[] } }).game.rooms.length);
+  expect(pieces).toBeGreaterThan(1);
+  expect(erreurs, erreurs.join('\n')).toEqual([]);
+});

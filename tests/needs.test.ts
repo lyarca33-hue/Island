@@ -103,3 +103,17 @@ describe('besoins du perso', () => {
     expect(n.health).toBe(100);
   });
 });
+
+describe('besoins en pause (cuisine seule)', () => {
+  it('restent pleins, et boire ne remplit plus la vessie', () => {
+    const n = new Needs();
+    n.pause(['fatigue', 'hygiene', 'vessie']);
+    n.tick(10, 'run', true);
+    expect(n.values.fatigue).toBe(100);
+    expect(n.values.hygiene).toBe(100);
+    expect(n.values.vessie).toBe(100);
+    expect(n.values.faim).toBeLessThan(70);
+    n.restore('soif', 50);
+    expect(n.values.vessie).toBe(100);
+  });
+});

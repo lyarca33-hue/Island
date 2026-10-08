@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/Game';
 import type { Quality } from '../game/postfx';
+import { CARTE, CARTES, switchCarte } from '../game/carte';
 import './time.css';
 
 const QUALITIES: Array<[Quality, string]> = [['basse', 'Basse'], ['normale', 'Normale'], ['haute', 'Haute']];
@@ -45,6 +46,13 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
         <span>Afficher les images par seconde</span>
       </label>
       <SoundControls game={game} />
+      <span>Carte</span>
+      <div className="time-speeds">
+        {CARTES.map(([c, label]) => (
+          <button key={c} className={CARTE === c ? 'active' : ''} onClick={() => CARTE !== c && switchCarte(c)}>{label}</button>
+        ))}
+      </div>
+      <small>Cuisine seule : la nouvelle carte, refaite pièce par pièce (fatigue, hygiène et vessie en pause). Chaque carte garde sa partie ; changer recharge le jeu.</small>
     </div>
   );
 }
