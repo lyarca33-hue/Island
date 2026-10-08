@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import { box, DARK_WOOD, ROOM, SALON_PASS, toon, WALL_T, WIN_HIGH, type Rect, type Room, type RoomSpec } from './room';
+import { kentia } from './plants';
 
 /** Intérieur du salon : son mur ouest est dos au mur est de la cuisine. */
 export const SALON: Rect = { x0: ROOM.x1 + 2 * WALL_T, x1: ROOM.x1 + 2 * WALL_T + 5.2, z0: ROOM.z0, z1: ROOM.z1 };
@@ -59,16 +60,8 @@ function salonDecor(room: Room): void {
   );
   room.wallGroup('ouest').add(pic);
   // plante en pot dans le coin sud-est (le coin nord-est reste libre pour un passage vers le nord)
-  const plant = new THREE.Group();
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.13, 0.36, 18), toon(0xb5653a));
-  pot.position.y = 0.18;
-  plant.add(pot);
-  for (const [x, z, h] of [[0, 0, 0.9], [0.1, 0.05, 0.7], [-0.08, 0.08, 0.75], [0.05, -0.1, 0.65], [-0.1, -0.05, 0.6]]) {
-    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.1, h, 8), toon(0x4f8a3c));
-    leaf.position.set(x, 0.36 + h / 2, z);
-    plant.add(leaf);
-  }
-  plant.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
+  // les palmes s'ouvrent vers la pièce (nord-ouest), pas à travers les murs du coin
+  const plant = kentia(-0.75 * Math.PI, 1.9);
   plant.position.set(x1 - 0.3, 0, z1 - 0.3);
   room.group.add(plant);
   room.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.2, 0, -0.2), new THREE.Vector3(0.2, 1.2, 0.2)), pos: plant.position.clone(), yaw: 0, wall: false });

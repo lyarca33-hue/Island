@@ -17,6 +17,9 @@ const LIFE: Record<string, number | null> = {
   farine: null, sucre: null, 'tablette de chocolat': null, confiture: null, miel: null, 'pâte à tartiner': null,
   'sauce tomate': null, vinaigre: null, levure: null, biscuits: null, chips: null, moutarde: null, ketchup: null,
   mayonnaise: null, oignon: 336, ail: 336, 'pomme de terre': 336,
+  // un gâteau dure plusieurs jours
+  'gâteau': 96, 'gâteau au chocolat': 96, 'gâteau au yaourt': 96,
+  'parts de gâteau': 72, 'parts de gâteau au chocolat': 72, 'parts de gâteau au yaourt': 72,
 };
 /** Les morceaux coupés se gardent moins longtemps que l'aliment entier. */
 const CUT_LIFE = 24;

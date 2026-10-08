@@ -489,7 +489,7 @@ const clothCache = new Map<string, THREE.Texture>();
 /** Garde peu de textures peintes en mémoire (chacune peut peser 16 Mo en 2048²). */
 function remember(cache: Map<string, THREE.Texture>, key: string, tex: THREE.Texture) {
   cache.set(key, tex);
-  while (cache.size > 12) {
+  while (cache.size > 6) {
     const [k, old] = cache.entries().next().value!;
     cache.delete(k);
     old.dispose();

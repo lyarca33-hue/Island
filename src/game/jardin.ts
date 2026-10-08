@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import type { Character } from './character';
 import type { ItemDef } from './items/catalog';
 import type { WorldItem } from './items/carry';
-import { mergeStaticParts } from './items/merge';
+import { carrotTopGeo, tomatoPlantGeo, flowerGeo, flowerHeadGeo, FLOWER_KINDS, foliage, foliageMaterial, leafMaterial, leafMesh, merge, painted, pineGeo, rng, tuftGeo, vineLeavesGeo, type Lobe } from './plants';
 import { createToonMaterial } from './toon';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
@@ -37,15 +37,6 @@ function group(...parts: THREE.Object3D[]): THREE.Group {
 
 /** Pavé de `w` × `h` × `d` centré en (x, y, z). */
 const box = (w: number, h: number, d: number, mat: THREE.ColorRepresentation | THREE.Material, x = 0, y = h / 2, z = 0, shadow = true) => mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z, shadow);
-
-/** Petit générateur pseudo-aléatoire déterministe (même jardin à chaque lancement). */
-function rng(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
 
 // ——— les objets du jardin ———
 
@@ -217,23 +208,17 @@ export const GARDEN_ITEMS: ItemDef[] = [
         b.rotation.set(tilt * Math.cos(a), 0, tilt * Math.sin(a), 'YXZ');
         g.add(b);
       }
-      const leaves = toon(0x4d8a36);
       // la couronne grandit et rapetisse autour de son milieu (feuilles au printemps, nue l'hiver)
       const crown = group();
       crown.name = 'feuillage';
       crown.position.y = CROWN_Y;
-      for (const [x, y, z, r] of [[0, 2.15, 0, 0.85], [0.5, 1.95, 0.2, 0.55], [-0.45, 2.0, -0.25, 0.6], [0.1, 2.05, -0.5, 0.55], [-0.2, 1.95, 0.5, 0.55], [0.15, 2.6, 0.05, 0.55]]) {
-        crown.add(mesh(new THREE.IcosahedronGeometry(r, 1), leaves, x, y - CROWN_Y, z));
-      }
-      const blossoms = group();
+      const lobes: Lobe[] = [[0, 2.2, 0, 0.8], [0.5, 1.98, 0.2, 0.55], [-0.45, 2.02, -0.25, 0.58], [0.1, 2.05, -0.5, 0.52], [-0.2, 1.98, 0.5, 0.55], [0.15, 2.6, 0.05, 0.5]]
+        .map(([x, y, z, r]) => ({ x, y: y - CROWN_Y, z, r, sy: 0.85 }));
+      crown.add(foliage(lobes, foliageMaterial(0x4d8a36), 11));
+      // les fleurs du printemps : des grappes posées sur le feuillage, un peu plus au large
+      const blossoms = foliage(lobes.map((l) => ({ ...l, r: l.r * 1.12 })), foliageMaterial(0xfbe3ee, 'blossoms'), 12, { core: false, density: 0.45, card: 0.7 });
       blossoms.name = 'fleurs';
-      const rand = rng(11);
-      const petal = toon(0xfbe3ee);
-      for (let i = 0; i < 40; i++) {
-        const a = rand() * Math.PI * 2, e = rand() * 1.1 - 0.2;
-        const r = 0.82 + rand() * 0.12;
-        blossoms.add(mesh(new THREE.IcosahedronGeometry(0.065, 0), petal, Math.cos(a) * Math.cos(e) * r, 2.15 - CROWN_Y + Math.sin(e) * r, Math.sin(a) * Math.cos(e) * r, false));
-      }
+      blossoms.castShadow = false;
       crown.add(blossoms);
       const apples = group();
       apples.name = 'pommes';
@@ -269,16 +254,10 @@ export const GARDEN_ITEMS: ItemDef[] = [
       const flowers = group();
       flowers.name = 'fleurs';
       const rand = rng(5);
-      const green = toon(0x4f8a3c);
       for (let i = 0; i < FLOWERS; i++) {
         const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * 0.48;
         const h = 0.22 + rand() * 0.16;
-        const f = group(
-          mesh(new THREE.CylinderGeometry(0.006, 0.008, h, 5), green, 0, h / 2, 0, false),
-          mesh(new THREE.SphereGeometry(0.04, 7, 5).scale(1, 0.55, 1), green, 0.03, h * 0.35, 0, false),
-          mesh(new THREE.IcosahedronGeometry(0.045, 0), FLOWER_COLORS[i % FLOWER_COLORS.length], 0, h, 0),
-          mesh(new THREE.SphereGeometry(0.018, 6, 5), 0xf6d55c, 0, h + 0.03, 0, false),
-        );
+        const f = leafMesh(flowerGeo(FLOWER_KINDS[i % FLOWER_KINDS.length], h, FLOWER_COLORS[i % FLOWER_COLORS.length], 50 + i, 0.05));
         f.position.set(Math.cos(a) * r, 0.06, Math.sin(a) * r);
         f.rotation.y = rand() * Math.PI;
         flowers.add(f);
@@ -298,15 +277,20 @@ export const GARDEN_ITEMS: ItemDef[] = [
     breakWord: 'abîmé',
     // posé debout : les tiges serrées dans un cornet de papier kraft, les fleurs en haut
     build: () => {
-      const green = toon(0x4f8a3c);
-      const g = group(mesh(new THREE.CylinderGeometry(0.05, 0.022, 0.16, 12, 1, true), 0xc9a66b, 0, 0.1, 0));
+            const g = group(mesh(new THREE.CylinderGeometry(0.05, 0.022, 0.16, 12, 1, true), 0xc9a66b, 0, 0.1, 0));
       (g.children[0] as THREE.Mesh).material = Object.assign(toon(0xc9a66b), { side: THREE.DoubleSide });
+      const parts: THREE.BufferGeometry[] = [];
       for (let i = 0; i < BOUQUET; i++) {
         const a = (i / BOUQUET) * Math.PI * 2;
         const x = Math.cos(a) * 0.03, z = Math.sin(a) * 0.03;
-        g.add(mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.24, 5), green, x * 0.6, 0.12, z * 0.6, false));
-        g.add(mesh(new THREE.IcosahedronGeometry(0.035, 0), FLOWER_COLORS[(i * 2) % FLOWER_COLORS.length], x, 0.25 + (i % 2) * 0.02, z));
+        const stem = painted(new THREE.CylinderGeometry(0.004, 0.004, 0.24, 4, 1, true), 0x4f8a3c);
+        // tiges un peu écartées en éventail, la tête au bout
+        const tilt = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(-z, 0, x).normalize(), 0.18);
+        parts.push(stem.translate(0, 0.12, 0).applyMatrix4(tilt).translate(x * 0.6, 0, z * 0.6));
+        const top = new THREE.Vector3(0, 0.25 + (i % 2) * 0.02, 0).applyMatrix4(tilt);
+        parts.push(flowerHeadGeo(FLOWER_KINDS[i % FLOWER_KINDS.length], 0.034, FLOWER_COLORS[(i * 2) % FLOWER_COLORS.length]).applyMatrix4(tilt).translate(top.x + x * 0.6, top.y, top.z + z * 0.6));
       }
+      g.add(leafMesh(merge(parts), false));
       return g;
     },
   },
@@ -355,20 +339,14 @@ interface Parcel {
 
 /** La plante d'un carré : feuillage qui grandit, légumes montrés une fois mûrs. */
 function cropModel(crop: Crop, x: number): { plant: THREE.Group; grow: THREE.Group; fruits: THREE.Object3D[] } {
-  const leaf = toon(crop.id === 'pomme-de-terre' ? 0x5c8f3a : 0x4f9a3c);
+  const leaf = foliageMaterial(crop.id === 'pomme-de-terre' ? 0x5c8f3a : 0x4f9a3c);
   const grow = group();
   const fruits: THREE.Object3D[] = [];
   const spots: Array<[number, number]> = [[-0.12, -0.25], [0.12, -0.25], [-0.12, 0.05], [0.12, 0.05], [-0.12, 0.35], [0.12, 0.35]];
   if (crop.id === 'carotte') {
     const orange = toon(0xe8853a);
-    for (const [px, pz] of spots.slice(0, 6)) {
-      // fanes en plumeau
-      for (let k = 0; k < 3; k++) {
-        const f = mesh(new THREE.ConeGeometry(0.02, 0.2, 5), leaf, px + (k - 1) * 0.02, 0.1, pz, false);
-        f.rotation.z = (k - 1) * 0.35;
-        grow.add(f);
-      }
-    }
+    // fanes en plumeau, toutes dans un seul maillage
+    grow.add(leafMesh(merge(spots.map(([px, pz], i) => carrotTopGeo(60 + i).translate(px, 0, pz))), false));
     for (const [px, pz] of spots.slice(0, crop.yield)) {
       const top = mesh(new THREE.ConeGeometry(0.03, 0.07, 8).rotateX(Math.PI), orange, px, 0.01, pz, false);
       fruits.push(top);
@@ -377,31 +355,23 @@ function cropModel(crop: Crop, x: number): { plant: THREE.Group; grow: THREE.Gro
     const stake = toon(0xb08a5a), red = toon(0xd83a2e);
     for (const pz of [-0.18, 0.22]) {
       grow.add(mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.75, 6), stake, 0, 0.375, pz, false));
-      for (const [dy, dx, r] of [[0.18, 0.05, 0.11], [0.36, -0.05, 0.12], [0.55, 0.04, 0.1]]) grow.add(mesh(new THREE.IcosahedronGeometry(r, 0), leaf, dx, dy, pz));
     }
+    grow.add(leafMesh(merge([-0.18, 0.22].map((pz, i) => tomatoPlantGeo(70 + i).translate(0, 0, pz)))));
     for (const [dx, dy, pz] of [[0.1, 0.3, -0.15], [-0.1, 0.45, -0.2], [0.1, 0.42, 0.25], [-0.1, 0.28, 0.2]]) fruits.push(mesh(new THREE.SphereGeometry(0.04, 10, 8), red, dx, dy, pz));
   } else if (crop.id === 'pomme-de-terre') {
     const brown = toon(0xc9a66b), bloom = toon(0xf3eef6);
-    for (const pz of [-0.25, 0.05, 0.35]) {
-      const bush = mesh(new THREE.IcosahedronGeometry(0.15, 1), leaf, 0, 0.12, pz);
-      bush.scale.y = 0.75;
-      grow.add(bush, mesh(new THREE.IcosahedronGeometry(0.025, 0), bloom, 0.05, 0.24, pz, false));
-    }
+    grow.add(foliage([-0.25, 0.05, 0.35].map((pz) => ({ x: 0, y: 0.11, z: pz, r: 0.16, sy: 0.75 })), leaf, 72, { density: 2, card: 1.1 }));
+    for (const pz of [-0.25, 0.05, 0.35]) grow.add(mesh(new THREE.IcosahedronGeometry(0.022, 1), bloom, 0.05, 0.22, pz, false));
     for (const [dx, pz] of [[-0.17, -0.15], [0.17, 0.0], [-0.17, 0.25]]) fruits.push(mesh(new THREE.SphereGeometry(0.04, 9, 7).scale(1.2, 0.9, 1), brown, dx, 0.015, pz));
   } else {
     const green = toon(0x3f7a2c);
-    for (const [px, pz] of spots) {
-      const l = mesh(new THREE.SphereGeometry(0.09, 8, 6).scale(1, 0.3, 1), leaf, px, 0.04, pz);
-      grow.add(l);
-    }
+    grow.add(leafMesh(merge(spots.map(([px, pz], i) => vineLeavesGeo(80 + i).translate(px, 0, pz))), false));
     for (const [dx, pz] of [[-0.05, -0.12], [0.08, 0.15], [-0.08, 0.38]]) {
       const c = mesh(new THREE.CapsuleGeometry(0.025, 0.12, 4, 8).rotateZ(Math.PI / 2), green, dx, 0.03, pz);
       c.rotation.y = 0.5;
       fruits.push(c);
     }
   }
-  // les feuilles poussent ensemble (grow change d'échelle) : un seul dessin ; les fruits se montrent un à un
-  mergeStaticParts(grow);
   const plant = group(grow, ...fruits);
   plant.position.set(x, SOIL_Y, 0);
   return { plant, grow, fruits };
@@ -491,11 +461,13 @@ export class Garden {
   /** Heures de jeu depuis qu'on a senti les fleurs. */
   private smelled = 99;
 
-  private oakLeaves = toon(LEAF_COLOR[1]);
+  private oakLeaves = foliageMaterial(LEAF_COLOR[1]);
   private pineLeaves = toon(0x2f6a3e);
   private oakCrowns: THREE.Object3D[] = [];
-  private borderFlowers: THREE.InstancedMesh;
+  private borderFlowers: THREE.InstancedMesh[];
   private borderBase: THREE.Matrix4[] = [];
+  /** Où est chaque fleur de la bordure : son maillage de têtes et sa place dedans. */
+  private borderSlot: Array<[THREE.InstancedMesh, number]> = [];
   private lastLook = { yearPos: -1, snow: -1 };
 
   constructor(host: GardenHost) {
@@ -520,15 +492,13 @@ export class Garden {
       }
       const crown = group();
       crown.position.y = 2.9;
-      for (let k = 0; k < 6; k++) {
-        const a = rand() * Math.PI * 2, r = k === 0 ? 0 : 0.6 + rand() * 0.4;
-        crown.add(mesh(new THREE.IcosahedronGeometry(k === 0 ? 1.15 : 0.7 + rand() * 0.25, 1), this.oakLeaves, Math.cos(a) * r, k === 0 ? 0 : rand() * 0.8 - 0.4, Math.sin(a) * r));
+      const lobes: Lobe[] = [];
+      for (let k = 0; k < 7; k++) {
+        const a = rand() * Math.PI * 2, r = k === 0 ? 0 : 0.6 + rand() * 0.45;
+        lobes.push({ x: Math.cos(a) * r, y: k === 0 ? 0.1 : rand() * 0.8 - 0.35, z: Math.sin(a) * r, r: k === 0 ? 1.1 : 0.62 + rand() * 0.25, sy: 0.85 });
       }
-      // le feuillage change avec la saison (taille, caché l'hiver) : regroupé à part du tronc
-      crown.name = 'couronne';
-      mergeStaticParts(crown);
+      crown.add(foliage(lobes, this.oakLeaves, 100 + Math.round(x * 10 + z)));
       t.add(crown);
-      mergeStaticParts(t);
       this.oakCrowns.push(crown);
       t.scale.setScalar(s);
       t.position.set(x, 0, z);
@@ -537,51 +507,53 @@ export class Garden {
     }
     // sapins : trois cônes empilés, verts toute l'année (blanchis par la neige)
     for (const [x, z, s] of PINES) {
-      const t = group(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.8, 8), bark, 0, 0.4, 0));
-      for (const [y, r, h] of [[1.3, 1.1, 1.5], [2.1, 0.85, 1.3], [2.8, 0.55, 1.1]]) t.add(mesh(new THREE.ConeGeometry(r, h, 9), this.pineLeaves, 0, y, 0));
-      mergeStaticParts(t);
+      const t = group(mesh(new THREE.CylinderGeometry(0.1, 0.14, 1.0, 8), bark, 0, 0.5, 0), mesh(pineGeo(Math.round(x * 3 + z)), this.pineLeaves));
       t.scale.setScalar(s);
+      t.rotation.y = rand() * Math.PI;
       t.position.set(x, 0, z);
       add(t, x, z, 0.6 * s);
     }
     // buissons ronds, toujours verts
-    const bush = toon(0x3d7a3a);
-    for (const [x, z, r] of BUSHES) {
-      const b = group(mesh(new THREE.IcosahedronGeometry(r, 1), bush, 0, r * 0.8, 0), mesh(new THREE.IcosahedronGeometry(r * 0.7, 1), bush, r * 0.6, r * 0.6, r * 0.2));
-      mergeStaticParts(b);
+    const bush = foliageMaterial(0x3d7a3a);
+    BUSHES.forEach(([x, z, r], i) => {
+      const lobes: Lobe[] = [{ x: 0, y: r * 0.8, z: 0, r, sy: 0.85 }, { x: r * 0.6, y: r * 0.6, z: r * 0.2, r: r * 0.7 }, { x: -r * 0.45, y: r * 0.55, z: -r * 0.35, r: r * 0.65 }];
+      const b = group(foliage(lobes, bush, 200 + i, { density: 1.6 }));
       b.position.set(x, 0, z);
       add(b, x, z, r * 0.9, r * 1.6);
-    }
+    });
     // chemin de pierres plates
     const stone = toon(0xa4a29b);
-    const path = group();
     PATH.forEach(([x, z], i) => {
       const s = mesh(new THREE.CylinderGeometry(0.22 + (i % 3) * 0.03, 0.24, 0.03, 9), stone, x, 0.012, z, false);
       s.rotation.y = i * 1.3;
       s.scale.z = 0.8 + (i % 2) * 0.15;
-      path.add(s);
+      this.group.add(s);
     });
-    // toutes les pierres en un seul dessin
-    mergeStaticParts(path);
-    this.group.add(path);
     // bordure fleurie au pied du salon : terre, petite bordure de bois, fleurs (instanciées)
     const len = BORDER.x1 - BORDER.x0, cx = (BORDER.x0 + BORDER.x1) / 2;
     this.group.add(box(len, 0.05, BORDER.d, 0x5b3d26, cx, 0.025, BORDER.z), box(len, 0.08, 0.03, 0x8a6440, cx, 0.04, BORDER.z + BORDER.d / 2));
     this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-len / 2, 0, -BORDER.d / 2), new THREE.Vector3(len / 2, 0.5, BORDER.d / 2)), pos: new THREE.Vector3(cx, 0, BORDER.z), yaw: 0 });
+    // tiges et feuilles d'une part, têtes de fleurs (deux sortes, teintées une à une) d'autre part
     const n = 44;
-    this.borderFlowers = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.05, 0), toon(0xffffff), n);
-    this.borderFlowers.castShadow = true;
-    const stems = new THREE.InstancedMesh(new THREE.ConeGeometry(0.05, 0.28, 5), toon(0x4f8a3c), n);
+    const kinds = [FLOWER_KINDS[0], FLOWER_KINDS[1]];
+    const heads = kinds.map((k) => new THREE.InstancedMesh(flowerHeadGeo(k, 0.05, 0xffffff, 0xffe9a0), leafMaterial(), Math.ceil(n / 2)));
+    const stems = new THREE.InstancedMesh(flowerGeo('cosmos', 0.3, 0xffffff, 7, 0.05, false), leafMaterial(), n);
+    stems.receiveShadow = true;
     const m = new THREE.Matrix4();
     for (let i = 0; i < n; i++) {
       const x = BORDER.x0 + 0.08 + rand() * (len - 0.16), z = BORDER.z + (rand() - 0.5) * (BORDER.d - 0.1), h = 0.22 + rand() * 0.16;
-      stems.setMatrixAt(i, m.makeTranslation(x, 0.14, z));
-      const base = new THREE.Matrix4().makeTranslation(x, h, z);
+      const yaw = new THREE.Matrix4().makeRotationY(rand() * Math.PI * 2);
+      stems.setMatrixAt(i, m.makeTranslation(x, 0.04, z).multiply(new THREE.Matrix4().makeScale(1, (h - 0.04) / 0.3, 1)).multiply(yaw));
+      const base = new THREE.Matrix4().makeTranslation(x, h, z).multiply(yaw);
+      const head = heads[i % 2], k = Math.floor(i / 2);
       this.borderBase.push(base);
-      this.borderFlowers.setMatrixAt(i, base);
-      this.borderFlowers.setColorAt(i, new THREE.Color(FLOWER_COLORS[i % FLOWER_COLORS.length]));
+      this.borderSlot.push([head, k]);
+      head.setMatrixAt(k, base);
+      head.setColorAt(k, new THREE.Color(FLOWER_COLORS[i % FLOWER_COLORS.length]));
     }
-    this.group.add(stems, this.borderFlowers);
+    for (const h of heads) h.castShadow = true;
+    this.borderFlowers = heads;
+    this.group.add(stems, ...heads);
   }
 
   /** Branche les objets du jardin posés dans la scène (potager, pommier, massifs). */
@@ -600,13 +572,7 @@ export class Garden {
       });
       const rand = rng(9);
       for (let i = 0; i < 9; i++) {
-        const tuft = group();
-        for (let k = 0; k < 4; k++) {
-          const b = mesh(new THREE.ConeGeometry(0.012, 0.09, 4), 0x7a9a3a, (k - 1.5) * 0.012, 0.045, 0, false);
-          b.rotation.z = (k - 1.5) * 0.3;
-          tuft.add(b);
-        }
-        mergeStaticParts(tuft);
+        const tuft = leafMesh(tuftGeo(90 + i, 0.1, 6, 0x7a9a3a), false);
         tuft.position.set((rand() - 0.5) * (BED_W - 0.25), SOIL_Y, (rand() - 0.5) * (BED_D - 0.25));
         this.bed.object.add(tuft);
         this.weedTufts.push(tuft);
@@ -706,10 +672,13 @@ export class Garden {
     this.borderBase.forEach((base, i) => {
       // les dernières fleurs de l'automne : une sur trois
       const s = bloom >= 0.99 || i % 3 === 0 ? bloom : Math.max(0, bloom * 2 - 1);
-      this.borderFlowers.setMatrixAt(i, m.copy(base).multiply(new THREE.Matrix4().makeScale(Math.max(0.001, s), Math.max(0.001, s), Math.max(0.001, s))));
+      const [head, k] = this.borderSlot[i];
+      head.setMatrixAt(k, m.copy(base).multiply(new THREE.Matrix4().makeScale(Math.max(0.001, s), Math.max(0.001, s), Math.max(0.001, s))));
     });
-    this.borderFlowers.instanceMatrix.needsUpdate = true;
-    this.borderFlowers.visible = bloom > 0.02;
+    for (const head of this.borderFlowers) {
+      head.instanceMatrix.needsUpdate = true;
+      head.visible = bloom > 0.02;
+    }
     for (const m of this.beds.keys()) this.showFlowers(m);
     // le pommier : feuilles, fleurs du printemps, couleur des pommes
     if (this.tree) {
@@ -718,7 +687,7 @@ export class Garden {
         crown.visible = leafy > 0.03;
         crown.scale.setScalar(Math.max(0.03, leafy));
         crown.traverse((o) => {
-          if (o instanceof THREE.Mesh) mixColor(w, LEAF_COLOR, (o.material as THREE.MeshToonMaterial).color);
+          if (o instanceof THREE.Mesh && o.name !== 'fleurs') mixColor(w, LEAF_COLOR, (o.material as THREE.MeshToonMaterial).color);
         });
       }
       const blossoms = this.tree.object.getObjectByName('fleurs');
