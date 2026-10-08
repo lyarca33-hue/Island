@@ -15,6 +15,10 @@
   rochers, champignons) : [Stylized Nature MegaKit](https://quaternius.com/packs/ultimatestylizednature.html) de
   Quaternius, **CC0** (version gratuite « Standard »), modèles choisis et textures réduites par
   `tools/build_nature_assets.py`.
+- Meubles (`public/models/interior.glb` : canapé, table basse, table, chaises, tabouret) :
+  [Ultimate House Interior Pack](https://quaternius.com/packs/ultimatehomeinterior.html) de Quaternius, **CC0**,
+  modèles choisis par `tools/build_interior_assets.py`, posés dans la boîte des meubles faits pour le jeu
+  (`src/game/items/interior.ts`).
 - Plantes (`src/game/plants.ts` : arbres, sapins, buissons, fleurs, légumes du potager, plantes d'intérieur) : formes et
   textures de feuilles faites par programme pour le jeu, aucun fichier tiers.
 - Accessoires du créateur (`src/creator/accessories.ts` : toque, chapeaux, lunettes, nœuds, écharpe...) : formes three.js
