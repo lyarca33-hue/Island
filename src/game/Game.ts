@@ -16,9 +16,11 @@ import { loadNature } from './nature';
 import { loadInterior } from './items/interior';
 import { DELIVERY_SPOT, Entree } from './entree';
 import { Loisirs } from './loisirs';
+import { Chat } from './chat';
 import { Mouvements } from './mouvements';
 import { Paysage } from './paysage';
 import { FISH_BY_ID, OUTDOOR_FEMININE, OUTDOOR_START } from './items/plein-air';
+import { ANIMAL_FEMININE, ANIMAL_START } from './items/animaux';
 import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
 import { ENTREE_FEMININE } from './items/entree';
 import { Buanderie } from './buanderie';
@@ -469,7 +471,7 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...PATISSERIE_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE, ...OUTDOOR_FEMININE, ...FECULENT_FEMININE, ...LINGE_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...PATISSERIE_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE, ...OUTDOOR_FEMININE, ...ANIMAL_FEMININE, ...FECULENT_FEMININE, ...LINGE_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...PATISSERIE_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL, ...FECULENT_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -618,6 +620,8 @@ export class Game {
   private entree: Entree;
   /** Pêche à l'étang, feu de camp, trousse de secours (loisirs.ts). */
   private loisirs: Loisirs;
+  /** Le chaton : le nourrir, le caresser, sa gamelle, sa sieste sur le canapé (chat.ts). */
+  private chat: Chat;
   /** Sauter, nager dans l'étang, grimper sur un meuble (mouvements.ts). */
   private mouvements: Mouvements;
   /** Route, marché, train, station autour de la maison (paysage.ts). */
@@ -898,6 +902,15 @@ export class Game {
       notice: (t) => this.onNotice?.(t),
       obstacle: (it) => this.isObstacle(it),
     });
+    this.chat = new Chat({
+      character: this.character,
+      remove: (item) => this.removeItem(item),
+      notice: (t) => this.onNotice?.(t),
+      say: (t) => this.say(t),
+      mood: (n) => this.addMood(n),
+      route: (from, to) => this.character.nav?.route(from, to) ?? [to],
+      isFish: (id) => FISH_BY_ID.has(id),
+    });
     this.scene.add(this.paysage.group);
     this.laundry = new Buanderie({
       character: this.character,
@@ -941,7 +954,7 @@ export class Game {
       this.scene.add(item.object);
       return item;
     };
-    for (const [id, x, y, z, rot] of [...START_ITEMS, ...GARDEN_START, ...OUTDOOR_START, ...ROOMS.flatMap((r) => r.items ?? [])]) {
+    for (const [id, x, y, z, rot] of [...START_ITEMS, ...GARDEN_START, ...OUTDOOR_START, ...ANIMAL_START, ...ROOMS.flatMap((r) => r.items ?? [])]) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -1001,6 +1014,7 @@ export class Game {
     this.garden.attach(this.items);
     this.entree.attach(this.items);
     this.loisirs.attach(this.items);
+    this.chat.attach(this.items, this.scene);
     this.mouvements.attach(this.items);
     this.laundry.attach(this.items);
     // la bouilloire a de quoi faire deux tasses au départ
@@ -1288,7 +1302,7 @@ export class Game {
 
   /** Obstacle : un meuble, ou un gros objet (porté à deux mains : chaise, caisse) posé au sol. */
   private isObstacle(it: WorldItem): boolean {
-    if (it.def.shower || this.loisirs.walkable(it)) return false;
+    if (it.def.shower || this.loisirs.walkable(it) || this.chat.walkable(it)) return false;
     if (!it.def.portable) return true;
     return isTwoHanded(it.grip) && it.object.position.y < 0.05 && !this.character.carried.includes(it) && !this.flying.some((f) => f.item === it);
   }
@@ -6037,6 +6051,8 @@ export class Game {
     else if (this.entree.owns(item)) return this.entree.click(item, running);
     // étang, ponton, trousse de secours (loisirs.ts)
     else if (this.loisirs.owns(item)) return this.loisirs.click(item, running);
+    // le chaton, sa gamelle (chat.ts)
+    else if (this.chat.owns(item)) return this.chat.click(item, running);
     // machines à laver, étendoir, linge propre à ranger dans l'armoire (buanderie.ts)
     else if (this.laundry.owns(item)) return this.laundry.click(item, running);
     // bouton d'un appareil (un feu de la gazinière, la machine à café) : l'allumer ou l'éteindre
@@ -6653,6 +6669,7 @@ export class Game {
     this.garden.menu(item, add);
     this.entree.menu(item, add);
     this.loisirs.menu(item, add);
+    this.chat.menu(item, add);
     this.mouvements.menu(item, add);
     this.laundry.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
@@ -6814,7 +6831,7 @@ export class Game {
   }
 
   private stateOf(item: WorldItem): string {
-    const garden = this.garden.stateOf(item) ?? this.entree.stateOf(item) ?? this.laundry.stateOf(item) ?? this.loisirs.stateOf(item);
+    const garden = this.garden.stateOf(item) ?? this.entree.stateOf(item) ?? this.laundry.stateOf(item) ?? this.loisirs.stateOf(item) ?? this.chat.stateOf(item);
     if (garden) return garden;
     const words: string[] = [];
     const a = agree(item.name);
@@ -7060,6 +7077,7 @@ export class Game {
     this.garden.update(dt, this.clock.yearPos, Math.max(look.snow, w.cover));
     this.garden.rain(w.rain, (dt * this.clock.speed) / 3600);
     this.loisirs.update(dt);
+    this.chat.update(dt, (dt * this.clock.speed) / 60);
     this.paysage.update(dt);
     this.laundry.update(dt, this.clock.speed / TIME_SPEED);
     this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
@@ -8411,7 +8429,7 @@ export class Game {
         if (this.lamps.get(item)?.on) x.lampe = true;
         Object.assign(x, this.entree.extras(item), this.garden.extras(item), this.loisirs.extras(item));
         Object.assign(x, this.entree.extras(item), this.garden.extras(item));
-        Object.assign(x, this.laundry.extras(item));
+        Object.assign(x, this.laundry.extras(item), this.chat.extras(item));
         put('reveil', this.alarms.get(item));
         return x;
       },
@@ -8448,6 +8466,7 @@ export class Game {
         this.garden.setExtras(item, x);
         this.loisirs.setExtras(item, x);
         this.laundry.setExtras(item, x);
+        this.chat.setExtras(item, x);
         if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, x.reveil);
       },
       perso: this.character,
