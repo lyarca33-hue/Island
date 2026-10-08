@@ -1,0 +1,196 @@
+/**
+ * Sons de cuisine, fabriqués à la volée (Web Audio, sans fichier) : le grésillement d'une poêle,
+ * l'eau qui bout, le bip du four et du micro-ondes, la vaisselle qui tinte, le verre qui casse.
+ * Coupables dans le menu (Affichage), réglage gardé dans le navigateur.
+ *
+ * Le navigateur ne laisse jouer un son qu'après un geste du joueur : le contexte audio naît au
+ * premier clic ou à la première touche.
+ */
+
+const KEY = 'island-sons';
+
+export type SoundName = 'bip' | 'ding' | 'tinte' | 'casse' | 'verse';
+
+export class KitchenSound {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private noise: AudioBuffer | null = null;
+  private sizzle: { gain: GainNode; filter: BiquadFilterNode } | null = null;
+  private boil: { gain: GainNode; filter: BiquadFilterNode } | null = null;
+  private crackle = 0;
+  private bubble = 0;
+  private _on: boolean;
+  private _volume: number;
+  /** Ce qui a joué (les derniers sons, avec leur heure) : pour le banc de test et le débogage. */
+  readonly log: Array<{ name: string; at: number }> = [];
+  /** Niveau des sons continus en cours (0 à 1). */
+  levels = { gresille: 0, bout: 0 };
+
+  constructor() {
+    let saved: { on?: boolean; volume?: number } = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    } catch {
+      // stockage indisponible : réglage par défaut
+    }
+    this._on = saved.on ?? true;
+    this._volume = saved.volume ?? 0.6;
+    const wake = () => {
+      this.ensure();
+      if (this.ctx?.state === 'suspended') void this.ctx.resume();
+    };
+    window.addEventListener('pointerdown', wake, { passive: true });
+    window.addEventListener('keydown', wake);
+  }
+
+  get on(): boolean {
+    return this._on;
+  }
+  set on(v: boolean) {
+    this._on = v;
+    this.apply();
+  }
+  get volume(): number {
+    return this._volume;
+  }
+  set volume(v: number) {
+    this._volume = Math.min(1, Math.max(0, v));
+    this.apply();
+  }
+
+  private apply(): void {
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this._on ? this._volume : 0, this.ctx.currentTime, 0.05);
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ on: this._on, volume: this._volume }));
+    } catch {
+      // stockage indisponible : réglage pour cette partie seulement
+    }
+  }
+
+  private ensure(): AudioContext | null {
+    if (this.ctx) return this.ctx;
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return null;
+    const ctx = (this.ctx = new Ctx());
+    this.master = ctx.createGain();
+    this.master.gain.value = this._on ? this._volume : 0;
+    this.master.connect(ctx.destination);
+    // deux secondes de bruit blanc, rejouées en boucle par les sons continus
+    const buf = (this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate));
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const loop = (type: BiquadFilterType, freq: number, q: number) => {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = type;
+      filter.frequency.value = freq;
+      filter.Q.value = q;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(filter).connect(gain).connect(this.master!);
+      src.start();
+      return { gain, filter };
+    };
+    this.sizzle = loop('highpass', 3200, 0.7);
+    this.boil = loop('lowpass', 420, 1.2);
+    return ctx;
+  }
+
+  /**
+   * Sons continus, à chaque image : `gresille` (poêles qui cuisent) et `bout` (eau qui bout), de 0
+   * à 1, déjà atténués par la distance.
+   */
+  update(dt: number, gresille: number, bout: number): void {
+    this.levels = { gresille, bout };
+    const ctx = this.ctx;
+    if (!ctx || !this.sizzle || !this.boil) return;
+    const t = ctx.currentTime;
+    // le grésillement crépite : son volume saute un peu au hasard
+    this.crackle -= dt;
+    if (this.crackle <= 0) {
+      this.crackle = 0.03 + Math.random() * 0.08;
+      this.sizzle.gain.gain.setTargetAtTime(gresille * (0.12 + Math.random() * 0.12), t, 0.015);
+    }
+    // l'eau qui bout : des bulles, un grondement sourd qui monte et descend
+    this.bubble -= dt;
+    if (this.bubble <= 0) {
+      this.bubble = 0.06 + Math.random() * 0.12;
+      this.boil.gain.gain.setTargetAtTime(bout * (0.25 + Math.random() * 0.35), t, 0.03);
+      this.boil.filter.frequency.setTargetAtTime(300 + Math.random() * 350, t, 0.03);
+      if (bout > 0.2 && Math.random() < 0.5) this.blip(180 + Math.random() * 260, 0.05, bout * 0.08);
+    }
+  }
+
+  /** Un son ponctuel ; `volume` 0 à 1 (la distance déjà comprise). */
+  play(name: SoundName, volume = 1): void {
+    this.log.push({ name, at: performance.now() });
+    if (this.log.length > 50) this.log.shift();
+    const ctx = this.ctx;
+    if (!ctx || volume <= 0.01) return;
+    const t = ctx.currentTime;
+    if (name === 'bip') {
+      // trois bips aigus : le four ou le micro-ondes a fini
+      for (let i = 0; i < 3; i++) this.tone('square', 1850, t + i * 0.22, 0.12, 0.08 * volume);
+    } else if (name === 'ding') {
+      this.tone('sine', 1320, t, 0.9, 0.22 * volume);
+      this.tone('sine', 2640, t, 0.5, 0.06 * volume);
+    } else if (name === 'tinte') {
+      // vaisselle posée : deux harmoniques métalliques très courtes, un peu au hasard
+      const f = 2100 + Math.random() * 900;
+      this.tone('sine', f, t, 0.18, 0.09 * volume);
+      this.tone('sine', f * 1.51, t, 0.12, 0.05 * volume);
+    } else if (name === 'casse') {
+      this.burst(t, 0.35, 2600, 0.5 * volume);
+      for (let i = 0; i < 4; i++) this.tone('sine', 2500 + Math.random() * 3000, t + Math.random() * 0.15, 0.1, 0.05 * volume);
+    } else if (name === 'verse') {
+      this.burst(t, 1.2, 900, 0.08 * volume);
+    }
+  }
+
+  private tone(type: OscillatorType, freq: number, at: number, len: number, peak: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, at);
+    gain.gain.linearRampToValueAtTime(peak, at + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    osc.connect(gain).connect(this.master!);
+    osc.start(at);
+    osc.stop(at + len + 0.05);
+  }
+
+  /** Une bulle qui éclate : une note grave qui glisse vers le haut. */
+  private blip(freq: number, len: number, peak: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.exponentialRampToValueAtTime(freq * 2.2, t + len);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(peak, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    osc.connect(gain).connect(this.master!);
+    osc.start(t);
+    osc.stop(t + len + 0.02);
+  }
+
+  /** Un éclat de bruit filtré (verre brisé, eau versée). */
+  private burst(at: number, len: number, freq: number, peak: number): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = freq;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(peak, at);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    src.connect(filter).connect(gain).connect(this.master!);
+    src.start(at);
+    src.stop(at + len + 0.05);
+  }
+}

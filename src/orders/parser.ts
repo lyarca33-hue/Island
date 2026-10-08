@@ -102,7 +102,7 @@ const BOWLS: Record<string, string> = { assiette: 'fourchette', bol: 'cuillère'
 /** Vaisselle (fiche `dish`) : la tasse, le verre et la carafe sont des « récipient » pour describe(). */
 const isDish = (o: WorldObject) => o.sorte === 'vaisselle' || ['tasse', 'verre', 'carafe'].includes(o.nom);
 /** On ne boit pas à la carafe : on s'en sert un verre. */
-const JUGS = new Set(['carafe']);
+const JUGS = new Set(['carafe', 'théière']);
 /** Le verre (ou la tasse) à servir : tenu, puis qui traîne, puis sec, puis le plus proche. */
 const byUse = (enMain: string[]) => (a: WorldObject, b: WorldObject) =>
   +!enMain.includes(a.ref) - +!enMain.includes(b.ref) || +!isLoose(a) - +!isLoose(b) || +a.ou.includes('mouill') - +b.ou.includes('mouill') || a.distance - b.distance;
@@ -219,6 +219,9 @@ const ALIASES: Record<string, string[]> = {
   maniques: ['manique', 'maniques'],
   'sacs poubelle': ['rouleau', 'sacs'],
   'sac poubelle': ['sac'],
+  // le thé
+  theiere: ['theiere', 'theieres'],
+  'sachets de the': ['sachet', 'sachets'],
   champignons: ['champignon', 'champignons'],
   poivron: ['poivron', 'poivrons'],
   courgette: ['courgette', 'courgettes'],
@@ -349,6 +352,11 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
   if (!parts.length) return null;
   for (const original of parts) {
     let w = stripFillers(normalize(original).split(' '));
+    // « prends ton petit-déjeuner », « fais le petit déj »
+    if (/\bpetit (dejeuner|dej)\b/.test(w.join(' '))) {
+      out.push({ kind: 'petit_dej' });
+      continue;
+    }
     // « quelle heure est-il ? »
     if (w.join(' ').startsWith('quelle heure') || w.join(' ').startsWith('il est quelle heure')) {
       out.push({ kind: 'heure' });
@@ -391,6 +399,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (['du', 'de', 'des', 'un'].includes(rest[0]) && rest.some((x) => SPICE_WORDS[x])) return parseClause('assaisonner', rest, original, world);
       // « mets une pastille (dans le lave-vaisselle) »
       if (rest.some((x) => x.startsWith('pastille'))) return [{ kind: 'pastille' }];
+      // « mets un sachet de thé (dans la tasse / la théière) »
+      if (rest.some((x) => x === 'sachet' || x === 'sachets')) return [{ kind: 'sachet', ref: found.find((o) => o.nom === 'tasse' || o.nom === 'théière')?.ref }];
       // « mets les gants (de ménage) »
       if (rest.some((x) => x === 'gants' || x === 'gant')) return [{ kind: 'gants', mettre: true }];
       // « mets un sac (neuf) dans la poubelle »
@@ -518,8 +528,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
         const plate = found.find((o) => o.nom in BOWLS);
         if (food || plate) return [{ kind: 'servir', ref: food?.ref, sur: plate?.ref }];
       }
-      // « fais-toi un thé »
-      if (rest.includes('the')) return [{ kind: 'the' }];
+      // « sers le thé (dans la tasse) » : la théière infusée se verse
+      const pot = world.objets.find((o) => o.nom === 'théière' && o.ou.includes('contient du thé'));
+      if (rest.includes('the') && pot && ['sers', 'servir'].includes(word)) return [{ kind: 'verser', ref: pot.ref, dans: found.find((o) => o.nom === 'tasse')?.ref ?? world.objets.filter((o) => o.nom === 'tasse').sort(byUse(world.enMain))[0]?.ref }];
+      // « fais-toi un thé », « fais du thé dans la théière »
+      if (rest.includes('the')) return [{ kind: 'the', dans: found.find((o) => o.nom === 'théière')?.ref }];
       return rest.includes('cafe') ? [{ kind: 'cafe' }] : null;
     case 'boire': {
       // « bois la bouteille », « bois de l'eau » (une bouteille pleine s'il y en a, sinon la tasse remplie à l'évier), « bois un café »

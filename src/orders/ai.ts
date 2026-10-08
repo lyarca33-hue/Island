@@ -100,7 +100,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "aller", "objet": "<ref>"} : marcher jusqu'à un objet ou un meuble
 - {"tache": "ranger", "livres": ["<ref>", ...]} : ranger ces livres dans la bibliothèque (liste vide = tous ceux qui traînent)
 - {"tache": "cafe"} : se faire un café (prend la tasse si besoin)
-- {"tache": "the"} : se faire un thé à la bouilloire (prend la tasse si besoin) ; le thé réveille moitié moins que le café
+- {"tache": "the", "objet": "<ref>"} : se faire un thé (sachet de thé dans la tasse, eau chaude de la bouilloire, infusion) ; « objet » : la théière pour en faire plusieurs tasses (facultatif) ; le thé réveille moitié moins que le café
 - {"tache": "jus"} : se servir dans la tasse un jus de fruits du mixeur (il doit être prêt : « mettre » un fruit dans le mixeur puis « allumer » le mixeur d'abord). Le jus désaltère et nourrit un peu
 - {"tache": "boire", "objet": "<ref>", "liquide": "eau"} : boire une gorgée (« objet » facultatif : une bouteille d'eau du frigo, la tasse… ; sans objet, la tasse ; « liquide » facultatif, "eau", "café", "thé" ou "jus de fruits" : si la tasse est vide, elle est d'abord remplie, de café par défaut). Boire fait baisser la soif
 - {"tache": "eau"} : remplir la tasse d'eau à l'évier (prend la tasse si besoin). Une tasse « sale » (bue jusqu'au bout) est seulement rincée : la machine à café refuse une tasse sale
@@ -125,6 +125,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "sortir_poubelle"} : sortir le sac de la poubelle au conteneur dehors
 - {"tache": "sac_neuf", "objet": "<ref>"} : remettre un sac neuf dans la poubelle
 - {"tache": "heure"} : regarder l'heure à l'horloge
+- {"tache": "petit_dej"} : prendre le petit-déjeuner (café, tartines de confiture, jus d'orange, à table)
+- {"tache": "sachet", "objet": "<ref>"} : mettre un sachet de thé dans la tasse ou la théière
 - {"tache": "essuyer_vaisselle", "objets": ["<ref>", ...]} : essuyer au torchon la vaisselle mouillée (sortie de l'évier ; liste vide = toute). Sinon « mettre » la vaisselle mouillée dans l'égouttoir, où elle sèche seule
 - {"tache": "essuyer_mains"} : s'essuyer les mains au torchon après les avoir lavées
 - {"tache": "liste_courses"} : lire la liste de courses (ce qui manque à la maison)
@@ -229,7 +231,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'aller': return s('objet') ? { kind: 'aller', ref: s('objet') } : null;
     case 'ranger': return { kind: 'ranger', refs: Array.isArray(o.livres) ? o.livres.map(String) : [] };
     case 'cafe': return { kind: 'cafe' };
-    case 'the': return { kind: 'the' };
+    case 'the': return { kind: 'the', dans: s('objet') || undefined };
     case 'jus': return { kind: 'jus' };
     case 'boire': return { kind: 'boire', ref: s('objet') || undefined, liquide: s('liquide') === 'eau' ? 'eau' : s('liquide') === 'café' || s('liquide') === 'cafe' ? 'café' : s('liquide') === 'thé' || s('liquide') === 'the' ? 'thé' : s('liquide').startsWith('jus') ? 'jus de fruits' : undefined };
     case 'eau': return { kind: 'eau', ref: s('objet') || undefined };
@@ -253,6 +255,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'sortir_poubelle': return { kind: 'sortir_poubelle' };
     case 'sac_neuf': return { kind: 'sac_neuf', ref: s('objet') || undefined };
     case 'heure': return { kind: 'heure' };
+    case 'petit_dej': return { kind: 'petit_dej' };
+    case 'sachet': return { kind: 'sachet', ref: s('objet') || undefined };
     case 'essuyer_vaisselle': return { kind: 'essuyer_vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'essuyer_mains': return { kind: 'essuyer_mains' };
     case 'liste_courses': return { kind: 'liste_courses' };

@@ -12,6 +12,7 @@ import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
 import { PREP_STOCK } from './prep';
 import { UPKEEP_STOCK } from './upkeep';
+import { LIFE_STOCK } from './life';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -55,7 +56,7 @@ export const DRINK_EFFECTS: Record<string, { soif?: number; faim?: number; fatig
 };
 
 /** Épicerie : se range au garde-manger. */
-export const PANTRY_THINGS = ['farine', 'sucre', 'tablette de chocolat', 'confiture', 'miel', 'pâte à tartiner', 'sauce tomate', 'vinaigre', 'levure', 'biscuits', 'chips', 'oignon', 'ail', 'banane', 'pomme de terre'];
+export const PANTRY_THINGS = ['farine', 'sucre', 'tablette de chocolat', 'confiture', 'miel', 'pâte à tartiner', 'sauce tomate', 'vinaigre', 'levure', 'biscuits', 'chips', 'oignon', 'ail', 'banane', 'pomme de terre', 'sachets de thé'];
 /** Frais et boissons : au frigo. */
 export const FRESH_THINGS = ['jambon', 'saucisses', 'poulet', 'poisson', 'yaourt', 'crème', 'salade', 'orange', 'fraises', 'citron', 'champignons', 'poivron', 'courgette', 'moutarde', 'ketchup', 'mayonnaise', "jus d'orange", 'soda', 'eau gazeuse', 'vin', 'feuilles de salade', 'rondelles de banane', "quartiers d'orange", 'rondelles de citron'];
 /** Surgelés : au congélateur. */
@@ -84,6 +85,7 @@ export const STOCK: Record<string, number> = {
   pomme: 2, steak: 2, tomate: 1, carotte: 1, concombre: 1, 'pomme de terre': 2, pain: 1, "bouteille d'eau": 2, lasagne: 1, sandwich: 1,
   ...PREP_STOCK,
   ...UPKEEP_STOCK,
+  ...LIFE_STOCK,
 };
 
 /** Paquet en carton ou en papier : corps, bande de couleur (étiquette). */

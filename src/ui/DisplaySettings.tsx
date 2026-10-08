@@ -44,7 +44,28 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
         <input type="checkbox" checked={fps} onChange={(e) => onFps(e.target.checked)} />
         <span>Afficher les images par seconde</span>
       </label>
+      <SoundControls game={game} />
     </div>
+  );
+}
+
+/** Sons de cuisine : activés ou coupés, et leur volume (mémorisés). */
+function SoundControls({ game }: { game: Game }) {
+  const [on, setOn] = useState(game.sound.on);
+  const [volume, setVolume] = useState(game.sound.volume);
+  return (
+    <>
+      <label className="menu-check">
+        <input type="checkbox" checked={on} onChange={(e) => { game.sound.on = e.target.checked; setOn(e.target.checked); }} />
+        <span>Sons de cuisine</span>
+      </label>
+      {on && (
+        <label className="menu-check">
+          <span>Volume</span>
+          <input type="range" min={0} max={1} step={0.05} value={volume} aria-label="Volume des sons" onChange={(e) => { game.sound.volume = +e.target.value; setVolume(+e.target.value); }} />
+        </label>
+      )}
+    </>
   );
 }
 

@@ -17,6 +17,7 @@ import { FRESH_THINGS, PAN_FOOD, PANTRY_ITEMS } from './pantry';
 import { BATHROOM_ITEMS } from './bathroom';
 import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
 import { UPKEEP_ITEMS } from './upkeep';
+import { LIFE_ITEMS } from './life';
 
 export interface ItemDef {
   id: string;
@@ -1405,6 +1406,7 @@ export const ITEMS: ItemDef[] = [
   ...PREP_ITEMS,
   // meubles et entretien : barre à couteaux, crochets, horloge, fenêtre, îlot, balai… (upkeep.ts)
   ...UPKEEP_ITEMS,
+  ...LIFE_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));
