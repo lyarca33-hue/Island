@@ -1,5 +1,5 @@
 /**
- * La chambre, au nord du salon : on y entre par le passage du mur nord du salon ; la porte du mur
+ * La chambre, au nord du salon : on y entre par la porte du mur nord du salon ; la porte du mur
  * ouest mène à la salle de bain. Parquet clair,
  * le lit tête contre le mur du fond entre deux tables de nuit (la lampe de chevet sur l'une),
  * l'armoire contre le mur est, un tapis au pied du lit, une suspension au plafond.
@@ -88,15 +88,19 @@ export const CHAMBRE_SPEC: RoomSpec = {
   name: 'chambre',
   rect: CHAMBRE,
   floor: () => parquet(CHAMBRE),
-  // passage vers le salon (sud) et porte de la salle de bain (ouest : voir salle-de-bain.ts)
-  doors: [{ wall: 'sud', u0: CHAMBRE_PASS.x0, u1: CHAMBRE_PASS.x1 }, { wall: 'ouest', u0: BATHROOM_DOOR.z0, u1: BATHROOM_DOOR.z1 }],
+  // portes intérieures, qui s'ouvrent dans la chambre : celle du salon (sud), rabattue contre le
+  // mur est, et celle de la salle de bain (ouest : voir salle-de-bain.ts), rabattue côté lit
+  doors: [
+    { wall: 'sud', u0: CHAMBRE_PASS.x0, u1: CHAMBRE_PASS.x1, inner: true, flip: true },
+    { wall: 'ouest', u0: BATHROOM_DOOR.z0, u1: BATHROOM_DOOR.z1, inner: true },
+  ],
   joined: ['sud'],
   windows: (anchor) => {
     const bx = anchor('lit')?.x ?? 5.5;
     return [
-      // au-dessus de la tête de lit, et sur le mur est, à côté de l'armoire
-      { wall: 'nord', u0: bx - 0.45, u1: bx + 0.45, y0: 1.25, y1: WIN_HIGH },
-      { wall: 'est', u0: -6.3, u1: -5.3, y0: 0.95, y1: WIN_HIGH },
+      // au-dessus de la tête de lit, et sur le mur est, à côté de l'armoire ; rideaux prune, comme le tapis
+      { wall: 'nord', u0: bx - 0.45, u1: bx + 0.45, y0: 1.25, y1: WIN_HIGH, curtain: 0x7a4f7c },
+      { wall: 'est', u0: -6.3, u1: -5.3, y0: 0.95, y1: WIN_HIGH, curtain: 0x7a4f7c },
     ];
   },
   lamps: () => [{ x: 6.0, z: -5.6, kind: 'suspension', shade: 0x8a5a8c }],

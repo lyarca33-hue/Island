@@ -90,7 +90,30 @@ export const RECIPES: Recipe[] = [
     extras: ['rondelles de carotte'],
     bonus: 8,
     on: 'assiette',
-    words: ['steak patates', 'steak frites', 'steak pommes', 'steak pomme', 'steak puree'],
+    words: ['steak patates', 'steak pommes', 'steak pomme', 'steak puree'],
+  },
+  {
+    dish: 'steak-frites',
+    needs: ['steak', 'frites'],
+    extras: ['feuilles de salade'],
+    bonus: 8,
+    on: 'assiette',
+    words: ['steak frites', 'steak frite'],
+  },
+  {
+    dish: 'poisson-citron',
+    needs: ['poisson', 'rondelles de citron'],
+    extras: ['pomme de terre', 'feuilles de salade'],
+    bonus: 7,
+    on: 'assiette',
+    words: ['poisson citron', 'poisson au citron'],
+  },
+  {
+    dish: 'yaourt-fraises',
+    needs: ['yaourt', 'fraises'],
+    bonus: 4,
+    on: 'assiette',
+    words: ['yaourt fraises', 'yaourt fraise'],
   },
   {
     dish: 'poulet-frites',
@@ -213,6 +236,37 @@ export const DISHES: ItemDef[] = [
       const f = mesh(new THREE.BoxGeometry(0.06, 0.008, 0.008), 0xe6c060, 0.04, 0.006 + (i % 3) * 0.007, -0.03 + i * 0.008);
       f.rotation.y = (i % 2 ? 0.4 : -0.3) + i * 0.1;
       g.add(f);
+    }
+    return g;
+  }),
+  dish('steak-frites', 'steak frites', { hunger: 70, bites: 6, color: 0x8a5a3c }, () => {
+    const g = new THREE.Group();
+    const steak = mesh(new THREE.CylinderGeometry(0.04, 0.042, 0.016, 16), 0x7b4a2c, -0.03, 0.008, 0);
+    steak.scale.set(1.25, 1, 0.9);
+    g.add(steak);
+    // un tas de frites à côté
+    for (let i = 0; i < 9; i++) {
+      const f = mesh(new THREE.BoxGeometry(0.06, 0.008, 0.008), 0xe6c060, 0.04, 0.006 + (i % 3) * 0.007, -0.035 + i * 0.008);
+      f.rotation.y = (i % 2 ? 0.4 : -0.3) + i * 0.1;
+      g.add(f);
+    }
+    return g;
+  }),
+  dish('poisson-citron', 'poisson au citron', { hunger: 42, bites: 5, color: 0xf0dcc0 }, () => {
+    const g = new THREE.Group();
+    g.add(mesh(new THREE.BoxGeometry(0.12, 0.016, 0.055), 0xf0dcc0, -0.01, 0.008, 0));
+    disk(g, 0.02, 0.0, 0.016, 0.0, 0xf2df3a, 0xf8f0a8);
+    disk(g, 0.02, 0.045, 0.002, 0.03, 0xf2df3a, 0xf8f0a8);
+    return g;
+  }),
+  dish('yaourt-fraises', 'yaourt aux fraises', { hunger: 24, bites: 4, color: 0xf2c4c8 }, () => {
+    // une coupelle de yaourt, des fraises dessus
+    const g = new THREE.Group();
+    g.add(mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.03, 18), 0xf6f3ec, 0, 0.015, 0));
+    g.add(mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.004, 18), 0xf2c4c8, 0, 0.03, 0));
+    for (let i = 0; i < 4; i++) {
+      const a = i * (Math.PI / 2) + 0.4;
+      g.add(mesh(new THREE.ConeGeometry(0.01, 0.018, 8).rotateX(Math.PI), 0xd8352a, Math.cos(a) * 0.018, 0.04, Math.sin(a) * 0.018));
     }
     return g;
   }),
