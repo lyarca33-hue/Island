@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import type { WorldItem } from './items/carry';
+import { ITEM_BY_ID } from './items/catalog';
 import type { NeedKey } from './needs';
 import { BODY_STATES } from './temperature';
 
@@ -48,6 +49,12 @@ export interface GameSave {
   /** Température du corps (°C), trempé par la pluie (0 à 1), chaleur d'une boisson (°C de ressenti), état. */
   body?: { temp: number; soaked: number; inner: number; state: string };
   items: ItemSave[];
+  /**
+   * Les genres d'objets que le jeu connaissait à la sauvegarde. Un objet de la maison dont le
+   * genre n'y est pas est arrivé avec une mise à jour : on le garde au chargement au lieu de le
+   * croire mangé ou cassé. Absent des anciennes sauvegardes.
+   */
+  known?: string[];
   /** Le perso du créateur, pour le retrouver sur un autre appareil. */
   recipe?: Recipe;
 }
@@ -128,13 +135,15 @@ export function captureGame(a: SaveAccess): GameSave {
     weather,
     body: { temp: round(a.body.temp), soaked: round(a.body.soaked), inner: round(a.body.inner), state: a.body.state },
     items,
+    known: [...ITEM_BY_ID.keys()],
   };
 }
 
 /**
  * Remet la partie sauvée dans un jeu tout neuf (juste construit). Chaque objet sauvé reprend un
  * objet du même genre déjà là, dans l'ordre ; ceux qui manquent sont créés (plats cuisinés, sacs
- * livrés…), ceux en trop retirés (mangés, cassés, jetés).
+ * livrés…), ceux en trop retirés (mangés, cassés, jetés), sauf les genres arrivés depuis la
+ * sauvegarde (voir GameSave.known), qui restent à leur place de départ.
  */
 export function applyGame(a: SaveAccess, s: GameSave): void {
   const pool = new Map<string, WorldItem[]>();
@@ -166,7 +175,9 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
     a.refresh(it);
     if (saved.x) a.setExtras(it, saved.x);
   }
-  for (const left of pool.values()) for (const it of left) a.remove(it);
+  // genres que la sauvegarde connaissait ; sans la liste (ancienne sauvegarde), ceux qu'elle contient
+  const known = new Set(s.known ?? s.items.map((saved) => saved.id));
+  for (const [id, left] of pool) if (known.has(id)) for (const it of left) a.remove(it);
 
   a.clock.minutes = s.clock.minutes;
   a.clock.speed = s.clock.speed;

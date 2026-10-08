@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Puppet } from '../creator/puppet';
+import type { VRMHumanBoneName } from '@pixiv/three-vrm';
 import type { Recipe } from '../creator/recipe';
 import { Carry, type Side, type WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
@@ -337,6 +338,11 @@ export class Character {
     return out;
   }
 
+  /** Os du perso du créateur (« head », « neck », « leftUpperArm »…), pour l'habiller ; null sans perso du créateur. */
+  bone(name: VRMHumanBoneName): THREE.Object3D | null {
+    return this.puppet?.vrm.humanoid.getRawBoneNode(name) ?? null;
+  }
+
   /** Retire ce qu'avait ajouté `dressHands`. */
   undress(parts: THREE.Object3D[]): void {
     for (const p of parts) p.removeFromParent();
@@ -622,8 +628,10 @@ export class Character {
       delta = Math.atan2(Math.sin(delta), Math.cos(delta));
       this.heading += delta * Math.min(1, dt * TURN_RATE);
       this.root.rotation.y = this.heading;
-    } else if (this.approach) {
-      // arrivé : se tourner vers l'objet (ou le meuble), puis agir
+    } else if (this.approach && !this.target && !this.busy) {
+      // arrivé, les mains libres de tout geste (un ordre donné pendant qu'elles finissent de
+      // prendre attend la fin, sinon l'action serait refusée et le perso resterait planté) :
+      // se tourner vers l'objet (ou le meuble), puis agir
       const to = this.approach.face.clone().sub(this.root.position);
       let delta = Math.atan2(to.x, to.z) - this.heading;
       delta = Math.atan2(Math.sin(delta), Math.cos(delta));

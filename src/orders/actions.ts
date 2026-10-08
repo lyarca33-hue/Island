@@ -443,8 +443,8 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'aller_piece',
-    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre ou salle de bain (le perso s’arrête juste après l’entrée).',
-    params: { piece: 'cuisine, salon, chambre ou salle de bain' },
+    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre, salle de bain ou entrée (le perso s’arrête juste après l’entrée).',
+    params: { piece: 'cuisine, salon, chambre, salle de bain ou entrée' },
     run: (g, a) => g.walkToRoom(a.piece),
   },
   {
@@ -470,6 +470,21 @@ export const ACTIONS: ActionDef[] = [
     description: 'Aller se coucher dans le lit (`lit` facultatif : sinon le plus proche) et dormir : l’écran passe au noir, le temps file et la fatigue remonte ; le perso se réveille seul une fois reposé. Les mains doivent être vides ; refusé si la fatigue est presque pleine.',
     params: { lit: 'ref du lit' },
     run: (g, a) => g.sleepIn(a.lit),
+  },
+  {
+    name: 'sieste',
+    description: 'Faire la sieste allongé sur le canapé (`canape` facultatif : sinon le plus proche) : le temps file, la fatigue remonte, le perso se réveille seul au bout d’une à deux heures. Mains vides ; refusé si la fatigue est presque pleine.',
+    params: { canape: 'ref du canapé' },
+    run: (g, a) => g.nap(a.canape),
+  },
+  {
+    name: 'regler_reveil',
+    description: 'Régler le réveil-matin de la chambre à l’heure `heure` (ex. 7 ou 6.5 pour 6 h 30), ou le couper (`heure` = off). Réglé, il sonne à cette heure (« Driiing ! ») et le perso qui dort dans le lit se lève à ce moment-là au lieu d’attendre d’être reposé.',
+    params: { heure: 'heure du réveil, ou off' },
+    run: (g, a) => {
+      const h = Number(String(a.heure ?? '7').replace(',', '.').replace(/\s*h\s*(\d+)?/, (_m, mm) => (mm ? `.${Math.round((Number(mm) / 60) * 100)}` : '')));
+      return g.setAlarm(a.heure === 'off' ? null : Number.isFinite(h) ? h : 7, a.reveil);
+    },
   },
   {
     name: 'reveiller',
@@ -528,7 +543,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'assaisonner',
-    description: 'Assaisonner avec le pot d’épices tenu (sel, poivre, paprika, herbes de Provence, huile d’olive) ce qu’il y a dans ou sur `objet` : la poêle, l’assiette, la planche (sinon l’aliment tenu, la poêle sur le feu, l’assiette servie).',
+    description: 'Assaisonner avec le pot d’épices tenu (sel, poivre, paprika, herbes de Provence, huile d’olive) ou la sauce tenue (ketchup, mayonnaise, moutarde, vinaigre, crème, citron, ail) ce qu’il y a dans ou sur `objet` : la poêle, l’assiette, la planche (sinon l’aliment tenu, la poêle sur le feu, l’assiette servie).',
     params: {},
     run: (g, a) => g.season(a.objet),
   },

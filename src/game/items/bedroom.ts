@@ -1,6 +1,6 @@
 /**
  * La chambre : le lit (on y dort), la table de nuit (un tiroir pour les livres), la lampe de
- * chevet (elle s'allume et s'éteint d'un clic), l'armoire et ses pulls. Mêmes fiches que le reste
+ * chevet (elle s'allume et s'éteint d'un clic), le réveil-matin, l'armoire et ses pulls. Mêmes fiches que le reste
  * du catalogue (catalog.ts) ; le sommeil, la lampe, la porte et le tiroir sont joués par Game.ts.
  *
  * Tous sont posés au sol, l'avant vers +Z (le lit : la tête contre le mur, à -Z).
@@ -149,6 +149,52 @@ export const BEDROOM_ITEMS: ItemDef[] = [
       bulb.position.y = 0.27;
       bulb.name = 'ampoule';
       g.add(foot, stem, shade, bulb);
+      return g;
+    },
+  },
+  {
+    // réveil-matin à deux cloches : on le règle (7 h par défaut), il sonne et réveille le dormeur
+    id: 'reveil',
+    name: 'réveil',
+    portable: true,
+    fragility: 4,
+    durability: 120,
+    clock: true,
+    // le cadran face à +Z ; posé sur ses deux pieds
+    build: () => {
+      const r = 0.055, cy = 0.075, red = 0xc0392b, brass = 0xd4b04a;
+      const g = new THREE.Group();
+      g.add(
+        mesh(new THREE.CylinderGeometry(r, r, 0.04, 28).rotateX(Math.PI / 2), red, 0, cy, 0),
+        mesh(new THREE.CylinderGeometry(r * 0.86, r * 0.86, 0.004, 28).rotateX(Math.PI / 2), 0xfbf8f0, 0, cy, 0.0205),
+        mesh(new THREE.TorusGeometry(r * 0.9, 0.005, 8, 28), brass, 0, cy, 0.021),
+        // deux cloches, le marteau entre elles, l'anse
+        mesh(new THREE.SphereGeometry(0.026, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), brass, -0.035, cy + r - 0.004, 0),
+        mesh(new THREE.SphereGeometry(0.026, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), brass, 0.035, cy + r - 0.004, 0),
+        box(0.006, 0.03, 0.006, brass, 0, cy + r + 0.012, 0),
+        mesh(new THREE.TorusGeometry(0.022, 0.003, 6, 16, Math.PI), brass, 0, cy + r + 0.03, -0.004),
+        // pieds
+        box(0.012, 0.03, 0.012, brass, -0.035, 0.015, 0),
+        box(0.012, 0.03, 0.012, brass, 0.035, 0.015, 0),
+      );
+      for (let i = 0; i < 12; i += 3) {
+        const a = (i / 12) * Math.PI * 2;
+        const tick = box(0.004, 0.01, 0.002, 0x333333, Math.sin(a) * 0.04, cy + Math.cos(a) * 0.04, 0.023);
+        tick.rotation.z = -a;
+        tick.castShadow = false;
+        g.add(tick);
+      }
+      const hand = (name: string, len: number, w: number) => {
+        const pivot = new THREE.Group();
+        pivot.name = name;
+        pivot.position.set(0, cy, 0.024);
+        const m = box(w, len, 0.002, 0x222222, 0, len / 2 - 0.006, 0);
+        m.castShadow = false;
+        pivot.add(m);
+        g.add(pivot);
+      };
+      hand('aiguille-heures', 0.03, 0.005);
+      hand('aiguille-minutes', 0.042, 0.003);
       return g;
     },
   },

@@ -44,13 +44,16 @@ export const WALL_T = 0.12;
 const CUT_H = 0.2;
 /** Hauteur d'une porte ou d'un passage. */
 export const DOOR_H = 2.08;
-/** Porte d'entrée de la cuisine (mur ouest) : de z0 à z1. */
-const DOOR = { z0: 1.35, z1: 2.25 };
+/** Passage de la cuisine à l'entrée (mur ouest de la cuisine, mur est de l'entrée) : de z0 à z1. */
+export const DOOR = { z0: 1.35, z1: 2.25 };
 /** Passage de la cuisine au salon (mur est de la cuisine, mur ouest du salon) : de z0 à z1. */
 export const SALON_PASS = { z0: -1.9, z1: -1.0 };
 /** Distance (m) à laquelle une porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
 const DOOR_NEAR = 1.4;
 const DOOR_SPEED = 1.8;
+/** Rideaux : vitesse (part tirée par seconde), part de la lumière de la fenêtre qu'ils arrêtent. */
+const CURTAIN_SPEED = 1.5;
+const CURTAIN_DIM = 0.85;
 /** Bas et haut des fenêtres (celle du fond, au-dessus de l'évier, passe au-dessus du robinet). */
 const WIN_LOW = 1.3;
 export const WIN_HIGH = 2.1;
@@ -125,14 +128,23 @@ export interface Opening {
   y1: number;
   /** Fenêtre qui s'ouvre : le battant (croisillon, vitre) est un objet (la fiche `fenetre`), le mur n'en garde que le cadre. */
   sash?: boolean;
+  /** Rideaux devant la fenêtre (leur couleur) : tirés, ils assombrissent la pièce le jour. */
+  curtain?: THREE.ColorRepresentation;
 }
 
-/** Porte ou passage : `leaf` = porte d'entrée avec un battant qui s'ouvre seul devant le perso. */
+/**
+ * Porte ou passage : `leaf` = porte d'entrée avec un battant qui s'ouvre seul devant le perso ;
+ * `inner` = porte intérieure (battant blanc, sans paillasson) qui s'ouvre dans la pièce, ouverte ou
+ * fermée à la main (clic droit) : fermée, elle s'ouvre quand le perso passe et se referme derrière lui.
+ */
 export interface Doorway {
   wall: WallName;
   u0: number;
   u1: number;
   leaf?: boolean;
+  inner?: boolean;
+  /** Charnière à l'autre bout de l'ouverture. */
+  flip?: boolean;
 }
 
 /** Rangée de meubles dos au mur, dans l'ordre de x (nord, sud) ou de z (est, ouest) croissant à partir de `from` ; un nombre laisse un écart (m). */
@@ -275,12 +287,34 @@ interface Wall {
   boxes: THREE.Box3[];
 }
 
-/** Porte d'entrée : battant (dans le mur haut), son ombre (gardée en coupe), ouverture. */
+/**
+ * Battant de porte (dans le mur haut), son ombre (gardée en coupe), ouverture. Porte intérieure :
+ * fermée à la main (`shut`), et réarmée (`armed`) une fois le perso éloigné, pour ne pas se rouvrir
+ * sous le nez de celui qui vient de la fermer.
+ */
 interface Leaf {
   door: THREE.Group;
   ghost: THREE.Group;
   center: THREE.Vector3;
   open: number;
+  /** Rotation (rad) du battant grand ouvert. */
+  swing: number;
+  wall: WallName;
+  inner: boolean;
+  shut: boolean;
+  armed: boolean;
+}
+
+/** Rideaux d'une fenêtre : deux pans (et leur ombre), la lumière de la fenêtre, part tirée (0 ouverts, 1 tirés). */
+interface Curtain {
+  group: THREE.Group;
+  panels: Array<{ mesh: THREE.Mesh; ghost: THREE.Mesh; side: -1 | 1 }>;
+  light: THREE.SpotLight | null;
+  wall: WallName;
+  u: number;
+  width: number;
+  drawn: boolean;
+  k: number;
 }
 
 export class Room {
@@ -291,6 +325,7 @@ export class Room {
   readonly obstacles: Array<{ box: THREE.Box3; pos: THREE.Vector3; yaw: number; wall: boolean }> = [];
   private walls: Wall[] = [];
   private leaves: Leaf[] = [];
+  private curtains: Curtain[] = [];
   /** Animations du décor (aiguilles de l'horloge…), à chaque image avec l'heure du jeu. */
   private tickers: Array<(dt: number, hour: number) => void> = [];
   private wallMat = toon(PLASTER);
@@ -363,7 +398,10 @@ export class Room {
 
     for (const l of spec.lamps(anchor)) this.addLamp(l.x, l.z, l.kind, l.shade ?? 0x2f5d50);
     // lumière du dehors par les fenêtres, et le toit vu du dehors
-    for (const o of windows) this.addWindowLight(this.wall(o.wall), o);
+    for (const o of windows) {
+      const light = this.addWindowLight(this.wall(o.wall), o);
+      if (o.curtain !== undefined) this.addCurtain(o, light);
+    }
     this.buildRoof();
 
     // interrupteur : plaque blanche, bascule (haut enfoncé = allumé)
@@ -453,6 +491,63 @@ export class Room {
     return ray.intersectObject(this.lightSwitch, true)[0]?.distance ?? null;
   }
 
+  /** Porte intérieure ou rideaux visés par le rayon (visibles), leur numéro et leur distance. */
+  fixtureHit(ray: THREE.Raycaster): { kind: 'porte' | 'rideaux'; index: number; distance: number } | null {
+    let best: { kind: 'porte' | 'rideaux'; index: number; distance: number } | null = null;
+    const test = (kind: 'porte' | 'rideaux', index: number, o: THREE.Object3D) => {
+      if (!this.visibleChain(o)) return;
+      const d = ray.intersectObject(o, true)[0]?.distance;
+      if (d !== undefined && (!best || d < best.distance)) best = { kind, index, distance: d };
+    };
+    this.leaves.forEach((l, i) => { if (l.inner) test('porte', i, l.door); });
+    this.curtains.forEach((c, i) => test('rideaux', i, c.group));
+    return best;
+  }
+
+  /** La porte intérieure `i` est-elle ouverte (laissée ouverte à la main) ? */
+  doorOpen(i: number): boolean {
+    return !this.leaves[i].shut;
+  }
+
+  /** Ouvre ou ferme la porte intérieure `i` (elle tourne à son rythme). */
+  setDoor(i: number, open: boolean): void {
+    const l = this.leaves[i];
+    l.shut = !open;
+    // fermée par le perso planté devant : elle attend qu'il s'éloigne pour se rouvrir à son passage
+    l.armed = open;
+  }
+
+  /** Les rideaux `i` sont-ils tirés ? */
+  curtainsDrawn(i: number): boolean {
+    return this.curtains[i].drawn;
+  }
+
+  /** Tire (`drawn`) ou ouvre les rideaux `i`. */
+  setCurtains(i: number, drawn: boolean): void {
+    this.curtains[i].drawn = drawn;
+  }
+
+  /**
+   * Où se tenir pour ouvrir ou fermer la porte `i` (du côté de `from`, dans la pièce ou de l'autre
+   * côté du mur), ou tirer les rideaux `i` ; et le point à regarder.
+   */
+  fixtureSpot(kind: 'porte' | 'rideaux', i: number, from: THREE.Vector3): { stand: THREE.Vector3; face: THREE.Vector3 } {
+    if (kind === 'porte') {
+      const l = this.leaves[i];
+      const [nx, nz] = WALLS[l.wall].n;
+      const n = new THREE.Vector3(nx, 0, nz);
+      const c = l.center.clone().setY(0);
+      // devant la porte, côté pièce ; de l'autre côté si le perso est derrière le mur
+      const inside = from.clone().sub(c).dot(n) > -WALL_T;
+      const stand = inside ? c.clone().addScaledVector(n, 0.75) : c.clone().addScaledVector(n, -(2 * WALL_T + 0.75));
+      return { stand, face: c.setY(1) };
+    }
+    const c = this.curtains[i];
+    const f = this.wallFrame(c.wall, c.u, 1.2);
+    const [nx, nz] = WALLS[c.wall].n;
+    return { stand: f.position.clone().setY(0).add(new THREE.Vector3(nx, 0, nz).multiplyScalar(0.7)), face: f.position.clone() };
+  }
+
   /** Lampe (suspension au plafond, ou lampadaire posé au sol) et sa lumière, éteinte au départ. */
   private addLamp(x: number, z: number, kind: 'suspension' | 'lampadaire', shadeColor: THREE.ColorRepresentation): void {
     const lamp = new THREE.Group();
@@ -519,36 +614,48 @@ export class Room {
     const sill = this.wallFrame(d.wall, uc);
     sill.add(box(WALL_T, 0.012, 2 * half, toon(DARK_WOOD), -WALL_T / 2, 0.006, 0, false));
     this.group.add(sill);
-    if (!d.leaf) return;
-    const leafMat = toon(0x6f8f74);
+    if (!d.leaf && !d.inner) return;
+    const inner = !!d.inner;
+    const leafMat = toon(inner ? 0xf4f1ea : 0x6f8f74);
+    const panelMat = toon(inner ? 0xe6e1d6 : 0x5f7d64);
+    const knob = toon(inner ? 0xc8ced4 : 0xc9a24a);
     const leafW = 2 * half - 0.02;
+    // charnière au bout -Z du repère du mur (à l'autre bout avec `flip`) : le battant part de là
+    const s = d.flip ? -1 : 1;
     const door = new THREE.Group();
-    door.name = 'porte-entree';
-    door.position.set(-WALL_T + 0.02, 0, -half + 0.01);
+    door.name = inner ? 'porte' : 'porte-entree';
+    // porte d'entrée au fond de l'épaisseur du mur (elle s'ouvre dehors) ; porte intérieure contre
+    // la pièce (elle s'ouvre dedans, à plat contre le mur)
+    door.position.set(inner ? -0.03 : -WALL_T + 0.02, 0, -s * (half - 0.01));
     door.add(
-      box(0.04, DOOR_H - 0.02, leafW, leafMat, 0, (DOOR_H - 0.02) / 2 + 0.01, leafW / 2),
-      // panneaux moulurés et poignée, côté pièce
-      box(0.01, 0.75, leafW - 0.24, toon(0x5f7d64), 0.025, 1.45, leafW / 2),
-      box(0.01, 0.75, leafW - 0.24, toon(0x5f7d64), 0.025, 0.55, leafW / 2),
-      box(0.04, 0.03, 0.12, toon(0xc9a24a), 0.045, 1.0, leafW - 0.1),
-      box(0.04, 0.03, 0.12, toon(0xc9a24a), -0.045, 1.0, leafW - 0.1),
+      box(0.04, DOOR_H - 0.02, leafW, leafMat, 0, (DOOR_H - 0.02) / 2 + 0.01, s * leafW / 2),
+      // panneaux moulurés et poignée, côté pièce (des deux côtés pour une porte intérieure)
+      box(0.01, 0.75, leafW - 0.24, panelMat, 0.025, 1.45, s * leafW / 2),
+      box(0.01, 0.75, leafW - 0.24, panelMat, 0.025, 0.55, s * leafW / 2),
+      box(0.04, 0.03, 0.12, knob, 0.045, 1.0, s * (leafW - 0.1)),
+      box(0.04, 0.03, 0.12, knob, -0.045, 1.0, s * (leafW - 0.1)),
     );
+    if (inner) door.add(box(0.01, 0.75, leafW - 0.24, panelMat, -0.025, 1.45, s * leafW / 2), box(0.01, 0.75, leafW - 0.24, panelMat, -0.025, 0.55, s * leafW / 2));
     f.add(door);
     // ombre du battant, gardée même quand le mur est abaissé en coupe ; un peu plus large que le
     // battant : pas de filet de soleil autour quand la porte est fermée
     const gf = this.wallFrame(d.wall, uc);
     const ghost = new THREE.Group();
     ghost.position.copy(door.position);
-    const ghostLeaf = box(0.08, DOOR_H + 0.04, leafW + 0.08, this.shadowMat, 0, (DOOR_H + 0.04) / 2, leafW / 2);
+    const ghostLeaf = box(0.08, DOOR_H + 0.04, leafW + 0.08, this.shadowMat, 0, (DOOR_H + 0.04) / 2, s * leafW / 2);
     ghostLeaf.receiveShadow = false;
     ghost.add(ghostLeaf);
     gf.add(ghost);
     this.group.add(gf);
-    // paillasson devant la porte
-    const mat = this.wallFrame(d.wall, uc);
-    mat.add(box(0.5, 0.012, 0.8, toon(0x9b6b3d), 0.32, 0.008, 0, false));
-    this.group.add(mat);
-    this.leaves.push({ door, ghost, center: f.position.clone(), open: 0 });
+    // paillasson devant la porte d'entrée ; une porte intérieure, elle, démarre ouverte
+    if (!inner) {
+      const mat = this.wallFrame(d.wall, uc);
+      mat.add(box(0.5, 0.012, 0.8, toon(0x9b6b3d), 0.32, 0.008, 0, false));
+      this.group.add(mat);
+    }
+    // ouverte : la porte d'entrée tourne de 100° vers le dehors, une porte intérieure de 90° vers la pièce
+    const swing = (inner ? s : -s) * THREE.MathUtils.degToRad(inner ? 90 : 100);
+    this.leaves.push({ door, ghost, center: f.position.clone(), open: inner ? 1 : 0, swing, wall: d.wall, inner, shut: false, armed: true });
   }
 
   /**
@@ -556,7 +663,7 @@ export class Room {
    * haut de la fenêtre, projette au sol la forme des carreaux (texture `windowCookie`). Placé
    * dedans, il n'éclaire pas la façade ni l'herbe.
    */
-  private addWindowLight(w: Wall, o: Opening): void {
+  private addWindowLight(w: Wall, o: Opening): THREE.SpotLight {
     const alongX = w.n.x === 0;
     const inner = alongX ? w.at.y : w.at.x;
     const um = (o.u0 + o.u1) / 2;
@@ -576,6 +683,61 @@ export class Room {
     light.shadow.needsUpdate = true;
     this.winLights.push(light);
     this.group.add(light, light.target);
+    return light;
+  }
+
+  /**
+   * Rideaux de la fenêtre `o` : une tringle au-dessus, deux pans de tissu qui se rejoignent au
+   * milieu quand on les tire. Leur ombre (gardée en coupe) arrête le soleil ; la lumière de la
+   * fenêtre `light` baisse quand ils sont tirés.
+   */
+  private addCurtain(o: Opening, light: THREE.SpotLight): void {
+    const width = o.u1 - o.u0 + 0.3;
+    const top = Math.min(o.y1 + 0.12, WALL_H - 0.05);
+    const g = this.wallFrame(o.wall, (o.u0 + o.u1) / 2);
+    g.add(box(0.025, 0.025, width + 0.06, toon(DARK_WOOD), 0.09, top, 0, false));
+    for (const s of [-1, 1]) g.add(box(0.03, 0.04, 0.04, toon(DARK_WOOD), 0.09, top, s * (width / 2 + 0.03), false));
+    const h = top - Math.max(o.y0 - 0.2, 0.05);
+    // pan de 1 m de large, plissé : mis à l'échelle (le long du mur) selon qu'il est tiré ou non
+    const geo = new THREE.BoxGeometry(0.03, h, 1);
+    const mat = toon(o.curtain!);
+    const panels: Curtain['panels'] = [];
+    const gf = this.wallFrame(o.wall, (o.u0 + o.u1) / 2);
+    for (const side of [-1, 1] as const) {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.position.set(0.09, top - 0.02 - h / 2, 0);
+      // plis : de fines bandes plus sombres
+      for (let i = -2; i <= 2; i++) mesh.add(box(0.032, h, 0.04, toon(new THREE.Color(o.curtain!).multiplyScalar(0.82)), 0, 0, i * 0.2, false));
+      g.add(mesh);
+      const ghost = new THREE.Mesh(geo, this.shadowMat);
+      ghost.castShadow = true;
+      ghost.receiveShadow = false;
+      ghost.position.copy(mesh.position);
+      gf.add(ghost);
+      panels.push({ mesh, ghost, side });
+    }
+    g.name = 'rideaux';
+    this.wallGroup(o.wall).add(g);
+    this.group.add(gf);
+    const c: Curtain = { group: g, panels, light, wall: o.wall, u: (o.u0 + o.u1) / 2, width, drawn: false, k: 0 };
+    this.curtains.push(c);
+    this.placeCurtain(c);
+  }
+
+  /** Pans des rideaux selon leur part tirée : repliés de chaque côté, ou se rejoignant au milieu. */
+  private placeCurtain(c: Curtain): void {
+    const k = THREE.MathUtils.smootherstep(c.k, 0, 1);
+    const w = THREE.MathUtils.lerp(0.18, c.width / 2 + 0.02, k);
+    for (const p of c.panels) {
+      for (const m of [p.mesh, p.ghost]) {
+        m.scale.z = w;
+        m.position.z = p.side * (c.width / 2 - w / 2);
+      }
+      // les plis gardent leur épaisseur : on les écarte avec le pan
+      for (const f of p.mesh.children) f.scale.z = 1 / w;
+    }
   }
 
   /**
@@ -692,7 +854,9 @@ export class Room {
     const warm = 1 - THREE.MathUtils.smoothstep(Math.min(hour - SUNRISE, SUNSET - hour), 1, 3.5);
     for (const l of this.winLights) {
       l.color.copy(WIN_DAY).lerp(WIN_WARM, warm).lerp(WIN_MOON, 1 - day);
-      l.intensity = day * WIN_I * (1 - 0.7 * this.overcast) + night * WIN_MOON_I * (1 - 0.6 * this.overcast);
+      // rideaux tirés : il ne passe plus qu'un peu de jour à travers le tissu
+      const veil = 1 - CURTAIN_DIM * (this.curtains.find((c) => c.light === l)?.k ?? 0);
+      l.intensity = (day * WIN_I * (1 - 0.7 * this.overcast) + night * WIN_MOON_I * (1 - 0.6 * this.overcast)) * veil;
       if (this.shadowsOn && l.intensity > 0.01) this.liveShadows.push(l);
     }
   }
@@ -858,9 +1022,19 @@ export class Room {
     this.roof.visible = !indoors && !anyCut && !rays.some((r) => r.intersectsBox(this.roofBox));
     for (const l of this.leaves) {
       const near = Math.hypot(player.x - l.center.x, player.z - l.center.z) < DOOR_NEAR;
-      l.open = THREE.MathUtils.clamp(l.open + (near ? 1 : -1) * DOOR_SPEED * dt, 0, 1);
-      l.door.rotation.y = -THREE.MathUtils.smootherstep(l.open, 0, 1) * THREE.MathUtils.degToRad(100);
+      if (!near) l.armed = true;
+      // porte intérieure ouverte : elle le reste ; fermée : elle s'ouvre pour laisser passer
+      const want = l.inner && !l.shut ? true : near && l.armed;
+      l.open = THREE.MathUtils.clamp(l.open + (want ? 1 : -1) * DOOR_SPEED * dt, 0, 1);
+      l.door.rotation.y = THREE.MathUtils.smootherstep(l.open, 0, 1) * l.swing;
       l.ghost.rotation.y = l.door.rotation.y;
+    }
+    for (const c of this.curtains) {
+      const k = THREE.MathUtils.clamp(c.k + (c.drawn ? 1 : -1) * CURTAIN_SPEED * dt, 0, 1);
+      if (k !== c.k) {
+        c.k = k;
+        this.placeCurtain(c);
+      }
     }
     for (const t of this.tickers) t(dt, hour);
     this.hour = solar;
@@ -977,8 +1151,9 @@ function kitchenDecor(room: Room, anchor: Anchors): void {
 }
 
 /**
- * La cuisine : porte d'entrée (mur ouest), passage vers le salon (mur est), fenêtre au-dessus de
- * l'évier et à côté de la table, suspension au-dessus de la table, interrupteur à côté de la porte.
+ * La cuisine : passage vers l'entrée (mur ouest) et vers le salon (mur est), fenêtre au-dessus de
+ * l'évier et à côté de la table (mur sud, sur le jardin), suspension au-dessus de la table,
+ * interrupteur à côté du passage de l'entrée.
  *
  * Le long du fond : lave-vaisselle à côté de l'évier (sous la fenêtre), plan de travail pour
  * couper entre l'évier et la gazinière, tiroir à couverts, le frigo, puis le garde-manger au bout. Le long du mur
@@ -990,17 +1165,18 @@ export const KITCHEN: RoomSpec = {
   rect: ROOM,
   floor: () => tiledFloor(ROOM),
   doors: [
-    { wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1, leaf: true },
+    { wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1 },
     { wall: 'est', u0: SALON_PASS.z0, u1: SALON_PASS.z1 },
   ],
-  joined: ['est'],
+  joined: ['est', 'ouest'],
   windows: (anchor) => {
     const sinkX = anchor('evier')?.x ?? -1.6;
-    const tableZ = anchor('table')?.z ?? 1;
+    const tableX = anchor('table')?.x ?? 1;
     return [
       // celle de l'évier s'ouvre : son battant est l'objet `fenetre` (KITCHEN.items)
       { wall: 'nord', u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH, sash: true },
-      { wall: 'est', u0: tableZ - 0.55, u1: tableZ + 0.55, y0: 0.95, y1: WIN_HIGH },
+      // celle de la table donne sur le jardin (le mur est est dos au salon)
+      { wall: 'sud', u0: tableX - 0.55, u1: tableX + 0.55, y0: 0.95, y1: WIN_HIGH },
     ];
   },
   lamps: (anchor) => {
@@ -1040,8 +1216,8 @@ export const KITCHEN: RoomSpec = {
     // le balai et le seau (la serpillière dedans) dans le coin, après le garde-manger
     ['balai', 2.55, 0, -2.66, 0],
     ['seau', 2.95, 0, -2.5, 0],
-    // dehors, à côté de la porte d'entrée : le conteneur où vont les sacs poubelle
-    ['conteneur', ROOM.x0 - 0.95, 0, 0.55, Math.PI / 2],
+    // dehors, contre le mur ouest de l'entrée (entree.ts), près de la porte : le conteneur où vont les sacs poubelle
+    ['conteneur', -6.35, 0, 2.3, 0],
   ],
   decor: kitchenDecor,
 };

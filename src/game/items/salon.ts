@@ -25,6 +25,11 @@ const SOFA_W = 2.0;
 const SOFA_D = 0.9;
 const SOFA_SEAT = 0.44;
 const SOFA_BACK = 0.85;
+/**
+ * Sieste sur le canapé (repère du canapé) : les pieds du dormeur contre l'accoudoir +X, la tête
+ * vers l'accoudoir -X, couché sur les coussins d'assise ; on se relève devant (+Z).
+ */
+export const SOFA_NAP = { feet: new THREE.Vector3(SOFA_W / 2 - 0.2, SOFA_SEAT + 0.06, 0.08), head: new THREE.Vector3(-1, 0, 0), front: SOFA_D / 2 };
 /** Hauteur du plateau de la table basse. */
 export const LOW_TABLE_H = 0.42;
 /** Meuble télé : hauteur du dessus (où pose la télé). */
