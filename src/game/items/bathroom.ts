@@ -1,7 +1,8 @@
 /**
  * La salle de bain : lavabo (avec son miroir), douche à l'italienne, toilettes, porte-serviettes et
- * serviette. Mêmes fiches que le reste du catalogue (catalog.ts) ; la douche, les toilettes et
- * la serviette sont jouées par Game.ts.
+ * serviette, brosse et verre à dents, dérouleur et rouleaux de papier toilette. Mêmes fiches que
+ * le reste du catalogue (catalog.ts) ; la douche, les toilettes, la serviette, le brossage des
+ * dents et le papier qui s'use sont joués par Game.ts.
  *
  * Tous sont posés au sol, l'avant vers +Z, le dos contre le mur (-Z).
  */
@@ -62,6 +63,39 @@ const TOWEL_W = 0.42;
 const TOWEL_H = 0.46;
 const TOWEL_T = 0.02;
 
+/** Où va le verre à dents sur le rebord du lavabo (repère du lavabo, base du verre). */
+export const TOOTH_SPOT: [number, number, number] = [-0.21, BASIN_TOP, -0.17];
+/** Verre à dents : hauteur ; brosse à dents : longueur, et sa couleur. */
+const GLASS_H = 0.1;
+export const BRUSH_L = 0.17;
+const BRUSH_COLOR = 0x3d9ad1;
+/** Rouleau de papier toilette : rayon plein, rayon du tube en carton, largeur. */
+const ROLL_R = 0.055;
+const TUBE_R = 0.022;
+const ROLL_W = 0.1;
+
+/**
+ * Brosse à dents debout, la tête en haut (repère : base du manche) ; aussi celle qu'on tient en
+ * se brossant les dents (Game : dans la main droite).
+ */
+export function brushModel(): THREE.Group {
+  return group(
+    box(0.012, BRUSH_L - 0.03, 0.008, BRUSH_COLOR, 0, (BRUSH_L - 0.03) / 2, 0),
+    box(0.012, 0.03, 0.01, BRUSH_COLOR, 0, BRUSH_L - 0.015, 0),
+    // les poils, blancs et bleus, côté avant
+    box(0.01, 0.024, 0.012, 0xf4f8fa, 0, BRUSH_L - 0.016, 0.01),
+  );
+}
+
+/** Le papier qui reste sur le rouleau : 1 plein, 0 juste le carton. */
+export function showRoll(roll: THREE.Object3D, left: number): void {
+  const paper = roll.getObjectByName('papier');
+  if (!paper) return;
+  const r = TUBE_R + 0.004 + (ROLL_R - TUBE_R - 0.004) * Math.max(0, Math.min(1, left));
+  paper.visible = left > 0;
+  paper.scale.set(r / ROLL_R, 1, r / ROLL_R);
+}
+
 /** Bouffée de vapeur : un disque blanc aux bords fondus. */
 let steamTex: THREE.CanvasTexture | null = null;
 function steamTexture(): THREE.CanvasTexture {
@@ -116,10 +150,8 @@ export const BATHROOM_ITEMS: ItemDef[] = [
         mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.15, 12).rotateX(Math.PI / 2), CHROME, 0, H + 0.11, (-0.17 + TAP_Z) / 2),
         mesh(new THREE.CylinderGeometry(0.011, 0.009, 0.03, 12), CHROME, 0, TAP_Y - 0.01 + 0.02, TAP_Z),
         box(0.016, 0.016, 0.09, CHROME, 0, H + 0.135, -0.2),
-        // savon et verre à dents sur le rebord
+        // savon sur le rebord (le verre et la brosse à dents sont de vrais objets, posés à gauche : TOOTH_SPOT)
         box(0.08, 0.025, 0.05, 0xe7a7b8, 0.21, H + 0.0125, -0.17),
-        mesh(new THREE.CylinderGeometry(0.03, 0.026, 0.1, 14), 0xc7e2ea, -0.21, H + 0.05, -0.17),
-        box(0.008, 0.16, 0.008, 0x3d9ad1, -0.215, H + 0.11, -0.17),
       );
       // miroir et sa petite tablette, contre le mur
       const frame = box(MIRROR_W + 0.04, MIRROR_Y1 - MIRROR_Y0 + 0.04, 0.02, 0xe9e1cf, 0, (MIRROR_Y0 + MIRROR_Y1) / 2, -SINK_D / 2 + 0.01);
@@ -293,6 +325,70 @@ export const BATHROOM_ITEMS: ItemDef[] = [
       wet.visible = false;
       g.add(wet);
       return g;
+    },
+  },
+  {
+    id: 'verre-a-dents',
+    name: 'verre à dents',
+    portable: true,
+    grip: 'pinch',
+    fragility: 3,
+    durability: 150,
+    build: () => {
+      // verre dépoli : fond épais, paroi qui s'évase un peu
+      const mat = new THREE.MeshBasicMaterial({ color: 0xc7e2ea, transparent: true, opacity: 0.55, depthWrite: false });
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.026, GLASS_H, 14, 1, true), mat);
+      wall.position.y = GLASS_H / 2;
+      return group(wall, mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.01, 14), 0xb4d6e0, 0, 0.005, 0));
+    },
+  },
+  {
+    id: 'brosse-a-dents',
+    name: 'brosse à dents',
+    portable: true,
+    grip: 'pinch',
+    gripPoint: [0, BRUSH_L * 0.35, 0],
+    fragility: 9,
+    durability: 120,
+    // posée, elle se couche ; rangée debout dans son verre
+    layFlat: true,
+    build: () => brushModel(),
+  },
+  {
+    id: 'derouleur',
+    name: 'dérouleur de papier',
+    portable: false,
+    movable: false,
+    fragility: 8,
+    durability: 300,
+    holds: ['rouleau de papier toilette'],
+    // le rouleau sur l'axe, couché le long du mur ; sa base (un bout du rouleau) côté +X
+    slots: [[ROLL_W / 2, -0.03, 0.09]],
+    slotTilt: [0, 0, Math.PI / 2],
+    build: () => {
+      // posé contre le mur (repère : la platine) ; deux bras et l'axe du rouleau
+      const g = group(
+        box(0.14, 0.04, 0.012, CHROME, 0, 0, 0.006),
+        box(0.012, 0.02, 0.1, CHROME, -0.064, 0, 0.05),
+        box(0.012, 0.02, 0.1, CHROME, 0.064, 0, 0.05),
+        mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.13, 10).rotateZ(Math.PI / 2), CHROME, 0, -0.03, 0.09),
+      );
+      return g;
+    },
+  },
+  {
+    id: 'papier-toilette',
+    name: 'rouleau de papier toilette',
+    portable: true,
+    grip: 'pinch',
+    fragility: 10,
+    durability: 100,
+    build: () => {
+      // debout (repère : base) ; le papier s'amenuise jusqu'au carton (showRoll)
+      const tube = mesh(new THREE.CylinderGeometry(TUBE_R, TUBE_R, ROLL_W + 0.004, 14), 0xb98d5a, 0, ROLL_W / 2, 0);
+      const paper = mesh(new THREE.CylinderGeometry(ROLL_R, ROLL_R, ROLL_W, 18), 0xfbfbf6, 0, ROLL_W / 2, 0);
+      paper.name = 'papier';
+      return group(tube, paper);
     },
   },
 ];
