@@ -53,8 +53,6 @@ test('le jeu se lance : prendre la tasse, faire un café, s’asseoir', async ({
   expect(await tasse(page)).not.toBe('en main');
   expect(await geste(page, 'pickUp', 'tasse')).toBe(true);
   await expect.poll(async () => (await etat(page)).enMain, { timeout: 120_000 }).toContain('tasse');
-  // un geste lancé pendant que la main finit de prendre est perdu : on attend la fin
-  await auRepos(page);
 
   // un café à la machine : la tasse finit pleine de café
   expect(await geste(page, 'makeCoffee')).toBe(true);
