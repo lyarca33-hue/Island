@@ -25,8 +25,10 @@ export interface HeadFit {
   skull: THREE.Box3;
   /** Haut de la coiffure. */
   hairTop: number;
-  /** Rayon de la coiffure autour du crâne, à mi-hauteur entre les yeux et le sommet. */
+  /** Rayon de la coiffure à la hauteur d'un chapeau (un peu sous le sommet). */
   hairRadius: number;
+  /** Centre (x, z) de la coiffure à cette hauteur. */
+  hairCenter: THREE.Vector2;
   /** Avant de la coiffure (frange), au même niveau. */
   hairFront: number;
   /** Centre des yeux : x = écart d'un œil, y = hauteur, z = avant. */
@@ -83,9 +85,8 @@ function dome(r: number, h: number, m: THREE.Material, from = 0, to = Math.PI / 
 
 /** Ce que les chapeaux doivent recouvrir : centre, rayon et sommet de la coiffure. */
 function crown(h: HeadFit) {
-  const c = h.skull.getCenter(new THREE.Vector3());
-  const r = Math.max(h.hairRadius, (h.skull.max.x - h.skull.min.x) / 2) * 1.02;
-  return { cx: c.x, cz: c.z, r, top: Math.max(h.hairTop, h.skull.max.y) };
+  const r = Math.max(h.hairRadius * 1.1, 0.075);
+  return { cx: h.hairCenter.x, cz: h.hairCenter.y, r, top: Math.max(h.hairTop, h.skull.max.y) };
 }
 
 /** Repère des lunettes : z de l'avant du visage au niveau des yeux. */
@@ -146,7 +147,7 @@ export const ACCESSORIES: Accessory[] = [
       const g = new THREE.Group();
       const m = mat(c);
       const y0 = top - 0.075;
-      g.add(mesh(new THREE.CylinderGeometry(r * 2.3, r * 2.3, 0.008, SEG * 2), m, cx, y0, cz));
+      g.add(mesh(new THREE.CylinderGeometry(r * 1.9, r * 1.9, 0.008, SEG * 2), m, cx, y0, cz));
       const cap = dome(r * 1.02, 0.1, m);
       cap.position.set(cx, y0, cz);
       g.add(cap);
@@ -160,8 +161,8 @@ export const ACCESSORIES: Accessory[] = [
       const { cx, cz, r, top } = crown(h);
       const g = new THREE.Group();
       const m = mat(c);
-      const y0 = top - 0.1;
-      const cap = dome(r * 1.03, 0.115, m);
+      const y0 = top - 0.09;
+      const cap = dome(r * 1.03, 0.12, m);
       cap.position.set(cx, y0, cz);
       g.add(cap);
       // visière : demi-disque devant
@@ -378,8 +379,8 @@ export const ACCESSORIES: Accessory[] = [
       const g = new THREE.Group();
       const m = mat(c);
       const y0 = top - 0.05;
-      g.add(mesh(new THREE.CylinderGeometry(r * 1.55, r * 1.55, 0.008, SEG * 2), m, cx, y0, cz));
-      g.add(mesh(new THREE.CylinderGeometry(r * 0.92, r * 0.86, 0.17, SEG), m, cx, y0 + 0.085, cz));
+      g.add(mesh(new THREE.CylinderGeometry(r * 1.4, r * 1.4, 0.008, SEG * 2), m, cx, y0, cz));
+      g.add(mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.86, 0.13, SEG), m, cx, y0 + 0.065, cz));
       g.add(mesh(new THREE.CylinderGeometry(r * 0.875, r * 0.875, 0.03, SEG), mat(0xc2413a), cx, y0 + 0.02, cz));
       return g;
     },
@@ -391,7 +392,7 @@ export const ACCESSORIES: Accessory[] = [
       const g = new THREE.Group();
       const m = mat(c);
       const y0 = top - 0.06;
-      g.add(mesh(new THREE.CylinderGeometry(r * 2.2, r * 2.2, 0.008, SEG * 2), m, cx, y0, cz));
+      g.add(mesh(new THREE.CylinderGeometry(r * 1.8, r * 1.8, 0.008, SEG * 2), m, cx, y0, cz));
       // pointe en deux morceaux, la seconde tombe en arrière
       g.add(mesh(new THREE.CylinderGeometry(r * 0.5, r * 1.02, 0.16, SEG), m, cx, y0 + 0.08, cz));
       const tip = mesh(new THREE.ConeGeometry(r * 0.5, 0.14, SEG), m, 0, 0.06, 0);

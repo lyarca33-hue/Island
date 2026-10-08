@@ -83,17 +83,23 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
     const s = sceneRef.current;
     if (!s) return;
     let live = true;
-    const t = window.setTimeout(() => live && setBusy(true), 120);
-    s.setRecipe(recipe).then(() => live && setHeight(s.height * 100)).catch((e) => {
-      console.error(e);
-      setError('Cette pièce n’a pas pu se charger.');
-    }).finally(() => {
-      clearTimeout(t);
-      if (live) setBusy(false);
-    });
-    saveRecipe(recipe);
+    let t = 0;
+    // petit délai : glisser dans le sélecteur de couleur envoie des dizaines de couleurs à la
+    // seconde, on n'applique (et ne repeint les motifs) que la dernière
+    const apply = window.setTimeout(() => {
+      t = window.setTimeout(() => live && setBusy(true), 120);
+      s.setRecipe(recipe).then(() => live && setHeight(s.height * 100)).catch((e) => {
+        console.error(e);
+        setError('Cette pièce n’a pas pu se charger.');
+      }).finally(() => {
+        clearTimeout(t);
+        if (live) setBusy(false);
+      });
+      saveRecipe(recipe);
+    }, 60);
     return () => {
       live = false;
+      clearTimeout(apply);
       clearTimeout(t);
     };
   }, [recipe, loading]);
