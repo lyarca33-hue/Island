@@ -106,7 +106,8 @@ export function showWear(root: THREE.Object3D, ratio: number): void {
     if (!mesh.isMesh || NO_WEAR.has(mesh.name)) return;
     for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       const m = mat as THREE.MeshToonMaterial;
-      if (!m.color) continue;
+      // matériaux partagés entre plusieurs plantes, ou découpés par leur texture (feuillages) : intouchés
+      if (!m.color || m.userData.noWear) continue;
       const base: THREE.Color = (m.userData.baseColor ??= m.color.clone());
       base.getHSL(hsl);
       m.color.setHSL(hsl.h, hsl.s * (1 - 0.5 * w), hsl.l * (1 - 0.2 * w));

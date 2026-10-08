@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { BATHROOM_DOOR } from './salle-de-bain';
 import { box, DARK_WOOD, toon, WALL_T, WIN_HIGH, type Rect, type Room, type RoomSpec } from './room';
 import { SALON } from './salon';
+import { sansevieria } from './plants';
 
 /** Intérieur de la chambre : son mur sud est dos au mur nord du salon. */
 export const CHAMBRE: Rect = { x0: SALON.x0, x1: SALON.x1, z0: SALON.z0 - 2 * WALL_T - 5.36, z1: SALON.z0 - 2 * WALL_T };
@@ -69,16 +70,7 @@ function chambreDecor(room: Room, anchor: (id: string) => THREE.Vector3 | undefi
   );
   room.wallGroup('ouest').add(pic);
   // plante en pot dans le coin sud-ouest
-  const plant = new THREE.Group();
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.11, 0.3, 18), toon(0xd9d3c5));
-  pot.position.y = 0.15;
-  plant.add(pot);
-  for (const [x, z, h] of [[0, 0, 0.7], [0.08, 0.04, 0.55], [-0.07, 0.06, 0.6], [0.04, -0.08, 0.5]]) {
-    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.09, h, 8), toon(0x4f8a3c));
-    leaf.position.set(x, 0.3 + h / 2, z);
-    plant.add(leaf);
-  }
-  plant.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
+  const plant = sansevieria();
   plant.position.set(x0 + 0.3, 0, z1 - 0.3);
   room.group.add(plant);
   room.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.17, 0, -0.17), new THREE.Vector3(0.17, 1.0, 0.17)), pos: plant.position.clone(), yaw: 0, wall: false });
