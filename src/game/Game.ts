@@ -5692,6 +5692,12 @@ export class Game {
     }
   }
 
+  /** Oublie l'appui en cours sur un objet (un second doigt qui zoome, un appui long qui ouvre le menu). */
+  cancelPress(): void {
+    if (this.press?.dragging) this.onDrag?.(null);
+    this.press = null;
+  }
+
   setZoom(factor: number): void {
     this.zoom = THREE.MathUtils.clamp(this.zoom * factor, ZOOM_MIN, ZOOM_MAX);
   }
@@ -5825,7 +5831,7 @@ export class Game {
       const p = this.groundPoint(e.clientX, e.clientY);
       if (!p) return;
       if (this.moving) {
-        this.onNotice?.('Z Q S D pour déplacer le meuble, R / F pour le pivoter, E pour le lâcher.');
+        this.onNotice?.(matchMedia('(pointer: coarse)').matches ? 'Les flèches pour déplacer le meuble, les flèches rondes pour le pivoter, Lâcher pour le poser.' : 'Z Q S D pour déplacer le meuble, R / F pour le pivoter, E pour le lâcher.');
         return;
       }
       this.character.goTo(p, e.shiftKey);
