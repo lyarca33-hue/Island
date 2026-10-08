@@ -135,6 +135,8 @@ const MOOD_STAR = 2;
 const MORNING: [number, number] = [5, 11];
 /** Au-delà de tant de mètres, un son de cuisine ne s'entend presque plus. */
 const HEAR = 3;
+/** Distance (m) entre deux bruits de pas. */
+const STEP = 0.7;
 const ICE_CUBES = 3;
 const ICE_MELT = 120;
 /** Couleur de chaque liquide (celle du jet de la machine qui le donne). */
@@ -600,6 +602,9 @@ export class Game {
   readonly sound = new KitchenSound();
   /** Vaisselle tenue à l'image d'avant : posée, elle tinte. */
   private carriedDishes = new Set<WorldItem>();
+  /** Pas : où était le perso à l'image d'avant, chemin fait depuis le dernier pas (m). */
+  private stepFrom = new THREE.Vector3();
+  private stepDist = 0;
   /** Aliments dont la vapeur se voit. */
   private steaming = new WeakSet<WorldItem>();
   /** Compétence cuisine : points gagnés (gardés dans le navigateur d'une partie à l'autre). */
@@ -3047,6 +3052,30 @@ export class Game {
       this.sound.play('tinte', this.hear(d.object.position));
     }
     this.carriedDishes = now;
+    // les pas : un toutes les STEP mètres (le pas court est plus long), sur le sol ou dans l'herbe
+    const moved = p0(c.position).distanceTo(p0(this.stepFrom));
+    this.stepFrom.copy(c.position);
+    if (moved < 1) this.stepDist += moved;
+    if (this.stepDist >= STEP) {
+      this.stepDist = 0;
+      this.sound.play(this.activeRoom ? 'pas' : 'pas-herbe', 0.8);
+    }
+    // l'ambiance : douche, télé, et dehors oiseaux le jour, grillons la nuit (pas l'hiver), pluie
+    const tv = [...this.tvs.values()].filter((t) => t.on).sort((a, b) => this.hear(b.item.object.position) - this.hear(a.item.object.position))[0];
+    const dedans = !!this.activeRoom;
+    const out = dedans ? 0.25 : 1;
+    const rain = this.sound.rain;
+    const night = this.clock.isNight;
+    const winter = this.clock.season === 3;
+    this.sound.ambient(Math.max(0, dt), {
+      douche: this.showering ? this.hear(this.showering.shower.object.position) : 0,
+      tele: tv ? this.hear(tv.item.object.position) : 0,
+      chaine: tv?.channel ?? 0,
+      oiseaux: night ? 0 : out * (winter ? 0.3 : 1) * (1 - rain),
+      grillons: night && !winter ? out * (1 - rain) : 0,
+      pluie: rain,
+      dedans,
+    });
   }
 
   readClock(): boolean {
@@ -4706,6 +4735,7 @@ export class Game {
     const c = this.character;
     const pull = () => {
       this.flushes.set(toilet, FLUSH_SECONDS);
+      this.sound.play('chasse', this.hear(toilet.object.position));
       this.wearItem(toilet, WEAR_TAP);
       this.onNotice?.(this.handsToWash ? 'Chasse tirée. Pense à te laver les mains au lavabo.' : 'Chasse tirée.');
     };
