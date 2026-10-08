@@ -1,6 +1,8 @@
 /**
- * Types de prise : quelques façons de tenir un objet, communes à tous les objets. Un objet dit
- * seulement laquelle il utilise (voir catalog.ts) ; la pose du bras et des doigts est ici.
+ * Types de prise : les façons de tenir un objet, communes à tous les objets. Un objet dit
+ * seulement laquelle il utilise (voir catalog.ts) ; la pose du bras et des doigts est ici. On ne
+ * tient pas une assiette comme une tasse : à plat sur la paume, une pomme au creux de la main, un
+ * couvert pointé vers l'avant, une poêle par le manche bras baissé, un balai debout à côté de soi.
  *
  * Tous les chiffres sont dans le repère du buste du perso (face à +Z, sa gauche vers +X) et
  * pour la main droite ; la main gauche est le miroir. Les positions de main sont données
@@ -8,7 +10,22 @@
  */
 import * as THREE from 'three';
 
-export type GripType = 'pinch' | 'fist' | 'side' | 'chest' | 'twoHands' | 'stack' | 'read' | 'push' | 'wash';
+export type GripType =
+  | 'pinch'
+  | 'fist'
+  | 'palm'
+  | 'cradle'
+  | 'utensil'
+  | 'handle'
+  | 'pole'
+  | 'loose'
+  | 'side'
+  | 'chest'
+  | 'twoHands'
+  | 'stack'
+  | 'read'
+  | 'push'
+  | 'wash';
 
 export interface HandSpec {
   /** Où va la main, depuis l'épaule (longueurs de bras, repère du buste). */
@@ -45,6 +62,11 @@ export interface GripSpec {
    * la poitrine reste ainsi du côté gauche, sans croiser le bras devant l'autre main.
    */
   leftReach?: [number, number, number];
+  /**
+   * Point de l'objet calé dans la main une fois tenu : `bottom`, le dessous (posé sur la paume) ;
+   * sinon le point saisi (ItemDef.gripPoint), qui reste celui que la main va chercher.
+   */
+  point?: 'bottom';
 }
 
 export const GRIPS: Record<GripType, GripSpec> = {
@@ -56,19 +78,70 @@ export const GRIPS: Record<GripType, GripSpec> = {
     forward: [0, -1, 0],
     hold: [-0.1, -0.015, 0.035],
   },
-  // en poing (tasse par l'anse, bouteille, épée) : l'avant de l'objet part vers le dos de la
-  // main, son côté +Z (l'anse) reste dans le poing
+  // en poing (tasse par l'anse, bouteille, verre) : l'avant de l'objet part vers le dos de la
+  // main, son côté +Z (l'anse) reste dans le poing ; l'avant-bras devant soi, le coude près du
+  // flanc (pas tiré en arrière)
   fist: {
     label: 'en poing',
-    right: { reach: [-0.15, -0.6, 0.45], pole: [-0.5, -0.3, -0.8], fingers: [0.1, -0.15, 1], palm: [1, 0, 0], curl: 70, thumb: 35 },
+    right: { reach: [-0.08, -0.62, 0.46], pole: [-0.55, -0.7, -0.45], fingers: [0.15, -0.1, 1], palm: [1, 0, 0], curl: 70, thumb: 35 },
     up: [0, 0, 1],
     forward: [1, 0, 0],
     hold: [-0.07, -0.03, 0.01],
   },
-  // le long du corps, bras tendu (livre, sac, seau)
+  // à plat sur la paume tournée vers le ciel, doigts tendus vers l'avant (assiette, bol, plat)
+  palm: {
+    label: 'sur la paume',
+    right: { reach: [0.04, -0.5, 0.56], pole: [-0.55, -0.75, -0.35], fingers: [0.2, 0.05, 1], palm: [0, 1, 0], curl: 8, thumb: 0 },
+    up: [0, -1, 0],
+    forward: [-1, 0, 0],
+    hold: [-0.075, -0.028, 0.005],
+    point: 'bottom',
+  },
+  // au creux de la main, doigts refermés autour (pomme, œuf, tomate, savon)
+  cradle: {
+    label: 'au creux de la main',
+    right: { reach: [0.02, -0.55, 0.5], pole: [-0.55, -0.75, -0.35], fingers: [0.25, 0.3, 1], palm: [0.25, 1, -0.3], curl: 42, index: 34, thumb: 25 },
+    up: [0, -1, 0],
+    forward: [-1, 0, 0],
+    hold: [-0.065, -0.03, 0.008],
+    point: 'bottom',
+  },
+  // couvert ou couteau : manche dans le poing, la pointe vers l'avant et un peu vers le bas
+  utensil: {
+    label: 'comme un couvert',
+    right: { reach: [-0.08, -0.66, 0.4], pole: [-0.55, -0.7, -0.45], fingers: [0.1, -0.93, -0.2], palm: [1, 0, 0], curl: 62, index: 45, thumb: 30 },
+    up: [0, 0, 1],
+    forward: [1, 0, 0],
+    hold: [-0.07, -0.03, 0.01],
+  },
+  // par le manche, bras baissé le long du corps, l'objet à l'horizontale devant (poêle, casserole)
+  handle: {
+    label: 'par le manche',
+    right: { reach: [-0.1, -0.78, 0.3], pole: [-0.4, -0.5, -0.8], fingers: [0.08, -0.15, 1], palm: [1, 0, 0], curl: 72, thumb: 38 },
+    up: [0, 0, 1],
+    forward: [1, 0, 0],
+    hold: [-0.07, -0.03, 0.01],
+  },
+  // long manche tenu debout à côté de soi, comme une canne (balai, serpillière)
+  pole: {
+    label: 'debout à côté de soi',
+    right: { reach: [-0.2, -0.72, 0.28], pole: [-0.5, -0.4, -0.8], fingers: [0.05, -0.1, 1], palm: [1, 0, 0], curl: 72, thumb: 38 },
+    up: [0, 0, 1],
+    forward: [1, 0, 0],
+    hold: [-0.07, -0.03, 0.01],
+  },
+  // linge ou objet souple qui pend au bout des doigts, bras relâché (torchon, serviette, gants)
+  loose: {
+    label: 'au bout des doigts',
+    right: { reach: [-0.14, -0.84, 0.18], pole: [-0.3, 0, -1], fingers: [0.05, -1, 0.25], palm: [1, 0, 0], curl: 48, index: 40, thumb: 30 },
+    up: [-1, 0, 0],
+    forward: [0, 0, 1],
+    hold: [-0.075, -0.025, 0.01],
+  },
+  // le long du corps, bras qui pend (sac, seau, planche) : presque tendu, jamais verrouillé
   side: {
     label: 'le long du corps',
-    right: { reach: [-0.2, -0.95, 0.06], pole: [-0.3, 0, -1], fingers: [0, -1, 0.15], palm: [1, 0, 0], curl: 75, thumb: 40 },
+    right: { reach: [-0.2, -0.88, 0.08], pole: [-0.3, 0, -1], fingers: [0, -1, 0.15], palm: [1, 0, 0], curl: 75, thumb: 40 },
     up: [1, 0, 0],
     forward: [0, 0, 1],
     hold: [-0.07, -0.025, 0.01],
@@ -149,5 +222,8 @@ export function guessGrip(size: THREE.Vector3): GripType {
   if (big > 0.45 || small > 0.2) return 'twoHands';
   if (big < 0.16 && small < 0.03) return 'pinch';
   if (big > 0.22 && small < 0.08) return 'side';
+  // plat et large : sur la paume ; petit et rond : au creux de la main
+  if (big > 0.14 && size.y < 0.06 && size.y < big * 0.35) return 'palm';
+  if (big < 0.09 && small > big * 0.6) return 'cradle';
   return 'fist';
 }
