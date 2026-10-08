@@ -39,7 +39,10 @@ Les gestes passent par `window.game`, comme dans la console du jeu, et l'état e
 `game.describe()`. Une capture d'écran est prise à chaque étape : sur GitHub, on les trouve dans
 l'artefact **test-de-fumee** de l'exécution (avec la trace Playwright si le test échoue).
 
-Sans carte graphique, le rendu ne fait que quelques images par seconde et le jeu avance au
-ralenti : le test prend quelques minutes, c'est normal.
+Sans carte graphique, le rendu ne fait qu'une image par seconde environ. Le jeu n'avançant que de
+50 ms par image, il tournerait vingt fois au ralenti (le café ne finissait pas toujours de couler
+dans les cinq minutes) : le test règle `game.catchUp = 40`, qui fait jouer jusqu'à 40 pas de 50 ms
+avant chaque image pour suivre le temps réel. Le chargement reste long : le test prend quelques
+minutes, c'est normal.
 
 En local, la première fois : `npx playwright install chromium`.
