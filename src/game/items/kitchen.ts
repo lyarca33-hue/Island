@@ -527,8 +527,9 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     movable: false,
     durability: 200,
     fragility: 5,
-    // comme la machine à café : la tasse se pose à côté, sous le bec, et le thé y coule
-    pour: { at: [KETTLE_CUP, 0, 0.03], fills: ['tasse'], liquid: 'thé', seconds: 2.4, color: 0x9a5a22 },
+    // comme la machine à café : la tasse se pose à côté, sous le bec, et l'eau chaude y coule
+    // de l'eau chaude : un sachet de thé dans la tasse (ou la théière) la fait infuser
+    pour: { at: [KETTLE_CUP, 0, 0.03], fills: ['tasse', 'théière'], liquid: 'eau chaude', seconds: 2.4, color: 0xd7e4e6 },
     // il faut de l'eau dedans : on y verse celle d'une casserole, d'une bouteille ou d'une tasse
     tank: 1,
     // le bouton du socle l'allume ; l'eau chauffe, puis le thé coule ; elle s'éteint seule si on l'oublie

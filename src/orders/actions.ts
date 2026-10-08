@@ -69,9 +69,21 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'the',
-    description: 'Se faire un thé : il faut tenir la tasse ; le perso la pose sous le bec de la bouilloire puis la reprend pleine. La bouilloire doit avoir de l’eau (sinon : verser de l’eau dedans).',
+    description: 'Eau chaude de la bouilloire : il faut tenir la tasse (ou la théière) ; le perso la pose sous le bec puis la reprend pleine. La bouilloire doit avoir de l’eau. Avec un sachet de thé dedans (action sachet), l’eau chaude infuse en thé.',
     params: {},
     run: (g) => g.makeTea(),
+  },
+  {
+    name: 'sachet',
+    description: 'Mettre un sachet de thé (la boîte de sachets tenue) dans la tasse ou la théière `dans` (sinon celle qu’on tient).',
+    params: { dans: 'ref de la tasse ou de la théière' },
+    run: (g, a) => g.addTeaBag(a.dans),
+  },
+  {
+    name: 'infuser',
+    description: 'Attendre que le sachet de thé ait infusé l’eau chaude de `objet` (tasse ou théière) : elle devient du thé.',
+    params: { objet: 'ref de la tasse ou de la théière' },
+    run: (g, a) => g.waitTea(a.objet),
   },
   {
     name: 'boire',

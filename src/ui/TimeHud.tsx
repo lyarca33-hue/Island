@@ -171,13 +171,58 @@ function SkillGauge({ game, open, onOpen }: { game: Game; open: boolean; onOpen:
   );
 }
 
+/** L'humeur, à côté de la compétence : l'anneau se remplit, sa couleur dit si ça va. */
+function MoodGauge({ game, open, onOpen }: { game: Game; open: boolean; onOpen: (open: boolean) => void }) {
+  const pct = Math.round(game.mood);
+  const word = pct >= 70 ? 'Joyeux' : pct >= 45 ? 'Ça va' : pct >= 30 ? 'Bof' : 'Morose';
+  const tone = pct >= 70 ? 'happy' : pct < 30 ? 'low' : 'ok';
+  const touch = useRef<string | null>(null);
+  return (
+    <div className={`gauge mood ${tone}`}>
+      <button
+        className="gauge-ring"
+        aria-label={`Humeur : ${pct} sur 100, ${word.toLowerCase()}`}
+        aria-expanded={open}
+        onPointerEnter={(e) => e.pointerType === 'mouse' && onOpen(true)}
+        onPointerLeave={(e) => e.pointerType === 'mouse' && onOpen(false)}
+        onPointerDown={(e) => (touch.current = e.pointerType === 'mouse' ? null : e.pointerType)}
+        onClick={() => {
+          if (touch.current) onOpen(!open);
+          touch.current = null;
+        }}
+        onFocus={() => !touch.current && onOpen(true)}
+        onBlur={() => onOpen(false)}
+      >
+        <svg className="gauge-track" viewBox="0 0 36 36" aria-hidden>
+          <circle className="gauge-bg" cx="18" cy="18" r="15.5" pathLength={100} />
+          <circle className="gauge-fill" cx="18" cy="18" r="15.5" pathLength={100} strokeDasharray={`${Math.max(0.01, pct)} 100`} />
+        </svg>
+        <Icon name="smile" size={15} />
+      </button>
+      {open && (
+        <div className="gauge-tip" role="tooltip">
+          <div className="gauge-tip-head">
+            <Icon name="smile" size={15} />
+            <b>Humeur</b>
+            <span className="gauge-tip-value">{word}</span>
+          </div>
+          <div className="gauge-tip-bar"><span style={{ width: `${pct}%` }} /></div>
+          <div className="gauge-tip-row">{pct} / 100</div>
+          {game.moodFactor !== 1 && <div className="gauge-tip-row gauge-tip-hint">{game.moodFactor > 1 ? 'Apprend la cuisine plus vite' : 'Apprend la cuisine moins vite'}</div>}
+          <div className="gauge-tip-row gauge-tip-hint">Monte en mangeant assis à table, avec de bons plats et un vrai petit-déjeuner</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * En haut à droite : les jauges de besoins (rondes, sans texte ; le détail au survol) et
  * l'horloge, qui ouvre le réglage de l'heure.
  */
 export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => void }) {
   const read = useGauges(game);
-  const [open, setOpen] = useState<GaugeKey | 'skill' | null>(null);
+  const [open, setOpen] = useState<GaugeKey | 'skill' | 'mood' | null>(null);
   if (!game || !read) return null;
   const { clock } = game;
   return (
@@ -197,6 +242,7 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
           />
         ))}
         <SkillGauge game={game} open={open === 'skill'} onOpen={(o) => setOpen((cur) => (o ? 'skill' : cur === 'skill' ? null : cur))} />
+        <MoodGauge game={game} open={open === 'mood'} onOpen={(o) => setOpen((cur) => (o ? 'mood' : cur === 'mood' ? null : cur))} />
       </div>
       <button className="hud-clock" onClick={onClock} title="Régler l’heure (Menu → Heure)">
         <span className={`hud-sky${clock.isNight ? ' night' : ''}`}>

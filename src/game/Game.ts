@@ -22,6 +22,8 @@ import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } fr
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
 import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
 import { BAGS_PER_ROLL, UPKEEP_FEMININE, UPKEEP_PLURAL } from './items/upkeep';
+import { HOT_WATER, INFUSE, LIFE_FEMININE, LIFE_PLURAL, TEA, TEA_BAGS, TEA_COLOR, teaBag } from './items/life';
+import { KitchenSound } from './sound';
 import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
 import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
@@ -58,6 +60,8 @@ const SLEEP_FADE = 0.7;
 const SLEEP_DIM = 0.55;
 const NOT_SLEEPY = 90;
 const TEA_ENERGY = 6;
+/** Où l'on met un sachet de thé. */
+const TEA_VESSELS = ['tasse', 'théière'];
 /** Un jus de fruits (mixeur) nourrit un peu : faim rendue par tasse pleine. */
 const JUICE_HUNGER = 12;
 /** L'eau désaltère plus que le café : soif en plus pour une bouteille entière. */
@@ -120,10 +124,21 @@ const OVERFLOW = 1.4;
 /** Évier débouché : temps pour que la cuve pleine se vide (s). */
 const SINK_DRAIN = 4;
 /** Glaçons : combien par récipient, et combien de temps ils tiennent avant d'avoir fondu (s). */
+/** Humeur (0 à 100) : où elle revient doucement (points par heure de jeu), et ce qui la fait bouger. */
+const MOOD_REST = 55;
+const MOOD_DRIFT = 3;
+const MOOD_TABLE = 10;
+const MOOD_STANDING_DISH = 2;
+const MOOD_BREAKFAST = 8;
+const MOOD_STAR = 2;
+/** Heures du petit-déjeuner. */
+const MORNING: [number, number] = [5, 11];
+/** Au-delà de tant de mètres, un son de cuisine ne s'entend presque plus. */
+const HEAR = 3;
 const ICE_CUBES = 3;
 const ICE_MELT = 120;
 /** Couleur de chaque liquide (celle du jet de la machine qui le donne). */
-const LIQUID_COLOR = new Map<string, THREE.ColorRepresentation>([...[...ITEM_BY_ID.values()].flatMap((d) => (d.pour ? [[d.pour.liquid, d.pour.color] as const] : [])), ...Object.entries(DRINK_COLORS), ...Object.entries(PREP_LIQUIDS)]);
+const LIQUID_COLOR = new Map<string, THREE.ColorRepresentation>([...[...ITEM_BY_ID.values()].flatMap((d) => (d.pour ? [[d.pour.liquid, d.pour.color] as const] : [])), ...Object.entries(DRINK_COLORS), ...Object.entries(PREP_LIQUIDS), [TEA, TEA_COLOR]]);
 const liquidColor = (liquid: string): THREE.ColorRepresentation => LIQUID_COLOR.get(liquid) ?? 0x9fcde6;
 /** Contenance d'un récipient (litres). */
 const volumeOf = (item: WorldItem) => item.def.tank ?? item.def.volume ?? 0.25;
@@ -198,10 +213,14 @@ const START_ON_WORKTOP: Array<[string, number, number, number]> = [
   ['liste-courses', 0.42, -0.18, -0.2],
 ];
 
+/** Posés au départ sur l'îlot : [id, x, z, rotation] dans le repère de l'îlot. */
+const START_ON_ISLAND: Array<[string, number, number, number]> = [['theiere', 0.3, 0.05, Math.PI / 2]];
+
 /** Rangés au départ dans un meuble : [id, meuble, place]. */
 const START_STORED: Array<[string, string, number]> = [
   // les pulls pliés dans l'armoire de la chambre
   ['pull', 'armoire', 0],
+  ['sachets-the', 'garde-manger', 4],
   // le couteau de cuisine, aimanté sur la barre au-dessus du plan de travail
   ['couteau', 'barre-couteaux', 1],
   ['pull-bleu', 'armoire', 1],
@@ -392,9 +411,9 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
-const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL]);
+const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
 /** Pronom de l'objet : « lave-la », « lave-le », « lave-les ». */
 const it = (name: string) => (PLURAL.has(name) ? 'les' : FEMININE.has(name) ? 'la' : 'le');
@@ -566,6 +585,21 @@ export class Game {
   private seasoned = new Map<WorldItem, Set<string>>();
   /** Aliments déjà entamés : le perso a dit ce qu'il en pensait (périmé, étoiles). */
   private judged = new WeakSet<WorldItem>();
+  /** Sachets de thé dans les tasses et la théière : l'eau chaude infuse en thé (voir tickTea). */
+  private steeps = new Map<WorldItem, { bag: THREE.Object3D; t: number; filled: boolean }>();
+  /** Sachets qui restent dans chaque boîte (TEA_BAGS dans une boîte neuve). */
+  private teaBoxes = new Map<WorldItem, number>();
+  /** Le thé qu'on attend (action « infuser »). */
+  private teaWait: WorldItem | null = null;
+  /** Humeur du perso, de 0 à 100 : repas à table, bons plats, petit-déjeuner (voir addMood). */
+  mood = 60;
+  onMood?: (mood: number) => void;
+  /** Ce matin : un repas à table, une boisson (café, thé, jus) ; le bonus donné. */
+  private breakfast = { day: -1, meal: false, drink: false, done: false };
+  /** Sons de cuisine (grésillement, ébullition, bips, vaisselle). */
+  readonly sound = new KitchenSound();
+  /** Vaisselle tenue à l'image d'avant : posée, elle tinte. */
+  private carriedDishes = new Set<WorldItem>();
   /** Aliments dont la vapeur se voit. */
   private steaming = new WeakSet<WorldItem>();
   /** Compétence cuisine : points gagnés (gardés dans le navigateur d'une partie à l'autre). */
@@ -813,6 +847,7 @@ export class Game {
       it.object.position.copy(slot.pos);
       it.object.quaternion.copy(slot.rot);
       if (id === 'pastilles') this.tablets.set(it, TABLETS);
+      if (id === 'sachets-the') this.teaBoxes.set(it, TEA_BAGS);
     }
     const worktop = this.items.find((i) => i.def.id === 'plan-de-travail');
     if (worktop) {
@@ -822,6 +857,17 @@ export class Game {
         it.object.quaternion.setFromAxisAngle(UP, worktop.object.rotation.y + rot);
         if (it.def.layFlat) it.object.quaternion.multiply(LAY_FLAT);
         const at = new THREE.Vector3(x, worktop.box.max.y, z).applyMatrix4(worktop.object.matrixWorld);
+        it.object.position.copy(at).setY(at.y + it.restLift(it.object.quaternion));
+      }
+    }
+    // la théière, sur l'îlot
+    const island = this.items.find((i) => i.def.id === 'ilot');
+    if (island) {
+      island.object.updateMatrixWorld(true);
+      for (const [id, x, z, rot] of START_ON_ISLAND) {
+        const it = add(id);
+        it.object.quaternion.setFromAxisAngle(UP, island.object.rotation.y + rot);
+        const at = new THREE.Vector3(x, island.box.max.y, z).applyMatrix4(island.object.matrixWorld);
         it.object.position.copy(at).setY(at.y + it.restLift(it.object.quaternion));
       }
     }
@@ -997,7 +1043,7 @@ export class Game {
   get idle(): boolean {
     // endormi, c'est fini : on ne bouge plus jusqu'au réveil
     if (this.sleep) return this.sleep.phase === 'asleep';
-    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.showering && !this.toiletVisit && !this.cookWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.showering && !this.toiletVisit && !this.cookWait && !this.teaWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
@@ -1312,6 +1358,7 @@ export class Game {
     // ce qui était posé dessus ou rangé dedans tombe
     const above = item.def.portable && !isTwoHanded(item.grip) ? [] : this.itemsOn(item);
     this.addDebris(new Debris(item, floor, vel));
+    this.sound.play('casse', this.hear(item.object.position));
     this.items = this.items.filter((i) => i !== item);
     this.riders = this.riders.filter((r) => r.base !== item && r.item !== item);
     if (this.brew && (this.brew.machine === item || this.brew.cup === item)) {
@@ -1348,7 +1395,8 @@ export class Game {
       if (it === base || carried.includes(it) || this.flying.some((f) => f.item === it)) return false;
       if (it.object.position.distanceTo(at) > far + reach(it.box) * 1.1 + 0.3) return false;
       const q = ON_BOX.setFromObject(it.object).getCenter(ON_TMP).applyMatrix4(toLocal);
-      return q.x > b.min.x && q.x < b.max.x && q.z > b.min.z && q.z < b.max.z && q.y > b.min.y + 0.02 && q.y < b.max.y + 0.6;
+      // (une assiette est plate : des tartines posées dedans ont leur milieu à peine au-dessus du fond)
+      return q.x > b.min.x && q.x < b.max.x && q.z > b.min.z && q.z < b.max.z && q.y > b.min.y + Math.min(0.02, (b.max.y - b.min.y) * 0.5) && q.y < b.max.y + 0.6;
     });
   }
 
@@ -1447,6 +1495,9 @@ export class Game {
         ou = under ? `posé sur ${this.ref(under)}` : 'posé en hauteur';
       }
       if (item === this.brew?.cup) ou += ` (${theLiquid(this.brew.machine.def.pour!.liquid)} coule dedans)`;
+      const steep = this.steeps.get(item);
+      if (steep) ou += item.contents === HOT_WATER && item.level > 0.05 ? ', un sachet de thé infuse' : ', avec un sachet de thé';
+      if (item.def.id === 'sachets-the') ou += `, ${this.teaBagsLeft(item)} sachet${this.teaBagsLeft(item) > 1 ? 's' : ''}`;
       const door = this.doors.get(item);
       if (door) {
         const part = item.def.window ? '' : item.def.drawer ? 'tiroir ' : item.def.bin ? 'couvercle ' : 'porte ';
@@ -1986,7 +2037,7 @@ export class Game {
         // au fond de l'assiette, là où elle est à présent
         plate.object.updateMatrixWorld(true);
         const spot = new THREE.Vector3(0, plate.def.plate!, 0).applyMatrix4(plate.object.matrixWorld);
-        c.drop(spot, undefined, () => this.onNotice?.(`${cap(the(food.name))} est servi${FEMININE.has(food.name) ? 'e' : ''} dans l’assiette.`), false, food);
+        c.drop(spot, undefined, () => this.onNotice?.(`${theName(food.name)} ${PLURAL.has(food.name) ? 'sont' : 'est'} servi${agree(food.name)} dans l’assiette.`), false, food);
       }, running);
       return true;
     }
@@ -2041,6 +2092,7 @@ export class Game {
     food.object.removeFromParent();
     this.dropCrumbs(plate, f.color);
     this.onNotice?.(`${theName(food.name)} ${PLURAL.has(food.name) ? 'sont' : 'est'} fini${agree(food.name)}. Miam ! Reste la vaisselle.`);
+    this.mealDone(true, food);
   }
 
   /**
@@ -2840,6 +2892,163 @@ export class Game {
   }
 
   /** Regarde l'horloge : le perso dit l'heure. */
+  // ——— vie : thé, humeur, petit-déjeuner, sons ———
+
+  /** Sachets qui restent dans la boîte (une boîte achetée est pleine). */
+  private teaBagsLeft(box: WorldItem): number {
+    return this.teaBoxes.get(box) ?? TEA_BAGS;
+  }
+
+  /**
+   * Met un sachet de thé (boîte tenue) dans la tasse ou la théière `ref` (sinon celle qu'on tient,
+   * sinon la plus proche). Avec de l'eau chaude de la bouilloire, il infuse en thé.
+   */
+  addTeaBag(ref?: string, running = false): boolean {
+    const c = this.character;
+    const fits = (i: WorldItem) => TEA_VESSELS.includes(i.name);
+    const pot = ref ? this.byRef(ref) : (c.heldItems.find(fits) ?? this.nearest((i) => fits(i) && !c.carried.includes(i)));
+    const box = c.heldItems.find((h) => h.def.id === 'sachets-the') ?? this.nearest((i) => i.def.id === 'sachets-the');
+    if (!pot || !fits(pot)) return this.notice(pot ? `Le sachet de thé va dans une tasse ou la théière, pas dans ${the(pot.name)}.` : 'Pas de tasse ni de théière pour le thé.');
+    if (this.steeps.has(pot)) return this.notice(`Il y a déjà un sachet de thé dans ${the(pot.name)}.`);
+    if (pot.dirty) return this.notice(`${cap(the(pot.name))} est sale : lave-${it(pot.name)} d’abord.`);
+    if (pot.contents && pot.contents !== HOT_WATER) return this.notice(`${cap(the(pot.name))} contient ${someLiquid(pot.contents)} : vide-${it(pot.name)} d’abord.`);
+    if (!box) return this.notice('Plus de sachets de thé : ajoute-les à la liste de courses.');
+    if (!c.handOf(box)) return this.chain([() => this.take(box, running), () => this.addTeaBag(this.ref(pot), running)]);
+    if (c.busy || c.bracing) return false;
+    const drop = () => {
+      const left = this.teaBagsLeft(box) - 1;
+      const fill = pot.def.fill!;
+      const r = pot.name === 'théière' ? 0.03 : Math.max(0.02, pot.box.max.x * 0.8);
+      const bag = teaBag(fill[1] + 0.01, r);
+      pot.object.add(bag);
+      this.steeps.set(pot, { bag, t: 0, filled: !!pot.contents });
+      if (left <= 0) {
+        this.discard(box);
+        this.onNotice?.(`Sachet de thé dans ${the(pot.name)}. C’était le dernier : la boîte vide est jetée.`);
+      } else {
+        this.teaBoxes.set(box, left);
+        this.onNotice?.(`Sachet de thé dans ${the(pot.name)}${pot.contents === HOT_WATER ? ' : il infuse' : ' : ajoute l’eau chaude de la bouilloire'} (encore ${left} sachet${left > 1 ? 's' : ''}).`);
+      }
+    };
+    const at = () => this.pourPoint(pot);
+    const start = () => {
+      if (!c.handOf(box)?.pour(at, () => {})) return;
+      setTimeout(drop, 700);
+    };
+    if (c.carried.includes(pot)) start();
+    else c.approachThen(this.frontOf(pot), pot.object.position, start, running);
+    return true;
+  }
+
+  /** Attend que le thé de `ref` ait infusé (vrai tout de suite s'il l'est déjà). */
+  waitTea(ref: string): boolean {
+    const pot = this.byRef(ref);
+    if (!pot) return this.notice(`Aucun objet « ${ref} ».`);
+    if (pot.contents === TEA) return true;
+    if (!this.steeps.has(pot)) return this.notice(`Pas de sachet de thé dans ${the(pot.name)}.`);
+    if (pot.contents !== HOT_WATER) return this.notice(`Il faut de l’eau chaude (la bouilloire) dans ${the(pot.name)}.`);
+    this.teaWait = pot;
+    return true;
+  }
+
+  /** Les sachets infusent l'eau chaude ; ils partent avec ce qu'on vide, boit jusqu'au bout ou lave. */
+  private tickTea(dt: number): void {
+    for (const [pot, s] of this.steeps) {
+      const wet = !!pot.contents && pot.level > 0.02;
+      if (wet) s.filled = true;
+      if (pot.contents === HOT_WATER && wet) {
+        s.t += Math.max(0, dt);
+        // le thé fonce à mesure qu'il infuse
+        const k = Math.min(1, s.t / INFUSE);
+        pot.setLiquidColor(new THREE.Color(liquidColor(HOT_WATER)).lerp(new THREE.Color(TEA_COLOR), k));
+        if (s.t >= INFUSE) {
+          pot.contents = TEA;
+          pot.setLiquidColor(TEA_COLOR);
+          this.onNotice?.(`Le thé a infusé dans ${the(pot.name)}.`);
+        }
+      }
+      const gone = !this.items.includes(pot) || pot.dirty || (s.filled && !wet);
+      if (!gone) continue;
+      s.bag.removeFromParent();
+      this.steeps.delete(pot);
+    }
+    const w = this.teaWait;
+    if (w && (w.contents !== HOT_WATER || !this.steeps.has(w) || !this.items.includes(w))) this.teaWait = null;
+  }
+
+  /** Bouge l'humeur de `n` points (0 à 100). */
+  private addMood(n: number): void {
+    this.mood = THREE.MathUtils.clamp(this.mood + n, 0, 100);
+    this.onMood?.(this.mood);
+  }
+
+  /** De bonne humeur, la cuisine s'apprend plus vite (×1,25) ; morose, moins vite (×0,75). */
+  get moodFactor(): number {
+    return this.mood >= 70 ? 1.25 : this.mood < 30 ? 0.75 : 1;
+  }
+
+  /** Un aliment fini : à table, l'humeur monte ; un plat debout, à peine. */
+  private mealDone(atTable: boolean, food: WorldItem): void {
+    if (atTable) {
+      this.addMood(MOOD_TABLE);
+      this.onNotice?.(`Repas assis à table : humeur +${MOOD_TABLE}.`);
+      this.morning('meal');
+    } else if (food.stars) {
+      this.addMood(MOOD_STANDING_DISH);
+      this.onNotice?.(`Mangé debout : assis à table, l’humeur monterait de ${MOOD_TABLE}.`);
+    }
+  }
+
+  /** Le matin, un repas à table et une boisson (café, thé, jus) : c'est un vrai petit-déjeuner. */
+  private morning(what: 'meal' | 'drink'): void {
+    const h = this.clock.hour;
+    if (h < MORNING[0] || h >= MORNING[1]) return;
+    const b = this.breakfast;
+    if (b.day !== this.clock.day) Object.assign(b, { day: this.clock.day, meal: false, drink: false, done: false });
+    b[what] = true;
+    if (b.meal && b.drink && !b.done) {
+      b.done = true;
+      this.addMood(MOOD_BREAKFAST);
+      this.onNotice?.(`Bon petit-déjeuner : humeur +${MOOD_BREAKFAST}.`);
+    }
+  }
+
+  /** Volume d'un son joué en `at`, selon la distance au perso (1 tout près, presque rien à HEAR mètres). */
+  private hear(at: THREE.Vector3): number {
+    const d = p0(at).distanceTo(p0(this.character.position)) / HEAR;
+    return 1 / (1 + d * d);
+  }
+
+  /** Sons continus (poêles qui grésillent, eau qui bout, bouilloire) ; la vaisselle posée tinte. */
+  private tickSound(dt: number): void {
+    let sizzle = 0, boil = 0;
+    for (const [item, h] of this.heaters) {
+      const heat = item.def.heat!;
+      h.on.forEach((on, i) => {
+        if (!on && h.warm[i] <= 0) return;
+        const w = h.warm[i];
+        // la bouilloire gronde en chauffant
+        if (heat.lit !== 'flamme') {
+          if (item.def.tank && on && w < 1) boil += 0.6 * this.hear(item.object.position);
+          return;
+        }
+        const pan = this.onSpot(item, i);
+        if (!pan) return;
+        const water = pan.contents === 'eau' && pan.level > 0;
+        if (water && w > 0.6) boil += w * this.hear(pan.object.position);
+        else if (!water && w > 0.3 && this.inPan(pan).length) sizzle += w * this.hear(pan.object.position);
+      });
+    }
+    this.sound.update(Math.max(0, dt), Math.min(1, sizzle), Math.min(1, boil));
+    const c = this.character;
+    const now = new Set(c.carried.filter((i) => i.def.dish));
+    for (const d of this.carriedDishes) {
+      if (now.has(d) || !this.items.includes(d) || this.flying.some((f) => f.item === d)) continue;
+      this.sound.play('tinte', this.hear(d.object.position));
+    }
+    this.carriedDishes = now;
+  }
+
   readClock(): boolean {
     const t = this.clockText();
     this.say(`Il est ${t}.`);
@@ -2873,6 +3082,11 @@ export class Game {
     }
     if (this.smell < 0.1) this.smellWarned = false;
     if (this.roughHands > 0) this.roughHands = Math.max(0, this.roughHands - hours * ROUGH_HEAL);
+    // l'humeur revient doucement vers son point d'équilibre
+    if (this.mood !== MOOD_REST) {
+      const step = hours * MOOD_DRIFT;
+      this.mood = this.mood > MOOD_REST ? Math.max(MOOD_REST, this.mood - step) : Math.min(MOOD_REST, this.mood + step);
+    }
     // le camion passe le matin : le conteneur est vidé
     const day = this.clock.day;
     if (hour >= TRUCK_HOUR && day !== this.truckDay) {
@@ -2889,6 +3103,7 @@ export class Game {
       if (p.distanceTo(p0(d.position)) > d.spread + 0.1) continue;
       this.cutBy.add(d);
       this.needs.hurt(GLASS_CUT);
+      this.addMood(-4);
       this.say('Aïe !');
       this.onNotice?.(`Aïe, du verre par terre (santé −${GLASS_CUT}) : passe le balai.`);
     }
@@ -3253,6 +3468,7 @@ export class Game {
       if (before === 1 && item.portion < 1 && this.dirtyHands && !this.grubby.has(item)) {
         this.grubby.add(item);
         this.needs.hurt(DIRTY_EAT);
+        this.addMood(-3);
         this.onNotice?.(`Mangé avec les mains sales (${this.dirtyHands}) : mal au ventre (santé −${DIRTY_EAT}). Lave-toi les mains au savon.`);
       }
       this.lastBite.set(item, item.portion);
@@ -3261,8 +3477,10 @@ export class Game {
       this.items = this.items.filter((i) => i !== item);
       item.object.removeFromParent();
       // debout (pas à table), ça fait des miettes par terre
-      if (CRUMBY.test(item.name) && !(this.sitting && this.items.some((t) => t.def.table && p0(t.object.position).distanceTo(p0(c.position)) < 1.2))) this.dropFloorCrumbs(food.color);
+      const atTable = !!this.sitting && this.items.some((t) => t.def.table && p0(t.object.position).distanceTo(p0(c.position)) < 1.2);
+      if (CRUMBY.test(item.name) && !atTable) this.dropFloorCrumbs(food.color);
       this.onNotice?.(`${theName(item.name)} ${PLURAL.has(item.name) ? 'sont' : 'est'} fini${agree(item.name)}. Miam !`);
+      this.mealDone(atTable, item);
     }
   }
 
@@ -3334,6 +3552,8 @@ export class Game {
     if (light) light.visible = false;
     const lever = item.part('levier');
     if (lever) lever.position.y = 0;
+    // le four et le micro-ondes bipent, le reste fait « ding »
+    this.sound.play(item.def.id === 'four' || item.def.id === 'micro-ondes' ? 'bip' : 'ding', this.hear(item.object.position));
     this.onNotice?.(note);
   }
 
@@ -3835,9 +4055,9 @@ export class Game {
     return mixer ? this.pourAt(mixer, running) : false;
   }
 
-  /** Se fait un thé à la bouilloire la plus proche (il faut tenir la tasse). */
+  /** De l'eau chaude de la bouilloire la plus proche dans la tasse ou la théière tenue (avec un sachet : du thé). */
   makeTea(running = false): boolean {
-    const kettle = this.nearest((i) => i.def.pour?.liquid === 'thé');
+    const kettle = this.nearest((i) => i.def.pour?.liquid === HOT_WATER);
     if (!kettle) this.onNotice?.('Il n’y a pas de bouilloire.');
     return kettle ? this.pourAt(kettle, running) : false;
   }
@@ -5511,6 +5731,9 @@ export class Game {
       const tray = held.find((h) => h.name === 'bac à glaçons');
       const cup = held.find((h) => h !== tray && h.def.fill && !h.def.cookware && !h.def.mouth);
       if (tray && cup && !this.iced.has(cup)) add(`Glaçons dans ${the(cup.name)}`, () => this.addIce(this.ref(cup)));
+      const box = held.find((h) => h.def.id === 'sachets-the');
+      const pot = held.find((h) => TEA_VESSELS.includes(h.name) && !this.steeps.has(h));
+      if (box && pot) add(`Sachet de thé dans ${the(pot.name)}`, () => this.addTeaBag(this.ref(pot)));
       if (held.some((h) => h.def.wipes) && this.puddles().length) add('Essuyer la flaque', () => this.cleanFloor());
       // l'entretien : balai, serpillière, spray, gants, sac poubelle
       if (held.some((h) => h.def.sweeps) && this.floorMess().length) add('Balayer', () => this.sweepFloor());
@@ -5559,6 +5782,7 @@ export class Game {
     if (item.def.dish && item.wet > 0 && held.some((h) => h.def.towel)) add('Essuyer avec le torchon', () => this.dryDish(ref));
     // glaçons (bac tenu) dans une tasse
     if (held.some((h) => h.name === 'bac à glaçons') && item.def.fill && !item.def.cookware && !item.def.mouth && !this.iced.has(item)) add('Mettre des glaçons', () => this.addIce(ref));
+    if (held.some((h) => h.def.id === 'sachets-the') && TEA_VESSELS.includes(item.name) && !this.steeps.has(item)) add('Mettre un sachet de thé', () => this.addTeaBag(ref));
     // gazinière, bouilloire, machine à café : poser l'ustensile, allumer, éteindre
     const pan = held.find((h) => h.def.cookware);
     if (heat && pan && !item.def.pour) add(`Poser ${the(pan.name)} sur le feu`, () => this.putOnStove(item, pan, false));
@@ -5683,7 +5907,8 @@ export class Game {
   /** Le perso s'exerce en cuisine : des points, et un message au passage d'un niveau. */
   private practice(points: number): void {
     const before = this.cookingLevel;
-    this.skillPoints += points;
+    // de bonne humeur, on apprend plus vite ; morose, moins
+    this.skillPoints += points * this.moodFactor;
     saveSkill(this.skillPoints);
     this.onSkill?.(this.skillPoints);
     const after = this.cookingLevel;
@@ -5734,6 +5959,7 @@ export class Game {
     this.judged.add(item);
     if (freshness(item.def, item.age) === 'périmé') {
       this.needs.hurt(SPOILED_HARM);
+      this.addMood(-6);
       this.say('Beurk, c’est périmé…');
       this.onNotice?.(`${cap(the(item.name))} ${PLURAL.has(item.name) ? 'étaient périmés' : `était périmé${agree(item.name)}`} : mal au ventre (santé −${SPOILED_HARM}).`);
       return;
@@ -5741,6 +5967,7 @@ export class Game {
     const stars = this.starsOf(item);
     if (!stars || doneness(item.def, item.cooking) === 'brûlé') return;
     if (stars >= 5) this.needs.heal(STAR_HEAL);
+    if (stars !== 3) this.addMood((stars - 3) * MOOD_STAR);
     this.say(STAR_VERDICT[stars]);
     this.onNotice?.(`${cap(item.name)} ${starText(stars)} : ${STAR_VERDICT[stars].toLowerCase()}${stars >= 5 ? ` (santé +${STAR_HEAL})` : ''}`);
   }
@@ -5823,6 +6050,7 @@ export class Game {
     const door = this.doors.get(item);
     if (door?.target) words.push(`${item.def.drawer ? 'tiroir' : item.def.bin ? 'couvercle' : 'porte'} ouvert${item.def.drawer || item.def.bin ? '' : 'e'}`);
     if (this.iced.has(item)) words.push('avec glaçons');
+    if (this.steeps.has(item)) words.push('sachet de thé');
     words.push(...this.prepWords(item));
     if (this.towelsWet.has(item)) words.push('mouillée');
     if (item.def.shower && this.showering?.shower === item) words.push('l’eau coule');
@@ -5968,6 +6196,8 @@ export class Game {
     this.tickPour(dt);
     this.tickSinks(dt);
     this.tickIce(dt);
+    this.tickTea(dt);
+    this.tickSound(dt);
     this.tickPickQueue();
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));
@@ -6111,6 +6341,7 @@ export class Game {
         if (last?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
         if (last?.contents === 'thé') this.needs.restore('fatigue', drunk * TEA_ENERGY);
         if (last?.contents === 'jus de fruits') this.needs.restore('faim', drunk * JUICE_HUNGER);
+        if (last?.contents && ['café', TEA, 'jus de fruits', "jus d'orange"].includes(last.contents)) this.morning('drink');
         // les boissons du frigo (jus d'orange, soda, eau gazeuse, vin)
         const extra = last?.contents ? DRINK_EFFECTS[last.contents] : undefined;
         if (extra) for (const [need, n] of Object.entries(extra)) this.needs.restore(need as 'soif' | 'faim' | 'fatigue', drunk * n);

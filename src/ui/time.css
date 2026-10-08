@@ -38,6 +38,10 @@
   display: grid; place-items: center; background: #2b1f17; border: 1px solid var(--hud-line-strong); color: var(--hud-honey);
   font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
 }
+/* humeur : verte quand le perso est joyeux, orangée quand il est morose */
+.gauge.mood { --c: var(--hud-ok); }
+.gauge.mood.happy { --c: var(--hud-up); }
+.gauge.mood.low { --c: var(--hud-low); }
 /* une jauge presque vide dit sa valeur, sans attendre le survol */
 .gauge-low {
   position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 999px;
