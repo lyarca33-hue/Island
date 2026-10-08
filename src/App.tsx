@@ -20,6 +20,8 @@ import { SavePanel } from './ui/SavePanel';
 import { Menu, MenuSection, Shortcuts } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
+import { Magasin } from './ui/Magasin';
+import { PorteMonnaie } from './ui/PorteMonnaie';
 
 /**
  * On entre directement dans le monde avec le dernier perso créé (un perso par défaut sinon) ;
@@ -251,6 +253,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
             setMenuOpen(true);
           }}
         />
+        <PorteMonnaie game={ready} />
         {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
         <HoverTip game={ready} hidden={!!ctx || !!drag} />
         {fpsShown && <FpsCounter game={ready} />}
@@ -282,6 +285,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       {can.recipes && ready && !inv && <RecipeBook game={ready} onClose={() => ready.stopReading()} />}
       {can.book && ready && !inv && <BookReader key={can.book} game={ready} id={can.book} onClose={() => ready.stopReading()} />}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
+      <Magasin game={ready} />
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
       {drag && (
         <div className="hud-drag" style={{ left: drag.x, top: drag.y }}>

@@ -9,6 +9,7 @@
  */
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
+import { type Argent, type ArgentSave, type Commande, readCommande } from './argent';
 import type { WorldItem } from './items/carry';
 import { ITEM_BY_ID } from './items/catalog';
 import type { NeedKey } from './needs';
@@ -57,6 +58,10 @@ export interface GameSave {
   known?: string[];
   /** Le perso du créateur, pour le retrouver sur un autre appareil. */
   recipe?: Recipe;
+  /** Le porte-monnaie et les objets cassés à racheter. Absent des anciennes sauvegardes : l'argent de départ. */
+  argent?: ArgentSave;
+  /** La commande payée, pas encore livrée. */
+  commande?: Commande;
 }
 
 /** Ce que le jeu ouvre à la sauvegarde (Game.saveAccess) : ses objets et de quoi les refaire. */
@@ -80,6 +85,10 @@ export interface SaveAccess {
   setSkill(n: number): void;
   weather: object;
   body: { temp: number; soaked: number; inner: number; state: string };
+  argent: Argent;
+  /** La commande en route (livrée par le sac de courses), et son retour. */
+  delivery(): Commande | null;
+  setDelivery(c: Commande | null): void;
   /** Après le chargement : chemins à refaire autour des meubles déplacés. */
   done(): void;
 }
@@ -136,6 +145,8 @@ export function captureGame(a: SaveAccess): GameSave {
     body: { temp: round(a.body.temp), soaked: round(a.body.soaked), inner: round(a.body.inner), state: a.body.state },
     items,
     known: [...ITEM_BY_ID.keys()],
+    argent: a.argent.save(),
+    ...(a.delivery() ? { commande: structuredClone(a.delivery()!) } : {}),
   };
 }
 
@@ -188,6 +199,8 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
   if (s.weather) Object.assign(a.weather, s.weather);
   if (s.body && Number.isFinite(s.body.temp) && s.body.state in BODY_STATES) Object.assign(a.body, s.body);
   a.perso.placeAt(new THREE.Vector3(s.perso.x, 0, s.perso.z), s.perso.yaw);
+  a.argent.load(s.argent);
+  a.setDelivery(readCommande(s.commande));
   a.done();
 }
 
