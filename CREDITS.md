@@ -27,6 +27,8 @@
   (`src/game/items/interior.ts`).
 - Plantes (`src/game/plants.ts` : arbres, sapins, buissons, fleurs, légumes du potager, plantes d'intérieur) : formes et
   textures de feuilles faites par programme pour le jeu, aucun fichier tiers.
+- Chaton, gamelle et sac de croquettes (`src/game/items/animaux.ts`) : formes three.js faites pour le jeu, aucun
+  fichier tiers.
 - Accessoires du créateur (`src/creator/accessories.ts` : toque, chapeaux, lunettes, nœuds, écharpe...) : formes three.js
   faites pour le jeu, aucun fichier tiers.
 - Persos du créateur (`public/vrm/`) : modèles d'exemple officiels de [VRoid Studio](https://vroid.com/en/studio) (pixiv).

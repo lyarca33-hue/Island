@@ -10,6 +10,7 @@ import type { ItemDef } from './items/catalog';
 import { ITEM_BY_ID } from './items/catalog';
 import { STOCK } from './items/pantry';
 import { FISH_BY_ID, OUTDOOR_PRICES, RODS } from './items/plein-air';
+import { ANIMAL_PRICES } from './items/animaux';
 
 /** Argent au début d'une partie (centimes). */
 export const START_MONEY = 20000;
@@ -33,7 +34,7 @@ const PRICES: Record<string, number> = {
 };
 
 /** Toujours en rayon maison, cassé ou pas : ce qui s'use ou se perd. */
-export const HOUSE_ALWAYS = ['papier-toilette', 'pastilles', 'assiette', 'verre', 'bol', 'tasse', 'cuillere', 'fourchette', 'couteau-table', 'trousse-de-secours', 'pansements', ...RODS.slice(1).map((r) => r.id)];
+export const HOUSE_ALWAYS = ['papier-toilette', 'pastilles', 'assiette', 'verre', 'bol', 'tasse', 'cuillere', 'fourchette', 'couteau-table', 'trousse-de-secours', 'pansements', 'croquettes', ...RODS.slice(1).map((r) => r.id)];
 
 /** Jamais en vente : ce qu'on ne trouve pas au magasin (courrier, sac du livreur, plantes du jardin, poissons de l'étang…). */
 const NOT_SOLD = new Set(['lettre', 'liste-courses', 'sac-courses', 'sac-poubelle', 'bouquet', 'livre-recettes', ...FISH_BY_ID.keys()]);
@@ -43,7 +44,7 @@ export const MARKET_PRODUCE = new Set(['carotte', 'tomate', 'pomme-de-terre', 'c
 
 /** Prix d'un objet au magasin (centimes). */
 export function priceOf(def: ItemDef): number {
-  const p = PRICES[def.id] ?? OUTDOOR_PRICES[def.id];
+  const p = PRICES[def.id] ?? OUTDOOR_PRICES[def.id] ?? ANIMAL_PRICES[def.id];
   if (p !== undefined) return p;
   // un plat cuisiné (pas vendu tout fait) : ce que coûterait le même au restaurant du port
   if (def.food) return STOCK[def.name] ? 250 : 900;
