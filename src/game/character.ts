@@ -15,6 +15,8 @@ import { Carry, type Side, type WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { Rig } from './items/ik';
 import type { Nav } from './nav';
+import type { Pond } from './nage';
+import { WATER_Y } from './items/plein-air';
 import { LAYER_CHARACTER } from './postfx';
 import { createToonMaterial } from './toon';
 
@@ -32,17 +34,37 @@ const PALETTE: Record<string, THREE.ColorRepresentation> = {
   'asdf1:Beta_HighLimbsGeoSG2': 0xe0cfb4,
 };
 
-type Gait = 'idle' | 'walk' | 'run' | 'push' | 'gesture';
+type Gait = 'idle' | 'walk' | 'run' | 'push' | 'gesture' | 'swim' | 'tread';
 
 /** Gestes de cuisine (Quaternius, voir creator/source.ts) ; absents tant que le fichier n'est pas arrivé. */
 const KITCHEN = { interact: 'Interact', pickUp: 'PickUp_Table', kneel: 'Fixing_Kneeling', push: 'Push_Loop' };
-type Gesture = 'interact' | 'pickUp' | 'kneel';
+type Gesture = 'interact' | 'pickUp' | 'kneel' | 'throw';
 /** À genoux devant un placard bas : le début du clip seulement (il continue en bricolant). */
 const KNEEL_TIME = 1.7;
 /** Haut d'une porte (m) sous lequel on s'agenouille pour l'ouvrir plutôt que de tendre la main. */
 const KNEEL_BELOW = 0.6;
 /** Plan de travail, table : hauteurs (m) où l'on prend un objet en se penchant (clip PickUp_Table). */
 const TABLE_HEIGHT: [number, number] = [0.55, 1.2];
+
+/** Sauter, nager, grimper, lancer (Quaternius, voir creator/source.ts) ; absents tant que le fichier n'est pas arrivé. */
+const MOVES = { jump: 'Jump_Start', fall: 'Jump_Loop', land: 'Jump_Land', swim: 'Swim_Fwd_Loop', tread: 'Swim_Idle_Loop', climb: 'ClimbUp_1m', throw: 'OverhandThrow' };
+/** Saut : élan (s) avant de quitter le sol, vitesse au départ (m/s), pesanteur (m/s²) : 50 cm de haut. */
+const TAKEOFF = 0.12;
+const JUMP_SPEED = 3.4;
+const GRAVITY = 12;
+/** Réception : où commence le clip (pieds au sol), et combien de temps on reste plié (s). */
+const LAND_AT = 0.08;
+const LAND_TIME = 0.5;
+/** Plongeon : on est dans l'eau quand les pieds sont à cette hauteur (m). */
+const DIVE_DEPTH = -0.5;
+/** Nage : vitesses (m/s), lente et rapide. */
+const SWIM_SPEED = 1.1;
+const SWIM_FAST = 1.8;
+/** Grimper : vitesse du clip ; en sortant de l'eau, on part de cette hauteur (pieds sous l'eau, m). */
+const CLIMB_SPEED = 0.75;
+const CLIMB_FROM_WATER = -0.9;
+/** Lancer : le clip ralenti pour que le bras passe devant quand l'objet part (game/items/carry.ts). */
+const THROW_SPEED = 0.76;
 
 /** Clips pour s'asseoir (Quaternius, voir creator/source.ts). */
 const SIT = { enter: 'Sitting_Enter', idle: 'Sitting_Idle_Loop', talk: 'Sitting_Talking_Loop', exit: 'Sitting_Exit' };
@@ -115,6 +137,19 @@ export class Character {
   onStuck?: () => void;
   /** Geste de cuisine en cours et temps qu'il lui reste. */
   private gestureNow: { kind: Gesture; left: number } | null = null;
+  /**
+   * Saut : l'élan, en l'air (vitesse verticale), la réception. `dive` : plongeon dans l'étang,
+   * vers `dive.to` à `dive.speed`, depuis la rive `dive.bank`.
+   */
+  private jumpNow: { phase: 'takeoff' | 'air' | 'land'; t: number; vy: number; dive?: { to: THREE.Vector3; speed: number; bank: THREE.Vector3 } } | null = null;
+  /** En train de nager (`bank` : la rive d'où l'on a plongé). */
+  private swimNow: { bank: THREE.Vector3 } | null = null;
+  /** En train de grimper de `from` à `to` (durée `d`), puis `then`. */
+  private climbNow: { t: number; d: number; from: THREE.Vector3; to: THREE.Vector3; then?: () => void } | null = null;
+  /** L'étang où l'on nage (null : pas d'étang). */
+  water: Pond | null = null;
+  /** Hauteur où l'on tient debout en (x, z) : le dessus d'un meuble, sinon le sol (0). */
+  ground: ((x: number, z: number) => number) | null = null;
 
   /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
   async load(recipe?: Recipe | null): Promise<void> {
@@ -209,8 +244,18 @@ export class Character {
     this.root.position.set(pos.x, 0, pos.z);
     this.heading = yaw;
     this.root.rotation.set(0, yaw, 0, 'XYZ');
+    this.jumpNow = null;
+    this.swimNow = null;
+    this.climbNow = null;
+    this.submerge(false);
     this.setRoute(null);
     this.approach = null;
+    this.setGait('idle');
+  }
+
+  /** Où l'on se tient vraiment (au sol) : la rive d'où l'on a plongé si l'on nage (sauvegarde). */
+  get footing(): THREE.Vector3 {
+    return this.swimNow?.bank ?? this.climbNow?.to ?? this.root.position;
   }
 
   /** Marche jusqu'à un point du sol (clic). */
@@ -222,7 +267,8 @@ export class Character {
 
   /** Chemin vers `to` en contournant les meubles (null : on s'arrête). */
   private setRoute(to: THREE.Vector3 | null): void {
-    this.path = to ? (this.nav?.route(this.root.position, to) ?? [to.clone().setY(0)]) : [];
+    // dans l'eau, tout droit (on remonte sur la rive en chemin, puis on contourne les meubles)
+    this.path = to ? ((!this.swimNow && this.nav?.route(this.root.position, to)) || [to.clone().setY(0)]) : [];
     this.target = this.path.shift() ?? null;
   }
 
@@ -516,10 +562,13 @@ export class Character {
   throwItem(item: WorldItem, onRelease: (item: WorldItem, vel: THREE.Vector3) => void): boolean {
     const hand = this.handOf(item);
     if (!hand?.canThrow || this.busy) return false;
-    return hand.throw((it, vel) => {
+    if (!hand.throw((it, vel) => {
       this.order = this.order.filter((s) => s !== hand.side);
       onRelease(it, vel);
-    });
+    })) return false;
+    // tout le corps accompagne le bras (le clip est fait pour la main droite)
+    if (hand.side === 'right') this.gesture('throw');
+    return true;
   }
 
   /** Direction où regarde le perso (au sol). */
@@ -534,12 +583,13 @@ export class Character {
   /** Rien en cours : ni marche vers un point, ni approche d'un objet, ni geste des mains. */
   /** Allure en cours : immobile, marche, course. */
   get moveGait(): 'idle' | 'walk' | 'run' {
-    // pousser un meuble fatigue comme marcher ; un geste sur place, comme rester debout
-    return this.gait === 'push' ? 'walk' : this.gait === 'gesture' ? 'idle' : this.gait;
+    // pousser un meuble fatigue comme marcher, nager comme courir ; un geste sur place, comme rester debout
+    if (this.gait === 'swim') return 'run';
+    return this.gait === 'push' ? 'walk' : this.gait === 'gesture' || this.gait === 'tread' ? 'idle' : this.gait;
   }
 
   get idle(): boolean {
-    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && !this.bed && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
+    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && !this.bed && !this.jumpNow && !this.climbNow && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
   }
 
   update(dt: number, bounds: number): void {
@@ -601,6 +651,11 @@ export class Character {
       this.puppet?.update(dt);
       return;
     }
+    if (this.climbNow) {
+      this.updateClimb(dt);
+      this.puppet?.update(dt);
+      return;
+    }
     const dir = new THREE.Vector3();
     if (this.busy || this.washing) {
       // pendant une saisie, une dépose ou quand il se lave, le perso reste sur place
@@ -617,14 +672,20 @@ export class Character {
       dir.normalize();
       if (!this.target) dir.set(0, 0, 0);
     }
+    // en plongeant, on ne dirige plus rien
+    if (this.jumpNow?.dive) dir.set(0, 0, 0);
     const moving = dir.lengthSq() > 0;
-    const speed = this.running ? RUN_SPEED : WALK_SPEED;
+    const speed = this.swimNow ? (this.running ? SWIM_FAST : SWIM_SPEED) : this.running ? RUN_SPEED : WALK_SPEED;
     if (moving) {
       const step = this.target ? Math.min(speed * dt, this.root.position.distanceTo(this.target)) : speed * dt;
       const before = this.root.position.clone();
-      this.root.position.addScaledVector(dir, step);
-      // au clavier, on glisse le long des meubles au lieu d'y entrer
-      this.nav?.pushOut(this.root.position);
+      if (this.swimNow) this.swimStep(dir, step);
+      else if (this.jumpNow?.phase === 'air' || this.root.position.y > 0.01) this.airStep(dir, step);
+      else {
+        this.root.position.addScaledVector(dir, step);
+        // au clavier, on glisse le long des meubles au lieu d'y entrer
+        this.nav?.pushOut(this.root.position);
+      }
       // vers un point, bloqué sur place : on renonce au bout de 2 s (plutôt que de piétiner sans fin)
       if (this.target && this.move.lengthSq() === 0) {
         this.stuckFor = this.root.position.distanceTo(before) < step * 0.2 ? this.stuckFor + dt : 0;
@@ -658,15 +719,226 @@ export class Character {
         then();
       }
     }
+    // pendant le fondu du plongeon, on remonte à la surface
+    if (this.swimNow && !this.climbNow) this.root.position.y += (WATER_Y - this.root.position.y) * Math.min(1, dt * 3);
+    this.updateJump(dt, moving);
     const g = this.gestureNow;
     if (g) {
       g.left -= dt;
-      // le geste s'arrête à la fin, ou dès qu'on bouge (ou qu'une main se tend, sauf pour prendre sur la table)
-      if (g.left <= 0 || moving || (g.kind !== 'pickUp' && this.busy)) this.gestureNow = null;
+      // le geste s'arrête à la fin, ou dès qu'on bouge (ou qu'une main se tend, sauf pour prendre sur la table ou lancer)
+      if (g.left <= 0 || moving || (g.kind !== 'pickUp' && g.kind !== 'throw' && this.busy)) this.gestureNow = null;
     }
-    if (!this.gestureNow) this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
+    if (this.climbNow) {
+      // on vient de sortir de l'eau : le clip pour grimper est lancé
+    } else if (this.swimNow) this.setGait(moving ? 'swim' : 'tread');
+    else if (!this.gestureNow && !this.jumpNow) this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
     this.mixer?.update(dt);
     this.puppet?.update(dt);
+  }
+
+  // ——— sauter, nager, grimper ———
+
+  /** Peut sauter : perso du créateur, debout (au sol ou perché), les mains pas en plein geste. */
+  get canJump(): boolean {
+    return !!this.puppet && !this.jumpNow && !this.climbNow && !this.swimNow && !this.seat && !this.bed && !this.pushing && !this.washing && !this.busy;
+  }
+
+  /** En train de nager. */
+  get swimming(): boolean {
+    return !!this.swimNow;
+  }
+
+  /** En l'air, en train de grimper ou perché sur un meuble. */
+  get aloft(): boolean {
+    return !!this.jumpNow || !!this.climbNow || this.root.position.y > 0.01;
+  }
+
+  /** Saute sur place (ou dans l'élan de la marche) ; on peut retomber sur un meuble bas. */
+  jump(): boolean {
+    if (!this.canJump) return false;
+    this.takeOff();
+    return true;
+  }
+
+  private takeOff(dive?: { to: THREE.Vector3; speed: number; bank: THREE.Vector3 }): void {
+    this.jumpNow = { phase: 'takeoff', t: 0, vy: JUMP_SPEED, dive };
+    this.gestureNow = null;
+    this.gait = 'gesture';
+    this.puppet?.play(MOVES.jump, 0.08, true);
+  }
+
+  /** Va sur la rive `bank`, face à l'eau, et plonge jusqu'en `water` ; `then` une fois dans l'eau. */
+  swimIn(bank: THREE.Vector3, water: THREE.Vector3, running = false): boolean {
+    if (!this.canJump || this.carried.length) return false;
+    this.approachThen(bank, water, () => {
+      if (!this.canJump) return;
+      const from = this.root.position.clone().setY(0);
+      // on touche l'eau un peu avant la fin de la cloche (plongeon jusqu'à DIVE_DEPTH)
+      const air = (JUMP_SPEED + Math.sqrt(JUMP_SPEED ** 2 - 2 * GRAVITY * DIVE_DEPTH)) / GRAVITY;
+      this.takeOff({ to: water.clone().setY(0), speed: from.distanceTo(water.clone().setY(0)) / air, bank: bank.clone().setY(0) });
+      this.submerge(true);
+    }, running);
+    return true;
+  }
+
+  /** Nage jusqu'à la rive la plus proche et en sort. */
+  leaveWater(): boolean {
+    const bank = this.swimNow && this.water?.shore(this.root.position, (p) => !this.nav?.blocked(p));
+    if (!bank) return false;
+    this.goTo(bank, false);
+    return true;
+  }
+
+  /**
+   * Grimpe sur un meuble : va se placer en `stand` (au sol), face à `top` (sur le dessus, à sa
+   * hauteur), puis s'y hisse ; `then` une fois dessus. Les mains doivent être vides.
+   */
+  climbOnto(stand: THREE.Vector3, top: THREE.Vector3, running = false, then?: () => void): boolean {
+    if (!this.canJump || this.carried.length) return false;
+    this.approachThen(stand, top, () => {
+      if (this.canJump) this.startClimb(this.root.position.clone(), top.clone(), then);
+    }, running);
+    return true;
+  }
+
+  private startClimb(from: THREE.Vector3, to: THREE.Vector3, then?: () => void): void {
+    const d = (this.puppet?.clipDuration(MOVES.climb) || 0.67) / CLIMB_SPEED;
+    this.climbNow = { t: 0, d, from, to, then };
+    this.root.position.copy(from);
+    this.heading = Math.atan2(to.x - from.x, to.z - from.z);
+    this.root.rotation.y = this.heading;
+    this.gestureNow = null;
+    this.gait = 'gesture';
+    this.puppet?.play(MOVES.climb, 0.15, true, CLIMB_SPEED);
+  }
+
+  /** Se hisse : on monte pendant que les pieds se lèvent, on avance une fois les mains au bord. */
+  private updateClimb(dt: number): void {
+    const c = this.climbNow!;
+    c.t += dt;
+    const ease = (x: number) => x * x * (3 - 2 * x);
+    const span = (a: number, b: number) => ease(THREE.MathUtils.clamp((c.t / c.d - a) / (b - a), 0, 1));
+    const pos = this.root.position;
+    pos.lerpVectors(c.from, c.to, span(0.3, 0.95));
+    pos.y = c.from.y + (c.to.y - c.from.y) * span(0.08, 0.65);
+    if (c.t < c.d) return;
+    pos.copy(c.to);
+    this.climbNow = null;
+    c.then?.();
+  }
+
+  /** Hauteur où l'on retombe en `p` : l'eau (on y plonge), un meuble, sinon le sol. */
+  private floorAt(p: THREE.Vector3): number {
+    if (this.water?.swimmable(p)) return DIVE_DEPTH;
+    return this.ground?.(p.x, p.z) ?? 0;
+  }
+
+  /** Un pas en l'air ou perché sur un meuble : on passe au-dessus de ce qui est plus bas que les pieds. */
+  private airStep(dir: THREE.Vector3, step: number): void {
+    const pos = this.root.position;
+    const next = pos.clone().addScaledVector(dir, step);
+    // un mur, un meuble plus haut : on ne passe pas
+    if (this.nav?.blockedAbove(next, pos.y + 0.02)) return;
+    if (!this.jumpNow && this.floorAt(next) > pos.y + 0.05) return;
+    pos.x = next.x;
+    pos.z = next.z;
+    // perché : au bord du meuble, on tombe
+    if (!this.jumpNow && this.floorAt(pos) < pos.y - 0.05) {
+      this.jumpNow = { phase: 'air', t: 0, vy: 0 };
+      this.gait = 'gesture';
+      this.puppet?.play(MOVES.fall, 0.15);
+    }
+  }
+
+  /** Une brasse : dans l'eau on avance, vers la rive on en sort (sauf sous le ponton). */
+  private swimStep(dir: THREE.Vector3, step: number): void {
+    const pos = this.root.position;
+    const next = pos.clone().addScaledVector(dir, step);
+    if (this.water?.swimmable(next)) {
+      pos.x = next.x;
+      pos.z = next.z;
+      return;
+    }
+    const bank = this.water?.exit(next);
+    if (!bank || this.nav?.blocked(bank)) return;
+    // on remonte sur la rive, puis on reprend le chemin (en contournant les meubles)
+    const dest = this.path.length ? this.path[this.path.length - 1] : this.target;
+    this.swimNow = null;
+    this.startClimb(pos.clone().setY(CLIMB_FROM_WATER), bank, () => {
+      this.submerge(false);
+      if (dest) this.setRoute(dest);
+      this.setGait('idle');
+    });
+  }
+
+  /** Maillages du perso retirés du calque des persos (sous l'eau). */
+  private underwater: THREE.Object3D[] = [];
+
+  /**
+   * Sous l'eau, le corps n'est pas « caché par le décor » : sans ça, le rendu le montrerait en
+   * transparence dans son aura (postfx.ts). On le retire du calque des persos le temps de nager.
+   */
+  private submerge(on: boolean): void {
+    if (!on) {
+      for (const o of this.underwater) o.layers.enable(LAYER_CHARACTER);
+      this.underwater = [];
+      return;
+    }
+    if (this.underwater.length) return;
+    this.root.traverse((o) => {
+      if (o.layers.isEnabled(LAYER_CHARACTER)) {
+        o.layers.disable(LAYER_CHARACTER);
+        this.underwater.push(o);
+      }
+    });
+  }
+
+  /** Le saut : élan, cloche, réception (sur le sol, un meuble, ou dans l'eau). */
+  private updateJump(dt: number, moving: boolean): void {
+    const j = this.jumpNow;
+    if (!j) return;
+    j.t += dt;
+    if (j.phase === 'takeoff') {
+      if (j.t >= TAKEOFF) {
+        j.phase = 'air';
+        j.t = 0;
+      }
+      return;
+    }
+    if (j.phase === 'land') {
+      // on reste plié un instant (sauf si l'on repart)
+      if (j.t >= LAND_TIME || moving) {
+        this.jumpNow = null;
+        if (!moving) this.setGait('idle');
+      }
+      return;
+    }
+    const pos = this.root.position;
+    if (j.dive) {
+      const to = j.dive.to.clone().sub(pos).setY(0);
+      const d = Math.min(to.length(), j.dive.speed * dt);
+      if (d > 1e-4) pos.addScaledVector(to.normalize(), d);
+    }
+    j.vy -= GRAVITY * dt;
+    pos.y += j.vy * dt;
+    if (j.vy > 0) return;
+    // en tombant longtemps (d'un meuble), les bras battent
+    if (j.t > 0.6) this.puppet?.play(MOVES.fall, 0.2);
+    if (j.dive ? pos.y > DIVE_DEPTH : pos.y > this.floorAt(pos)) return;
+    if (this.water?.swimmable(pos) || j.dive) {
+      // dans l'eau : on remonte à la surface en nageant (voir update)
+      this.swimNow = { bank: j.dive?.bank ?? pos.clone().setY(0) };
+      this.jumpNow = null;
+      this.gait = 'gesture';
+      this.setGait('tread');
+      return;
+    }
+    pos.y = this.floorAt(pos);
+    if (pos.y < 0.01) pos.y = 0;
+    j.phase = 'land';
+    j.t = 0;
+    j.vy = 0;
+    this.puppet?.play(MOVES.land, 0.08, true, 1, LAND_AT);
   }
 
   /** Couché dans un lit. */
@@ -685,7 +957,7 @@ export class Character {
    * pas d'animation de passage, le perso est posé là. `stand` : où il se relèvera.
    */
   lieDown(feet: THREE.Vector3, head: THREE.Vector3, stand: THREE.Vector3): boolean {
-    if (this.busy || this.seat || this.pushing || this.bed) return false;
+    if (this.busy || this.seat || this.pushing || this.bed || this.jumpNow || this.swimNow || this.climbNow) return false;
     const yaw = Math.atan2(-head.x, -head.z);
     this.bed = { stand: stand.clone().setY(0), heading: Math.atan2(stand.x - feet.x, stand.z - feet.z) };
     this.target = null;
@@ -835,7 +1107,7 @@ export class Character {
   private setGait(g: Gait): void {
     if (g === this.gait) return;
     this.gait = g;
-    this.play(g === 'push' ? KITCHEN.push : g, 0.25);
+    this.play(g === 'push' ? KITCHEN.push : g === 'swim' ? MOVES.swim : g === 'tread' ? MOVES.tread : g, 0.25);
   }
 
   /**
@@ -845,12 +1117,13 @@ export class Character {
    */
   gesture(kind: Gesture): void {
     const p = this.puppet;
-    const name = KITCHEN[kind];
-    const d = p?.clipDuration(name) ?? 0;
-    if (!p || !d || this.seat || this.bed || this.pushing || this.washing) return;
+    const name = kind === 'throw' ? MOVES.throw : KITCHEN[kind];
+    const speed = kind === 'throw' ? THROW_SPEED : 1;
+    const d = (p?.clipDuration(name) ?? 0) / speed;
+    if (!p || !d || this.seat || this.bed || this.pushing || this.washing || this.jumpNow || this.swimNow || this.climbNow) return;
     this.gestureNow = { kind, left: kind === 'kneel' ? Math.min(KNEEL_TIME, d) : d };
     this.gait = 'gesture';
-    p.play(name, 0.2, true);
+    p.play(name, 0.2, true, speed);
   }
 
   /** Geste pour ouvrir ou fermer `door` : à genoux si elle est basse, sinon la main tendue. */

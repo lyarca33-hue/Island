@@ -254,10 +254,18 @@ devant lui à deux mains et penche la tête ; L de nouveau pour le refermer. Pre
 quelque chose referme le livre d'abord.
 
 Lancer : objet petit ou moyen tenu d'une main (tasse, livre, lettre), bouton « Lancer » ou
-touche T. Le bras part en arrière puis fouette, l'objet vole en tournant. Au premier choc il peut
+touche T. Le bras part en arrière puis fouette (de la main droite, tout le corps accompagne le
+geste), l'objet vole en tournant. Au premier choc il peut
 se briser selon sa fragilité (fiche `fragility`, de 1 très fragile à 10 incassable ; tasse 2,
 livre 8, lettre 10) et la force du choc : il disparaît en éclats de ses couleurs, et une tasse
 pleine laisse une flaque. Sinon il rebondit et se pose (un livre à plat).
+
+Sauter, nager, grimper (`src/game/mouvements.ts`, clips de Quaternius) : Espace ou « Sauter » au
+clic droit sur le perso pour sauter (un demi-mètre : on peut retomber sur un banc ou un lit bas).
+« Nager » au clic droit sur l'étang, les mains vides : le perso plonge depuis la rive, nage au
+clavier ou au clic (Maj : plus vite), et se hisse sur la rive en y arrivant (« Sortir de l’eau »
+au clic droit sur le perso). « Grimper dessus » au clic droit sur un meuble de 35 cm à 1,25 m
+(table, plan de travail, lit) : le perso s'y hisse, s'y promène, et retombe en passant le bord.
 
 Déplacer un gros meuble (fiche `movable` : table, bibliothèque, machine à café) : mains vides,
 clic sur le meuble. Le perso se place contre le côté le plus proche et pose les mains dessus ;

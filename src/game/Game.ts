@@ -16,6 +16,7 @@ import { loadNature } from './nature';
 import { loadInterior } from './items/interior';
 import { DELIVERY_SPOT, Entree } from './entree';
 import { Loisirs } from './loisirs';
+import { Mouvements } from './mouvements';
 import { Paysage } from './paysage';
 import { FISH_BY_ID, OUTDOOR_FEMININE, OUTDOOR_START } from './items/plein-air';
 import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
@@ -617,6 +618,8 @@ export class Game {
   private entree: Entree;
   /** Pêche à l'étang, feu de camp, trousse de secours (loisirs.ts). */
   private loisirs: Loisirs;
+  /** Sauter, nager dans l'étang, grimper sur un meuble (mouvements.ts). */
+  private mouvements: Mouvements;
   /** Route, marché, train, station autour de la maison (paysage.ts). */
   private paysage = new Paysage();
   /** La lessive : panier à linge, machine à laver, sèche-linge, étendoir (buanderie.ts). */
@@ -879,6 +882,12 @@ export class Game {
       heal: (n) => this.needs.heal(n),
       night: () => this.clock.isNight,
     });
+    this.mouvements = new Mouvements({
+      character: this.character,
+      items: () => this.items,
+      notice: (t) => this.onNotice?.(t),
+      obstacle: (it) => this.isObstacle(it),
+    });
     this.scene.add(this.paysage.group);
     this.laundry = new Buanderie({
       character: this.character,
@@ -982,6 +991,7 @@ export class Game {
     this.garden.attach(this.items);
     this.entree.attach(this.items);
     this.loisirs.attach(this.items);
+    this.mouvements.attach(this.items);
     this.laundry.attach(this.items);
     // la bouilloire a de quoi faire deux tasses au départ
     for (const item of this.items) {
@@ -6242,6 +6252,11 @@ export class Game {
       // M : la lettre, quelle que soit la disposition du clavier (AZERTY ou QWERTY)
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
       if (e.code === 'KeyT' && !e.repeat) this.throwItem();
+      if (e.code === 'Space') {
+        // Espace : sauter (pas de défilement de la page ni de bouton pressé)
+        e.preventDefault();
+        if (!e.repeat) this.mouvements.jump();
+      }
       if (e.code === 'KeyP' && !e.repeat) this.serve();
       if (e.code === 'KeyV' && !e.repeat) this.washDishes();
       if (e.code === 'KeyK' && !e.repeat) this.cut();
@@ -6471,6 +6486,7 @@ export class Game {
       for (const h of new Set(held.map((i) => i.name))) add(`Poser : ${h}`, () => this.drop(h));
       if (can.seated) add('Se lever', () => this.standUp());
       if (can.sleeping) add('Se réveiller', () => this.wakeUp());
+      this.mouvements.menu(null, add);
       return out;
     }
     const ref = this.ref(item);
@@ -6618,6 +6634,7 @@ export class Game {
     this.garden.menu(item, add);
     this.entree.menu(item, add);
     this.loisirs.menu(item, add);
+    this.mouvements.menu(item, add);
     this.laundry.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));

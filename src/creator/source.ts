@@ -51,6 +51,25 @@ export function loadPoseAnimations(): Promise<Array<{ scene: THREE.Object3D; cli
 }
 
 /**
+ * Sauter, nager, grimper, lancer : quelques clips de la réserve ci-dessous (Quaternius, CC0),
+ * extraits à part (500 ko au lieu de 7,6 Mo). Fichiers manquants ignorés.
+ */
+const MOVES_URLS = ['ual_moves1.glb', 'ual_moves2.glb'].map((f) => `${import.meta.env.BASE_URL}anim/${f}`);
+let moves: Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> | null = null;
+
+export function loadMoveAnimations(): Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> {
+  moves ??= Promise.all(
+    MOVES_URLS.map((url) =>
+      new GLTFLoader()
+        .loadAsync(url)
+        .then((g) => [{ scene: g.scene, clips: g.animations }])
+        .catch(() => []),
+    ),
+  ).then((all) => all.flat());
+  return moves;
+}
+
+/**
  * Réserve de clips des deux volumes de la bibliothèque (CC0), pas encore reliés à une action.
  * Volume 1 : sauter, nager, se baisser en marchant, trottiner, rouler, se battre, tomber,
  * conduire, tenir une torche. Volume 2 : ouvrir un coffre, grimper, récolter, semer, arroser,
