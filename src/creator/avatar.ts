@@ -13,7 +13,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYER_CHARACTER } from '../game/postfx';
 import { ACCESSORY_BY_ID, SLOTS, type AccSlot, type BackFit, type HeadFit, type NeckFit } from './accessories';
 import { paintedFace, patternedCloth, type WornPattern } from './looks';
-import type { Body, Recipe } from './recipe';
+import { defaultRecipe, importedOf, type Body, type Recipe } from './recipe';
 import { loadVrm } from './vrm';
 
 type Part = 'face' | 'hair' | 'body';
@@ -312,7 +312,11 @@ function grayTexture(tex: THREE.Texture): THREE.Texture {
   return out;
 }
 
+const partsOf = (r: Recipe) => ({ outfit: r.outfit, face: r.face, hair: r.hair });
+
 export class Avatar {
+  /** Prévenu quand un perso importé manque et que le perso de base le remplace. */
+  static onMissingImport: (() => void) | null = null;
   /** À placer dans la scène ; son échelle donne la taille. */
   readonly root = new THREE.Group();
   readonly base: VRM;
@@ -407,6 +411,19 @@ export class Avatar {
   }
 
   static async build(r: Recipe): Promise<Avatar> {
+    const own = importedOf(r);
+    if (own) {
+      // perso importé absent de cet appareil (partie venue du compte) ou devenu illisible : perso de base
+      const vrm = await loadVrm(own).catch((e) => {
+        console.warn('Perso VRoid importé indisponible, perso de base à la place', e);
+        Avatar.onMissingImport?.();
+        return null;
+      });
+      if (!vrm) return Avatar.build({ ...r, ...partsOf(defaultRecipe(r.gender)) });
+      const a = new Avatar(new Map([[own, vrm]]), r);
+      a.applyLook(r);
+      return a;
+    }
     const ids = [...new Set([r.outfit, r.face, r.hair])];
     const vrms = await Promise.all(ids.map((id) => loadVrm(id)));
     const a = new Avatar(new Map(ids.map((id, i) => [id, vrms[i]])), r);
