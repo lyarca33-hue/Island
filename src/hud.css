@@ -336,6 +336,26 @@
 .recipe-detail .have { color: var(--hud-up); }
 .recipe-detail .miss { color: var(--hud-low); }
 .recipe-detail button:disabled { opacity: 0.55; cursor: default; }
+
+/* Livre d'histoire ouvert : une page à la fois, marque-page */
+.book-reader { width: min(330px, calc(100% - 2 * var(--hud-gap))); }
+.book-title { display: flex; flex-direction: column; gap: 1px; }
+.book-title small { color: var(--hud-ink-2); font-size: 12px; font-style: italic; }
+.book-page {
+  position: relative; min-height: 150px; padding: 14px 16px; border-radius: 10px; background: #f4ead2; color: #3b2c1d;
+  font-family: Georgia, 'Times New Roman', serif; font-size: 15px; line-height: 1.5; box-shadow: inset 0 0 18px rgba(120, 85, 40, 0.18);
+}
+.book-page p { margin: 0; }
+.book-ribbon { position: absolute; top: -2px; right: 18px; width: 12px; height: 30px; background: #b0302a; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%); }
+.book-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.book-nav small { color: var(--hud-ink-2); }
+.book-nav button {
+  width: 34px; height: 30px; border-radius: 999px; border: 1px solid var(--hud-line-strong); background: rgba(255, 240, 215, 0.08);
+  color: var(--hud-ink); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.book-nav button:hover:not(:disabled) { border-color: var(--hud-honey); background: rgba(245, 190, 91, 0.15); }
+.book-nav button:disabled, .book-mark:disabled { opacity: 0.4; cursor: default; }
+.book-mark { width: 100%; }
 .menu .recipe-book { max-height: 46vh; overflow: auto; }
 
 .hud-loading {
