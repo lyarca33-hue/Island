@@ -21,6 +21,8 @@ export interface Rect {
   hz: number;
   /** Un mur (mince) : on en sort par le côté où l'on est, même si un meuble s'y trouve. */
   wall?: boolean;
+  /** Hauteur du dessus (m) : on passe au-dessus en sautant ou perché plus haut. */
+  top?: number;
 }
 
 /** Rectangle au sol d'un meuble (sa boîte tournée comme lui), élargi de `grow`. */
@@ -52,7 +54,7 @@ export class Nav {
 
   /** Ajoute un meuble (ou un mur) : sa boîte (repère du meuble), sa position et sa rotation (lacet). */
   add(box: THREE.Box3, pos: THREE.Vector3, yaw: number, wall = false): void {
-    this.rects.push({ ...footprint(box, pos, yaw, RADIUS), wall });
+    this.rects.push({ ...footprint(box, pos, yaw, RADIUS), wall, top: pos.y + box.max.y });
   }
 
   /** Point dans le repère du rectangle. */
@@ -68,6 +70,15 @@ export class Nav {
   /** Le point est-il dans un meuble (élargi du rayon du perso) ? */
   blocked(p: THREE.Vector3): boolean {
     return !!this.inside(p);
+  }
+
+  /** Le point est-il dans un meuble plus haut que `y` (en l'air ou perché, on passe au-dessus des plus bas) ? */
+  blockedAbove(p: THREE.Vector3, y: number): boolean {
+    return this.rects.some((r) => {
+      if ((r.top ?? Infinity) <= y) return false;
+      const [lx, lz] = this.local(r, p.x, p.z);
+      return Math.abs(lx) < r.hx && Math.abs(lz) < r.hz;
+    });
   }
 
   private inside(p: THREE.Vector3, margin = 0): Rect | null {

@@ -4,19 +4,29 @@
  *   ponton lancer sa ligne ; le bouchon plonge et un poisson arrive, plus ou moins rare selon la
  *   canne. Il se vide sur la planche de la cuisine (le poisson qui se cuit) ou se vend au marché ;
  * - le coin camping : le feu de camp s'allume d'un clic sur les bûches (on y pose une poêle comme
- *   sur la gazinière, et il réchauffe), les torches brûlent la nuit, la trousse de secours et les
- *   pansements soignent ;
+ *   sur la gazinière, et il réchauffe). Sa grille reçoit le poisson pêché, entier : il grille
+ *   (Game.heatPan, comme dans la poêle), dore puis noircit si on l'oublie, et se mange tel quel.
+ *   On dort sous la tente comme dans un lit. Les torches brûlent la nuit, la trousse de secours
+ *   et les pansements soignent ;
  * - deux petits monstres se promènent (le puglin près du jardin, le diablotin dans la station) :
- *   animés avec les clips de la Universal Animation Library (même squelette), ils s'arrêtent
- *   pour regarder le perso qui approche, et dansent quand on les salue d'un clic.
+ *   animés avec les clips de la Universal Animation Library (même squelette), ils regardent le
+ *   perso qui approche et dansent quand on les salue d'un clic. Le puglin, curieux, suit le perso
+ *   un moment après un salut (et vient de lui-même le voir une fois ami) ; le diablotin, farouche,
+ *   s'enfuit quand on l'approche (vite si l'on court) et se tapit s'il est acculé, jusqu'à ce que
+ *   trois saluts l'apprivoisent : il suit alors comme le puglin.
  *
  * Game ne fait que brancher (menu, clic, image, sauvegarde) par l'interface LoisirsHost.
  */
 import * as THREE from 'three';
 import type { Character } from './character';
 import type { WorldItem } from './items/carry';
+import { waterCap } from './items/cooking';
+import { showWear } from './items/durability';
 import { loadPoseAnimations } from '../creator/source';
-import { DOCK_L, DOCK_TOP, FISH, FISH_BY_ID, POND, ROAMS, ROD_H, WATER_Y, rodLevel, type FishKind, type Rarity } from './items/plein-air';
+import { DOCK_L, DOCK_TOP, FIRE_SPOT_Y, FISH, FISH_BY_ID, GRILL_FOOD, POND, ROAMS, ROD_H, WATER_Y, OUTDOOR_FEMININE, rodLevel, type FishKind, type Rarity, type Temper } from './items/plein-air';
+
+/** « le poisson rouge », « la carpe koï », « l’espadon », « les saucisses ». */
+const theName = (n: string) => (n.endsWith('s') && !n.includes(' ') ? `les ${n}` : /^[aeiouéèêœ]/i.test(n) ? `l’${n}` : OUTDOOR_FEMININE.includes(n) ? `la ${n}` : `le ${n}`);
 
 export interface LoisirsHost {
   readonly character: Character;
@@ -30,6 +40,12 @@ export interface LoisirsHost {
   heal(n: number): void;
   /** Il fait nuit (les torches brûlent). */
   night(): boolean;
+  /** Tous les objets du monde (pour dorer les poissons qui grillent). */
+  items(): readonly WorldItem[];
+  /** Le feu de camp est-il allumé ? */
+  lit(fire: WorldItem): boolean;
+  /** Clic sur le feu de camp (Game.useStove) : y poser ce qu'on tient, sur la grille. */
+  useFire(fire: WorldItem): boolean;
 }
 
 /** Chance de chaque rareté selon la canne (niveau 1 à 5). */
@@ -50,18 +66,70 @@ const BANDAGE_HEAL = 12;
 const ROAM_SPEED = 0.7;
 const NOTICE_AT = 2.2;
 const DANCE_S = 5;
+/** Le suivre : combien de temps après un salut (s), à quelle distance il se tient (m), d'où un ami vient voir le perso (m). */
+const FOLLOW_S = 45;
+const FOLLOW_GAP = 1.3;
+const CALL_AT = 6;
+/** Il lâche le perso parti trop loin (m), et ne s'éloigne pas de chez lui de plus que sa zone plus ça (m). */
+const LOSE_AT = 12;
+const LEASH = 9;
+/** Le farouche : il fuit le perso qui marche à moins de ça (m), qui court à moins de ça (m) ; saluts pour l'apprivoiser. */
+const SHY_WALK = 2.6;
+const SHY_RUN = 5;
+const TAME = 3;
+/** Vitesses (m/s) pour suivre et pour fuir. */
+const FOLLOW_SPEED = 1.5;
+const CATCH_UP = 2.6;
+const FLEE_SPEED = 2.2;
+/** Poisson qui grille : on revoit sa couleur tous les tant (s). */
+const TINT_EVERY = 0.4;
+const GRILLED = new THREE.Color(0xb07a48);
+const CHARRED = new THREE.Color(0x2e241c);
+
+type Gesture = 'walk' | 'idle' | 'look' | 'dance' | 'cower';
 
 /** Un monstre qui se promène : son objet, ses gestes, où il va, ce qu'il fait. */
 interface Roamer {
   item: WorldItem;
-  zone: { x: number; z: number; r: number };
+  zone: { x: number; z: number; r: number; temper: Temper };
   mixer: THREE.AnimationMixer | null;
-  acts: Partial<Record<'walk' | 'idle' | 'look' | 'dance', THREE.AnimationAction>>;
+  acts: Partial<Record<Gesture, THREE.AnimationAction>>;
   playing: string;
   target: THREE.Vector3 | null;
   /** Temps qui reste à attendre (ou à danser). */
   wait: number;
   dancing: boolean;
+  /** Saluts reçus (gardés avec la partie) : le farouche s'apprivoise, le curieux devient ami. */
+  friend: number;
+  /** Temps qui reste à suivre le perso (s). */
+  follow: number;
+  /** Ce qu'il faisait à l'image d'avant (pour ne le dire qu'une fois). */
+  mind: Mind;
+  /** Il rentre chez lui (perdu de vue, trop loin) : il ne suit plus avant d'y être. */
+  homing: boolean;
+  /** Temps avant de pouvoir redire qu'il s'enfuit (s). */
+  quiet: number;
+}
+
+/** Ce que fait un monstre, selon le perso. */
+export type Mind = 'promène' | 'regarde' | 'suit' | 'fuit' | 'tapi';
+
+/**
+ * Ce que décide le monstre : `dist` du perso, `home` sa distance à son coin, `running` le perso
+ * qui court, `friend` les saluts reçus, `follow` le temps de suivi qui reste, `cornered` plus de
+ * place pour fuir.
+ */
+export function monsterMind(temper: Temper, o: { dist: number; home: number; zone: number; running: boolean; friend: number; follow: number; cornered: boolean; homing?: boolean }): Mind {
+  const tame = temper === 'curieux' || o.friend >= TAME;
+  const leashed = !!o.homing || o.home > o.zone + LEASH;
+  if (!tame) {
+    if (o.dist < (o.running ? SHY_RUN : SHY_WALK)) return o.cornered ? 'tapi' : 'fuit';
+    return o.dist < SHY_RUN ? 'regarde' : 'promène';
+  }
+  // l'ami suit le perso après un salut, ou vient de lui-même s'il passe tout près
+  const wants = o.follow > 0 || (o.friend >= 1 && o.dist < CALL_AT);
+  if (wants && o.dist < LOSE_AT && !leashed) return o.dist > FOLLOW_GAP ? 'suit' : 'regarde';
+  return o.dist < NOTICE_AT ? 'regarde' : 'promène';
 }
 
 export class Loisirs {
@@ -86,7 +154,7 @@ export class Loisirs {
     this.dock = items.find((i) => i.def.id === 'ponton') ?? null;
     for (const it of items) {
       const zone = ROAMS[it.def.id];
-      if (zone) this.roamers.push({ item: it, zone, mixer: null, acts: {}, playing: '', target: null, wait: 1 + Math.random() * 3, dancing: false });
+      if (zone) this.roamers.push({ item: it, zone, mixer: null, acts: {}, playing: '', target: null, wait: 1 + Math.random() * 3, dancing: false, friend: 0, follow: 0, mind: 'promène', homing: false, quiet: 0 });
     }
     if (this.roamers.length) void loadPoseAnimations().then((sets) => this.animate(sets.flatMap((s) => s.clips)));
     for (const t of items.filter((i) => i.def.id === 'torche-bois')) {
@@ -132,18 +200,23 @@ export class Loisirs {
 
   owns(item: WorldItem): boolean {
     if (item === this.pond || item === this.dock || item.def.id in ROAMS) return true;
+    // un poisson en main et la grille sur le feu : le clic sur le feu l'y pose (Game.useStove)
+    if (item.def.id === 'feu-de-camp') return !!this.grillable() && !this.grillOn(item);
     return (item.def.id === 'trousse-de-secours' || item.def.id === 'pansements') && this.host.health() < 99.5;
   }
 
   menu(item: WorldItem, add: (label: string, run: () => boolean) => void): void {
     if (item === this.pond || item === this.dock) add('Pêcher', () => this.fish(false));
     if (item.def.id in ROAMS) add(`Saluer le ${item.name}`, () => this.greet(item));
+    const food = this.grillable();
+    if (item.def.id === 'feu-de-camp' && food) add(`Griller ${theName(food.name)}`, () => this.grill(item));
     if ((item.def.id === 'trousse-de-secours' || item.def.id === 'pansements') && this.host.health() < 99.5) add('Se soigner', () => this.care(item, false));
   }
 
   click(item: WorldItem, running: boolean): boolean {
     if (item === this.pond || item === this.dock) return this.fish(running);
     if (item.def.id in ROAMS) return this.greet(item);
+    if (item.def.id === 'feu-de-camp') return this.grill(item);
     if (item.def.id === 'trousse-de-secours' || item.def.id === 'pansements') return this.care(item, running);
     return false;
   }
@@ -155,16 +228,28 @@ export class Loisirs {
     }
     const fish = FISH_BY_ID.get(item.def.id);
     if (fish) return `${fish.rarity}, ${Math.round(fish.length * 100)} cm`;
+    if (item.def.id === 'tente') return 'on peut y dormir';
+    const r = this.roamers.find((x) => x.item === item);
+    if (r) {
+      const tame = r.zone.temper === 'curieux' || r.friend >= TAME;
+      const what = r.mind === 'suit' ? 'te suit' : r.mind === 'fuit' ? 's’enfuit' : r.mind === 'tapi' ? 'se tapit, apeuré' : r.dancing ? 'danse' : 'se promène';
+      return r.zone.temper === 'farouche' && !tame ? `farouche (apprivoisé ${r.friend}/${TAME}), ${what}` : `${r.friend ? 'ami' : 'curieux'}, ${what}`;
+    }
     return null;
   }
 
-  /** Sauvegarde : sur l'étang, le compte des prises et les espèces vues. */
+  /** Sauvegarde : sur l'étang, le compte des prises et les espèces vues ; sur un monstre, ses saluts. */
   extras(item: WorldItem): Record<string, unknown> {
+    const r = this.roamers.find((x) => x.item === item);
+    if (r) return r.friend ? { monstre: { amitie: r.friend } } : {};
     if (item !== this.pond || !this.caught) return {};
     return { peche: { pris: this.caught, especes: [...this.species] } };
   }
 
   setExtras(item: WorldItem, x: Record<string, unknown>): void {
+    const m = x.monstre as { amitie?: unknown } | undefined;
+    const r = this.roamers.find((y) => y.item === item);
+    if (r && typeof m?.amitie === 'number' && m.amitie >= 0) r.friend = Math.min(99, Math.round(m.amitie));
     if (item.def.id !== 'etang') return;
     const p = x.peche as { pris?: unknown; especes?: unknown } | undefined;
     if (!p) return;
@@ -181,6 +266,72 @@ export class Loisirs {
     }
     this.tickFishing(dt);
     for (const r of this.roamers) this.roam(r, dt);
+    if ((this.tintT -= dt) <= 0) {
+      this.tintT = TINT_EVERY;
+      this.tintGrilled();
+    }
+  }
+
+  // ——— griller au feu de camp ———
+
+  private tintT = 0;
+  /** Cuisson à laquelle chaque poisson a été teinté la dernière fois. */
+  private tinted = new WeakMap<WorldItem, number>();
+
+  /** Ce qu'on tient qui se grille (le poisson pêché, la viande). */
+  private grillable(): WorldItem | undefined {
+    return this.host.character.heldItems.find((h) => GRILL_FOOD.includes(h.name) && !!h.def.cook);
+  }
+
+  /** La grille posée sur ce feu de camp (s'il y en a une). */
+  private grillOn(fire: WorldItem): WorldItem | undefined {
+    const at = fire.object.position;
+    const carried = this.host.character.carried;
+    return this.host.items().find((i) => i.def.id === 'grille-camping' && !carried.includes(i)
+      && Math.hypot(i.object.position.x - at.x, i.object.position.z - at.z) < 0.07 && Math.abs(i.object.position.y - at.y - FIRE_SPOT_Y) < 0.04);
+  }
+
+  /** Poser sur la grille ce qu'on tient (Game s'en charge) ; sans grille sur le feu, on le dit. */
+  private grill(fire: WorldItem): boolean {
+    const food = this.grillable();
+    if (!food) return false;
+    const grille = this.grillOn(fire);
+    if (!grille) return this.tell(`Pose d’abord la grille de camping sur le feu de camp pour y griller ${theName(food.name)}.`);
+    const carried = this.host.character.carried;
+    const on = this.host.items().filter((i) => i.def.cook && !carried.includes(i) && i.object.position.distanceTo(grille.object.position) < 0.2);
+    if (on.length >= grille.def.cookware!.places.length) return this.tell('La grille est pleine : retire d’abord ce qui y grille.');
+    const ok = this.host.useFire(fire);
+    if (ok && !this.host.lit(fire)) this.host.notice('Allume le feu de camp (clic sur les bûches) pour que ça grille.');
+    return ok;
+  }
+
+  /**
+   * Un poisson entier qui grille dore, puis noircit s'il reste trop longtemps (ses couleurs à lui,
+   * pas une teinte unie : voir showDoneness pour les pièces `cuit` de la cuisine).
+   */
+  private tintGrilled(): void {
+    for (const it of this.host.items()) {
+      if (!FISH_BY_ID.has(it.def.id)) continue;
+      const t = it.cooking;
+      if (t === (this.tinted.get(it) ?? 0)) continue;
+      this.tinted.set(it, t);
+      const cook = it.def.cook!;
+      const golden = THREE.MathUtils.clamp(t / cook.seconds, 0, 1) * 0.6;
+      const burnt = THREE.MathUtils.clamp((t - waterCap(it.def)) / (cook.burn * 0.5), 0, 1);
+      it.object.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          const m = mat as THREE.MeshToonMaterial;
+          if (!m.color) continue;
+          const raw: THREE.Color = (m.userData.rawColor ??= (m.userData.baseColor ?? m.color).clone());
+          const base: THREE.Color = (m.userData.baseColor ??= new THREE.Color());
+          base.copy(raw).lerp(GRILLED, golden).lerp(CHARRED, burnt);
+          if (m.userData.noWear) m.color.copy(base);
+        }
+      });
+      showWear(it.object, it.condition);
+    }
   }
 
   // ——— les monstres ———
@@ -191,7 +342,7 @@ export class Loisirs {
       const c = clips.find((k) => k.name === name);
       return c && new THREE.AnimationClip(name, c.duration, c.tracks.filter((t) => t.name.endsWith('.quaternion')));
     };
-    const want = { walk: pick('Walk_Formal_Loop'), idle: pick('Idle_FoldArms_Loop'), look: pick('Idle_Talking_Loop'), dance: pick('Dance_Loop') };
+    const want = { walk: pick('Walk_Formal_Loop'), idle: pick('Idle_FoldArms_Loop'), look: pick('Idle_Talking_Loop'), dance: pick('Dance_Loop'), cower: pick('Crouch_Idle_Loop') };
     for (const r of this.roamers) {
       const body = r.item.object.getObjectByName('monstre');
       if (!body) continue;
@@ -212,14 +363,31 @@ export class Loisirs {
     r.playing = key;
   }
 
-  /** Le monstre se promène dans sa zone, s'arrête pour regarder le perso qui approche, danse quand on le salue. */
+  /** Le pas du monstre : vers `to` à `speed` m/s, sans entrer dans un meuble ni un mur (faux s'il est bloqué). */
+  private step(r: Roamer, to: THREE.Vector3, speed: number, dt: number): boolean {
+    const o = r.item.object;
+    const d = to.clone().sub(o.position).setY(0);
+    const len = d.length();
+    if (len < 1e-3) return true;
+    const next = o.position.clone().addScaledVector(d.divideScalar(len), Math.min(len, speed * dt));
+    if (this.host.character.nav?.blocked(next)) return false;
+    o.position.copy(next);
+    // le pas suit la vitesse
+    const walk = r.acts.walk;
+    if (walk) walk.timeScale = Math.min(2.6, speed / ROAM_SPEED);
+    this.play(r, 'walk');
+    return true;
+  }
+
+  /** Le monstre se promène dans sa zone, regarde le perso qui approche, danse quand on le salue, le suit ou le fuit selon son caractère. */
   private roam(r: Roamer, dt: number): void {
     dt = Math.max(0, Math.min(dt, 0.1));
     r.mixer?.update(dt);
     const o = r.item.object;
     if (!o.parent) return;
-    const me = this.host.character.position;
-    const near = Math.hypot(me.x - o.position.x, me.z - o.position.z) < NOTICE_AT;
+    const c = this.host.character;
+    const me = c.position;
+    const dist = Math.hypot(me.x - o.position.x, me.z - o.position.z);
     const faceTo = (x: number, z: number) => {
       const want = Math.atan2(x - o.position.x, z - o.position.z);
       const d = Math.atan2(Math.sin(want - o.rotation.y), Math.cos(want - o.rotation.y));
@@ -233,36 +401,93 @@ export class Loisirs {
       }
       return this.play(r, 'dance');
     }
-    if (near) {
+    r.follow = Math.max(0, r.follow - dt);
+    const home = Math.hypot(o.position.x - r.zone.x, o.position.z - r.zone.z);
+    // fuir : à l'opposé du perso, sans quitter son coin (plus un peu)
+    const away = new THREE.Vector3(o.position.x - me.x, 0, o.position.z - me.z).normalize();
+    const flee = o.position.clone().addScaledVector(away, 1.2);
+    const cornered = Math.hypot(flee.x - r.zone.x, flee.z - r.zone.z) > r.zone.r + 1.5 || !!c.nav?.blocked(flee);
+    if (r.homing && home < r.zone.r) r.homing = false;
+    r.quiet = Math.max(0, r.quiet - dt);
+    const mind = monsterMind(r.zone.temper, { dist, home, zone: r.zone.r, running: c.moveGait === 'run', friend: r.friend, follow: r.follow, cornered, homing: r.homing });
+    const was = r.mind;
+    r.mind = mind;
+    if (was === 'suit' && mind === 'promène') {
+      // perdu de vue, ou trop loin de chez lui : il y retourne avant de suivre à nouveau
+      const lost = dist >= LOSE_AT, far = home > r.zone.r + LEASH;
+      r.follow = 0;
+      r.homing = lost || far;
+      this.host.notice(lost ? `Le ${r.item.name} t’a perdu de vue : il rentre chez lui.` : far ? `Le ${r.item.name} ne va pas plus loin : il rentre chez lui.` : `Le ${r.item.name} retourne à ses affaires.`);
+    } else if (mind === 'fuit' && was !== 'fuit' && was !== 'tapi' && !r.quiet) {
+      r.quiet = 20;
+      this.host.notice(`Le ${r.item.name} s’enfuit en ricanant !`);
+    }
+    if (mind !== 'promène') r.target = null;
+    if (mind === 'regarde') {
       faceTo(me.x, me.z);
       return this.play(r, 'look');
     }
+    if (mind === 'tapi') {
+      faceTo(me.x, me.z);
+      return this.play(r, r.acts.cower ? 'cower' : 'look');
+    }
+    if (mind === 'fuit') {
+      faceTo(flee.x, flee.z);
+      if (!this.step(r, flee, FLEE_SPEED, dt)) this.play(r, r.acts.cower ? 'cower' : 'look');
+      return;
+    }
+    if (mind === 'suit') {
+      // derrière le perso, à quelques pas ; il trottine pour rattraper
+      const spot = new THREE.Vector3(me.x, 0, me.z).addScaledVector(away, FOLLOW_GAP * 0.9);
+      faceTo(spot.x, spot.z);
+      if (!this.step(r, spot, dist > 4 ? CATCH_UP : FOLLOW_SPEED, dt)) {
+        faceTo(me.x, me.z);
+        this.play(r, 'look');
+      }
+      return;
+    }
+    // la promenade : retour dans son coin d'abord s'il en est sorti
+    if (!r.target && home > r.zone.r) r.target = new THREE.Vector3(r.zone.x, 0, r.zone.z);
     if (!r.target) {
       if ((r.wait -= dt) > 0) return this.play(r, 'idle');
       const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r.zone.r;
       r.target = new THREE.Vector3(r.zone.x + Math.cos(a) * d, 0, r.zone.z + Math.sin(a) * d);
     }
-    const to = r.target.clone().sub(o.position).setY(0);
-    const dist = to.length();
-    if (dist < 0.1) {
+    if (Math.hypot(r.target.x - o.position.x, r.target.z - o.position.z) < 0.1) {
       r.target = null;
       r.wait = 2 + Math.random() * 5;
       return this.play(r, 'idle');
     }
     faceTo(r.target.x, r.target.z);
-    o.position.addScaledVector(to.normalize(), Math.min(dist, ROAM_SPEED * dt));
-    this.play(r, 'walk');
+    if (!this.step(r, r.target, ROAM_SPEED, dt)) {
+      r.target = null;
+      r.wait = 1;
+    }
   }
 
-  /** Un clic sur un monstre : il danse de joie (et ça fait sourire). */
+  /**
+   * Un clic sur un monstre : le curieux danse de joie puis suit le perso un moment ; le farouche
+   * pas encore apprivoisé, s'il n'est pas déjà en fuite, danse et se méfie un peu moins.
+   */
   private greet(item: WorldItem): boolean {
     const r = this.roamers.find((x) => x.item === item);
     if (!r) return false;
+    const shy = r.zone.temper === 'farouche' && r.friend < TAME;
+    if (shy && (r.mind === 'fuit' || r.mind === 'tapi')) return this.tell(`Le ${item.name} a trop peur : reste un peu à l’écart (et sans courir) avant de le saluer.`);
+    r.friend++;
     r.dancing = true;
     r.wait = DANCE_S;
     r.target = null;
     this.host.mood(2);
-    this.host.notice(`Le ${item.name} danse de joie !`);
+    if (shy && r.friend >= TAME) {
+      r.follow = FOLLOW_S;
+      this.host.mood(3);
+      this.host.notice(`Le ${item.name} est apprivoisé ! Il danse, puis il te suivra.`);
+    } else if (shy) this.host.notice(`Le ${item.name} danse, un peu moins méfiant (${r.friend}/${TAME}).`);
+    else {
+      r.follow = FOLLOW_S;
+      this.host.notice(`Le ${item.name} danse de joie ! Il va te suivre un moment.`);
+    }
     return true;
   }
 

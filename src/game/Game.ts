@@ -17,6 +17,7 @@ import { loadInterior } from './items/interior';
 import { DELIVERY_SPOT, Entree } from './entree';
 import { Loisirs } from './loisirs';
 import { Chat } from './chat';
+import { Mouvements } from './mouvements';
 import { Paysage } from './paysage';
 import { FISH_BY_ID, OUTDOOR_FEMININE, OUTDOOR_START } from './items/plein-air';
 import { ANIMAL_FEMININE, ANIMAL_START } from './items/animaux';
@@ -621,6 +622,8 @@ export class Game {
   private loisirs: Loisirs;
   /** Le chaton : le nourrir, le caresser, sa gamelle, sa sieste sur le canapé (chat.ts). */
   private chat: Chat;
+  /** Sauter, nager dans l'étang, grimper sur un meuble (mouvements.ts). */
+  private mouvements: Mouvements;
   /** Route, marché, train, station autour de la maison (paysage.ts). */
   private paysage = new Paysage();
   /** La lessive : panier à linge, machine à laver, sèche-linge, étendoir (buanderie.ts). */
@@ -889,6 +892,15 @@ export class Game {
       health: () => this.needs.health,
       heal: (n) => this.needs.heal(n),
       night: () => this.clock.isNight,
+      items: () => this.items,
+      lit: (fire) => !!this.heaters.get(fire)?.on.some(Boolean),
+      useFire: (fire) => this.useStove(fire, false),
+    });
+    this.mouvements = new Mouvements({
+      character: this.character,
+      items: () => this.items,
+      notice: (t) => this.onNotice?.(t),
+      obstacle: (it) => this.isObstacle(it),
     });
     this.chat = new Chat({
       character: this.character,
@@ -1003,6 +1015,7 @@ export class Game {
     this.entree.attach(this.items);
     this.loisirs.attach(this.items);
     this.chat.attach(this.items, this.scene);
+    this.mouvements.attach(this.items);
     this.laundry.attach(this.items);
     // la bouilloire a de quoi faire deux tasses au départ
     for (const item of this.items) {
@@ -1688,6 +1701,12 @@ export class Game {
     return same.length > 1 ? `${item.def.id}-${same.indexOf(item) + 1}` : item.def.id;
   }
 
+  /** Les gestes du menu (clic droit) de l'objet `ref` : les ordres tapés s'en servent (lessive, jardin, pêche). */
+  menuOf(ref: string): MenuEntry[] {
+    const item = this.byRef(ref);
+    return item ? this.menuFor(item) : [];
+  }
+
   private byRef(ref: string): WorldItem | undefined {
     return this.items.find((i) => this.ref(i) === ref);
   }
@@ -1776,6 +1795,9 @@ export class Game {
       const lamp = this.lamps.get(item);
       if (lamp) ou += lamp.on ? ', allumée' : ', éteinte';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
+      // lessive, jardin, pêche, entrée : leur état (« linge sec », « 3 pommes »), comme dans l'infobulle
+      const outside = this.garden.stateOf(item) ?? this.entree.stateOf(item) ?? this.laundry.stateOf(item) ?? this.loisirs.stateOf(item);
+      if (outside) ou += `, ${outside}`;
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
       const coupable = (!!item.def.cut && item.portion === 1) || undefined;
       return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, cuisson, coupable, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
@@ -2273,7 +2295,7 @@ export class Game {
       const stand = toWorld(edge + sx * 0.38, 0, 0.1).setY(0);
       if (this.character.nav?.blocked(stand)) continue;
       // couché de son côté du lit, la tête sur l'oreiller (le haut du crâne à 25 cm de la tête de lit)
-      const feet = toWorld(sx * (b.max.x - b.min.x) * 0.22, def.top + 0.08, b.min.z + 0.25 + 1.62);
+      const feet = toWorld(sx * (b.max.x - b.min.x) * 0.22, def.top + 0.08, (def.head ?? b.min.z) + 0.25 + 1.62);
       return { stand, feet, head };
     }
     return null;
@@ -5978,7 +6000,7 @@ export class Game {
       // dans l'eau, ça cuit sans jamais brûler
       // sans eau, ce qu'on ne remue pas attache au fond : ça cuit et brûle plus vite
       const left = (this.unstirred.get(food) ?? 0) + dt * warm;
-      if (!water) this.unstirred.set(food, left);
+      if (!water && !pan.def.cookware?.grate) this.unstirred.set(food, left);
       if (!water && left > STICK_AFTER && left - dt * warm <= STICK_AFTER && doneness(food.def, before) !== 'brûlé') this.onNotice?.(`${cap(the(food.name))} attache au fond : remue avec la spatule (ou fais sauter).`);
       const sticks = !water && left > STICK_AFTER ? 1 + STICK_SPEED : 1;
       if (warm > 0.3) {
@@ -6265,6 +6287,11 @@ export class Game {
       // M : la lettre, quelle que soit la disposition du clavier (AZERTY ou QWERTY)
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
       if (e.code === 'KeyT' && !e.repeat) this.throwItem();
+      if (e.code === 'Space') {
+        // Espace : sauter (pas de défilement de la page ni de bouton pressé)
+        e.preventDefault();
+        if (!e.repeat) this.mouvements.jump();
+      }
       if (e.code === 'KeyP' && !e.repeat) this.serve();
       if (e.code === 'KeyV' && !e.repeat) this.washDishes();
       if (e.code === 'KeyK' && !e.repeat) this.cut();
@@ -6494,6 +6521,7 @@ export class Game {
       for (const h of new Set(held.map((i) => i.name))) add(`Poser : ${h}`, () => this.drop(h));
       if (can.seated) add('Se lever', () => this.standUp());
       if (can.sleeping) add('Se réveiller', () => this.wakeUp());
+      this.mouvements.menu(null, add);
       return out;
     }
     const ref = this.ref(item);
@@ -6642,6 +6670,7 @@ export class Game {
     this.entree.menu(item, add);
     this.loisirs.menu(item, add);
     this.chat.menu(item, add);
+    this.mouvements.menu(item, add);
     this.laundry.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));

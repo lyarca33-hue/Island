@@ -4,7 +4,8 @@
  * avec son feu de camp (Survival Pack), et deux petits monstres qui se promènent (Bestiary -
  * Dungeon Monsters Kit, licence Quaternius QAL).
  *
- * Ce qu'on en fait (pêcher, se soigner, le feu qui éclaire) est dans loisirs.ts.
+ * Ce qu'on en fait (pêcher, griller sa prise au feu de camp, dormir sous la tente, se soigner,
+ * les monstres qui suivent ou fuient) est dans loisirs.ts.
  */
 import * as THREE from 'three';
 import { creatureModel, fitScale, packModel, packSize, type Fit } from '../packs/assets';
@@ -134,6 +135,15 @@ export const RODS: Array<{ id: string; name: string; model: ModelName<'peche'>; 
   { id: 'canne-a-peche-4', name: 'canne à pêche en carbone', model: 'FishingRod_Lvl4', price: 15000 },
   { id: 'canne-a-peche-5', name: 'canne à pêche de champion', model: 'FishingRod_Lvl5', price: 30000 },
 ];
+/** Faim rendue par un poisson grillé entier, et en combien de bouchées (selon sa taille). */
+export const fishMeal = (length: number) => ({
+  hunger: Math.round(THREE.MathUtils.clamp(length * 90, 12, 60)),
+  bites: Math.round(THREE.MathUtils.clamp(length * 10, 3, 8)),
+});
+
+/** Temps de grill (s, feu bien pris) : un gros poisson cuit plus longtemps. */
+export const fishGrill = (length: number) => Math.round(10 + length * 20);
+
 /** Hauteur d'une canne (m) : le bout de la ligne. */
 export const ROD_H = 1.6;
 
@@ -144,6 +154,7 @@ export const rodLevel = (id: string) => RODS.findIndex((r) => r.id === id) + 1;
 export const OUTDOOR_PRICES: Record<string, number> = {
   ...Object.fromEntries(RODS.map((r) => [r.id, r.price])),
   ...Object.fromEntries(FISH.map((f) => [f.id, Math.round(f.price * 1.6)])),
+  'grille-camping': 2200,
   'trousse-de-secours': 2500,
   pansements: 600,
   hache: 3500,
@@ -161,6 +172,46 @@ export const OUTDOOR_PRICES: Record<string, number> = {
 /** Feu de camp : où se pose une poêle, au-dessus des bûches. */
 const FIRE_W = 0.9;
 const FIRE_TOP = packSize('survie', 'Bonfire').y * fitScale('survie', 'Bonfire', { width: FIRE_W });
+/** Où se pose la grille (ou la poêle) au-dessus des bûches. */
+export const FIRE_SPOT_Y = FIRE_TOP * 0.82;
+/** Grille de camping : demi-largeur, longueur, hauteur du treillis (m). */
+const GRILL_HX = 0.22;
+const GRILL_L = 0.62;
+const GRILL_FLOOR = 0.014;
+
+/** Tente : longueur avec ses cordes (m), et de sa toile (la moitié), où l'on dort. */
+const TENT_L = 4;
+const TENT_CANVAS = TENT_L / 2;
+
+/** Ce qui se grille au feu de camp : les poissons pêchés entiers, et la viande du frigo. */
+export const GRILL_FOOD = [...FISH.map((f) => f.name), 'poisson', 'steak', 'saucisses', 'poulet'];
+
+/** La grille de camping : un cadre et un treillis de fer, deux places côte à côte. */
+function grillModel(): THREE.Group {
+  const g = new THREE.Group();
+  const iron = toon(0x3b3a38);
+  const bar = (w: number, d: number, x: number, z: number, y = GRILL_FLOOR) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.01, d), iron);
+    m.position.set(x, y - 0.005, z);
+    m.castShadow = true;
+    g.add(m);
+  };
+  // le cadre
+  bar(GRILL_HX * 2, 0.014, 0, -GRILL_L / 2);
+  bar(GRILL_HX * 2, 0.014, 0, GRILL_L / 2);
+  bar(0.014, GRILL_L, -GRILL_HX, 0);
+  bar(0.014, GRILL_L, GRILL_HX, 0);
+  // le treillis
+  for (let i = 1; i < 7; i++) bar(0.006, GRILL_L, -GRILL_HX + (i * GRILL_HX * 2) / 7, 0);
+  // deux poignées relevées, aux bouts (la boîte monte assez haut pour garder ce qu'on y pose)
+  for (const z of [-1, 1]) {
+    const h = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.005, 4, 10, Math.PI), iron);
+    h.position.set(0, GRILL_FLOOR, z * (GRILL_L / 2 + 0.005));
+    h.rotation.y = Math.PI / 2;
+    g.add(h);
+  }
+  return g;
+}
 
 export const OUTDOOR_ITEMS: ItemDef[] = [
   {
@@ -236,8 +287,11 @@ export const OUTDOOR_ITEMS: ItemDef[] = [
     fragility: 9,
     durability: 100,
     breakWord: 'abîmé',
-    // se vide sur la planche : il donne le poisson de la cuisine, qui se cuit
+    // se vide sur la planche : il donne le poisson de la cuisine, qui se cuit ; entier, il se
+    // grille sur la grille du feu de camp et se mange tel quel (la couleur suit : loisirs.ts)
     cut: 'poisson',
+    food: { ...fishMeal(f.length), color: 0xf0dcc0 },
+    cook: { seconds: fishGrill(f.length), burn: 22, colors: [0xffffff, 0xb07a48, 0x2e241c] },
     build: () => {
       const g = model('peche', f.model, { length: f.length });
       // couché sur le flanc, comme sur l'étal
@@ -255,7 +309,7 @@ export const OUTDOOR_ITEMS: ItemDef[] = [
     fragility: 10,
     durability: 100000,
     // un clic sur les bûches l'allume ou l'éteint ; on y pose une poêle ou une casserole
-    heat: { spots: [[0, FIRE_TOP * 0.82, 0]], lit: 'flamme', warmup: 25 },
+    heat: { spots: [[0, FIRE_SPOT_Y, 0]], lit: 'flamme', warmup: 25 },
     build: () => {
       const g = new THREE.Group();
       const stones = toon(0x8c8a84);
@@ -291,7 +345,19 @@ export const OUTDOOR_ITEMS: ItemDef[] = [
       return new THREE.Group().add(g);
     },
   },
-  { id: 'tente', name: 'tente', portable: false, fragility: 10, durability: 5000, build: () => model('survie', 'Tent', { length: 3 }) },
+  {
+    id: 'grille-camping',
+    name: 'grille de camping',
+    portable: true,
+    grip: 'handle',
+    gripPoint: [0, GRILL_FLOOR, GRILL_L / 2 + 0.03],
+    cookware: { holds: GRILL_FOOD, places: [[-GRILL_HX / 2, GRILL_FLOOR, 0], [GRILL_HX / 2, GRILL_FLOOR, 0]], grate: true },
+    fragility: 10,
+    durability: 300,
+    build: grillModel,
+  },
+  // on y dort comme dans un lit (Game.sleepIn), allongé sous la toile (les cordes la dépassent)
+  { id: 'tente', name: 'tente', portable: false, bed: { top: 0.04, length: TENT_CANVAS, head: -TENT_CANVAS / 2 }, fragility: 10, durability: 5000, build: () => model('survie', 'Tent', { length: TENT_L }) },
   prop('trousse-de-secours', 'trousse de secours', 'survie', 'FirstAidKit', { width: 0.32 }, { grip: 'handle', durability: 3 }),
   prop('pansements', 'pansements', 'survie', 'Bandages', { height: 0.1 }, { durability: 5 }),
   prop('hache', 'hache', 'survie', 'Axe', { height: 0.7 }, { grip: 'pole', gripPoint: [0, 0.15, 0], fragility: 10, durability: 400 }),
@@ -328,10 +394,16 @@ export const OUTDOOR_ITEMS: ItemDef[] = [
   { id: 'diablotin', name: 'diablotin', portable: false, fragility: 10, durability: 100000, build: () => creatureModel('imp', 1.05) },
 ];
 
-/** Où se promène chaque monstre : centre (x, z) et rayon (m). */
-export const ROAMS: Record<string, { x: number; z: number; r: number }> = {
-  puglin: { x: -6, z: 13, r: 4.5 },
-  diablotin: { x: 31, z: -13.6, r: 2.4 },
+/**
+ * Caractère d'un monstre : le curieux vient voir le perso et le suit quand on l'a salué ; le
+ * farouche s'enfuit quand on l'approche, jusqu'à ce qu'on l'ait apprivoisé à force de saluts.
+ */
+export type Temper = 'curieux' | 'farouche';
+
+/** Où se promène chaque monstre : centre (x, z), rayon (m), et son caractère. */
+export const ROAMS: Record<string, { x: number; z: number; r: number; temper: Temper }> = {
+  puglin: { x: -6, z: 13, r: 4.5, temper: 'curieux' },
+  diablotin: { x: 31, z: -13.6, r: 2.4, temper: 'farouche' },
 };
 
 /** Objets du plein air posés au départ : [id, x, y, z, rotation (rad)]. */
@@ -348,6 +420,7 @@ export const OUTDOOR_START: Array<[string, number, number, number, number]> = [
   ['buche', -11, 0, 15.2, 0],
   ['buche', -12.3, 0, 16.6, Math.PI / 2],
   ['buche', -9.7, 0, 16.6, -Math.PI / 2],
+  ['grille-camping', -11, FIRE_SPOT_Y, 16.5, 0],
   ['tente', -11.2, 0, 19.6, Math.PI],
   ['torche-bois', -13.2, 0, 18.4, 0],
   ['torche-bois', -8.8, 0, 18.4, 0],
@@ -363,8 +436,8 @@ export const OUTDOOR_START: Array<[string, number, number, number, number]> = [
   ['lampe-torche', -12.6, 0, 19.9, 1.2],
   ['radio', -9.6, 0, 19.0, -0.4],
   ['gourde', -10.2, 0, 19.8, 0],
-  ['conserve', -10.6, 0, 19.9, 0],
-  ['conserve', -10.45, 0, 20.05, 0],
+  ['conserve', -9.9, 0, 21.2, 0],
+  ['conserve', -9.75, 0, 21.35, 0],
   ['telephone', -12.1, 0, 15.25, 0.8],
   ['piege-a-loup', -15.5, 0, 21.5, 0.7],
   ['puglin', ROAMS.puglin.x, 0, ROAMS.puglin.z, 0],
@@ -372,4 +445,4 @@ export const OUTDOOR_START: Array<[string, number, number, number, number]> = [
 ];
 
 /** Noms au féminin (accord des messages). */
-export const OUTDOOR_FEMININE = [...RODS.map((r) => r.name), 'barque', 'boîte à pêche', 'tente', 'trousse de secours', 'pelle', 'hache', 'boussole', 'lampe torche', 'radio', 'gourde', 'boîte de conserve', 'bonbonne de gaz', 'bûche', 'torche', 'carpe koï', 'limande', 'idole des Maures', 'baudroie'];
+export const OUTDOOR_FEMININE = [...RODS.map((r) => r.name), 'barque', 'boîte à pêche', 'grille de camping', 'tente', 'trousse de secours', 'pelle', 'hache', 'boussole', 'lampe torche', 'radio', 'gourde', 'boîte de conserve', 'bonbonne de gaz', 'bûche', 'torche', 'carpe koï', 'limande', 'idole des Maures', 'baudroie'];

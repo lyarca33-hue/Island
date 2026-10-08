@@ -76,7 +76,8 @@ export interface SaveAccess {
   /** États rangés à part par le jeu pour un objet, et leur retour. */
   extras(item: WorldItem): Record<string, unknown> | undefined;
   setExtras(item: WorldItem, x: Record<string, unknown>): void;
-  perso: { position: THREE.Vector3; yaw: number; forward: THREE.Vector3; placeAt(pos: THREE.Vector3, yaw: number): void };
+  /** `footing` : où il tient debout (la rive d'où il a plongé s'il nage). */
+  perso: { position: THREE.Vector3; footing: THREE.Vector3; yaw: number; forward: THREE.Vector3; placeAt(pos: THREE.Vector3, yaw: number): void };
   clock: { minutes: number; speed: number };
   needs: { values: Record<NeedKey, number>; health: number };
   mood: number;
@@ -129,7 +130,7 @@ export function captureGame(a: SaveAccess): GameSave {
     if (x && Object.keys(x).length) s.x = x;
     return s;
   });
-  const p = a.perso.position;
+  const p = a.perso.footing;
   const weather: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(a.weather)) if (typeof v === 'number' || typeof v === 'string' || v === null) weather[k] = v;
   return {
