@@ -6588,6 +6588,11 @@ export class Game {
     return { level, points: this.skillPoints, from: pointsFor(level), next: level < SKILL_MAX ? pointsFor(level + 1) : null };
   }
 
+  /** La compétence jardinage (jardin.ts), comme cookingSkill. */
+  get gardeningSkill(): { level: number; points: number; from: number; next: number | null } {
+    return this.garden.skill;
+  }
+
   /** Le perso s'exerce en cuisine : des points, et un message au passage d'un niveau. */
   private practice(points: number): void {
     const before = this.cookingLevel;
@@ -8181,7 +8186,7 @@ export class Game {
         if (this.bagless.has(item)) x.sansSac = true;
         if (this.flatCakes.has(item)) x.sansLevure = true;
         if (this.lamps.get(item)?.on) x.lampe = true;
-        Object.assign(x, this.entree.extras(item));
+        Object.assign(x, this.entree.extras(item), this.garden.extras(item));
         Object.assign(x, this.laundry.extras(item));
         put('reveil', this.alarms.get(item));
         return x;
@@ -8216,6 +8221,7 @@ export class Game {
         if (x.sansLevure) this.flatten(item);
         if (x.lampe) this.setLamp(item, true);
         this.entree.setExtras(item, x);
+        this.garden.setExtras(item, x);
         this.laundry.setExtras(item, x);
         if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, x.reveil);
       },
