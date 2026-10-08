@@ -707,7 +707,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;
-      const books = w.objets.filter((o) => o.nom === 'livre');
+      // le livre de recettes seulement s'il est demandé
+      const books = w.objets.filter((o) => o.nom === 'livre' || (o.nom === 'livre de recettes' && o.ref === intent.ref));
       // le livre demandé, sinon celui qu'on tient, sinon un qui traîne, sinon un de la bibliothèque
       const book = intent.ref
         ? books.find((o) => o.ref === intent.ref)

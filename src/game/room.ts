@@ -970,6 +970,8 @@ export const KITCHEN: RoomSpec = {
     // le pot à ustensiles à côté de la bouilloire, l'étagère à épices au mur au-dessus du plan de travail
     ['pot-ustensiles', 'tiroir', 0.17, -0.14],
     ['etagere-epices', 'plan-de-travail', 0, -0.15],
+    // le livre de recettes debout contre le mur, de l'autre côté de la bouilloire
+    ['livre-recettes', 'tiroir', -0.2, -0.17, Math.PI / 2],
     // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
     ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
     ['egouttoir', 'lave-vaisselle', 0.145, 0],

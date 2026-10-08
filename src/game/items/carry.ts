@@ -44,6 +44,13 @@ export class WorldItem {
   wet = 0;
   /** Temps passé sur le feu (s, à pleine chaleur) d'un ingrédient : voir ItemDef.cook. */
   cooking = 0;
+  /** Âge d'un aliment (heures de jeu hors du frigo, voir freshness.ts) : il finit périmé. */
+  age = 0;
+  /** Chaleur d'un aliment (1 sort du feu, 0 froid) ; `warmed` : il a été chauffé une fois (on peut dire « froid »). */
+  heat = 0;
+  warmed = false;
+  /** Étoiles de base d'un plat préparé (1 à 5) ; 0 : pas un plat (une pomme, une carotte crue). */
+  stars = 0;
 
   private closed: THREE.Object3D;
   private opened: THREE.Object3D | null = null;
@@ -143,6 +150,57 @@ export class WorldItem {
     let drops = this.part('gouttes');
     if (!drops && this.wet > 0) drops = this.addDrops();
     if (drops) drops.visible = this.wet > 0;
+  }
+
+  /** Taches de moisissure sur un aliment périmé (créées la première fois). */
+  setMoldy(on: boolean): void {
+    let spots = this.part('moisi');
+    if (!spots && on) spots = this.addSpots('moisi', 0x7d8f5a, 9, 0.006);
+    if (spots) spots.visible = on;
+  }
+
+  /** Volutes de vapeur au-dessus d'un plat chaud ; `k` de 0 (rien) à 1. */
+  setSteam(k: number): void {
+    let steam = this.part('vapeur');
+    if (!steam && k > 0) {
+      steam = new THREE.Group();
+      steam.name = 'vapeur';
+      const b = this.box;
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
+      const geo = new THREE.CylinderGeometry(0.003, 0.006, 0.06, 6);
+      for (let i = 0; i < 3; i++) {
+        const w = new THREE.Mesh(geo, mat);
+        w.name = 'vapeur';
+        w.position.set((i - 1) * 0.025, b.max.y + 0.035, ((i % 2) - 0.5) * 0.02);
+        w.raycast = () => {};
+        steam.add(w);
+      }
+      this.object.add(steam);
+    }
+    if (!steam) return;
+    steam.visible = k > 0.02;
+    for (const w of steam.children) ((w as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.35 * k;
+  }
+
+  /** Petites taches rondes posées sur le dessus de l'objet (moisissure). */
+  private addSpots(name: string, color: THREE.ColorRepresentation, n: number, r: number): THREE.Object3D {
+    const g = new THREE.Group();
+    g.name = name;
+    const b = this.box, c = b.getCenter(new THREE.Vector3());
+    const rx = (b.max.x - b.min.x) / 2, rz = (b.max.z - b.min.z) / 2;
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const geo = new THREE.SphereGeometry(1, 8, 6);
+    for (let i = 0; i < n; i++) {
+      const a = i * 2.39996, k = 0.2 + 0.6 * ((i * 0.618) % 1);
+      const spot = new THREE.Mesh(geo, mat);
+      spot.name = name;
+      const s = r * (0.7 + 0.6 * ((i * 0.382) % 1));
+      spot.scale.set(s, s * 0.4, s);
+      spot.position.set(c.x + Math.cos(a) * rx * k, b.max.y, c.z + Math.sin(a) * rz * k);
+      g.add(spot);
+    }
+    this.object.add(g);
+    return g;
   }
 
   /** Gouttes d'eau sur le bord et le fond (créées à la première vaisselle, hors de la boîte de l'objet). */

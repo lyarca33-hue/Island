@@ -241,6 +241,7 @@ const ALIASES: Record<string, string[]> = {
   'tartines au miel': ['tartine', 'tartines'],
   'tartines au chocolat': ['tartine', 'tartines'],
   'tartines beurrees': ['tartine', 'tartines'],
+  'livre de recettes': ['recettes', 'recette', 'livre'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -649,6 +650,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const door = found.find((o) => OPENS.has(o.sorte ?? ''));
       if (door) return [{ kind: 'ouvrir', ref: door.ref }];
       // « lis le livre rouge », « lis un livre », « lis » (celui qu'on tient)
+      // « lis le livre de recettes », « ouvre le livre de recettes »
+      if (rest.some((x) => x.startsWith('recette'))) {
+        const cookbook = found.find((o) => o.nom === 'livre de recettes');
+        if (cookbook) return [{ kind: 'lire', ref: cookbook.ref }];
+      }
       const books = found.filter((o) => o.nom === 'livre');
       if (found.length && !books.length) return null;
       const named = rest.some((x) => x === 'livre') && rest.some((x) => !STOP.has(x) && x !== 'livre');

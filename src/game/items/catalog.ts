@@ -270,6 +270,21 @@ const SHELF_SLOTS = SHELVES.flatMap((y) =>
  * Un livre (fiche commune, couleurs différentes). Debout, haut vers +Y, dos vers -Z ; la paume
  * se pose à plat sur la couverture.
  */
+/** Le livre de recettes de la cuisine : un livre rouge à bandeau crème ; le lire ouvre la liste des recettes. */
+function recipeBook(): ItemDef {
+  const base = book('livre-recettes', 0xb8432f);
+  return {
+    ...base,
+    name: 'livre de recettes',
+    stack: undefined,
+    build: () => {
+      const g = base.build();
+      g.add(mesh(new THREE.BoxGeometry(BOOK_T + 0.002, 0.05, 0.12), 0xf1e2c0, 0, 0.16, 0));
+      return g;
+    },
+  };
+}
+
 function book(id: string, color: THREE.ColorRepresentation): ItemDef {
   return {
     id,
@@ -465,6 +480,7 @@ export const ITEMS: ItemDef[] = [
   book('livre-rouge', 0x9a3b34),
   book('livre-vert', 0x3f6e48),
   book('livre-ocre', 0xb08a3a),
+  recipeBook(),
   book('livre-violet', 0x5e4a86),
   {
     id: 'caisse',
