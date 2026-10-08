@@ -20,6 +20,7 @@ import { UPKEEP_ITEMS } from './upkeep';
 import { LIFE_ITEMS } from './life';
 import { GARDEN_ITEMS } from '../jardin';
 import { ENTREE_ITEMS } from './entree';
+import { FECULENT_ITEMS } from './feculents';
 
 export interface ItemDef {
   id: string;
@@ -1412,6 +1413,8 @@ export const ITEMS: ItemDef[] = [
   ...GARDEN_ITEMS,
   // l'entrée : banc à chaussures, miroir, portemanteau et vêtements, boîte aux lettres (entree.ts)
   ...ENTREE_ITEMS,
+  // pâtes, riz et soupes à la casserole (feculents.ts)
+  ...FECULENT_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));
