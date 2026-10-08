@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Creator, loadSavedRecipe, saveRecipe } from './creator/Creator';
 import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
+import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
@@ -134,6 +135,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       if (m) g.onHover?.(null);
     };
     g.onNotice = flash;
+    Avatar.onMissingImport = () => flash('Ton perso VRoid importé n’est pas sur cet appareil : perso de base en attendant.');
     // la partie gardée dans le navigateur, puis sauvée toute seule (et envoyée au compte Google)
     const saved = loadLocal();
     if (saved) {

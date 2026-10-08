@@ -136,6 +136,11 @@ avec contours), expressions du visage, cheveux et vêtements qui bougent (ressor
 - **Expressions** (neutre, sourire, rire, triste, colère, surprise, peur, dégoût, clin d'œil) et
   clignement automatique des yeux.
 - Bouton « Au hasard », export / import du perso en JSON.
+- **Perso VRoid importé** (onglet Tenue) : un perso fait dans VRoid Studio et exporté en `.vrm`
+  (ou tout modèle VRM humanoïde) remplace tenue, visage et coiffure. Couleurs, proportions,
+  accessoires et animations marchent dessus. Le fichier est gardé dans le navigateur (IndexedDB),
+  la partie ne retient que son identifiant ; sur un autre appareil, le perso de base le remplace.
+  Textures réduites à 2048 px pour garder les images par seconde.
 
 Un perso est une **recette** (`src/creator/recipe.ts`) : quelques choix et nombres, sauvegardés
 dans le navigateur. C'est aussi ce qu'une IA pourra écrire pour créer des PNJ.
@@ -160,7 +165,8 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
-| `src/creator/vrm.ts` | Chargement des fichiers VRM (three-vrm) |
+| `src/creator/vrm.ts` | Chargement des fichiers VRM (three-vrm), import d'un .vrm du joueur |
+| `src/creator/imported.ts` | Persos VRoid importés, gardés dans le navigateur (IndexedDB) |
 | `src/creator/avatar.ts` | Assemblage tenue + visage + coiffure de modèles différents, proportions, couleurs |
 | `src/creator/retarget.ts` | Reciblage des animations Mixamo sur le squelette VRM |
 | `src/creator/puppet.ts` | Perso animé (assemblage + animations + expressions + clignement), partagé créateur / jeu |
