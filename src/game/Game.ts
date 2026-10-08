@@ -17,6 +17,7 @@ import { ENTREE_FEMININE } from './items/entree';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
+import { SOFA_NAP } from './items/salon';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { brushModel, showRoll, TOOTH_SPOT } from './items/bathroom';
 import { isTwoHanded } from './items/grips';
@@ -69,6 +70,13 @@ const SLEEP_SPEED = 2400;
 const SLEEP_FADE = 0.7;
 const SLEEP_DIM = 0.55;
 const NOT_SLEEPY = 90;
+/** Sieste sur le canapé : de 1 à 2 h (minutes de jeu). */
+const NAP_MIN = 60;
+const NAP_MAX = 120;
+/** Le réveil : heure proposée, durée de la sonnerie (s réelles) ; au-delà de 14 h de sommeil, on l'ignore. */
+const ALARM_HOUR = 7;
+const ALARM_RING = 2.4;
+const ALARM_REACH = 14 * 60;
 const TEA_ENERGY = 6;
 /** Où l'on met un sachet de thé. */
 const TEA_VESSELS = ['tasse', 'théière'];
@@ -884,6 +892,7 @@ export class Game {
       it.object.position.copy(new THREE.Vector3(x, base.box.max.y, z).applyMatrix4(base.object.matrixWorld));
       it.object.rotation.y = base.object.rotation.y + rot;
     }
+    this.placeAlarmClock();
     for (const spec of ROOMS) {
       const room = new Room(spec, (id) => this.items.find((i) => i.def.id === id)?.object.position);
       this.rooms.push(room);
@@ -1649,6 +1658,7 @@ export class Game {
       if (item.def.id === 'sacs-poubelle') ou += `, ${this.bagsLeft(item)} sac${this.bagsLeft(item) > 1 ? 's' : ''} dans le rouleau`;
       if (this.grime.has(item)) ou += `, taché${agree(item.name)} (à nettoyer au spray)`;
       if (item.def.clock) ou += `, indique ${this.clockText()}`;
+      if (item.def.id === 'reveil') ou += this.alarms.has(item) ? `, sonne à ${this.hourText(this.alarms.get(item)!)}` : ', réveil coupé';
       if (item.def.window && this.smell > 0.1) ou += ', la cuisine sent le brûlé (ouvrir pour aérer)';
       if (item.def.food && item.portion < 1) ou += `, entamé${agree(item.name)}`;
       if (item.def.tank) {
@@ -1984,7 +1994,13 @@ export class Game {
    * Sommeil en cours : le lit, la phase (fondu vers le noir, endormi, fondu au réveil), le temps
    * passé dans la phase, la vitesse de l'horloge à rendre au réveil, et quoi faire une fois levé.
    */
-  private sleep: { bed: WorldItem; phase: 'down' | 'asleep' | 'up'; t: number; speed: number; then?: () => void } | null = null;
+  private sleep: { bed: WorldItem; phase: 'down' | 'asleep' | 'up'; t: number; speed: number; then?: () => void; nap?: number; alarm?: number } | null = null;
+  /** Réveils réglés : l'heure où ils sonnent (absent : coupé). */
+  private alarms = new Map<WorldItem, number>();
+  /** Sonnerie en cours : le réveil, le temps qui reste, le prochain « bip ». */
+  private ringing: { item: WorldItem; left: number; next: number } | null = null;
+  /** Minutes de l'horloge au dernier tour (pour voir passer l'heure du réveil). */
+  private alarmLast = -1;
   /** Voile noir devant la scène : s'endormir et se réveiller passent par le noir. */
   private veil: HTMLDivElement | null = null;
 
@@ -2015,9 +2031,130 @@ export class Game {
       this.onNotice?.('Les dents n’ont pas été brossées ce soir : demain matin, un passage au lavabo.');
     }
     c.approachThen(side.stand, side.feet.clone().setY(0), () => {
-      this.sleep = { bed, phase: 'down', t: 0, speed: this.clock.speed };
+      this.sleep = { bed, phase: 'down', t: 0, speed: this.clock.speed, alarm: this.nextAlarm() };
     }, running);
     return true;
+  }
+
+  /**
+   * Fait la sieste sur le canapé `ref` (sinon le plus proche) : le perso s'y allonge, le temps file
+   * et il se réveille seul au bout d'une à deux heures (ou quand on le demande).
+   */
+  nap(ref?: string, running = false): boolean {
+    const sofa = ref ? this.byRef(ref) : this.nearest((i) => i.def.id === 'canape');
+    const c = this.character;
+    const fail = (msg: string) => {
+      this.onNotice?.(msg);
+      return false;
+    };
+    if (sofa?.def.id !== 'canape') return fail(ref ? `On ne fait pas la sieste sur : ${ref}.` : 'Il n’y a pas de canapé.');
+    if (this.sleep) return fail('Le perso dort déjà.');
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (c.carried.length) return fail('Pose d’abord ce que tu tiens pour faire la sieste.');
+    if (this.needs.values.fatigue >= NOT_SLEEPY) return fail('Le perso n’a pas sommeil (fatigue presque pleine).');
+    if (c.seated) return c.standUp(() => this.nap(this.ref(sofa), running));
+    const spot = this.restSpot(sofa);
+    if (!spot) return fail('Pas de place devant le canapé pour s’y allonger.');
+    c.approachThen(spot.stand, spot.feet.clone().setY(0), () => {
+      this.sleep = { bed: sofa, phase: 'down', t: 0, speed: this.clock.speed, nap: NAP_MIN + Math.random() * (NAP_MAX - NAP_MIN) };
+    }, running);
+    return true;
+  }
+
+  /** Où s'allonger : dans le lit (son côté libre) ou sur le canapé. */
+  private restSpot(item: WorldItem): { stand: THREE.Vector3; feet: THREE.Vector3; head: THREE.Vector3 } | null {
+    if (item.def.bed) return this.bedSide(item);
+    const o = item.object;
+    o.updateMatrixWorld(true);
+    const head = SOFA_NAP.head.clone().applyQuaternion(o.quaternion).setY(0).normalize();
+    const feet = SOFA_NAP.feet.clone().applyMatrix4(o.matrixWorld);
+    for (const x of [0, 0.5, -0.5]) {
+      const stand = new THREE.Vector3(x, 0, SOFA_NAP.front + 0.38).applyMatrix4(o.matrixWorld).setY(0);
+      if (!this.character.nav?.blocked(stand)) return { stand, feet, head };
+    }
+    return null;
+  }
+
+  /** Le réveil sur la table de nuit libre (celle sans la lampe), s'il n'y est pas déjà. */
+  private placeAlarmClock(): void {
+    if (this.items.some((i) => i.def.id === 'reveil')) return;
+    const lamp = this.items.find((i) => i.def.id === 'lampe-chevet');
+    const tables = this.items.filter((i) => i.def.id === 'table-de-nuit');
+    const base = tables.sort((a, b) => (lamp ? b.object.position.distanceTo(lamp.object.position) - a.object.position.distanceTo(lamp.object.position) : 0))[0];
+    const def = ITEM_BY_ID.get('reveil');
+    if (!base || !def) return;
+    const it = new WorldItem(def);
+    this.items.push(it);
+    this.scene.add(it.object);
+    base.object.updateMatrixWorld(true);
+    it.object.position.copy(new THREE.Vector3(0.06, base.box.max.y, 0.04).applyMatrix4(base.object.matrixWorld));
+    it.object.rotation.y = base.object.rotation.y;
+  }
+
+  /** Règle le réveil `ref` (sinon le plus proche) à `hour` h ; `null` le coupe. */
+  setAlarm(hour: number | null, ref?: string): boolean {
+    const item = ref ? this.byRef(ref) : this.nearest((i) => i.def.id === 'reveil');
+    if (item?.def.id !== 'reveil') {
+      this.onNotice?.(ref ? `${ref} n’est pas un réveil.` : 'Pas de réveil.');
+      return false;
+    }
+    if (hour === null) {
+      this.alarms.delete(item);
+      if (this.ringing?.item === item) this.ringing = null;
+      this.onNotice?.('Réveil coupé.');
+      return true;
+    }
+    const h = ((Math.round(hour * 2) / 2) % 24 + 24) % 24;
+    this.alarms.set(item, h);
+    this.onNotice?.(`Réveil réglé à ${this.hourText(h)}.`);
+    return true;
+  }
+
+  /** « 7 h », « 6 h 30 ». */
+  private hourText(h: number): string {
+    const m = Math.round((h % 1) * 60);
+    return m ? `${Math.floor(h)} h ${String(m).padStart(2, '0')}` : `${Math.floor(h)} h`;
+  }
+
+  /** Le prochain réveil qui sonnera (minutes de l'horloge), s'il tombe dans la nuit qui vient. */
+  private nextAlarm(): number | undefined {
+    const now = this.clock.minutes;
+    let best: number | undefined;
+    for (const h of this.alarms.values()) {
+      const day = Math.floor(now / 1440) * 1440;
+      let at = day + h * 60;
+      if (at <= now) at += 1440;
+      if (at - now <= ALARM_REACH && (best === undefined || at < best)) best = at;
+    }
+    return best;
+  }
+
+  /** Le réveil sonne à son heure (« Driiing ! ») et réveille le dormeur. */
+  private tickAlarm(dt: number): void {
+    const now = this.clock.minutes;
+    const last = this.alarmLast;
+    this.alarmLast = now;
+    if (last >= 0 && now > last) {
+      for (const [item, h] of this.alarms) {
+        const at = h * 60;
+        if (Math.floor((last - at) / 1440) < Math.floor((now - at) / 1440)) {
+          this.ringing = { item, left: ALARM_RING, next: 0 };
+          this.say('Driiing ! Driiing !');
+          const s = this.sleep;
+          if (s && !s.nap && s.phase !== 'up') s.alarm = Math.min(s.alarm ?? now, now);
+          break;
+        }
+      }
+    }
+    const r = this.ringing;
+    if (!r) return;
+    r.left -= dt;
+    r.next -= dt;
+    if (r.next <= 0) {
+      this.sound.play('bip', this.hear(r.item.object.position));
+      r.next = 0.18;
+    }
+    if (r.left <= 0) this.ringing = null;
   }
 
   /** Se réveille et sort du lit (puis `then`) ; faux si le perso ne dort pas. */
@@ -2085,7 +2222,7 @@ export class Game {
       }
       this.veil.style.opacity = String(Math.min(1, s.t / SLEEP_FADE));
       if (s.t < SLEEP_FADE) return;
-      const side = this.bedSide(s.bed);
+      const side = this.restSpot(s.bed);
       if (!side || !c.lieDown(side.feet, side.head, side.stand)) {
         this.sleep = null;
         this.onNotice?.('Impossible de se coucher ici.');
@@ -2093,19 +2230,28 @@ export class Game {
       }
       night(true);
       // on éteint la lampe de chevet en se couchant
-      for (const [item, lamp] of this.lamps) if (lamp.on && item.object.position.distanceTo(s.bed.object.position) < 2.5) this.setLamp(item, false);
+      if (s.bed.def.bed) for (const [item, lamp] of this.lamps) if (lamp.on && item.object.position.distanceTo(s.bed.object.position) < 2.5) this.setLamp(item, false);
       this.clock.speed = SLEEP_SPEED;
       s.phase = 'asleep';
       s.t = 0;
-      this.onNotice?.('Zzz… (C pour se réveiller)');
+      // la sieste : jusqu'à l'heure dite
+      if (s.nap) s.nap = this.clock.minutes + s.nap;
+      const alarm = s.alarm !== undefined ? ` (réveil à ${this.hourText((s.alarm / 60) % 24)})` : '';
+      this.onNotice?.(s.nap ? 'Petite sieste… Zzz (C pour se réveiller)' : `Zzz…${alarm} (C pour se réveiller)`);
     } else if (s.phase === 'asleep') {
       // le noir s'éclaircit un peu : on voit le perso dormir
       this.veil.style.opacity = String(Math.max(SLEEP_DIM, 1 - s.t / SLEEP_FADE));
-      const rested = this.needs.values.fatigue >= 100;
-      if (rested || c.wantsToMove) {
+      const now = this.clock.minutes;
+      // réveil réglé : on dort jusqu'à ce qu'il sonne ; sieste : une à deux heures ; sinon, reposé
+      const napped = !!s.nap && now >= s.nap;
+      const rang = !s.nap && s.alarm !== undefined && now >= s.alarm;
+      const rested = !napped && !rang && s.alarm === undefined && this.needs.values.fatigue >= 100;
+      if (napped || rang || rested || c.wantsToMove) {
         s.phase = 'up';
         s.t = 0;
-        if (rested) this.onNotice?.(`Bien reposé : réveillé à ${this.clock.label}.`);
+        if (napped) this.onNotice?.(`Fin de la sieste : réveillé à ${this.clock.label}.`);
+        else if (rang) this.onNotice?.(`Le réveil a sonné : debout à ${this.clock.label}.`);
+        else if (rested) this.onNotice?.(`Bien reposé : réveillé à ${this.clock.label}.`);
       }
     } else {
       this.clock.speed = s.speed;
@@ -6281,6 +6427,15 @@ export class Game {
     if (this.bagless.has(item)) add('Mettre un sac neuf', () => this.newBinBag(ref));
     // horloge, meubles tachés
     if (item.def.clock) add('Regarder l’heure', () => this.readClock());
+    if (item.def.id === 'reveil') {
+      const h = this.alarms.get(item);
+      if (h === undefined) add(`Régler le réveil à ${ALARM_HOUR} h`, () => this.setAlarm(ALARM_HOUR, ref));
+      else {
+        add(`Réveil plus tôt (${this.hourText((h + 23) % 24)})`, () => this.setAlarm(h - 1, ref));
+        add(`Réveil plus tard (${this.hourText((h + 1) % 24)})`, () => this.setAlarm(h + 1, ref));
+        add('Couper le réveil', () => this.setAlarm(null, ref));
+      }
+    }
     if (this.grime.has(item) && held.some((h) => h.def.spray)) add('Nettoyer au spray', () => this.cleanSurface(ref));
     if (item.def.gloves && !this.gloved) add('Enfiler les gants', () => this.putOnGloves());
     // évier
@@ -6345,6 +6500,10 @@ export class Game {
     if (item.def.bed) {
       if (this.sleep?.bed === item) add('Se réveiller', () => this.wakeUp());
       else if (!this.sleep) add('Dormir', () => this.sleepIn(ref));
+    }
+    if (item.def.id === 'canape') {
+      if (this.sleep?.bed === item) add('Se réveiller', () => this.wakeUp());
+      else if (!this.sleep) add('Faire la sieste', () => this.nap(ref));
     }
     const lamp = this.lamps.get(item);
     if (lamp) add(lamp.on ? 'Éteindre la lampe' : 'Allumer la lampe', () => this.switchLamp(ref, !lamp.on));
@@ -6692,6 +6851,7 @@ export class Game {
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));
     this.tickSleep(dt);
+    this.tickAlarm(dt);
     this.tickNeeds(dt);
     const book = held.find((h) => h.def.buildOpen);
     if (book && c.reading?.held === book) this.wearItem(book, dt * WEAR_READ);
@@ -7930,6 +8090,7 @@ export class Game {
         if (this.bagless.has(item)) x.sansSac = true;
         if (this.lamps.get(item)?.on) x.lampe = true;
         Object.assign(x, this.entree.extras(item));
+        put('reveil', this.alarms.get(item));
         return x;
       },
       setExtras: (item, x) => {
@@ -7961,6 +8122,7 @@ export class Game {
         if (typeof x.brossage === 'number') this.lastBrush = x.brossage;
         if (x.lampe) this.setLamp(item, true);
         this.entree.setExtras(item, x);
+        if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, x.reveil);
       },
       perso: this.character,
       clock: this.clock,
@@ -7981,6 +8143,7 @@ export class Game {
       done: () => {
         this.placeBathroomKit();
         this.entree.restored();
+        this.placeAlarmClock(); // partie sauvée avant le réveil
         this.character.nav = this.buildNav();
       },
     };
