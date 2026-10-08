@@ -528,7 +528,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'assaisonner',
-    description: 'Assaisonner avec le pot d’épices tenu (sel, poivre, paprika, herbes de Provence, huile d’olive) ce qu’il y a dans ou sur `objet` : la poêle, l’assiette, la planche (sinon l’aliment tenu, la poêle sur le feu, l’assiette servie).',
+    description: 'Assaisonner avec le pot d’épices tenu (sel, poivre, paprika, herbes de Provence, huile d’olive) ou la sauce tenue (ketchup, mayonnaise, moutarde, vinaigre, crème, citron, ail) ce qu’il y a dans ou sur `objet` : la poêle, l’assiette, la planche (sinon l’aliment tenu, la poêle sur le feu, l’assiette servie).',
     params: {},
     run: (g, a) => g.season(a.objet),
   },

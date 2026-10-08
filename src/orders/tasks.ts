@@ -4,6 +4,7 @@
  * par piles de 6 au plus, les ranger, recommencer tant qu'il en traîne.
  */
 import type { Game, WorldObject } from '../game/Game';
+import { CONDIMENTS } from '../game/items/condiments';
 import { DISHES, RECIPE_BY_DISH } from '../game/items/recipes';
 import { ITEMS } from '../game/items/catalog';
 import { perform } from './actions';
@@ -991,7 +992,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'assaisonner': {
       const jar = await takeTool(game, act, [intent.epice], (ref) => ref === intent.ref);
       await act('assaisonner', intent.ref ? { objet: intent.ref } : {});
-      // le pot retourne sur l'étagère
+      // le pot retourne sur l'étagère (les sauces et condiments restent en main)
+      if (CONDIMENTS[intent.epice]) return;
       const shelf = world(game).objets.find((o) => o.nom === 'étagère à épices');
       return shelf ? act('ranger', { meuble: shelf.ref, objet: jar }).then(() => {}, () => {}) : undefined;
     }
