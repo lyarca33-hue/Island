@@ -1,6 +1,8 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type ReactNode, useEffect, useSyncExternalStore } from 'react';
 import type { Game, HandActions } from '../game/Game';
 import { Icon, type IconName } from './icons';
+import { gestures, holdKey, installTouch } from './touch';
+import './touch.css';
 
 /** Une touche du clavier, dessinée comme une touche. */
 export function Key({ k }: { k: string }) {
@@ -98,4 +100,42 @@ export function HeldBar({ game, held, can }: { game: Game | null; held: string |
   if (can.prepare && !can.seated) return <Pill icon="pot" actions={<Act k="G" label="Préparer le plat" main onClick={() => g.prepare()} />}>Ingrédients prêts</Pill>;
   if (can.seated) return <Pill icon="chair" actions={<Act k="C" label="Se lever" main onClick={() => g.standUp()} />}>Assis</Pill>;
   return null;
+}
+
+/**
+ * Au doigt seulement (caché à la souris) : le bouton « Gestes », qui fait du prochain toucher un
+ * clic droit (le menu rond), et, quand on déplace un meuble, les flèches et la rotation, à tenir
+ * enfoncées comme les touches Z Q S D et R / F. Branche aussi le zoom à deux doigts et l'appui long.
+ */
+export function TouchPad({ game, can }: { game: Game | null; can: HandActions }) {
+  useEffect(() => (game ? installTouch(game) : undefined), [game]);
+  const armed = useSyncExternalStore(gestures.subscribe, () => gestures.on);
+  if (!game) return null;
+  return (
+    <div className="touch-pad">
+      {can.moving && (
+        <div className="touch-move">
+          <button className="touch-key" aria-label="Pivoter à gauche" {...holdKey('KeyF')}><Icon name="turnLeft" /></button>
+          <div className="touch-arrows">
+            <button className="touch-key up" aria-label="Avancer" {...holdKey('KeyW')}><Icon name="chevron" /></button>
+            <button className="touch-key left" aria-label="À gauche" {...holdKey('KeyA')}><Icon name="chevron" /></button>
+            <button className="touch-key down" aria-label="Reculer" {...holdKey('KeyS')}><Icon name="chevron" /></button>
+            <button className="touch-key right" aria-label="À droite" {...holdKey('KeyD')}><Icon name="chevron" /></button>
+          </div>
+          <button className="touch-key" aria-label="Pivoter à droite" {...holdKey('KeyR')}><Icon name="turnRight" /></button>
+        </div>
+      )}
+      <button
+        className={`touch-gestures${armed ? ' on' : ''}`}
+        aria-pressed={armed}
+        onClick={() => {
+          gestures.set(!armed);
+          if (!armed) game.onNotice?.('Touche un objet (ou le perso) pour voir les gestes. Un appui long marche aussi.');
+        }}
+      >
+        <Icon name="pinch" size={16} />
+        {armed ? 'Touche un objet…' : 'Gestes'}
+      </button>
+    </div>
+  );
 }
