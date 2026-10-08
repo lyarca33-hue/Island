@@ -1674,6 +1674,12 @@ export class Game {
     return same.length > 1 ? `${item.def.id}-${same.indexOf(item) + 1}` : item.def.id;
   }
 
+  /** Les gestes du menu (clic droit) de l'objet `ref` : les ordres tapés s'en servent (lessive, jardin, pêche). */
+  menuOf(ref: string): MenuEntry[] {
+    const item = this.byRef(ref);
+    return item ? this.menuFor(item) : [];
+  }
+
   private byRef(ref: string): WorldItem | undefined {
     return this.items.find((i) => this.ref(i) === ref);
   }
@@ -1762,6 +1768,9 @@ export class Game {
       const lamp = this.lamps.get(item);
       if (lamp) ou += lamp.on ? ', allumée' : ', éteinte';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
+      // lessive, jardin, pêche, entrée : leur état (« linge sec », « 3 pommes »), comme dans l'infobulle
+      const outside = this.garden.stateOf(item) ?? this.entree.stateOf(item) ?? this.laundry.stateOf(item) ?? this.loisirs.stateOf(item);
+      if (outside) ou += `, ${outside}`;
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
       const coupable = (!!item.def.cut && item.portion === 1) || undefined;
       return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, cuisson, coupable, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
