@@ -5,6 +5,12 @@
 Monde de RP en 3D dans le navigateur : un créateur de personnage, puis une map (un sol d'herbe)
 où le perso créé se promène, en cel shading avec le rendu HD-2D d'Arena Tactic.
 
+## Jouer en ligne
+
+**https://lyarca33-hue.github.io/Island/** : rien à installer, le lien ne change pas.
+Le jeu y est remis à jour tout seul à chaque fusion sur `main` (la version jouée s'affiche dans la
+fenêtre « Signaler »).
+
 ## Lancer le jeu
 
 ```bash
