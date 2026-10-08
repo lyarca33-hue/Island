@@ -8,7 +8,7 @@ import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
 import { retargetClips, UAL_TO_VRM, type AnimationSource } from './retarget';
 import { PoseLayer } from './pose';
-import { loadAnimationSource, loadExtraAnimations, loadPoseAnimations, loadSitAnimations } from './source';
+import { loadAnimationSource, loadExtraAnimations, loadMoveAnimations, loadPoseAnimations, loadSitAnimations } from './source';
 
 /** Retouche de pose par-dessus les clips (ex. porter un objet, voir game/items/carry.ts). */
 export interface PoseHook {
@@ -57,15 +57,18 @@ export class Puppet {
     p.extra = sit ? [{ ...sit, bones: UAL_TO_VRM }] : [];
     p.loadClips(source);
     p.play('idle', 0);
-    // poses du créateur (1,7 Mo) : ajoutées à leur arrivée, sans retarder l'entrée dans le jeu
-    void loadPoseAnimations().then((poses) => {
-      for (const s of poses) {
+    // poses du créateur (1,7 Mo), sauter, nager, grimper, lancer (500 ko) : ajoutés à leur
+    // arrivée, sans retarder l'entrée dans le jeu
+    const add = (sets: AnimationSource[]) => {
+      for (const s of sets) {
         const src = { ...s, bones: UAL_TO_VRM };
         p.extra.push(src);
         for (const clip of retargetClips(src, p.avatar.base)) p.actions.set(clip.name, p.mixer.clipAction(clip));
       }
       p.onClips?.();
-    });
+    };
+    void loadPoseAnimations().then(add);
+    void loadMoveAnimations().then(add);
     return p;
   }
 
@@ -171,13 +174,18 @@ export class Puppet {
     return [...this.actions.keys()];
   }
 
-  /** Joue un clip en fondu enchaîné depuis le clip courant (`once` : une fois, arrêté sur la fin). */
-  play(name: string, fade: number, once = false): void {
+  /**
+   * Joue un clip en fondu enchaîné depuis le clip courant (`once` : une fois, arrêté sur la fin ;
+   * `speed` : vitesse de lecture ; `at` : départ en cours de clip, en s).
+   */
+  play(name: string, fade: number, once = false, speed = 1, at = 0): void {
     const next = this.actions.get(name);
     if (!next || next === this.current) return;
     next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
     next.clampWhenFinished = once;
     next.reset().setEffectiveWeight(1).play();
+    next.timeScale = speed;
+    next.time = at;
     if (this.current) this.current.crossFadeTo(next, fade, false);
     this.current = next;
   }

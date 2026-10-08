@@ -50,6 +50,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['Clic droit', 'Tous les gestes possibles sur un objet'],
   ['ZQSD / ↑↓←→', 'Marcher'],
   ['Maj', 'Courir'],
+  ['Espace', 'Sauter'],
   ['E', 'Poser / lâcher'],
   ['B', 'Boire'],
   ['M', 'Manger (assis : dans l’assiette)'],
