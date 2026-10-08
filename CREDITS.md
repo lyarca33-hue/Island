@@ -11,6 +11,11 @@
   Idle_TalkingPhone_Loop, Consume) : même [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)
   de Quaternius, **CC0**, volumes 1 et 2 (`UAL1_Standard.glb`, `UAL2_Standard.glb` de la même copie publique), extraits par
   `tools/build_anim_assets.py`.
+- Gestes de cuisine (`public/anim/ual_kitchen.glb` : Interact, PickUp_Table, Fixing_Kneeling, Push_Loop) : même
+  [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html) de Quaternius, **CC0**,
+  volume 1 (`UAL1_Standard.glb`), extraits par `tools/build_anim_assets.py`.
+- Réserve d'animations pas encore utilisées (`public/anim/ual_extra.glb` : les 30 autres clips du volume 1, sauter,
+  nager, se battre...) : même bibliothèque de Quaternius, **CC0**.
 - Jardin (`public/models/nature.glb` : feuillus, sapins, buissons, herbes, fleurs, fougères, trèfles, galets,
   rochers, champignons) : [Stylized Nature MegaKit](https://quaternius.com/packs/ultimatestylizednature.html) de
   Quaternius, **CC0** (version gratuite « Standard »), modèles choisis et textures réduites par

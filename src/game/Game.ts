@@ -2018,6 +2018,7 @@ export class Game {
     if (c.seated) return c.standUp(() => this.switchLamp(this.ref(item), want, running));
     // tenue en main : on appuie sur l'interrupteur sans bouger
     const press = () => {
+      if (!c.carried.includes(item)) c.gesture('interact');
       this.setLamp(item, want);
       this.onNotice?.(want ? 'Lampe allumée.' : 'Lampe éteinte.');
     };
@@ -3837,6 +3838,9 @@ export class Game {
       return false;
     }
     this.character.approachThen(this.doorStand(item), item.object.position, () => {
+      // à genoux devant une porte basse (pas pour le couvercle de la poubelle)
+      if (item.def.bin) this.character.gesture('interact');
+      else this.character.gestureAt(item.part('porte') ?? item.object);
       d.target = 1;
       d.then = then;
       this.wearItem(item, WEAR_DOOR);
@@ -3979,6 +3983,7 @@ export class Game {
     else if (!this.storedIn(item).length) this.onNotice?.(`${cap(the(item.name))} est vide : mets-y d’abord quelque chose ${item.def.blends ? 'à mixer' : item.def.heats?.turns ? 'à griller' : item.def.heats ? 'à cuire' : 'à laver'}.`);
     else {
       this.character.approachThen(this.doorStand(item), item.object.position, () => {
+        this.character.gesture('interact');
         // on ferme la porte ; il démarre une fois fermée (tickAppliances)
         const d = this.doors.get(item);
         if (d) {
@@ -5754,6 +5759,7 @@ export class Game {
       return false;
     }
     this.character.approachThen(this.frontOf(item), item.object.position, () => {
+      this.character.gesture('interact');
       for (const i of which) h.on[i] = on;
       h.unused = 0;
       this.wearItem(item, WEAR_KNOB);
