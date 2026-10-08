@@ -39,7 +39,9 @@
 - Packs de [Quaternius](https://quaternius.com), **CC0** (`public/packs/*.glb`, convertis par
   `tools/build_pack_assets.mjs`) : Survival Pack (camp, survie), Cute Fish Pack (poissons, pêche),
   Realistic Car Pack (voitures), Train Pack (trains, rails), Ultimate Gun Pack (armurerie),
-  Fantasy Props MegaKit (marché, brocante, atelier), Modular SciFi MegaKit (station, aliens).
+  Fantasy Props MegaKit (marché, brocante, atelier), Modular SciFi MegaKit (station, aliens),
+  [Ultimate Food Pack](https://quaternius.com/packs/ultimatefood.html) (aliments de la cuisine :
+  pomme, tomate, steak, pizza, œuf…, recolorés).
 - Monstres (`public/packs/puglin.glb`, `imp.glb`) : Bestiary - Dungeon Monsters Kit de
   [Quaternius](https://quaternius.com), sous la **Quaternius Asset License (QAL)** : usage dans le jeu
   autorisé, crédit non obligatoire, mais les fichiers ne doivent pas être repris ni redistribués comme

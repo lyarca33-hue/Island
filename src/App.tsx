@@ -64,7 +64,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   // les modèles dont sont faits des objets (camping, pêche) : chargés avant de construire la maison
   const [packsReady, setPacksReady] = useState(false);
   useEffect(() => {
-    void Promise.all([preloadPacks(['survie', 'peche']), loadCreature('puglin'), loadCreature('imp')]).then(() => setPacksReady(true));
+    void Promise.all([preloadPacks(['survie', 'peche', 'nourriture']), loadCreature('puglin'), loadCreature('imp')]).then(() => setPacksReady(true));
   }, []);
   const [held, setHeld] = useState<string | null>(null);
   const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, recipes: false, book: null, seated: false, sleeping: false });
