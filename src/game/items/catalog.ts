@@ -196,7 +196,7 @@ export interface ItemDef {
    */
   heat?: { spots: Array<[number, number, number]>; lit: string; warmup: number; autoOff?: number };
   /** Ustensile qui va sur le feu (poêle, casserole) : ce qu'on y met (noms), et où (repère de l'ustensile, base de l'ingrédient). */
-  cookware?: { holds: string[]; places: Array<[number, number, number]> };
+  cookware?: { holds: string[]; places: Array<[number, number, number]>; /** Une grille (feu de camp) : rien n'y attache au fond. */ grate?: boolean };
   /**
    * Ingrédient qui cuit (cooking.ts) : `seconds` sur un feu bien chaud pour être cuit, puis `burn`
    * de plus pour brûler ; couleurs cru, cuit et brûlé des pièces nommées `cuit`.
@@ -210,10 +210,11 @@ export interface ItemDef {
   knife?: boolean;
   /**
    * Lit : on s'y couche pour dormir (la tête à -Z, sur l'oreiller). `top` : dessus du matelas (m),
-   * `length` : longueur du lit. La pièce `couette-dormeur` se montre sur le dormeur, à la place
-   * de la pièce `couette`.
+   * `length` : longueur du lit, `head` : où commence la couche, côté tête (z ; par défaut le bout
+   * de sa boîte : la tente a ses cordes au-delà de la toile). La pièce `couette-dormeur` se
+   * montre sur le dormeur, à la place de la pièce `couette`.
    */
-  bed?: { top: number; length: number };
+  bed?: { top: number; length: number; head?: number };
   /**
    * Lampe qu'on allume d'un clic (lampe de chevet) : la lumière part à `y` (m) au-dessus du pied ;
    * la pièce `ampoule` brille et la pièce `abat-jour` s'éclaire quand elle est allumée.
