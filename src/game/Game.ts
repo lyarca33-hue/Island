@@ -13,6 +13,7 @@ import { applySky, GameClock, seasonLook, TIME_SPEED } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
 import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
 import { loadNature } from './nature';
+import { loadInterior } from './items/interior';
 import { DELIVERY_SPOT, Entree } from './entree';
 import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
 import { ENTREE_FEMININE } from './items/entree';
@@ -840,6 +841,12 @@ export class Game {
     loadNature()
       .then((kit) => this.garden.dress(kit, ROOMS.map((r) => r.rect), this.qualityLevel === 'basse' ? 0.4 : 1))
       .catch((e) => console.warn('pack nature non chargé', e));
+    // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
+    loadInterior()
+      .then(() => {
+        for (const it of this.items) it.restyle();
+      })
+      .catch((e) => console.warn('pack intérieur non chargé', e));
     this.entree = new Entree({
       character: this.character,
       items: () => this.items,

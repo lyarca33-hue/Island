@@ -81,3 +81,19 @@ python3 tools/build_nature_assets.py --src "Stylized Nature MegaKit[Standard]/gl
 
 Pour ajouter un modèle : l'ajouter à `MODELS` (et son matériau à `MATERIALS` s'il est nouveau),
 puis le placer dans `src/game/nature.ts`.
+
+
+## `build_interior_assets.py` : les meubles (pack intérieur de Quaternius)
+
+Regroupe dans `public/models/interior.glb` les meubles de l'« Ultimate House Interior Pack » de
+Quaternius (CC0, à télécharger sur quaternius.com) listés dans `MODELS`, à faces plates et aux
+couleurs du pack.
+
+```bash
+python3 tools/build_interior_assets.py --src "Ultimate House Interior Pack - June 2020/OBJ" --out public/models/interior.glb
+```
+
+Pour habiller un autre meuble : ajouter son modèle à `MODELS`, puis la fiche du jeu et le modèle
+dans `INTERIOR_LOOKS` (`src/game/items/interior.ts`). Le modèle prend la boîte des pièces sans
+nom du meuble : les pièces nommées (portes, tiroirs, écran…) restent celles du jeu.
+

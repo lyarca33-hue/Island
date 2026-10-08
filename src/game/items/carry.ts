@@ -13,7 +13,8 @@ import type { ItemDef } from './catalog';
 import { GRIPS, guessGrip, isTwoHanded, vec, type GripSpec, type GripType, type HandSpec } from './grips';
 import { gradeIndex, showWear } from './durability';
 import { basisRotation, Rig, solveTwoBone, twistForearm } from './ik';
-import { mergeStaticParts } from './merge';
+import { buildModel, hasLook } from './interior';
+import { forgetGhosts, mergeStaticParts } from './merge';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
 function gripRotation(spec: GripSpec): THREE.Quaternion {
@@ -59,7 +60,8 @@ export class WorldItem {
   private opened: THREE.Object3D | null = null;
 
   constructor(readonly def: ItemDef) {
-    const model = def.build();
+    // le modèle du pack intérieur s'il habille cette fiche (interior.ts), sinon celui fait par programme
+    const model = buildModel(def);
     // pièces fixes regroupées : bien moins de dessins (voir merge.ts)
     mergeStaticParts(model);
     this.closed = model;
@@ -107,6 +109,22 @@ export class WorldItem {
     this.durability = THREE.MathUtils.clamp(ratio, 0, 1) * this.maxDurability;
     showWear(this.object, this.condition);
     return gradeIndex(this.condition) !== before;
+  }
+
+  /**
+   * Rhabille l'objet avec le modèle du pack intérieur, une fois chargé (interior.ts) : même boîte,
+   * mêmes pièces nommées, même usure. Sans effet sur les fiches que le pack n'habille pas.
+   */
+  restyle(): void {
+    if (!hasLook(this.def)) return;
+    const model = buildModel(this.def);
+    mergeStaticParts(model);
+    model.visible = this.closed.visible;
+    forgetGhosts(this.closed);
+    this.object.remove(this.closed);
+    this.closed = model;
+    this.object.add(model);
+    showWear(this.object, this.condition);
   }
 
   /** Montre le livre ouvert (lecture) ou fermé. */
