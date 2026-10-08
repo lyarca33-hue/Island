@@ -9,10 +9,11 @@
 import * as THREE from 'three';
 import { createToonMaterial } from '../game/toon';
 
-export type AccSlot = 'chapeau' | 'lunettes' | 'cheveux' | 'oreilles' | 'cou';
+export type AccSlot = 'chapeau' | 'lunettes' | 'cheveux' | 'oreilles' | 'cou' | 'dos' | 'queue';
 
 export const SLOTS: Array<[AccSlot, string]> = [
   ['chapeau', 'Chapeau'], ['lunettes', 'Lunettes'], ['cheveux', 'Dans les cheveux'], ['oreilles', 'Boucles d’oreilles'], ['cou', 'Cou'],
+  ['dos', 'Dans le dos'], ['queue', 'Queue'],
 ];
 
 /**
@@ -40,13 +41,22 @@ export interface NeckFit {
   base: number;
 }
 
+/**
+ * Arrière du corps habillé, dans des repères posés sur l'os du buste (back) et du bassin (seat),
+ * alignés sur le monde : z (négatif) de la surface du dos.
+ */
+export interface BackFit {
+  back: number;
+  seat: number;
+}
+
 export interface Accessory {
   id: string;
   label: string;
   slot: AccSlot;
   /** Couleur par défaut. */
   color: string;
-  build(head: HeadFit, neck: NeckFit, color: THREE.Color): THREE.Object3D;
+  build(head: HeadFit, neck: NeckFit, color: THREE.Color, back: BackFit): THREE.Object3D;
 }
 
 /** Couleurs proposées pour les accessoires. */
@@ -411,26 +421,23 @@ export const ACCESSORIES: Accessory[] = [
     },
   },
   {
-    id: 'bandana', label: 'Bandana', slot: 'chapeau', color: '#c2413a',
+    id: 'bandana', label: 'Bandeau noué', slot: 'chapeau', color: '#c2413a',
     build(h, _n, c) {
-      const { cx, cz, r, top } = crown(h);
-      const g = new THREE.Group();
+      // large ruban par-dessus la coiffure (même arc que le serre-tête), nœud sur le côté
+      const g = headband(h, c, 0.02);
+      const { cx, cz, r } = crown(h);
       const m = mat(c);
-      const y = h.eye.y + (top - h.eye.y) * 0.62;
-      const band = mesh(new THREE.CylinderGeometry(r * 0.94, r, 0.032, SEG, 1, true), m, cx, y, cz);
-      (band.material as THREE.Material).side = THREE.DoubleSide;
-      band.rotation.x = 0.2;
-      g.add(band);
-      // nœud et pans derrière
-      const knot = new THREE.Group();
-      knot.position.set(cx, y - 0.01, cz - r);
-      knot.add(mesh(new THREE.SphereGeometry(0.018, 10, 8), m));
+      const bow = new THREE.Group();
       for (const s of [-1, 1]) {
-        const tail = mesh(new THREE.BoxGeometry(0.03, 0.07, 0.006), m, s * 0.015, -0.04, -0.005);
-        tail.rotation.z = s * 0.3;
-        knot.add(tail);
+        const loop = mesh(new THREE.ConeGeometry(0.028, 0.06, 10), m, s * 0.032, 0, 0);
+        loop.rotation.z = (s * Math.PI) / 2;
+        loop.scale.z = 0.45;
+        bow.add(loop);
       }
-      g.add(knot);
+      bow.add(mesh(new THREE.SphereGeometry(0.014, 10, 8), m));
+      bow.position.set(cx + r * 1.0, h.eye.y + (crown(h).top - h.eye.y) * 0.55, cz + 0.02);
+      bow.rotation.set(0, Math.PI / 2, -0.3);
+      g.add(bow);
       return g;
     },
   },
@@ -514,24 +521,23 @@ export const ACCESSORIES: Accessory[] = [
     id: 'loup', label: 'Masque', slot: 'lunettes', color: '#1d1a22',
     build(h, _n, c) {
       const ex = Math.max(0.028, Math.abs(h.eye.x));
-      const r = ex * 0.52;
-      const w = ex + r * 2.3;
+      const w = ex * 1.95;
       const s = new THREE.Shape();
-      s.moveTo(-w, r * 0.6);
-      s.quadraticCurveTo(-ex, r * 2.2, 0, r * 0.9);
-      s.quadraticCurveTo(ex, r * 2.2, w, r * 0.6);
-      s.quadraticCurveTo(w * 0.95, -r * 1.6, ex * 0.3, -r * 1.1);
-      s.quadraticCurveTo(0, -r * 0.6, -ex * 0.3, -r * 1.1);
-      s.quadraticCurveTo(-w * 0.95, -r * 1.6, -w, r * 0.6);
+      s.moveTo(-w, ex * 0.35);
+      s.quadraticCurveTo(-ex, ex * 1.05, 0, ex * 0.45);
+      s.quadraticCurveTo(ex, ex * 1.05, w, ex * 0.35);
+      s.quadraticCurveTo(w * 0.9, -ex * 0.85, ex * 0.35, -ex * 0.62);
+      s.quadraticCurveTo(0, -ex * 0.35, -ex * 0.35, -ex * 0.62);
+      s.quadraticCurveTo(-w * 0.9, -ex * 0.85, -w, ex * 0.35);
       for (const k of [-1, 1]) {
         const hole = new THREE.Path();
-        hole.absellipse(k * ex, 0, r, r * 0.62, 0, Math.PI * 2, true, 0);
+        hole.absellipse(k * ex, 0, ex * 0.5, ex * 0.3, 0, Math.PI * 2, true, 0);
         s.holes.push(hole);
       }
       const geo = new THREE.ShapeGeometry(s, 16);
       // épouse l'arrondi du visage
       const pos = geo.getAttribute('position');
-      for (let i = 0; i < pos.count; i++) pos.setZ(i, -((pos.getX(i) / w) ** 2) * w * 0.9);
+      for (let i = 0; i < pos.count; i++) pos.setZ(i, -((pos.getX(i) / w) ** 2) * w * 0.6);
       geo.computeVertexNormals();
       const m = mat(c);
       m.side = THREE.DoubleSide;
@@ -708,6 +714,148 @@ export const ACCESSORIES: Accessory[] = [
       return g;
     },
   },
+
+  // --- dans le dos (repère du buste)
+  {
+    id: 'sac', label: 'Sac à dos', slot: 'dos', color: '#d98b3a',
+    build(_h, _n, c, b) {
+      const g = new THREE.Group();
+      const m = mat(c);
+      const d = 0.085;
+      const z = b.back - d / 2 + 0.008;
+      const bag = mesh(new THREE.BoxGeometry(0.2, 0.25, d), m, 0, -0.07, z);
+      g.add(bag);
+      // rabat arrondi et poche
+      const flap = mesh(new THREE.CylinderGeometry(d / 2 + 0.006, d / 2 + 0.006, 0.205, 16, 1, false, 0, Math.PI), mat(new THREE.Color(c).multiplyScalar(0.8)), 0, 0.055, z);
+      flap.rotation.z = Math.PI / 2;
+      flap.rotation.y = Math.PI / 2;
+      g.add(flap);
+      g.add(mesh(new THREE.BoxGeometry(0.13, 0.09, 0.025), mat(new THREE.Color(c).multiplyScalar(0.8)), 0, -0.12, z - d / 2 - 0.01));
+      g.add(mesh(new THREE.SphereGeometry(0.008, 8, 6), mat(0xe9c27a), 0, -0.085, z - d / 2 - 0.024));
+      return g;
+    },
+  },
+  {
+    id: 'ailes-ange', label: 'Ailes d’ange', slot: 'dos', color: '#f4efe6',
+    build(_h, _n, c, b) {
+      const g = new THREE.Group();
+      const m = mat(c);
+      for (const s of [-1, 1]) {
+        const wing = new THREE.Group();
+        // rangées de plumes, de plus en plus longues vers le bas
+        for (let i = 0; i < 6; i++) {
+          const len = 0.12 + i * 0.035;
+          const f = mesh(new THREE.SphereGeometry(0.03, 10, 8), m, s * len * 0.5, -i * 0.028, -i * 0.004);
+          f.scale.set(len / 0.06, 0.55, 0.22);
+          f.rotation.z = s * (0.35 - i * 0.13);
+          wing.add(f);
+        }
+        wing.position.set(s * 0.05, 0.02, b.back - 0.03);
+        wing.rotation.y = s * 0.45;
+        g.add(wing);
+      }
+      return g;
+    },
+  },
+  {
+    id: 'ailes-fee', label: 'Ailes de fée', slot: 'dos', color: '#7ec8d8',
+    build(_h, _n, c, b) {
+      const g = new THREE.Group();
+      const m = createToonMaterial({ color: c, rimStrength: 0.5 });
+      m.transparent = true;
+      m.opacity = 0.6;
+      m.side = THREE.DoubleSide;
+      m.depthWrite = false;
+      for (const s of [-1, 1]) {
+        const wing = new THREE.Group();
+        const up = mesh(new THREE.CircleGeometry(0.1, 24), m, s * 0.09, 0.06, 0);
+        up.scale.set(1, 0.6, 1);
+        up.rotation.z = s * 0.6;
+        const low = mesh(new THREE.CircleGeometry(0.065, 24), m, s * 0.06, -0.06, 0);
+        low.scale.set(1, 0.65, 1);
+        low.rotation.z = -s * 0.5;
+        wing.add(up, low);
+        wing.position.set(s * 0.02, 0, b.back - 0.02);
+        wing.rotation.y = s * 0.5;
+        g.add(wing);
+      }
+      return g;
+    },
+  },
+  {
+    id: 'ailes-demon', label: 'Ailes de chauve-souris', slot: 'dos', color: '#3a2a55',
+    build(_h, _n, c, b) {
+      const g = new THREE.Group();
+      const m = mat(c);
+      m.side = THREE.DoubleSide;
+      const shape = new THREE.Shape();
+      shape.moveTo(0, 0.02);
+      shape.lineTo(0.08, 0.1);
+      shape.lineTo(0.24, 0.07);
+      shape.quadraticCurveTo(0.21, 0.02, 0.22, -0.04);
+      shape.quadraticCurveTo(0.17, -0.02, 0.15, -0.07);
+      shape.quadraticCurveTo(0.1, -0.04, 0.07, -0.09);
+      shape.quadraticCurveTo(0.04, -0.04, 0, -0.04);
+      shape.closePath();
+      for (const s of [-1, 1]) {
+        const wing = mesh(new THREE.ShapeGeometry(shape, 8), m, s * 0.03, 0.02, b.back - 0.02);
+        wing.scale.x = s;
+        wing.rotation.y = s * 0.55;
+        g.add(wing);
+      }
+      return g;
+    },
+  },
+  // --- queues (repère du bassin)
+  {
+    id: 'queue-chat', label: 'Queue de chat', slot: 'queue', color: '#1d1a22',
+    build(_h, _n, c, b) {
+      const z = b.seat + 0.01;
+      const pts = [
+        new THREE.Vector3(0, -0.03, z), new THREE.Vector3(0, -0.1, z - 0.08), new THREE.Vector3(0.03, -0.08, z - 0.2),
+        new THREE.Vector3(0.05, 0.05, z - 0.26), new THREE.Vector3(0.03, 0.14, z - 0.24),
+      ];
+      return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.014, 8), mat(c));
+    },
+  },
+  {
+    id: 'queue-renard', label: 'Queue de renard', slot: 'queue', color: '#d98b3a',
+    build(_h, _n, c, b) {
+      const g = new THREE.Group();
+      const z = b.seat + 0.01;
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, -0.04, z), new THREE.Vector3(0, -0.1, z - 0.09), new THREE.Vector3(0.04, -0.05, z - 0.2), new THREE.Vector3(0.07, 0.06, z - 0.24),
+      ]);
+      const n = 9;
+      for (let i = 0; i < n; i++) {
+        const t = i / (n - 1);
+        const r = 0.025 + Math.sin(t * Math.PI * 0.85) * 0.04;
+        g.add(mesh(new THREE.SphereGeometry(r, 12, 10), mat(i >= n - 2 ? new THREE.Color(0xf4efe6) : c), ...curve.getPoint(t).toArray()));
+      }
+      return g;
+    },
+  },
+  {
+    id: 'queue-lapin', label: 'Queue de lapin', slot: 'queue', color: '#f4efe6',
+    build(_h, _n, c, b) {
+      return mesh(new THREE.SphereGeometry(0.04, 14, 12), mat(c), 0, -0.07, b.seat - 0.02);
+    },
+  },
+  {
+    id: 'queue-diable', label: 'Queue de diable', slot: 'queue', color: '#c2413a',
+    build(_h, _n, c, b) {
+      const g = new THREE.Group();
+      const z = b.seat + 0.01;
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, -0.05, z), new THREE.Vector3(-0.02, -0.16, z - 0.08), new THREE.Vector3(0.04, -0.2, z - 0.2), new THREE.Vector3(0.08, -0.1, z - 0.25),
+      ]);
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 32, 0.007, 6), mat(c)));
+      const tip = mesh(new THREE.ExtrudeGeometry(heartShape(0.028), { depth: 0.006, bevelEnabled: false }), mat(c), ...curve.getPoint(1).toArray());
+      tip.rotation.set(0, Math.PI / 2, Math.PI);
+      g.add(tip);
+      return g;
+    },
+  },
 ];
 
 /** Une boucle à chaque lobe d'oreille (côtés du crâne, un peu sous les yeux). */
@@ -757,7 +905,7 @@ function flower(r: number, c: THREE.Color): THREE.Group {
   return g;
 }
 
-function headband(h: HeadFit, c: THREE.Color): THREE.Group {
+function headband(h: HeadFit, c: THREE.Color, thick = 0.011): THREE.Group {
   const { cx, cz, r, top } = crown(h);
   const g = new THREE.Group();
   // arc d'une oreille à l'autre, par-dessus la coiffure
@@ -768,7 +916,13 @@ function headband(h: HeadFit, c: THREE.Color): THREE.Group {
     const a = (i / 24) * Math.PI;
     pts.push(new THREE.Vector3(cx + Math.cos(a) * rx, h.eye.y + Math.sin(a) * ry, cz + 0.01));
   }
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.011, 6), mat(c)));
+  const band = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, thick, 6), mat(c));
+  // ruban large : aplati d'avant en arrière
+  if (thick > 0.011) {
+    band.scale.z = 0.45;
+    band.position.z = (cz + 0.01) * 0.55;
+  }
+  g.add(band);
   return g;
 }
 

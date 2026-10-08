@@ -58,6 +58,10 @@ export class Needs {
    * remonte doucement tant que tous les besoins vont bien.
    */
   health = 100;
+  /** Multiplicateurs de baisse en plus (ex. le froid fatigue : { fatigue: 1.4 }, voir temperature.ts). */
+  factors: Partial<Record<NeedKey, number>> = {};
+  /** La santé peut remonter (faux quand le corps a trop froid ou trop chaud). */
+  canHeal = true;
 
   /** Fait passer `hours` heures de jeu ; `gait` : ce que fait le perso pendant ce temps. */
   tick(hours: number, gait: 'idle' | 'walk' | 'run' | 'sit' | 'sleep', night: boolean): void {
@@ -70,12 +74,13 @@ export class Needs {
       let rate = n.perHour * (gait === 'run' ? n.run : gait === 'walk' ? n.walk : 1);
       if (n.key === 'fatigue' && night) rate *= NIGHT_FATIGUE;
       if (n.key === 'fatigue' && gait === 'sit') rate *= SIT_FATIGUE;
+      rate *= this.factors[n.key] ?? 1;
       this.values[n.key] = Math.max(0, this.values[n.key] - rate * hours);
     }
     let harm = 0;
     for (const n of NEEDS) if (this.values[n.key] <= 0) harm += HARM_AT_ZERO[n.key];
     if (harm > 0) this.hurt(harm * hours);
-    else if (NEEDS.every((n) => this.values[n.key] >= HEAL_ABOVE)) this.heal(HEAL_PER_HOUR * hours);
+    else if (this.canHeal && NEEDS.every((n) => this.values[n.key] >= HEAL_ABOVE)) this.heal(HEAL_PER_HOUR * hours);
   }
 
   /** Fait perdre de la santé (chute, objet cassé qui blesse…). */

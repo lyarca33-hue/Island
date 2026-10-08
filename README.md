@@ -5,6 +5,12 @@
 Monde de RP en 3D dans le navigateur : un créateur de personnage, puis une map (un sol d'herbe)
 où le perso créé se promène, en cel shading avec le rendu HD-2D d'Arena Tactic.
 
+## Jouer en ligne
+
+**https://lyarca33-hue.github.io/Island/** : rien à installer, le lien ne change pas.
+Le jeu y est remis à jour tout seul à chaque fusion sur `main` (la version jouée s'affiche dans la
+fenêtre « Signaler »).
+
 ## Lancer le jeu
 
 ```bash
@@ -12,7 +18,9 @@ npm install
 npm run dev
 ```
 
-Puis ouvrir http://localhost:5173. Le jeu s'ouvre directement sur la map avec le dernier perso
+Puis ouvrir http://localhost:5173. La partie se sauvegarde toute seule (Menu → Partie) ; pour
+la retrouver sur un autre ordinateur, se connecter avec Google : voir
+[docs/compte-google.md](docs/compte-google.md). Le jeu s'ouvre directement sur la map avec le dernier perso
 créé (un perso par défaut la première fois) ; Menu → Personnage → « ✎ Modifier le personnage »
 ouvre le créateur, et « Jouer » ramène sur la map.
 

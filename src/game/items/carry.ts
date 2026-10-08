@@ -232,7 +232,13 @@ export class WorldItem {
   /** Une bouchée : l'aliment rétrécit (autour du point tenu, il reste dans la main). */
   bite(): void {
     if (!this.def.food) return;
-    this.portion = Math.max(0, this.portion - 1 / this.def.food.bites);
+    this.setPortion(this.portion - 1 / this.def.food.bites);
+  }
+
+  /** Part qui reste (1 entier, 0 mangé) : l'aliment rétrécit d'autant. */
+  setPortion(portion: number): void {
+    if (!this.def.food) return;
+    this.portion = THREE.MathUtils.clamp(portion, 0, 1);
     const s = 0.4 + 0.6 * this.portion;
     this.closed.scale.setScalar(s);
     this.closed.position.copy(this.gripPoint).multiplyScalar(1 - s);

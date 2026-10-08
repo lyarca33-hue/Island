@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Creator, loadSavedRecipe } from './creator/Creator';
+import { Creator, loadSavedRecipe, saveRecipe } from './creator/Creator';
 import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
 import { prefetchModel } from './creator/vrm';
+import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
+import { AutoSave, clearLocal, type GameSave, loadLocal, saveLocal } from './game/save';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
 import { ContextMenu } from './ui/ContextMenu';
@@ -14,6 +16,7 @@ import { Icon } from './ui/icons';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { RecipeBook } from './ui/RecipeBook';
 import { BookReader } from './ui/BookReader';
+import { SavePanel } from './ui/SavePanel';
 import { Menu, MenuSection, Shortcuts } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
@@ -25,11 +28,22 @@ import { NeedsHud, TimeControls } from './ui/TimeHud';
 export function App() {
   const [mode, setMode] = useState<'creator' | 'game'>('game');
   const [recipe, setRecipe] = useState<Recipe>(() => loadSavedRecipe() ?? defaultRecipe('f'));
+  /** Change à chaque partie chargée (compte) ou recommencée : le monde est reconstruit. */
+  const [run, setRun] = useState(0);
+  const replace = useCallback((s: GameSave | null) => {
+    if (s) saveLocal(s);
+    else clearLocal();
+    if (s?.recipe) {
+      saveRecipe(s.recipe);
+      setRecipe(s.recipe);
+    }
+    setRun((n) => n + 1);
+  }, []);
 
   if (mode === 'creator') {
     return <Creator initial={recipe} onDone={(r) => { setRecipe(r); setMode('game'); }} />;
   }
-  return <World recipe={recipe} onEdit={() => setMode('creator')} />;
+  return <World key={run} recipe={recipe} onEdit={() => setMode('creator')} onReplace={replace} />;
 }
 
 /**
@@ -37,7 +51,7 @@ export function App() {
  * (caméra, masquer, signaler), en haut à droite les jauges et l'horloge, en bas ce qu'on tient
  * et la saisie. H masque le tout pour profiter de la scène.
  */
-function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
+function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => void; onReplace: (s: GameSave | null) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
   const [ready, setReady] = useState<Game | null>(null);
@@ -62,6 +76,14 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
   /** Interface masquée (touche H) : il ne reste que la scène, les messages et les menus ouverts exprès. */
   const [hidden, setHidden] = useState(false);
+  /** Dernière sauvegarde automatique (ms). */
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const autosave = useRef<AutoSave | null>(null);
+  /** Quitte cette partie sans la sauver, pour en charger une autre (ou recommencer). */
+  const replaceGame = useCallback((s: GameSave | null) => {
+    autosave.current?.cancel();
+    onReplace(s);
+  }, [onReplace]);
   const noticeTimer = useRef(0);
   const flash = useCallback((text: string) => {
     setNotice(text);
@@ -112,17 +134,47 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
       if (m) g.onHover?.(null);
     };
     g.onNotice = flash;
+    // la partie gardée dans le navigateur, puis sauvée toute seule (et envoyée au compte Google)
+    const saved = loadLocal();
+    if (saved) {
+      try {
+        g.loadState(saved);
+        setSavedAt(saved.savedAt);
+      } catch (e) {
+        console.error('Partie sauvée illisible', e);
+      }
+    }
+    const capture = () => ({ ...g.saveState(), recipe });
+    const auto = new AutoSave(capture, (s, leaving) => {
+      setSavedAt(s.savedAt);
+      cloud.push(s, leaving);
+    });
+    autosave.current = auto;
+    cloud.current = capture;
+    cloud.adopt = (s) => {
+      replaceGame(s);
+      flash('Partie du compte chargée.');
+    };
     g.start().then(() => setLoading(false)).catch((e) => {
       console.error(e);
       setError('Le personnage n’a pas pu être chargé.');
     });
     return () => {
       clearTimeout(noticeTimer.current);
+      auto.stop();
+      if (cloud.current === capture) cloud.current = null;
       g.dispose();
       game.current = null;
       setReady(null);
     };
-  }, [recipe, flash]);
+  }, [recipe, flash, replaceGame]);
+
+  // le compte a une partie plus récente : le menu s'ouvre sur la question
+  useEffect(() => cloud.subscribe((st) => {
+    if (!st.conflict) return;
+    setSection('partie');
+    setMenuOpen(true);
+  }), []);
 
   return (
     <div className={`app${hidden ? ' hud-off' : ''}`}>
@@ -162,6 +214,9 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
             </>
           }
         >
+          <MenuSection title="Partie" icon="cloud" open={section === 'partie'} onToggle={fold('partie')}>
+            <SavePanel savedAt={savedAt} onNewGame={() => replaceGame(null)} />
+          </MenuSection>
           <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
             <Shortcuts />
           </MenuSection>

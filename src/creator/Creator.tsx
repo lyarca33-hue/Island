@@ -4,10 +4,10 @@ import { ACC_COLORS, ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from '.
 import { CreatorScene, type Framing } from './CreatorScene';
 import { EXPRESSIONS } from './expressions';
 import {
-  BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, defaultRecipe, EYE_COLORS, HAIR_COLORS, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
+  BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, defaultRecipe, EYE_COLORS, FANTASY_SKINS, HAIR_COLORS, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
   SKIN_TONES, type Body, type Clothes, type Recipe,
 } from './recipe';
-import { BLUSH_COLORS, BROW_COLORS, FACE_MARKS, MARK_COLORS, NO_MAKEUP, PATTERNS, type Makeup } from './looks';
+import { BLUSH_COLORS, BROW_COLORS, FACE_MARKS, LIP_COLORS, MARK_COLORS, NO_MAKEUP, PATTERNS, SHADOW_COLORS, type Makeup } from './looks';
 import { prefetchModel } from './vrm';
 import './creator.css';
 
@@ -36,7 +36,7 @@ export function loadSavedRecipe(): Recipe | null {
   }
 }
 
-function save(r: Recipe): void {
+export function saveRecipe(r: Recipe): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(r));
   } catch {
@@ -91,7 +91,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
       clearTimeout(t);
       if (live) setBusy(false);
     });
-    save(recipe);
+    saveRecipe(recipe);
     return () => {
       live = false;
       clearTimeout(t);
@@ -242,6 +242,10 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
               <p className="hint">Les yeux, la bouche et les expressions viennent avec le visage.</p>
               <h3>Joues roses</h3>
               <Swatches colors={BLUSH_COLORS} value={recipe.makeup?.blush ?? null} none="Aucune" onChange={(c) => setMakeup({ blush: c })} />
+              <h3>Fard à paupières</h3>
+              <Swatches colors={SHADOW_COLORS} value={recipe.makeup?.shadow ?? null} none="Aucun" onChange={(c) => setMakeup({ shadow: c })} />
+              <h3>Rouge à lèvres</h3>
+              <Swatches colors={LIP_COLORS} value={recipe.makeup?.lips ?? null} none="Aucun" onChange={(c) => setMakeup({ lips: c })} />
               <h3>Sourcils</h3>
               <Swatches colors={BROW_COLORS} value={recipe.makeup?.brows ?? null} onChange={(c) => setMakeup({ brows: c })} />
               <h3>Cils et contour des yeux</h3>
@@ -282,7 +286,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
                     <div className="chips wrap">
                       <button className={!worn ? 'on' : ''} onClick={() => setAcc(slot, null)}>Aucun</button>
                       {ACCESSORIES.filter((a) => a.slot === slot).map((a) => (
-                        <button key={a.id} className={worn?.id === a.id ? 'on' : ''} onClick={() => setAcc(slot, a.id)}>{a.label}</button>
+                        <button key={a.id} className={worn?.id === a.id ? 'on' : ''} onClick={() => { setAcc(slot, a.id); setFraming(slot === 'dos' || slot === 'queue' ? 'corps' : 'visage'); }}>{a.label}</button>
                       ))}
                     </div>
                     {worn && (
@@ -307,6 +311,8 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
             <>
               <h3>Peau</h3>
               <Swatches colors={SKIN_TONES.slice(1)} value={recipe.skinTone} onChange={(c) => set({ skinTone: c })} />
+              <h3>Peau fantaisie</h3>
+              <Swatches colors={FANTASY_SKINS} value={recipe.skinTone} onChange={(c) => set({ skinTone: c })} />
               <h3>Yeux</h3>
               <Swatches colors={EYE_COLORS} value={recipe.eyeColor} onChange={(c) => set({ eyeColor: c })} />
               <h3>Cheveux</h3>

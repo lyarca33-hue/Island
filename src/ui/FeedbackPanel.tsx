@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 const ISSUES_URL = 'https://github.com/lyarca33-hue/Island/issues/new';
 /** GitHub refuse les adresses trop longues : au-delà, le texte est coupé (le bouton Copier garde tout). */
 const MAX_BODY = 6000;
+/** Version jouée : posée par la mise en ligne (date + commit), « locale » avec npm run dev. */
+const VERSION: string = import.meta.env.VITE_VERSION || 'locale';
 
 /** Titre de l'issue : la première ligne du texte, raccourcie. */
 function titleOf(text: string): string {
@@ -34,7 +36,7 @@ export function FeedbackPanel({ initial, onClose }: { initial: string; onClose: 
   const [text, setText] = useState(initial);
   const [copied, setCopied] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
-  const full = text.trim();
+  const full = `${text.trim()}\n\n_Version : ${VERSION}_`;
   const empty = !text.trim();
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export function FeedbackPanel({ initial, onClose }: { initial: string; onClose: 
         <button onClick={send} disabled={empty} title="Ouvre une issue pré-remplie sur GitHub (Ctrl+Entrée)">Envoyer sur GitHub</button>
         <button onClick={copy} disabled={empty} title="Pour le coller dans la discussion du projet">{copied ? 'Copié ✓' : 'Copier'}</button>
       </div>
-      <small>GitHub s’ouvre dans un nouvel onglet : il reste à cliquer sur « Create ». Copier sert à le coller dans la discussion.</small>
+      <small>Version : {VERSION}. GitHub s’ouvre dans un nouvel onglet : il reste à cliquer sur « Create ». Copier sert à le coller dans la discussion.</small>
     </div>
   );
 }

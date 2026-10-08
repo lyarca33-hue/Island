@@ -186,6 +186,20 @@ export class Character {
     }
   }
 
+  /** Cap du perso (radians, autour de la verticale). */
+  get yaw(): number {
+    return this.heading;
+  }
+
+  /** Remet le perso debout à `pos`, tourné de `yaw` (partie chargée), sans marche en cours. */
+  placeAt(pos: THREE.Vector3, yaw: number): void {
+    this.root.position.set(pos.x, 0, pos.z);
+    this.heading = yaw;
+    this.root.rotation.set(0, yaw, 0, 'XYZ');
+    this.setRoute(null);
+    this.approach = null;
+  }
+
   /** Marche jusqu'à un point du sol (clic). */
   goTo(p: THREE.Vector3, running: boolean): void {
     this.setRoute(p);
