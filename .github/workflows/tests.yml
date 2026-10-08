@@ -1,0 +1,42 @@
+# Banc d'essai automatique sur chaque PR : tests unitaires (Vitest), puis le jeu lancé dans
+# Chromium pour quelques gestes (Playwright). Détails : docs/tests.md
+name: Tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unitaires:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  fumee:
+    name: test de fumée
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      # captures d'écran (à chaque étape) et trace en cas d'échec
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-de-fumee
+          path: |
+            test-results
+            playwright-report
+          retention-days: 14

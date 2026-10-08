@@ -628,8 +628,10 @@ export class Character {
       delta = Math.atan2(Math.sin(delta), Math.cos(delta));
       this.heading += delta * Math.min(1, dt * TURN_RATE);
       this.root.rotation.y = this.heading;
-    } else if (this.approach) {
-      // arrivé : se tourner vers l'objet (ou le meuble), puis agir
+    } else if (this.approach && !this.target && !this.busy) {
+      // arrivé, les mains libres de tout geste (un ordre donné pendant qu'elles finissent de
+      // prendre attend la fin, sinon l'action serait refusée et le perso resterait planté) :
+      // se tourner vers l'objet (ou le meuble), puis agir
       const to = this.approach.face.clone().sub(this.root.position);
       let delta = Math.atan2(to.x, to.z) - this.heading;
       delta = Math.atan2(Math.sin(delta), Math.cos(delta));
