@@ -5447,7 +5447,7 @@ export class Game {
         const stove = this.stoveUnder(pan);
         if (stove) this.soil(stove.heater, 1);
         this.practice(XP_COOKED);
-      } else if (before < cap0 && t >= cap0) this.onNotice?.(`Ça sent le brûlé : retire ${the(food.name)} du feu !`);
+      } else if (!water && before < cap0 && t >= cap0) this.onNotice?.(`Ça sent le brûlé : retire ${the(food.name)} du feu !`);
       else if (now === 'brûlé' && was !== 'brûlé') this.onNotice?.(`${name} a brûlé.`);
       // ça fume dès que ça commence à brûler, de plus en plus
       if (t > cap0) {
@@ -7075,17 +7075,19 @@ export class Game {
     const tool = this.heldWith((h) => !!h.def.stirs);
     const cookedIn = (p: WorldItem) => this.inPan(p).some((f) => doneness(f.def, f.cooking) !== 'cru');
     const from = this.panFor(pan, (p) => cookedIn(p) && !c.carried.includes(p));
-    const plate = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.plate && !c.carried.includes(i) && !this.shelfOf(i) && !i.dirty && !this.foodOn(i));
     const food = from && this.inPan(from).find((f) => doneness(f.def, f.cooking) !== 'cru');
+    // la soupe va dans un bol
+    const soup = !!food && SOUPS.includes(food.name);
+    const plate = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.plate && (!soup || !!i.def.deep) && !c.carried.includes(i) && !this.shelfOf(i) && !i.dirty && !this.foodOn(i));
     if (!tool) this.onNotice?.('Prends la spatule ou la louche (dans le pot à ustensiles) pour servir.');
     else if (!from || !food) this.onNotice?.('Rien de cuit à servir dans les poêles et casseroles.');
-    else if (!plate?.def.plate) this.onNotice?.('Pas d’assiette ou de bol propre et vide où servir.');
+    else if (!plate?.def.plate) this.onNotice?.(soup ? 'Pas de bol propre et vide où servir la soupe (il y en a au placard).' : 'Pas d’assiette ou de bol propre et vide où servir.');
     else if (c.carried.includes(plate)) this.onNotice?.('Pose d’abord l’assiette pour y servir.');
     else if (this.shelfOf(plate)) this.onNotice?.(`Sors d’abord ${the(plate.name)} du rangement.`);
     else if (plate.dirty) this.onNotice?.(`${cap(the(plate.name))} est sale.`);
     else if (this.foodOn(plate)) this.onNotice?.(`Il y a déjà ${this.foodOn(plate)!.name} dans ${the(plate.name)}.`);
     else if (DRAINS.some((n) => food.name.startsWith(n)) && from.contents === 'eau' && from.level > 0.01) this.onNotice?.(`Égoutte d’abord ${the(food.name)} : prends ${the(from.name)} et vide l’eau dans l’évier.`);
-    else if (SOUPS.includes(food.name) && !plate.def.deep) this.onNotice?.('La soupe se sert dans un bol (il y en a au placard).');
+    else if (soup && !plate.def.deep) this.onNotice?.('La soupe se sert dans un bol (il y en a au placard).');
     else {
       // 1. dans l'ustensile : l'aliment passe sur la spatule ; 2. au-dessus de l'assiette : il y glisse
       return this.gesture(tool, from, 'stir', this.above(from, 0.01), () => {
