@@ -90,6 +90,7 @@
 .hud-paused { color: var(--hud-honey); }
 .hud-day { display: flex; align-items: center; gap: 6px; color: var(--hud-ink-2); font-size: 12.5px; }
 .hud-day::before { content: ''; width: 3px; height: 3px; border-radius: 50%; background: var(--hud-ink-3); }
+.hud-weather { font-size: 13px; line-height: 1; }
 
 @media (max-width: 560px) {
   /* téléphone : jauges et horloge sur une ligne, sous la barre du menu */

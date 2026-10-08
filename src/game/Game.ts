@@ -25,10 +25,11 @@ import { BAGS_PER_ROLL, UPKEEP_FEMININE, UPKEEP_PLURAL } from './items/upkeep';
 import { HOT_WATER, INFUSE, LIFE_FEMININE, LIFE_PLURAL, TEA, TEA_BAGS, TEA_COLOR, teaBag } from './items/life';
 import { KitchenSound } from './sound';
 import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
+import { createPrecipitation, createWindowDrops, outdoorPanes, type Precipitation, Weather, type WindowDrops } from './meteo';
 import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
-import { placeRuns, Room, WALL_T } from './room';
+import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { CHANNELS, Tv } from './tv';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, type Quality } from './postfx';
@@ -521,6 +522,7 @@ const ON_TMP = new THREE.Vector3();
 const ON_POS = new THREE.Vector3();
 /** Rayon (m) sous lequel une pièce d'objet ne fait pas d'ombre. */
 const SMALL_CASTER = 0.035;
+const roofProbe = new THREE.Vector3();
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -532,6 +534,10 @@ export class Game {
   private hemi: THREE.HemisphereLight;
   /** Heure du jeu (4 fois plus rapide que le temps réel) : pilote la lumière et les besoins. */
   readonly clock = new GameClock();
+  /** Météo (pluie, neige, ciel gris selon la saison) : `weather.rain` sert au bruit de la pluie. */
+  readonly weather = new Weather();
+  private precip: Precipitation;
+  private windowDrops: WindowDrops;
   /** Fatigue, faim, soif, hygiène du perso. */
   readonly needs = new Needs();
   /** Niveau des récipients tenus à l'image précédente : ce qui a été bu depuis. */
@@ -905,6 +911,9 @@ export class Game {
 
     this.motes = createMotes();
     this.scene.add(this.motes.points);
+    this.precip = createPrecipitation();
+    this.scene.add(this.precip.group);
+    this.windowDrops = createWindowDrops(outdoorPanes(this.scene, this.underRoof));
     this.scene.add(this.puffs.group);
     this.stream = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.005, 1, 8), new THREE.MeshBasicMaterial({ color: 0x9fcde6, transparent: true, opacity: 0.85 }));
     this.stream.visible = false;
@@ -6266,15 +6275,47 @@ export class Game {
     else if (this.activeRoom && !this.activeRoom.contains(c.position, 2 * WALL_T + 0.15)) this.activeRoom = null;
     // les ombres des lampes et fenêtres restent à la dernière pièce occupée (dehors aussi)
     this.shadowRoom = this.activeRoom ?? this.shadowRoom ?? this.rooms[0] ?? null;
-    for (const r of this.rooms) r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null, r === this.shadowRoom);
+    for (const r of this.rooms) {
+      r.overcast = this.weather.cloud;
+      r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null, r === this.shadowRoom);
+    }
     for (const tv of this.tvs.values()) tv.tick(dt);
     this.placeBubble();
     // saison dehors : herbe, neige, pétales, feuilles ou flocons ; dans une pièce, poussières dorées
     const look = seasonLook(this.clock.yearPos);
-    setGroundSeason(this.ground, look.grass, look.snow);
+    // météo : pluie, flocons, gouttes aux vitres ; sol plus sombre mouillé, blanchi par la neige tombée
+    const w = this.weather;
+    w.update(this.clock, dt, (dt * this.clock.speed) / 3600);
+    const damp = 1 - 0.28 * w.wet;
+    setGroundSeason(this.ground, [look.grass[0] * damp, look.grass[1] * damp, look.grass[2] * damp], Math.max(look.snow, w.cover));
+    this.rainView.copy(toCamera);
+    this.precip.update(dt, this.character.position, w, this.rainHidden);
+    this.windowDrops.update(dt, w);
+    this.sound.setRain(w.rain);
     this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
     this.scheduleShadows();
     this.post.render();
+  };
+
+  /** Le point (x, z) est-il sous le toit d'une pièce (murs compris) ? La pluie n'y tombe pas. */
+  private underRoof = (x: number, z: number): boolean => this.rooms.some((r) => r.contains(roofProbe.set(x, 0, z), WALL_T));
+  /** Direction de la caméra à cette image. */
+  private rainView = new THREE.Vector3(0, 1, 0);
+  /**
+   * Goutte ou flocon caché : sous un toit, ou (perso dans une pièce aux murs abaissés) entre la
+   * caméra et les pièces, là où il passerait devant elles et semblerait tomber dedans.
+   */
+  private rainHidden = (x: number, y: number, z: number): boolean => {
+    if (this.underRoof(x, z)) return true;
+    if (!this.activeRoom) return false;
+    // vue de la caméra, la goutte passe devant le sol ou le haut des murs d'une pièce
+    const v = this.rainView;
+    for (const h of [0, WALL_H]) {
+      const k = (y - h) / v.y;
+      roofProbe.set(x - v.x * k, 0, z - v.z * k);
+      if (this.rooms.some((r) => r.contains(roofProbe, WALL_T))) return true;
+    }
+    return false;
   };
 
   /** Pièce dont les lampes et les fenêtres font des ombres : celle du perso, gardée dehors. */
@@ -7160,7 +7201,7 @@ export class Game {
     );
     c.lookAt(this.focus);
     // lumière selon l'heure et la saison ; soleil et carte d'ombre suivent le perso
-    applySky(this.clock.solarHour, this.clock.noonElevation, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus);
+    applySky(this.clock.solarHour, this.clock.noonElevation, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus, this.weather.cloud);
   }
 
   private disposed = false;

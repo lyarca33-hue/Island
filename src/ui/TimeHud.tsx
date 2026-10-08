@@ -3,6 +3,7 @@ import { hhmm, SEASON_DAYS, SEASONS, TIME_SPEED, YEAR_DAYS } from '../game/clock
 import type { Game } from '../game/Game';
 import { skillPerks } from '../game/items/freshness';
 import { NEEDS } from '../game/needs';
+import { WEATHERS, type WeatherKind } from '../game/meteo';
 import { forecast, type GaugeKey, type GaugeState, GaugeWatch } from './gauges';
 import { Icon, type IconName } from './icons';
 import './time.css';
@@ -251,6 +252,7 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
         <b>{clock.label}</b>
         {clock.speed === 0 && <Icon name="pause" size={13} className="hud-paused" />}
         <span className="hud-day" title={`Jour ${clock.day} · lever ${hhmm(clock.sun.rise)}, coucher ${hhmm(clock.sun.set)}`}>{clock.dateLabel}</span>
+        <span className="hud-weather" title={game.weather.label}>{game.weather.icon}</span>
       </button>
     </div>
   );
@@ -282,6 +284,15 @@ export function TimeControls({ game }: { game: Game | null }) {
         ))}
       </div>
       <small>Soleil : lever {hhmm(sun.rise)}, coucher {hhmm(sun.set)}. Une saison dure {SEASON_DAYS} jours.</small>
+      <span>Météo : <b>{game.weather.label}</b></span>
+      <div className="time-speeds">
+        <button className={game.weather.force === null ? 'active' : ''} title="Selon la saison" onClick={() => (game.weather.force = null)}>Auto</button>
+        {(Object.keys(WEATHERS) as WeatherKind[]).map((k) => (
+          <button key={k} className={game.weather.force === k ? 'active' : ''} title={WEATHERS[k].name} onClick={() => (game.weather.force = k)}>
+            {WEATHERS[k].icon}
+          </button>
+        ))}
+      </div>
       <label>
         <span>Heure : <b>{clock.label}</b></span>
         <input
