@@ -49,3 +49,20 @@ export function loadPoseAnimations(): Promise<Array<{ scene: THREE.Object3D; cli
   ).then((all) => all.flat());
   return poses;
 }
+
+/**
+ * Réserve de clips de la même bibliothèque (CC0), pas encore reliés à une action : sauter,
+ * nager, se baisser en marchant, trottiner, rouler, se battre (poings, épée, pistolet), tomber,
+ * conduire, tenir une torche... 3 Mo : jamais chargés au démarrage, seulement à la demande
+ * (Puppet.loadExtraAnimations). null si le fichier manque.
+ */
+export const EXTRA_URL = `${import.meta.env.BASE_URL}anim/ual_extra.glb`;
+let extra: Promise<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] } | null> | null = null;
+
+export function loadExtraAnimations(): Promise<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] } | null> {
+  extra ??= new GLTFLoader()
+    .loadAsync(EXTRA_URL)
+    .then((g) => ({ scene: g.scene, clips: g.animations }))
+    .catch(() => null);
+  return extra;
+}

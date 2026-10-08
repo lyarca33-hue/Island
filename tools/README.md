@@ -45,6 +45,18 @@ python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public
     --clips Interact PickUp_Table Fixing_Kneeling Push_Loop
 ```
 
+La réserve (les 30 autres clips du volume 1, chargés seulement à la demande par
+`Puppet.loadExtraAnimations()`) :
+
+```bash
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public/anim/ual_extra.glb \
+    --clips A_TPose Crouch_Fwd_Loop Death01 Driving_Loop Hit_Chest Hit_Head Idle_Loop Idle_Torch_Loop \
+    Jog_Fwd_Loop Jump_Land Jump_Loop Jump_Start Pistol_Aim_Down Pistol_Aim_Neutral Pistol_Aim_Up \
+    Pistol_Idle_Loop Pistol_Reload Pistol_Shoot Punch_Cross Punch_Jab Roll Spell_Simple_Enter \
+    Spell_Simple_Exit Spell_Simple_Shoot Sprint_Loop Swim_Fwd_Loop Swim_Idle_Loop Sword_Attack \
+    Sword_Idle Walk_Loop
+```
+
 Les os sont lus par `src/creator/retarget.ts` (`UAL_TO_VRM`).
 
 Les clips Mixamo du jeu (`public/anim/mixamo.glb`) viennent de X Bot, sans le mannequin, avec
