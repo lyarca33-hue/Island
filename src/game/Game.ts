@@ -9,11 +9,15 @@
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
-import { applySky, GameClock, seasonLook } from './clock';
+import { applySky, GameClock, seasonLook, TIME_SPEED } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
 import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
+import { loadNature } from './nature';
 import { DELIVERY_SPOT, Entree } from './entree';
+import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
 import { ENTREE_FEMININE } from './items/entree';
+import { Buanderie } from './buanderie';
+import { LINGE_FEMININE } from './items/linge';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
@@ -108,6 +112,7 @@ const TAP_DRINK = { seconds: 3 * SPLASH_CYCLE, thirst: 25 };
 const AIR_DRY_MINUTES = 120;
 /** Courses commandées : le sac arrive au bout de tant d'heures de jeu. */
 const DELIVERY_HOURS = 0.5;
+
 /**
  * Entretien : une grande flaque (rayon, m) demande la serpillière ; la serpillière essuie d'un
  * coup les flaques à cette distance (m) ; se couper sur des éclats de verre (santé) ; manger avec
@@ -459,7 +464,7 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...PATISSERIE_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE, ...FECULENT_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...PATISSERIE_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE, ...FECULENT_FEMININE, ...LINGE_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...PATISSERIE_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL, ...FECULENT_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -594,7 +599,11 @@ export class Game {
   /** Mains mouillées après les avoir lavées (1), sèches (0) : le torchon les sèche d'un coup. */
   private wetHands = 0;
   /** Courses commandées : heures de jeu avant que le sac arrive, et ce qu'il contiendra. */
-  private delivery: { hours: number; names: string[] } | null = null;
+  private delivery: Delivery | null = null;
+  /** Le porte-monnaie, et les objets cassés à racheter (argent.ts). */
+  readonly argent = new Argent();
+  /** Ouvre la fenêtre du magasin (Magasin.tsx). */
+  onShop: (() => void) | null = null;
   /** Sacs de courses posés : les aliments (noms) encore dedans. */
   private bags = new Map<WorldItem, string[]>();
   private ground: THREE.Mesh;
@@ -602,6 +611,8 @@ export class Game {
   private garden: Garden;
   /** L'entrée : vêtements, chaussures, boîte aux lettres et courrier (entree.ts). */
   private entree: Entree;
+  /** La lessive : panier à linge, machine à laver, sèche-linge, étendoir (buanderie.ts). */
+  private laundry: Buanderie;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
@@ -824,6 +835,11 @@ export class Game {
       sitting: () => this.sitting,
     });
     this.scene.add(this.garden.group);
+    // les arbres et les plantes du pack nature, dès que le fichier est chargé (en attendant, ceux faits
+    // par programme) ; en qualité basse, moins d'herbes et de fleurs au sol
+    loadNature()
+      .then((kit) => this.garden.dress(kit, ROOMS.map((r) => r.rect), this.qualityLevel === 'basse' ? 0.4 : 1))
+      .catch((e) => console.warn('pack nature non chargé', e));
     this.entree = new Entree({
       character: this.character,
       items: () => this.items,
@@ -837,6 +853,19 @@ export class Game {
       outdoors: () => !this.underRoof(this.character.position.x, this.character.position.z),
       outdoorAir: () => this.body.outdoor,
       rain: () => this.weather.rain,
+    });
+    this.laundry = new Buanderie({
+      character: this.character,
+      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
+      remove: (item) => this.removeItem(item),
+      notice: (t) => this.onNotice?.(t),
+      say: (t) => this.say(t),
+      mood: (n) => this.addMood(n),
+      sound: (name, at) => this.sound.play(name, this.hear(at)),
+      outdoors: (at) => !this.underRoof(at.x, at.z),
+      weather: () => this.weather,
+      night: () => this.clock.isNight,
+      outdoorAir: () => this.body.outdoor,
     });
     this.scene.add(this.character.root);
 
@@ -926,6 +955,7 @@ export class Game {
     }
     this.garden.attach(this.items);
     this.entree.attach(this.items);
+    this.laundry.attach(this.items);
     // la bouilloire a de quoi faire deux tasses au départ
     for (const item of this.items) {
       if (!item.def.tank) continue;
@@ -1506,6 +1536,8 @@ export class Game {
       if (jet) jet.visible = false;
       this.brew = null;
     }
+    item.object.updateMatrixWorld(true);
+    this.argent.noteBroken(item.def, item.object.getWorldPosition(new THREE.Vector3()), item.object.getWorldQuaternion(new THREE.Quaternion()));
     item.object.removeFromParent();
     for (const it of above) this.flying.push({ item: it, vel: new THREE.Vector3(), spin: new THREE.Vector3(), bounced: false });
     if (this.isObstacle(item)) this.character.nav = this.buildNav();
@@ -5061,6 +5093,7 @@ export class Game {
     this.wet = WET_SECONDS;
     this.wearItem(s.shower, WEAR_TAP);
     this.character.stopWash();
+    this.laundry.showered();
     this.onNotice?.('Douche prise : propre de la tête aux pieds. Sèche-toi avec la serviette, sinon tu mouilles le sol.');
   }
 
@@ -5946,6 +5979,8 @@ export class Game {
     else if (this.garden.owns(item)) return this.garden.click(item, running);
     // boîte aux lettres : relever le courrier (entree.ts)
     else if (this.entree.owns(item)) return this.entree.click(item, running);
+    // machines à laver, étendoir, linge propre à ranger dans l'armoire (buanderie.ts)
+    else if (this.laundry.owns(item)) return this.laundry.click(item, running);
     // bouton d'un appareil (un feu de la gazinière, la machine à café) : l'allumer ou l'éteindre
     else if (opts.button !== undefined && item.def.heat) return this.toggleHeat(item, running, opts.button);
     // poubelle : on y jette ce qu'on tient
@@ -6426,7 +6461,7 @@ export class Game {
     // la liste et le sac de courses
     if (item.def.id === 'liste-courses') {
       add('Lire la liste de courses', () => this.readList());
-      if (!this.delivery) add('Commander les courses', () => this.orderGroceries());
+      add(this.delivery ? 'Magasin (commande en route)' : 'Faire les courses au magasin', () => this.openShop());
     }
     if (this.bags.has(item)) add('Ranger les courses', () => this.unpackGroceries(ref));
     if (item.def.dish && item.wet > 0 && held.some((h) => h.def.towel)) add('Essuyer avec le torchon', () => this.dryDish(ref));
@@ -6553,6 +6588,7 @@ export class Game {
     if (item === this.sitting) add('Se lever', () => this.standUp());
     this.garden.menu(item, add);
     this.entree.menu(item, add);
+    this.laundry.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
     if (item.def.movable && !held.length) add(`Déplacer ${the(item.name)}`, () => this.grabFurniture(item, false));
@@ -6712,7 +6748,7 @@ export class Game {
   }
 
   private stateOf(item: WorldItem): string {
-    const garden = this.garden.stateOf(item) ?? this.entree.stateOf(item);
+    const garden = this.garden.stateOf(item) ?? this.entree.stateOf(item) ?? this.laundry.stateOf(item);
     if (garden) return garden;
     const words: string[] = [];
     const a = agree(item.name);
@@ -6947,6 +6983,7 @@ export class Game {
     this.sound.setRain(w.rain);
     this.garden.update(dt, this.clock.yearPos, Math.max(look.snow, w.cover));
     this.garden.rain(w.rain, (dt * this.clock.speed) / 3600);
+    this.laundry.update(dt, this.clock.speed / TIME_SPEED);
     this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
     this.scheduleShadows();
     this.post.render();
@@ -7982,10 +8019,91 @@ export class Game {
     if (this.delivery) return fail('Les courses sont déjà commandées : le sac arrive bientôt à la porte.');
     const list = this.shoppingList();
     if (!list.length) return fail('Rien ne manque : pas besoin de courses.');
-    const names = list.flatMap(([name, n]) => Array<string>(n).fill(name));
-    this.delivery = { hours: DELIVERY_HOURS, names };
-    this.onNotice?.(`Courses commandées (${this.listText(list)}) : le sac arrive devant la porte dans une demi-heure.`);
+    const lines = list.flatMap(([name, n]) => {
+      const def = [...ITEM_BY_ID.values()].find((d) => d.name === name);
+      return def ? [{ id: def.id, n }] : [];
+    });
+    return this.placeOrder(lines);
+  }
+
+  /** Ouvre le magasin (fenêtre de l'interface) ; sans interface, commande ce qui manque. */
+  openShop(): boolean {
+    if (this.onShop) {
+      this.onShop();
+      return true;
+    }
+    return this.orderGroceries();
+  }
+
+  /**
+   * Commande et paie `lines` (aliments et objets de la maison) : tout arrive par le sac de
+   * livraison, devant la porte, au bout d'une demi-heure de jeu.
+   */
+  placeOrder(lines: OrderLine[]): boolean {
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    lines = lines.filter((l) => l.n > 0 && ITEM_BY_ID.has(l.id));
+    if (this.delivery) return fail('Une commande est déjà en route : le sac arrive bientôt à la porte.');
+    if (!lines.length) return fail('Le panier est vide.');
+    const total = orderTotal(lines);
+    if (!this.argent.spend(total)) return fail(`Pas assez d’argent : il faut ${euros(total)}, il reste ${euros(this.argent.money)}.`);
+    const names: string[] = [];
+    const house: Delivery['house'] = [];
+    for (const { id, n } of lines) {
+      const def = ITEM_BY_ID.get(id)!;
+      // un objet cassé racheté n'est plus à racheter ; un meuble garde où il était
+      for (let i = 0; i < n; i++) (def.food || STOCK[def.name] ? names.push(def.name) : house.push({ id, at: this.argent.takeBroken(id) }));
+    }
+    this.delivery = { hours: DELIVERY_HOURS, names, house };
+    this.onNotice?.(`Commande payée (${euros(total)}, il reste ${euros(this.argent.money)}) : le livreur passe dans une demi-heure.`);
     return true;
+  }
+
+  /** Ce que le marché rachète dans la maison : légumes du jardin, pommes et plats faits maison, avec leur prix. */
+  marketItems(): Array<{ ref: string; name: string; stars: number; price: number }> {
+    const carried = this.character.carried;
+    return this.items.flatMap((it) => {
+      if (carried.includes(it) || this.bags.has(it) || this.flying.some((f) => f.item === it) || !it.def.food) return [];
+      if (it.def.cook && doneness(it.def, it.cooking) === 'cru') return [];
+      const stars = this.starsOf(it);
+      const price = sellPrice(it.def, stars, freshness(it.def, it.age));
+      return price > 0 ? [{ ref: this.ref(it), name: it.name, stars, price }] : [];
+    });
+  }
+
+  /** Vend au marché l'objet `ref` : il part, l'argent arrive dans le porte-monnaie. */
+  sellItem(ref: string): boolean {
+    const it = this.byRef(ref);
+    const offer = it && this.marketItems().find((m) => m.ref === ref);
+    if (!it || !offer) return this.notice('Le marché ne rachète pas ça.');
+    this.removeItem(it);
+    this.argent.earn(offer.price);
+    this.onNotice?.(`Vendu au marché : ${offer.name} pour ${euros(offer.price)}.`);
+    return true;
+  }
+
+  /** Vend au marché tout ce qu'il rachète. */
+  sellAll(): boolean {
+    // les objets d'abord : les repères (« tomate-2 ») changent à chaque vente
+    const offers = this.marketItems().map((m) => ({ ...m, item: this.byRef(m.ref)! }));
+    if (!offers.length) return this.notice('Rien à vendre au marché.');
+    let total = 0;
+    for (const o of offers) {
+      this.removeItem(o.item);
+      total += o.price;
+    }
+    this.argent.earn(total);
+    this.onNotice?.(`Vendu au marché : ${offers.length} produit${offers.length > 1 ? 's' : ''} pour ${euros(total)}.`);
+    return true;
+  }
+
+  /** Commande en route : ce qu'elle contient, et dans combien de minutes de jeu elle arrive. */
+  pendingOrder(): { minutes: number; names: string[] } | null {
+    const d = this.delivery;
+    if (!d) return null;
+    return { minutes: Math.max(1, Math.ceil(d.hours * 60)), names: [...d.names, ...d.house.map((h) => ITEM_BY_ID.get(h.id)?.name ?? h.id)] };
   }
 
   /** Le livreur passe : le sac de courses est posé devant la porte d'entrée. */
@@ -7995,8 +8113,20 @@ export class Game {
     d.hours -= hours;
     if (d.hours > 0) return;
     this.delivery = null;
+    // les objets de la maison : la vaisselle dans le sac (rangée avec les courses), le reste posé à sa place ou devant la porte
+    const loose = d.house.filter((h) => {
+      const def = ITEM_BY_ID.get(h.id);
+      if (def?.portable && this.homeOf(new WorldItem(def))) d.names.push(def.name);
+      else return !!def;
+      return false;
+    });
+    loose.forEach((h, i) => this.placeBought(h, i));
+    if (loose.length) this.character.nav = this.buildNav();
     const def = ITEM_BY_ID.get('sac-courses');
-    if (!def) return;
+    if (!def || !d.names.length) {
+      if (loose.length) this.onNotice?.('Ding-dong ! La commande est arrivée : ce qui est cassé a été remplacé.');
+      return;
+    }
     const bag = new WorldItem(def);
     // dans l'entrée, à côté de la porte de la maison
     bag.object.position.copy(DELIVERY_SPOT);
@@ -8004,6 +8134,39 @@ export class Game {
     this.scene.add(bag.object);
     this.bags.set(bag, d.names);
     this.onNotice?.('Ding-dong ! Les courses sont arrivées : le sac est dans l’entrée, à côté de la porte. Clic droit dessus : « Ranger les courses ».');
+  }
+
+  /** Pose un objet acheté : un meuble là où l'ancien a cassé, un objet portable devant la porte (`i` : rang, pour ne pas les empiler). */
+  private placeBought({ id, at: was }: Delivery['house'][number], i: number): void {
+    const def = ITEM_BY_ID.get(id);
+    if (!def) return;
+    const it = new WorldItem(def);
+    if (was && !def.portable) {
+      it.object.position.fromArray(was.p);
+      it.object.quaternion.fromArray(was.q).normalize();
+    } else {
+      it.object.position.copy(DELIVERY_SPOT).add(new THREE.Vector3(0.3 + (i % 3) * 0.3, 0, -Math.floor(i / 3) * 0.3));
+      it.object.position.y = it.restLift(it.object.quaternion);
+    }
+    this.items.push(it);
+    this.scene.add(it.object);
+    this.setUpNew(it);
+  }
+
+  /** Ce que le jeu prépare pour un objet neuf arrivé en cours de partie (pastilles dans la boîte, porte, lampe…). */
+  private setUpNew(it: WorldItem): void {
+    if (it.def.id === 'pastilles') this.tablets.set(it, TABLETS);
+    if (it.def.id === 'sachets-the') this.teaBoxes.set(it, TEA_BAGS);
+    if (it.def.door || it.def.drawer) this.doors.set(it, { open: 0, target: 0, then: null, reach: this.doorReach(it), keep: false });
+    if (it.def.lamp) this.addLampLight(it);
+    if (it.def.wash) this.sinks.set(it, { plug: false, tap: false, water: 0, spill: 0, warned: false });
+    const n = it.def.heat?.spots.length ?? 0;
+    if (n) this.heaters.set(it, { on: Array(n).fill(false), warm: Array(n).fill(0), unused: 0 });
+    if (it.def.screen) {
+      const tv = new Tv(it);
+      this.tvs.set(it, tv);
+      this.scene.add(tv.light);
+    }
   }
 
   /**
@@ -8067,6 +8230,7 @@ export class Game {
       it.object.quaternion.copy(rot);
       this.items.push(it);
       this.scene.add(it.object);
+      this.setUpNew(it);
       inBag.splice(inBag.indexOf(def.name), 1);
       placed.push(def.name);
     }
@@ -8170,6 +8334,7 @@ export class Game {
         if (this.flatCakes.has(item)) x.sansLevure = true;
         if (this.lamps.get(item)?.on) x.lampe = true;
         Object.assign(x, this.entree.extras(item), this.garden.extras(item));
+        Object.assign(x, this.laundry.extras(item));
         put('reveil', this.alarms.get(item));
         return x;
       },
@@ -8204,6 +8369,7 @@ export class Game {
         if (x.lampe) this.setLamp(item, true);
         this.entree.setExtras(item, x);
         this.garden.setExtras(item, x);
+        this.laundry.setExtras(item, x);
         if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, x.reveil);
       },
       perso: this.character,
@@ -8222,6 +8388,9 @@ export class Game {
       },
       weather: this.weather,
       body: this.body,
+      argent: this.argent,
+      delivery: () => this.delivery,
+      setDelivery: (d) => (this.delivery = d),
       done: () => {
         this.placeBathroomKit();
         this.entree.restored();

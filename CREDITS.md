@@ -16,6 +16,10 @@
   volume 1 (`UAL1_Standard.glb`), extraits par `tools/build_anim_assets.py`.
 - Réserve d'animations pas encore utilisées (`public/anim/ual_extra.glb` : les 30 autres clips du volume 1, sauter,
   nager, se battre...) : même bibliothèque de Quaternius, **CC0**.
+- Jardin (`public/models/nature.glb` : feuillus, sapins, buissons, herbes, fleurs, fougères, trèfles, galets,
+  rochers, champignons) : [Stylized Nature MegaKit](https://quaternius.com/packs/ultimatestylizednature.html) de
+  Quaternius, **CC0** (version gratuite « Standard »), modèles choisis et textures réduites par
+  `tools/build_nature_assets.py`.
 - Plantes (`src/game/plants.ts` : arbres, sapins, buissons, fleurs, légumes du potager, plantes d'intérieur) : formes et
   textures de feuilles faites par programme pour le jeu, aucun fichier tiers.
 - Accessoires du créateur (`src/creator/accessories.ts` : toque, chapeaux, lunettes, nœuds, écharpe...) : formes three.js

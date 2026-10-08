@@ -1,0 +1,61 @@
+/* Porte-monnaie, sous les jauges */
+.wallet {
+  position: absolute; right: var(--hud-gap); top: calc(var(--hud-gap) + var(--hud-ring) + 10px); display: flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--hud-line); background: var(--hud-glass);
+  box-shadow: var(--hud-shadow), var(--hud-hi); color: var(--hud-honey); font: inherit; font-size: 13.5px; cursor: pointer; pointer-events: auto;
+  transition: color 0.3s, border-color 0.3s;
+}
+.wallet b { color: var(--hud-ink); font-variant-numeric: tabular-nums; transition: color 0.3s; }
+.wallet:hover { background: var(--hud-glass-strong); border-color: var(--hud-line-strong); }
+.wallet:focus-visible { outline: 2px solid var(--hud-honey); outline-offset: 2px; }
+.wallet.up, .wallet.up b { color: var(--hud-up); border-color: var(--hud-up); }
+.wallet.down, .wallet.down b { color: var(--hud-mid); border-color: var(--hud-mid); }
+@media (max-width: 560px) {
+  .wallet { top: calc(var(--hud-gap) + var(--hud-bar) + var(--hud-ring) + 18px); }
+}
+
+/* Fenêtre du magasin */
+.shop {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 16; display: flex; flex-direction: column;
+  width: min(440px, calc(100% - 2 * var(--hud-gap))); height: min(560px, calc(100% - 140px)); padding: 12px 14px 14px; border-radius: 16px; font-size: 14px;
+  background: var(--hud-glass-strong); border: 1px solid var(--hud-line-strong); box-shadow: var(--hud-shadow), var(--hud-hi);
+}
+.shop-money { color: var(--hud-ink-2); font-size: 13px; }
+.shop-money b { color: var(--hud-honey); font-variant-numeric: tabular-nums; }
+.shop-tabs { display: flex; gap: 4px; margin-bottom: 8px; padding: 3px; border-radius: 999px; background: var(--hud-well); }
+.shop-tabs button {
+  flex: 1; padding: 5px 6px; border-radius: 999px; border: none; background: none; color: var(--hud-ink-2); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.shop-tabs button:hover { color: var(--hud-ink); }
+.shop-tabs button[aria-selected='true'] { background: var(--hud-glass); color: var(--hud-ink); box-shadow: inset 0 0 0 1px var(--hud-line-strong); }
+.shop-body { flex: 1; overflow-y: auto; min-height: 80px; scrollbar-width: thin; }
+.shop-note { margin: 2px 0 8px; color: var(--hud-ink-2); font-size: 12.5px; }
+.shop-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.shop-list li { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 8px; }
+.shop-list li.want { background: rgba(245, 190, 91, 0.08); }
+.shop-name { flex: 1; min-width: 0; }
+.shop-name small { color: var(--hud-ink-3); }
+.shop-name .broken { color: var(--hud-low); }
+.shop-price { color: var(--hud-ink-2); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+.shop-qty { display: flex; align-items: center; gap: 4px; }
+.shop-qty span { min-width: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.shop-qty button, .shop-list .shop-sell {
+  min-width: 26px; height: 26px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--hud-line-strong); background: rgba(255, 240, 215, 0.08);
+  color: var(--hud-ink); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.shop-qty button:hover:not(:disabled), .shop-list .shop-sell:hover { border-color: var(--hud-honey); background: rgba(245, 190, 91, 0.15); }
+.shop-qty button:disabled { opacity: 0.35; cursor: default; }
+.shop-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hud-line); }
+.shop-total b { font-variant-numeric: tabular-nums; }
+.shop-total .short { color: var(--hud-low); }
+.shop-order {
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--hud-honey); background: rgba(245, 190, 91, 0.2); color: var(--hud-ink);
+  font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.shop-order:hover:not(:disabled) { background: rgba(245, 190, 91, 0.32); }
+.shop-order:disabled { opacity: 0.4; cursor: default; }
+.shop-link { padding: 0; border: none; background: none; color: var(--hud-honey); font: inherit; font-size: 12.5px; cursor: pointer; text-decoration: underline; }
+@media (prefers-reduced-motion: no-preference) {
+  .shop { animation: shop-in 0.16s ease-out both; }
+  @keyframes shop-in { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+}
