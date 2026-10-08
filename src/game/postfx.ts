@@ -1,12 +1,12 @@
 /**
  * Post-traitement HD-2D, repris d'Arena Tactic (client/src/render/hd2d/postfx.ts) et allégé :
  * la scène est dessinée UNE fois dans une cible qui garde sa profondeur, puis UNE passe finale
- * fait le reste (contours encrés depuis la profondeur, flou de profondeur façon maquette,
- * bloom, étalonnage, vignettage, conversion sRGB).
+ * fait le reste (accentuation de la netteté, contours encrés depuis la profondeur, bloom,
+ * étalonnage, vignettage, conversion sRGB).
  *
- * Ajout par rapport à Arena Tactic : le flou de profondeur (« tilt-shift » du style HD-2D).
- * L'image de scène est réduite de moitié et floutée ; la passe finale mélange image nette et
- * image floue selon l'écart entre la profondeur du pixel et celle du perso suivi.
+ * Pas de flou de profondeur : toute la scène reste nette. La passe finale accentue légèrement
+ * les détails (façon AMD CAS, sur 4 voisins déjà en cache) pour compenser l'agrandissement par
+ * le navigateur quand le plafond de pixels est atteint.
  *
  * Persos : seule leur silhouette est encrée (calque LAYER_CHARACTER), comme dans Arena Tactic.
  */
@@ -75,17 +75,6 @@ const BLUR_FS = `
     gl_FragColor = vec4(c, 1.0);
   }`;
 
-export interface DofSettings {
-  /** Distance caméra -> point net (unités de scène). */
-  focus: number;
-  /** Demi-épaisseur de la zone parfaitement nette. */
-  range: number;
-  /** Distance supplémentaire sur laquelle le flou monte à son maximum. */
-  falloff: number;
-  /** Force du flou (0 = désactivé, 1 = plein). */
-  strength: number;
-}
-
 export class PostFx {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
@@ -94,9 +83,6 @@ export class PostFx {
   /** Bloom (quart de résolution). */
   private brightRT: THREE.WebGLRenderTarget;
   private blurRT: THREE.WebGLRenderTarget;
-  /** Flou de profondeur (demi-résolution). */
-  private dofA: THREE.WebGLRenderTarget;
-  private dofB: THREE.WebGLRenderTarget;
   /** Profondeur des persos seuls (sans décor), comparée à celle de la scène. */
   private charRT: THREE.WebGLRenderTarget;
   private charMat = new THREE.MeshBasicMaterial({ colorWrite: false, fog: false });
@@ -105,7 +91,6 @@ export class PostFx {
   private quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private brightMat: THREE.ShaderMaterial;
   private blurMat: THREE.ShaderMaterial;
-  private copyMat: THREE.ShaderMaterial;
   private finalMat: THREE.ShaderMaterial;
   private pw = 1;
   private ph = 1;
@@ -121,8 +106,6 @@ export class PostFx {
     this.sceneRT = new THREE.WebGLRenderTarget(1, 1, { ...opts, depthBuffer: true, samples: 0, depthTexture: new THREE.DepthTexture(1, 1) });
     this.brightRT = new THREE.WebGLRenderTarget(1, 1, opts);
     this.blurRT = new THREE.WebGLRenderTarget(1, 1, opts);
-    this.dofA = new THREE.WebGLRenderTarget(1, 1, opts);
-    this.dofB = new THREE.WebGLRenderTarget(1, 1, opts);
     this.charRT = new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1) });
 
     this.brightMat = new THREE.ShaderMaterial({
@@ -141,27 +124,21 @@ export class PostFx {
       uniforms: { tSrc: { value: null }, dir: { value: new THREE.Vector2() } },
       vertexShader: VS, fragmentShader: BLUR_FS, depthTest: false, depthWrite: false,
     });
-    this.copyMat = new THREE.ShaderMaterial({
-      uniforms: { tSrc: { value: null } },
-      vertexShader: VS,
-      fragmentShader: 'uniform sampler2D tSrc; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, 1.0); }',
-      depthTest: false, depthWrite: false,
-    });
     this.finalMat = new THREE.ShaderMaterial({
       uniforms: {
         tScene: { value: this.sceneRT.texture }, tDepth: { value: this.sceneRT.depthTexture },
-        tCharDepth: { value: this.charRT.depthTexture }, tBloom: { value: this.brightRT.texture }, tDof: { value: this.dofA.texture },
+        tCharDepth: { value: this.charRT.depthTexture }, tBloom: { value: this.brightRT.texture },
         texel: { value: new THREE.Vector2() }, near: { value: 0.1 }, range: { value: 399.9 },
         ink: { value: 0.8 }, bloom: { value: 0.5 }, aspect: { value: 1 },
-        focus: { value: 80 }, focusRange: { value: 3 }, focusFalloff: { value: 7 }, dofStrength: { value: 1 },
+        sharpen: { value: 0.5 },
         lift: { value: new THREE.Vector3(0.0, 0.004, 0.014) }, gain: { value: new THREE.Vector3(1.05, 1.0, 0.95) },
         saturation: { value: 1.12 },
       },
       vertexShader: VS,
       fragmentShader: `
-        uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tCharDepth; uniform sampler2D tBloom; uniform sampler2D tDof;
+        uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tCharDepth; uniform sampler2D tBloom;
         uniform vec2 texel; uniform float near; uniform float range; uniform float ink; uniform float bloom; uniform float aspect;
-        uniform float focus; uniform float focusRange; uniform float focusFalloff; uniform float dofStrength;
+        uniform float sharpen;
         uniform vec3 lift; uniform vec3 gain; uniform float saturation; varying vec2 vUv;
         // caméra orthographique : profondeur linéaire
         float lin(float raw){ return near + raw * range; }
@@ -177,10 +154,15 @@ export class PostFx {
           // profondeur du pixel et de ses 4 voisins, lue une seule fois
           float r0 = raw(vec2(0.0)), rxp = raw(vec2(1.0,0.0)), rxm = raw(vec2(-1.0,0.0)), ryp = raw(vec2(0.0,1.0)), rym = raw(vec2(0.0,-1.0));
           float c0 = lin(r0);
-          // flou de profondeur : nul autour du point net, maximal au-delà de range + falloff
-          float coc = smoothstep(focusRange, focusRange + focusFalloff, abs(c0 - focus)) * dofStrength;
+          // netteté adaptative (AMD CAS simplifié) : renforce les détails peu contrastés, épargne
+          // les bords déjà francs (pas de halo) ; poids négatif sur la croix des 4 voisins
           vec3 c = texture2D(tScene, vUv).rgb;
-          if (coc > 0.0) c = mix(c, textureLod(tDof, vUv, 0.0).rgb, coc);
+          vec3 nE = texture2D(tScene, vUv + vec2(texel.x, 0.0)).rgb, nW = texture2D(tScene, vUv - vec2(texel.x, 0.0)).rgb;
+          vec3 nN = texture2D(tScene, vUv + vec2(0.0, texel.y)).rgb, nS = texture2D(tScene, vUv - vec2(0.0, texel.y)).rgb;
+          vec3 mn = min(c, min(min(nE, nW), min(nN, nS))), mx = max(c, max(max(nE, nW), max(nN, nS)));
+          vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
+          vec3 wgt = -amp * mix(0.125, 0.2, sharpen);
+          c = max((c + (nE + nW + nN + nS) * wgt) / (1.0 + 4.0 * wgt), 0.0);
           // contours : dérivée SECONDE de la profondeur, nulle sur toute surface plane (sol vu en
           // biais), forte seulement sur les vraies arêtes et silhouettes
           float lx = abs(lin(rxp) + lin(rxm) - 2.0 * c0);
@@ -189,8 +171,7 @@ export class PostFx {
           // persos : arêtes intérieures ignorées, seule la silhouette reste encrée (le masque ne sert
           // qu'au-dessus du seuil d'encre : calculé seulement là)
           if (e > 0.16) e *= 1.0 - ch(vec2(0.0), r0) * ch(vec2(1.0,0.0), rxp) * ch(vec2(-1.0,0.0), rxm) * ch(vec2(0.0,1.0), ryp) * ch(vec2(0.0,-1.0), rym);
-          // pas de trait net dans les zones floues
-          c = mix(c, vec3(0.02, 0.018, 0.035), smoothstep(0.16, 0.4, e) * ink * (1.0 - coc));
+          c = mix(c, vec3(0.02, 0.018, 0.035), smoothstep(0.16, 0.4, e) * ink);
           c += texture2D(tBloom, vUv).rgb * bloom;
           c = c * gain + lift;
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -204,14 +185,6 @@ export class PostFx {
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.finalMat);
     this.quad.frustumCulled = false;
     this.quadScene.add(this.quad);
-  }
-
-  setDof(s: DofSettings): void {
-    const u = this.finalMat.uniforms;
-    u.focus.value = s.focus;
-    u.focusRange.value = s.range;
-    u.focusFalloff.value = s.falloff;
-    u.dofStrength.value = s.strength;
   }
 
   /** Étalonnage : gain par couleur et saturation (le cycle jour/nuit les fait varier). */
@@ -232,9 +205,6 @@ export class PostFx {
     this.ph = ph;
     this.sceneRT.setSize(pw, ph);
     this.charRT.setSize(pw, ph);
-    const hw = Math.max(1, Math.round(pw / 2)), hh = Math.max(1, Math.round(ph / 2));
-    this.dofA.setSize(hw, hh);
-    this.dofB.setSize(hw, hh);
     const qw = Math.max(1, Math.round(pw / 4)), qh = Math.max(1, Math.round(ph / 4));
     this.brightRT.setSize(qw, qh);
     this.blurRT.setSize(qw, qh);
@@ -274,14 +244,6 @@ export class PostFx {
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
     this.pass(this.brightMat, this.brightRT);
     this.blur(this.brightRT, this.blurRT, 1);
-    // flou de profondeur : image réduite de moitié, floutée deux fois (rayon croissant) ; rien à
-    // faire sans flou (créateur)
-    if (u.dofStrength.value > 0) {
-      this.copyMat.uniforms.tSrc.value = this.sceneRT.texture;
-      this.pass(this.copyMat, this.dofA);
-      this.blur(this.dofA, this.dofB, 1);
-      this.blur(this.dofA, this.dofB, 2);
-    }
     this.renderCharacterDepth();
     this.pass(this.finalMat, null);
   }
@@ -330,8 +292,8 @@ export class PostFx {
   }
 
   dispose(): void {
-    for (const t of [this.sceneRT, this.brightRT, this.blurRT, this.dofA, this.dofB, this.charRT]) t.dispose();
-    for (const m of [this.charMat, this.brightMat, this.blurMat, this.copyMat, this.finalMat]) m.dispose();
+    for (const t of [this.sceneRT, this.brightRT, this.blurRT, this.charRT]) t.dispose();
+    for (const m of [this.charMat, this.brightMat, this.blurMat, this.finalMat]) m.dispose();
     this.quad.geometry.dispose();
   }
 }

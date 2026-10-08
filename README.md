@@ -125,7 +125,7 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | Fichier | Rôle |
 | --- | --- |
 | `src/game/Game.ts` | Scène, caméra iso d'Arena Tactic (30°, 45°, orthographique), lumière, commandes |
-| `src/game/postfx.ts` | Post-traitement HD-2D repris d'Arena Tactic : contours encrés, bloom, étalonnage, vignettage, + flou de profondeur |
+| `src/game/postfx.ts` | Post-traitement HD-2D repris d'Arena Tactic : contours encrés, bloom, étalonnage, vignettage, netteté (sans flou) |
 | `src/game/toon.ts` | Matériau cel shading (3 paliers nets + liseré de lumière) |
 | `src/game/character.ts` | Perso glTF au squelette Mixamo, animations repos / marche / course |
 | `src/game/ground.ts` | Sol d'herbe (texture peinte par programme) |

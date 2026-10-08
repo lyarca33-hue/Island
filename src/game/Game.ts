@@ -7131,8 +7131,6 @@ export class Game {
     c.lookAt(this.focus);
     // lumière selon l'heure et la saison ; soleil et carte d'ombre suivent le perso
     applySky(this.clock.solarHour, this.clock.noonElevation, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus);
-    // flou de profondeur : net autour du perso (distance caméra -> point suivi), plus large au dézoom
-    this.post.setDof({ focus: CAM_DIST, range: 2.2 / this.zoom, falloff: 6 / this.zoom, strength: 1 });
   }
 
   private disposed = false;

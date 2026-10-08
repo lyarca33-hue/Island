@@ -65,7 +65,6 @@ export class CreatorScene {
     this.camera.position.set(0, 1.1, 10);
     this.camera.lookAt(0, 1.1, 0);
     this.post = new PostFx(this.renderer, this.scene, this.camera);
-    this.post.setDof({ focus: 10, range: 3, falloff: 3, strength: 0 });
     this.resizeObs = new ResizeObserver(() => this.resize());
     this.resizeObs.observe(container);
     this.resize();
