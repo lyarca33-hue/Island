@@ -8,7 +8,9 @@
  * télécharger le pack.
  *
  *   npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
- *   node tools/build_pack_assets.mjs --src <dossier des packs> --out public/packs
+ *   node tools/build_pack_assets.mjs --src <dossier des packs> --out public/packs [--only nourriture]
+ *
+ * Avec --only, seuls ces packs sont refaits ; le manifeste garde les tailles des autres.
  *
  * Les monstres du « Bestiary - Dungeon Monsters Kit » (licence Quaternius QAL : utilisables dans
  * le jeu, mais pas à redistribuer comme modèles) gardent leur squelette, pour les animations de la
@@ -34,6 +36,11 @@ const PACKS = [
   { id: 'armes', simplify: true, dir: 'Ultimate Gun Pack - July 2019/OBJ', kind: 'obj', scale: 1 },
   { id: 'fantasy', simplify: true, dir: 'Fantasy Props MegaKit[Standard]/Exports/glTF', kind: 'gltf', textures: 'Fantasy Props MegaKit[Standard]/Textures', scale: 1 },
   { id: 'scifi', simplify: true, dir: 'Modular SciFi MegaKit[Standard]/glTF', kind: 'gltf', textures: 'Modular SciFi MegaKit[Standard]/Textures', scale: 1 },
+  // les aliments qui habillent ceux du jeu (src/game/items/interior.ts : FOOD_LOOKS)
+  { id: 'nourriture', dir: 'Ultimate Food Pack - Oct 2019/OBJ', kind: 'obj', scale: 1, models: [
+    'Apple', 'Banana', 'Bread', 'ChickenLeg', 'ChocolateBar', 'Egg_Fried', 'Egg_Whole', 'KetchupBottle', 'Lettuce_Whole',
+    'MayoBottle', 'Orange', 'Pepper_Red', 'Pizza', 'Steak', 'Tomato',
+  ] },
 ];
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) => (v.startsWith('--') ? [...a, [v.slice(2), all[i + 1]]] : a), []));
@@ -182,7 +189,7 @@ function ground(parts, scale) {
 async function buildPack(io, pack) {
   const dir = path.join(SRC, pack.dir);
   const ext = pack.kind === 'obj' ? '.obj' : '.gltf';
-  const files = walk(dir, ext);
+  const files = walk(dir, ext).filter((f) => !pack.models || pack.models.includes(path.basename(f, ext)));
   const doc = new Document();
   const webp = doc.createExtension(EXTTextureWebP).setRequired(true);
   const buffer = doc.createBuffer();
@@ -270,7 +277,17 @@ const manifest = {};
 const only = args.only?.split(',');
 for (const pack of PACKS) if (!only || only.includes(pack.id)) manifest[pack.id] = await buildPack(io, pack);
 for (const c of CREATURES) if ((!only || only.includes(c.id)) && fs.existsSync(path.join(SRC, c.file))) await buildCreature(io, c);
-if (only) process.exit(0);
+// avec --only : les autres packs gardent les tailles déjà écrites
+const MANIFEST = 'src/game/packs/manifest.ts';
+if (only && fs.existsSync(MANIFEST)) {
+  const text = fs.readFileSync(MANIFEST, 'utf8');
+  const body = text.slice(text.indexOf('{', text.indexOf('PACK_SIZES')), text.lastIndexOf('} as const') + 1);
+  const old = new Function(`return ${body}`)();
+  for (const id of Object.keys(old)) if (!(id in manifest)) manifest[id] = old[id];
+}
+const order = [...PACKS.map((p) => p.id)];
+const sorted = Object.fromEntries(order.filter((id) => id in manifest).map((id) => [id, manifest[id]]));
+if (!Object.keys(sorted).length) process.exit(0);
 
 const lines = [
   '/**',
@@ -278,7 +295,7 @@ const lines = [
   ' * posé au sol et centré. Fichier écrit par tools/build_pack_assets.mjs : ne pas modifier à la main.',
   ' */',
   'export const PACK_SIZES = {',
-  ...Object.entries(manifest).map(([id, models]) => `  ${id}: {\n${Object.entries(models).map(([n, s]) => `    ${JSON.stringify(n)}: [${s.join(', ')}],`).join('\n')}\n  },`),
+  ...Object.entries(sorted).map(([id, models]) => `  ${id}: {\n${Object.entries(models).map(([n, s]) => `    ${JSON.stringify(n)}: [${s.join(', ')}],`).join('\n')}\n  },`),
   '} as const satisfies Record<string, Record<string, readonly [number, number, number]>>;',
   '',
   'export type PackId = keyof typeof PACK_SIZES;',
@@ -286,4 +303,4 @@ const lines = [
   '',
 ];
 fs.mkdirSync('src/game/packs', { recursive: true });
-fs.writeFileSync('src/game/packs/manifest.ts', lines.join('\n'));
+fs.writeFileSync(MANIFEST, lines.join('\n'));
