@@ -57,6 +57,19 @@ python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public
     Sword_Idle Walk_Loop
 ```
 
+et les 39 autres clips du volume 2 :
+
+```bash
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL2_Standard.glb --out public/anim/ual_extra2.glb \
+    --clips Chest_Open ClimbUp_1m Farm_Harvest Farm_PlantSeed Farm_Watering Hit_Knockback \
+    Idle_Lantern_Loop Idle_No_Loop Idle_Rail_Call Idle_Rail_Loop Idle_Shield_Break Idle_Shield_Loop \
+    LayToIdle Melee_Hook Melee_Hook_Rec NinjaJump_Idle_Loop NinjaJump_Land NinjaJump_Start \
+    OverhandThrow Shield_Dash Shield_OneShot Slide_Exit Slide_Loop Slide_Start Sword_Block Sword_Dash \
+    Sword_Heavy_Combo Sword_Regular_A Sword_Regular_A_Rec Sword_Regular_B Sword_Regular_B_Rec \
+    Sword_Regular_C Sword_Regular_Combo TreeChopping_Loop Walk_Carry_Loop Yes Zombie_Idle_Loop \
+    Zombie_Scratch Zombie_Walk_Fwd_Loop
+```
+
 Les os sont lus par `src/creator/retarget.ts` (`UAL_TO_VRM`).
 
 Les clips Mixamo du jeu (`public/anim/mixamo.glb`) viennent de X Bot, sans le mannequin, avec

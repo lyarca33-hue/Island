@@ -150,13 +150,16 @@ export class Puppet {
    * perso ; rend leurs noms. Console : game.character.puppet.loadExtraAnimations().then(console.log)
    */
   async loadExtraAnimations(): Promise<string[]> {
-    const s = await loadExtraAnimations();
-    if (!s) return [];
-    const src = { ...s, bones: UAL_TO_VRM };
-    if (!this.extra.some((e) => e.scene === s.scene)) this.extra.push(src);
-    const clips = retargetClips(src, this.avatar.base);
-    for (const clip of clips) this.actions.set(clip.name, this.mixer.clipAction(clip));
-    return clips.map((c) => c.name);
+    const names: string[] = [];
+    for (const s of await loadExtraAnimations()) {
+      const src = { ...s, bones: UAL_TO_VRM };
+      if (!this.extra.some((e) => e.scene === s.scene)) this.extra.push(src);
+      for (const clip of retargetClips(src, this.avatar.base)) {
+        this.actions.set(clip.name, this.mixer.clipAction(clip));
+        names.push(clip.name);
+      }
+    }
+    return names;
   }
 
   /** Durée d'un clip (s), 0 s'il manque. */
