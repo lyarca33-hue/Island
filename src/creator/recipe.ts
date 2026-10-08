@@ -5,7 +5,7 @@
  */
 import { ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from './accessories';
 import { MODELS, MODEL_BY_ID, type Gender } from './catalog';
-import { BLUSH_COLORS, FACE_MARK_BY_ID, FACE_MARKS, MARK_COLORS, NO_MAKEUP, PATTERN_BY_ID, PATTERNS, type Makeup, type WornPattern } from './looks';
+import { BLUSH_COLORS, FACE_MARK_BY_ID, FACE_MARKS, LIP_COLORS, MARK_COLORS, SHADOW_COLORS, NO_MAKEUP, PATTERN_BY_ID, PATTERNS, type Makeup, type WornPattern } from './looks';
 
 export interface Body {
   /** Échelle de tout le corps (1 = taille du modèle d'origine). */
@@ -77,6 +77,8 @@ export const BODY_RANGE: Record<keyof Body, [number, number, string]> = {
 
 /** Teintes de peau : multipliées à la texture d'origine (blanc = inchangé). */
 export const SKIN_TONES = ['#ffffff', '#fbe3d2', '#f0c8a8', '#dba27c', '#b97c55', '#8a5638', '#5e3a26'];
+/** Peaux de conte : lutin, fée, elfe des neiges... */
+export const FANTASY_SKINS = ['#c9d8ff', '#a9c4f0', '#cdeccf', '#a8d8b0', '#e2cff5', '#ffd0e0', '#d8d8e0', '#ffc8a0'];
 export const HAIR_COLORS = [
   '#1d1a22', '#3b2a22', '#6b4429', '#a8743f', '#e3c27a', '#f1ece2', '#9aa3b5', '#c2413a', '#e58bb0', '#6c4ab8', '#3e78c9', '#3c9c78',
   // pastels et couleurs vives
@@ -145,6 +147,8 @@ export function randomRecipe(): Recipe {
       blush: Math.random() < 0.4 ? pick(BLUSH_COLORS) : null,
       brows: null,
       lashes: null,
+      shadow: Math.random() < 0.2 ? pick(SHADOW_COLORS) : null,
+      lips: gender === 'f' && Math.random() < 0.3 ? pick(LIP_COLORS) : null,
       marks,
       markColor: pick(MARK_COLORS),
     },
@@ -182,6 +186,8 @@ export function sanitizeRecipe(raw: unknown): Recipe | null {
       blush: color(r.makeup?.blush),
       brows: color(r.makeup?.brows),
       lashes: color(r.makeup?.lashes),
+      shadow: color(r.makeup?.shadow),
+      lips: color(r.makeup?.lips),
       marks: Array.isArray(r.makeup?.marks) ? [...new Set(r.makeup.marks.filter((id) => FACE_MARK_BY_ID.has(id)))] : [],
       markColor: color(r.makeup?.markColor) ?? NO_MAKEUP.markColor,
     },
