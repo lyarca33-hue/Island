@@ -46,3 +46,18 @@ seulement les rotations et le déplacement du bassin (ce que lit `retarget.ts`) 
 python3 tools/build_anim_assets.py --src public/models/xbot.glb --out public/anim/mixamo.glb \
     --root mixamorig:Hips --clips agree headShake idle run sad_pose sneak_pose walk
 ```
+
+
+## `build_nature_assets.py` : le jardin (pack nature de Quaternius)
+
+Regroupe dans `public/models/nature.glb` les modèles du jardin pris dans le « Stylized Nature
+MegaKit » de Quaternius (CC0, version gratuite, à télécharger sur quaternius.com) : seulement
+ceux de la liste `MODELS`, textures réduites en WebP, sans les cartes de relief.
+
+```bash
+pip install pillow numpy
+python3 tools/build_nature_assets.py --src "Stylized Nature MegaKit[Standard]/glTF" --out public/models/nature.glb
+```
+
+Pour ajouter un modèle : l'ajouter à `MODELS` (et son matériau à `MATERIALS` s'il est nouveau),
+puis le placer dans `src/game/nature.ts`.

@@ -11,6 +11,10 @@
   Idle_TalkingPhone_Loop, Consume) : même [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)
   de Quaternius, **CC0**, volumes 1 et 2 (`UAL1_Standard.glb`, `UAL2_Standard.glb` de la même copie publique), extraits par
   `tools/build_anim_assets.py`.
+- Jardin (`public/models/nature.glb` : feuillus, sapins, buissons, herbes, fleurs, fougères, trèfles, galets,
+  rochers, champignons) : [Stylized Nature MegaKit](https://quaternius.com/packs/ultimatestylizednature.html) de
+  Quaternius, **CC0** (version gratuite « Standard »), modèles choisis et textures réduites par
+  `tools/build_nature_assets.py`.
 - Plantes (`src/game/plants.ts` : arbres, sapins, buissons, fleurs, légumes du potager, plantes d'intérieur) : formes et
   textures de feuilles faites par programme pour le jeu, aucun fichier tiers.
 - Accessoires du créateur (`src/creator/accessories.ts` : toque, chapeaux, lunettes, nœuds, écharpe...) : formes three.js

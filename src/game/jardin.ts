@@ -13,6 +13,9 @@
  * récoltes sont plus grosses. Le potager, les pommes et les fleurs cueillies sont gardés avec la
  * partie (rangés avec leurs objets, voir extras), comme la compétence.
  *
+ * Arbres, sapins, buissons, chemin et ce qui pousse au sol viennent du pack nature de Quaternius
+ * (nature.ts) dès qu'il est chargé ; en attendant, ceux faits par programme ici.
+ *
  * Les fiches des objets sont ici (ajoutées au catalogue) ; Game ne fait que brancher le jardin
  * (menu, clic, heures qui passent, saison) par l'interface GardenHost.
  */
@@ -22,6 +25,8 @@ import type { ItemDef } from './items/catalog';
 import type { WorldItem } from './items/carry';
 import { carrotTopGeo, tomatoPlantGeo, flowerGeo, flowerHeadGeo, FLOWER_KINDS, foliage, foliageMaterial, leafMaterial, leafMesh, merge, painted, pineGeo, rng, tuftGeo, vineLeavesGeo, type Lobe } from './plants';
 import { createToonMaterial } from './toon';
+import { BUSH_COLOR, NEEDLE_COLOR, OAK_LEAF_COLOR, natureDecor, type NatureDecor, type NatureKit } from './nature';
+import type { Rect } from './room';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -518,6 +523,9 @@ export class Garden {
   private oakLeaves = foliageMaterial(LEAF_COLOR[1]);
   private pineLeaves = toon(0x2f6a3e);
   private oakCrowns: THREE.Object3D[] = [];
+  /** Arbres, sapins, buissons et chemin faits par programme, remplacés par les modèles du pack nature (dress). */
+  private procedural: THREE.Object3D[] = [];
+  private nature: NatureDecor | null = null;
   private borderFlowers: THREE.InstancedMesh[];
   private borderBase: THREE.Matrix4[] = [];
   /** Où est chaque fleur de la bordure : son maillage de têtes et sa place dedans. */
@@ -532,6 +540,7 @@ export class Garden {
     const bark = toon(0x6b4a2e);
     const add = (o: THREE.Object3D, x: number, z: number, half: number, h = 2) => {
       this.group.add(o);
+      this.procedural.push(o);
       this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-half, 0, -half), new THREE.Vector3(half, h, half)), pos: new THREE.Vector3(x, 0, z), yaw: 0 });
     };
     // feuillus : tronc, trois branches (visibles l'hiver, nues), couronne de feuilles
@@ -584,6 +593,7 @@ export class Garden {
       s.rotation.y = i * 1.3;
       s.scale.z = 0.8 + (i % 2) * 0.15;
       this.group.add(s);
+      this.procedural.push(s);
     });
     // bordure fleurie au pied du salon : terre, petite bordure de bois, fleurs (instanciées)
     const len = BORDER.x1 - BORDER.x0, cx = (BORDER.x0 + BORDER.x1) / 2;
@@ -610,6 +620,29 @@ export class Garden {
     for (const h of heads) h.castShadow = true;
     this.borderFlowers = heads;
     this.group.add(stems, ...heads);
+  }
+
+  /**
+   * Remplace les arbres, sapins, buissons et le chemin faits par programme par les modèles du pack
+   * nature, et sème herbes, fleurs, fougères, rochers et champignons hors de la maison (`rooms`),
+   * du chemin et des objets du jardin (`density` : 1 partout, moins en qualité basse). Les obstacles
+   * ne changent pas : mêmes places, mêmes tailles.
+   */
+  dress(kit: NatureKit, rooms: Rect[], density = 1): void {
+    if (this.nature) return;
+    for (const o of this.procedural) {
+      this.group.remove(o);
+      o.traverse((m) => {
+        if (m instanceof THREE.Mesh) m.geometry.dispose();
+      });
+    }
+    this.procedural = [];
+    this.oakCrowns = [];
+    const border: Rect = { x0: BORDER.x0, x1: BORDER.x1, z0: BORDER.z - BORDER.d / 2, z1: BORDER.z + BORDER.d / 2 };
+    const spots = GARDEN_START.map(([id, x, , z]): [number, number, number] => [x, z, id === 'pommier' ? 1.2 : 0.9]);
+    this.nature = natureDecor(kit, { oaks: OAKS, pines: PINES, bushes: BUSHES, path: PATH, rects: [...rooms, border], spots }, density);
+    this.group.add(this.nature.group);
+    this.lastLook.yearPos = -1;
   }
 
   /** Branche les objets du jardin posés dans la scène (potager, pommier, massifs). */
@@ -722,9 +755,22 @@ export class Garden {
       c.scale.setScalar(Math.max(0.03, leafy));
     }
     // les sapins blanchissent sous la neige
-    this.pineLeaves.color.set(0x2f6a3e).lerp(new THREE.Color(0xe8eef4), snow * 0.55);
+    const white = new THREE.Color(0xe8eef4);
+    this.pineLeaves.color.set(0x2f6a3e).lerp(white, snow * 0.55);
     // la bordure fleurie : les fleurs s'ouvrent et se fanent
     const bloom = mixN(w, BLOOM);
+    if (this.nature) {
+      const n = this.nature;
+      mixColor(w, OAK_LEAF_COLOR, n.leaves.color);
+      // l'automne, les feuilles tombent peu à peu ; l'hiver, les branches sont nues
+      n.leaves.alphaTest = 0.5 + (1 - Math.min(1, leafy)) * 0.45;
+      for (const c of n.crowns) c.visible = leafy > 0.05;
+      n.needles.color.set(NEEDLE_COLOR).lerp(white, snow * 0.55);
+      for (const m of n.bushLeaves) m.color.set(BUSH_COLOR).lerp(white, snow * 0.5);
+      // l'herbe et les petites plantes disparaissent sous la neige, les fleurs sont fermées l'hiver
+      for (const m of n.ground) m.visible = snow < 0.45;
+      for (const f of n.flowers) f.visible = bloom > 0.15;
+    }
     const m = new THREE.Matrix4();
     this.borderBase.forEach((base, i) => {
       // les dernières fleurs de l'automne : une sur trois
