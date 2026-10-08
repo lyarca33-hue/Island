@@ -3,7 +3,9 @@
  * « va à la table puis pose la lettre », « fais-toi un café », « lis le livre rouge », « dis bonjour »,
  * « assieds-toi sur la chaise », « lève-toi », « fais cuire le steak », « éteins le feu »,
  * « sers le sandwich dans l'assiette », « mange à table », « fais la vaisselle », « cuis la pomme
- * de terre au four », « jette la bouteille », « lance le lave-vaisselle ». Rend null dès
+ * de terre au four », « jette la bouteille », « lance le lave-vaisselle », et dans les autres pièces
+ * « va au salon », « regarde la télé », « mets la météo », « éteins la lumière », « prends une
+ * douche », « baisse la lunette », « range le pull », « va te coucher ». Rend null dès
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
@@ -30,7 +32,7 @@ const VERBS: Record<string, string[]> = {
   prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer', 'sors', 'sort', 'sortir'],
   poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer', 'mets', 'met', 'mettre', 'remets', 'remettre'],
   ranger: ['range', 'ranger', 'rangez'],
-  aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher'],
+  aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher', 'entre', 'entrer'],
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
   manger: ['mange', 'manges', 'manger', 'croque', 'croquer', 'grignote', 'grignoter', 'avale', 'avaler'],
@@ -76,7 +78,30 @@ const VERBS: Record<string, string[]> = {
   tartiner: ['tartine', 'tartiner', 'beurre', 'beurrer'],
   raper: ['rape', 'raper', 'rapes'],
   gouter: ['goute', 'gouter', 'goutes'],
+  // les autres pièces : télé, couvercle des toilettes, canapé
+  zapper: ['zappe', 'zapper', 'zap', 'change', 'changer', 'changes'],
+  baisser: ['baisse', 'baisser', 'rabats', 'rabat', 'rabattre'],
+  allonger: ['allonge', 'allonger', 'allonges', 'etends', 'etendre'],
 };
+/** Les pièces de la maison (nom de leur RoomSpec), par mots dits. */
+const ROOM_WORDS: Array<[string[], string]> = [
+  [['salle de bain', 'salle de bains', 'salle d eau', 'sdb'], 'salle de bain'],
+  [['cuisine'], 'cuisine'],
+  [['salon', 'sejour', 'living'], 'salon'],
+  [['chambre'], 'chambre'],
+];
+/** La pièce nommée dans l'ordre, s'il y en a une. */
+function roomIn(rest: string[]): string | undefined {
+  const text = ` ${rest.join(' ')} `;
+  return ROOM_WORDS.find(([ws]) => ws.some((w) => text.includes(` ${w} `)))?.[1];
+}
+/** Les chaînes de la télé (CHANNELS de tv.ts), par mot dit. */
+const CHANNEL_WORDS: Record<string, string> = { meteo: 'météo', aquarium: 'aquarium', dessin: 'dessin animé', dessins: 'dessin animé', anime: 'dessin animé', animes: 'dessin animé', cartoon: 'dessin animé', cartoons: 'dessin animé' };
+const channelIn = (rest: string[]) => rest.map((x) => CHANNEL_WORDS[x]).find(Boolean);
+/** La lumière de la pièce (à l'interrupteur), pas une lampe qu'on allume d'un clic. */
+const LIGHT_WORDS = new Set(['lumiere', 'lumieres', 'plafonnier', 'suspension', 'lampadaire', 'lustre']);
+/** Le couvercle des toilettes. */
+const LID_WORDS = new Set(['couvercle', 'lunette', 'abattant']);
 /** Les pots de l'étagère à épices, par mot dit. */
 const SPICE_WORDS: Record<string, string> = { sel: 'sel', sale: 'sel', saler: 'sel', poivre: 'poivre', poivrer: 'poivre', paprika: 'paprika', herbes: 'herbes de Provence', herbe: 'herbes de Provence', huile: "huile d'olive" };
 /** Ce qu'on tartine, par mot dit. */
@@ -90,7 +115,7 @@ const OPENS = new Set(['frigo', 'placard', 'appareil', 'poubelle']);
 /** Meubles où l'on range (et où l'on peut regarder ce qu'il y a). */
 const STORES = new Set(['frigo', 'placard', 'rangement', 'égouttoir']);
 /** Où se range un objet qui ne va ni au frais ni dans la bibliothèque. */
-const STORED_IN: Record<string, string> = { tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'crochets', maniques: 'crochets', couteau: 'barre à couteaux',
+const STORED_IN: Record<string, string> = { pull: 'armoire', tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'crochets', maniques: 'crochets', couteau: 'barre à couteaux',
   // les provisions : l'épicerie au garde-manger, le frais au frigo, les surgelés au congélateur
   ...Object.fromEntries([...PANTRY_THINGS.map((n) => [n, 'garde-manger']), ...FRESH_THINGS.map((n) => [n, 'frigo']), ...FROZEN_FOOD.map((n) => [n, 'congélateur'])]) };
 /** Boissons du frigo (se boivent à la bouteille ou se versent dans un verre). */
@@ -266,6 +291,12 @@ const ALIASES: Record<string, string[]> = {
   'tartines au chocolat': ['tartine', 'tartines'],
   'tartines beurrees': ['tartine', 'tartines'],
   'livre de recettes': ['recettes', 'recette', 'livre'],
+  // la chambre
+  armoire: ['armoire', 'armoires', 'penderie', 'dressing'],
+  pull: ['pull', 'pulls', 'pullover', 'sweat', 'gilet', 'tricot'],
+  'lampe de chevet': ['lampe', 'lampes', 'chevet', 'veilleuse'],
+  'table de nuit': ['nuit'],
+  lit: ['lit', 'lits', 'plumard', 'pieu'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -395,6 +426,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return portable.filter((o) => o.nom === portable[0].nom).slice(0, n).map((o) => ({ kind: 'prendre', ref: o.ref }));
     }
     case 'poser': {
+      // « mets la télé », « mets la météo (à la télé) »
+      if (['mets', 'met', 'mettre', 'remets', 'remettre'].includes(word) && world.objets.some((o) => o.nom === 'télé')) {
+        const chaine = channelIn(rest);
+        if (chaine) return [{ kind: 'tele', zapper: true, chaine }];
+        if (found.length && found.every((o) => o.nom === 'télé')) return [{ kind: 'tele', ref: found[0].ref }];
+      }
       // « mets du poivre (sur l'omelette) », « mets un peu d'huile » : assaisonner
       if (['du', 'de', 'des', 'un'].includes(rest[0]) && rest.some((x) => SPICE_WORDS[x])) return parseClause('assaisonner', rest, original, world);
       // « mets une pastille (dans le lave-vaisselle) »
@@ -476,10 +513,17 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « va aux toilettes », « va aux WC », « va faire pipi » ; « va sous la douche »
       if (rest.some((x) => ['toilettes', 'toilette', 'wc', 'pipi'].includes(x)) && !rest.includes('ta')) return [{ kind: 'toilettes' }];
       if (rest.includes('douche')) return [{ kind: 'douche' }];
+      // « va au salon », « va dans la chambre », « entre dans la salle de bain »
+      const room = roomIn(rest);
+      if (room && !found.length) return [{ kind: 'piece', piece: room }];
       const target = found[0];
       return target ? [{ kind: 'aller', ref: target.ref }] : null;
     }
     case 'cafe':
+      // « fais pipi », « fais tes besoins »
+      if (rest.includes('pipi') || rest.includes('besoins')) return [{ kind: 'toilettes' }];
+      // « fais une sieste (sur le canapé) »
+      if (rest.includes('sieste')) return parseClause('dormir', rest, original, world, 'sieste');
       // « fais ta toilette »
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
       // « fais les courses »
@@ -613,6 +657,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'pousser': {
       // « tire la chasse (d'eau) »
       if (rest.includes('chasse')) return [{ kind: 'chasse' }];
+      // « rentre dans la cuisine », « recule jusqu'au salon »
+      if (roomIn(rest) && !found.length) return [{ kind: 'piece', piece: roomIn(rest)! }];
       // « tire la chaise », « pousse la chaise sous la table »
       const chair = found.find((o) => o.sorte === 'siège');
       return chair ? [{ kind: 'chaise', ref: chair.ref, sous: verb === 'pousser' }] : null;
@@ -664,6 +710,10 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (rest.includes('heure') || found.some((o) => o.nom === 'horloge')) return [{ kind: 'heure' }];
       // « regarde-toi dans le miroir »
       if (rest.includes('miroir') || rest.includes('glace')) return [{ kind: 'miroir' }];
+      // « regarde la télé » (assis sur le canapé), « regarde la météo », « regarde les dessins animés »
+      const tv = found.find((o) => o.nom === 'télé');
+      const chaine = channelIn(rest);
+      if (tv || (chaine && world.objets.some((o) => o.nom === 'télé'))) return [{ kind: 'tele', ref: tv?.ref, assis: true, zapper: !!chaine, chaine }];
       // « regarde dans le frigo », « fouille le placard »
       const store = found.find((o) => STORES.has(o.sorte ?? ''));
       return store ? [{ kind: 'regarder', ref: store.ref }] : null;
@@ -710,7 +760,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « lis la liste de courses »
       if (rest.includes('liste')) return [{ kind: 'liste_courses' }];
       // « ouvre le robinet »
-      if (rest.includes('robinet') || (rest.includes('eau') && found.some((o) => o.sorte === 'évier'))) return [{ kind: 'robinet', ouvrir: true }];
+      if (rest.includes('robinet') || (rest.includes('eau') && found.some((o) => o.sorte === 'évier'))) return [{ kind: 'robinet', ouvrir: true, ref: found.find((o) => o.nom === 'lavabo')?.ref }];
+      // « ouvre le couvercle (des toilettes) », « ouvre les toilettes »
+      if (isLid(rest, found)) return [{ kind: 'couvercle', ouvrir: true }];
       // « ouvre le frigo », « ouvre le four », « ouvre le tiroir »
       const door = found.find((o) => OPENS.has(o.sorte ?? ''));
       if (door) return [{ kind: 'ouvrir', ref: door.ref }];
@@ -734,9 +786,21 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'asseoir', ref: seat?.ref }];
     }
     case 'lever':
+      // « lève le couvercle », « relève la lunette »
+      if (rest.some((x) => LID_WORDS.has(x))) return [{ kind: 'couvercle', ouvrir: true }];
       return [{ kind: 'lever' }];
+    case 'baisser':
+      // « baisse la lunette », « rabats le couvercle (des toilettes) »
+      if (rest.some((x) => LID_WORDS.has(x))) return [{ kind: 'couvercle', ouvrir: false }];
+      // « baisse la lumière » : l'éteindre
+      if (rest.some((x) => LIGHT_WORDS.has(x))) return [{ kind: 'lumiere', on: false, piece: roomIn(rest) }];
+      return null;
+    case 'allonger':
     case 'dormir': {
-      // « va dormir », « couche-toi dans le lit », « fais une sieste »
+      // « va dormir », « couche-toi dans le lit », « fais une sieste », « allonge-toi »
+      // « fais une sieste sur le canapé », « allonge-toi sur le canapé » : on s'y installe
+      const sofa = found.find((o) => o.sorte === 'siège');
+      if (sofa && !found.some((o) => o.sorte === 'lit')) return [{ kind: 'asseoir', ref: sofa.ref }];
       const bed = found.find((o) => o.sorte === 'lit');
       if (found.length && !bed) return null;
       return [{ kind: 'dormir', ref: bed?.ref }];
@@ -783,6 +847,14 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'allumer':
     case 'eteindre': {
+      // « allume la lumière (du salon) », « éteins le lampadaire », « éteins dans la cuisine »
+      if (rest.some((x) => LIGHT_WORDS.has(x)) || (roomIn(rest) && !found.length)) {
+        const piece = roomIn(rest) ?? (rest.includes('lampadaire') ? 'salon' : undefined);
+        return [{ kind: 'lumiere', on: verb === 'allumer', piece }];
+      }
+      // « allume la télé », « éteins la télé »
+      const tv = found.find((o) => o.nom === 'télé');
+      if (tv) return [{ kind: verb, ref: tv.ref }];
       // « allume la lampe de chevet », « éteins la lampe »
       const lamp = found.find((o) => o.sorte === 'lampe');
       if (lamp) return [{ kind: verb, ref: lamp.ref }];
@@ -798,7 +870,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'arreter': {
       // « ferme le robinet », « arrête l'eau »
-      if (rest.includes('robinet') || (rest.includes('eau') && !found.some((o) => o.sorte !== 'évier'))) return [{ kind: 'robinet', ouvrir: false }];
+      if (rest.includes('robinet') || (rest.includes('eau') && !found.some((o) => o.sorte !== 'évier'))) return [{ kind: 'robinet', ouvrir: false, ref: found.find((o) => o.nom === 'lavabo')?.ref }];
+      // « ferme le couvercle (des toilettes) », « ferme les toilettes »
+      if (isLid(rest, found)) return [{ kind: 'couvercle', ouvrir: false }];
+      // « ferme la télé », « arrête la télé »
+      const tv = found.find((o) => o.nom === 'télé');
+      if (tv) return [{ kind: 'eteindre', ref: tv.ref }];
       // « arrête le lave-vaisselle » ; « ferme le four » : la porte
       const closes = ['ferme', 'fermer', 'referme', 'refermer'].includes(word);
       const app = found.find((o) => o.sorte === 'appareil');
@@ -844,6 +921,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'remuer':
       return [{ kind: 'remuer', ref: found.find((o) => o.sorte === 'ustensile')?.ref }];
     case 'sauter':
+      // « retourne à la cuisine »
+      if (roomIn(rest) && !found.length) return [{ kind: 'piece', piece: roomIn(rest)! }];
       // « retourne à la table » : y aller
       if (found.length && !found.some((o) => o.nom === 'poêle' || o.sorte === 'nourriture')) return [{ kind: 'aller', ref: found[0].ref }];
       // « fais sauter la crêpe », « retourne l'omelette »
@@ -869,6 +948,17 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       const target = found.find((o) => !TOOLS.has(o.nom));
       return [{ kind: 'gouter', ref: target?.ref }];
     }
+    case 'doucher':
+      // « douche-toi », « va te doucher »
+      return [{ kind: 'douche' }];
+    case 'zapper': {
+      // « zappe », « change de chaîne », « mets la météo », « change pour l'aquarium »
+      const tv = found.find((o) => o.nom === 'télé');
+      const chaine = channelIn(rest);
+      if (!tv && !chaine && !rest.some((x) => x.startsWith('chaine')) && !(verb === 'zapper' && word.startsWith('zap'))) return null;
+      if (!world.objets.some((o) => o.nom === 'télé')) return null;
+      return [{ kind: 'tele', ref: tv?.ref, zapper: true, chaine }];
+    }
     case 'dire': {
       // le texte d'origine après le verbe (« dis bonjour à tous » → « bonjour à tous »)
       const m = original.match(/^.*?\b(?:dis|dit|dire|crie|crier)\b\s*(?:que\s+|qu['’]\s*|:\s*)?(.+)$/i);
@@ -892,6 +982,13 @@ function count(words: string[]): number | null {
 }
 
 const isLoose = (o: WorldObject) => o.ou !== 'en main' && !o.ou.startsWith('rangé');
+
+/** L'ordre vise le couvercle des toilettes (nommé, ou les toilettes seules) ? */
+function isLid(rest: string[], found: WorldObject[]): boolean {
+  // pas celui de la poubelle ni de la casserole
+  if (!found.every((o) => o.nom === 'toilettes')) return false;
+  return found.length > 0 || rest.some((x) => LID_WORDS.has(x));
+}
 
 /** « … avec la carafe » : l'objet nommé après « avec », et l'ordre sans ce morceau. */
 function withTool(rest: string[], objets: WorldObject[]): { tool?: WorldObject; rest: string[] } {
