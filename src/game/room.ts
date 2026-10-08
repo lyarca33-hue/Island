@@ -44,8 +44,8 @@ export const WALL_T = 0.12;
 const CUT_H = 0.2;
 /** Hauteur d'une porte ou d'un passage. */
 export const DOOR_H = 2.08;
-/** Porte d'entrée de la cuisine (mur ouest) : de z0 à z1. */
-const DOOR = { z0: 1.35, z1: 2.25 };
+/** Passage de la cuisine à l'entrée (mur ouest de la cuisine, mur est de l'entrée) : de z0 à z1. */
+export const DOOR = { z0: 1.35, z1: 2.25 };
 /** Passage de la cuisine au salon (mur est de la cuisine, mur ouest du salon) : de z0 à z1. */
 export const SALON_PASS = { z0: -1.9, z1: -1.0 };
 /** Distance (m) à laquelle une porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
@@ -1151,8 +1151,9 @@ function kitchenDecor(room: Room, anchor: Anchors): void {
 }
 
 /**
- * La cuisine : porte d'entrée (mur ouest), passage vers le salon (mur est), fenêtre au-dessus de
- * l'évier et à côté de la table, suspension au-dessus de la table, interrupteur à côté de la porte.
+ * La cuisine : passage vers l'entrée (mur ouest) et vers le salon (mur est), fenêtre au-dessus de
+ * l'évier et à côté de la table (mur sud, sur le jardin), suspension au-dessus de la table,
+ * interrupteur à côté du passage de l'entrée.
  *
  * Le long du fond : lave-vaisselle à côté de l'évier (sous la fenêtre), plan de travail pour
  * couper entre l'évier et la gazinière, tiroir à couverts, le frigo, puis le garde-manger au bout. Le long du mur
@@ -1164,17 +1165,18 @@ export const KITCHEN: RoomSpec = {
   rect: ROOM,
   floor: () => tiledFloor(ROOM),
   doors: [
-    { wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1, leaf: true },
+    { wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1 },
     { wall: 'est', u0: SALON_PASS.z0, u1: SALON_PASS.z1 },
   ],
-  joined: ['est'],
+  joined: ['est', 'ouest'],
   windows: (anchor) => {
     const sinkX = anchor('evier')?.x ?? -1.6;
-    const tableZ = anchor('table')?.z ?? 1;
+    const tableX = anchor('table')?.x ?? 1;
     return [
       // celle de l'évier s'ouvre : son battant est l'objet `fenetre` (KITCHEN.items)
       { wall: 'nord', u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH, sash: true },
-      { wall: 'est', u0: tableZ - 0.55, u1: tableZ + 0.55, y0: 0.95, y1: WIN_HIGH },
+      // celle de la table donne sur le jardin (le mur est est dos au salon)
+      { wall: 'sud', u0: tableX - 0.55, u1: tableX + 0.55, y0: 0.95, y1: WIN_HIGH },
     ];
   },
   lamps: (anchor) => {
@@ -1214,8 +1216,8 @@ export const KITCHEN: RoomSpec = {
     // le balai et le seau (la serpillière dedans) dans le coin, après le garde-manger
     ['balai', 2.55, 0, -2.66, 0],
     ['seau', 2.95, 0, -2.5, 0],
-    // dehors, à côté de la porte d'entrée : le conteneur où vont les sacs poubelle
-    ['conteneur', ROOM.x0 - 0.95, 0, 0.55, Math.PI / 2],
+    // dehors, contre le mur ouest de l'entrée (entree.ts), près de la porte : le conteneur où vont les sacs poubelle
+    ['conteneur', -6.35, 0, 2.3, 0],
   ],
   decor: kitchenDecor,
 };

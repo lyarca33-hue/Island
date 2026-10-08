@@ -19,6 +19,7 @@ import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
 import { UPKEEP_ITEMS } from './upkeep';
 import { LIFE_ITEMS } from './life';
 import { GARDEN_ITEMS } from '../jardin';
+import { ENTREE_ITEMS } from './entree';
 import { FECULENT_ITEMS } from './feculents';
 
 export interface ItemDef {
@@ -1410,6 +1411,8 @@ export const ITEMS: ItemDef[] = [
   ...UPKEEP_ITEMS,
   ...LIFE_ITEMS,
   ...GARDEN_ITEMS,
+  // l'entrée : banc à chaussures, miroir, portemanteau et vêtements, boîte aux lettres (entree.ts)
+  ...ENTREE_ITEMS,
   // pâtes, riz et soupes à la casserole (feculents.ts)
   ...FECULENT_ITEMS,
 ];

@@ -443,8 +443,8 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'aller_piece',
-    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre ou salle de bain (le perso s’arrête juste après l’entrée).',
-    params: { piece: 'cuisine, salon, chambre ou salle de bain' },
+    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre, salle de bain ou entrée (le perso s’arrête juste après l’entrée).',
+    params: { piece: 'cuisine, salon, chambre, salle de bain ou entrée' },
     run: (g, a) => g.walkToRoom(a.piece),
   },
   {

@@ -89,6 +89,7 @@ const ROOM_WORDS: Array<[string[], string]> = [
   [['cuisine'], 'cuisine'],
   [['salon', 'sejour', 'living'], 'salon'],
   [['chambre'], 'chambre'],
+  [['entree', 'hall', 'vestibule'], 'entrée'],
 ];
 /** La pièce nommée dans l'ordre, s'il y en a une. */
 function roomIn(rest: string[]): string | undefined {
@@ -237,6 +238,9 @@ const ALIASES: Record<string, string[]> = {
   'gants de menage': ['gants', 'gant'],
   savon: ['savon', 'savons'],
   conteneur: ['conteneur', 'container', 'benne'],
+  portemanteau: ['portemanteau', 'patere', 'pateres'],
+  manteau: ['manteau', 'veste', 'blouson'],
+  echarpe: ['echarpe', 'foulard'],
   fenetre: ['fenetre', 'fenetres'],
   horloge: ['horloge', 'pendule'],
   ilot: ['ilot'],
