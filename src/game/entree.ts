@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import type { Character } from './character';
 import type { WorldItem } from './items/carry';
+import { wearCoat } from './manteau';
 import { box, DARK_WOOD, DOOR, ROOM, tiles, toon, WALL_T, WIN_HIGH, type Rect, type Room, type RoomSpec } from './room';
 
 /** Intérieur de l'entrée : son mur est est dos au mur ouest de la cuisine. */
@@ -494,8 +495,9 @@ export class Entree {
   }
 
   /**
-   * Habille le perso du vêtement `k` : formes simples accrochées à ses os (le buste, les bras, le
-   * cou, la tête), à sa taille (mesurée du bassin au cou). Rien sans perso du créateur.
+   * Habille le perso du vêtement `k` : le manteau est taillé sur son corps et suit ses gestes
+   * (manteau.ts) ; l'écharpe et le bonnet sont des formes simples accrochées au cou et à la tête, à
+   * sa taille (mesurée du bassin au cou). Rien sans perso du créateur.
    */
   private dress(k: Clothes): THREE.Object3D[] {
     const c = this.host.character;
@@ -506,7 +508,6 @@ export class Entree {
     // unité : du bassin au cou (≈ 0,4 m pour un perso de 1,6 m)
     const u = at(neck).y - at(hips).y;
     const facing = c.root.getWorldQuaternion(new THREE.Quaternion());
-    const up = new THREE.Vector3(0, 1, 0);
     const out: THREE.Object3D[] = [];
     const part = (geo: THREE.BufferGeometry, color: number, x = 0, y = 0, z = 0) => {
       const m = new THREE.Mesh(geo, toon(color));
@@ -522,30 +523,10 @@ export class Entree {
       bone.attach(o);
       out.push(o);
     };
-    /** Manche (cylindre) de l'os `a` à l'os `b`. */
-    const sleeve = (a: THREE.Object3D | null, b: THREE.Object3D | null, radius: number, color: number) => {
-      if (!a || !b) return;
-      const pa = at(a), pb = at(b);
-      const m = part(new THREE.CylinderGeometry(radius, radius * 0.9, pa.distanceTo(pb) + 0.05 * u, 10), color);
-      put(a, m, pa.clone().lerp(pb, 0.5), new THREE.Quaternion().setFromUnitVectors(up, pb.clone().sub(pa).normalize()));
-    };
     if (k === 'manteau') {
-      const L = c.bone('leftUpperArm'), R = c.bone('rightUpperArm');
-      const top = at(neck).y - 0.04 * u, bottom = at(hips).y - 0.6 * u, h = top - bottom;
-      const mid = (L && R ? at(L).lerp(at(R), 0.5) : at(neck)).setY((top + bottom) / 2);
-      const wool = 0x7a3b2e;
-      const body = new THREE.Group();
-      body.add(
-        part(new THREE.BoxGeometry(0.82 * u, h, 0.7 * u), wool),
-        // le col relevé, les boutons devant
-        part(new THREE.BoxGeometry(0.5 * u, 0.12 * u, 0.62 * u), 0x5a2a20, 0, h / 2, -0.02 * u),
-      );
-      for (let i = 0; i < 4; i++) body.add(part(new THREE.BoxGeometry(0.05 * u, 0.05 * u, 0.02 * u), 0xd9c08a, 0, h * (0.3 - i * 0.18), 0.355 * u));
-      put(c.bone('spine') ?? hips, body, mid);
-      sleeve(L, c.bone('leftLowerArm'), 0.15 * u, wool);
-      sleeve(R, c.bone('rightLowerArm'), 0.15 * u, wool);
-      sleeve(c.bone('leftLowerArm'), c.bone('leftHand'), 0.13 * u, wool);
-      sleeve(c.bone('rightLowerArm'), c.bone('rightHand'), 0.13 * u, wool);
+      // un vrai manteau, taillé sur le corps du perso et animé avec lui (manteau.ts)
+      const coat = wearCoat(c);
+      if (coat) out.push(coat);
     } else if (k === 'echarpe') {
       const scarf = new THREE.Group();
       scarf.add(part(new THREE.TorusGeometry(0.17 * u, 0.07 * u, 8, 16).rotateX(Math.PI / 2), 0x2f6f8f));
