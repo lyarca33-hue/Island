@@ -4,6 +4,7 @@ import type { Game } from '../game/Game';
 import { skillPerks } from '../game/items/freshness';
 import { NEEDS } from '../game/needs';
 import { WEATHERS, type WeatherKind } from '../game/meteo';
+import { BODY_STATES, degrees, indoorTemp, NORMAL_TEMP } from '../game/temperature';
 import { forecast, type GaugeKey, type GaugeState, GaugeWatch } from './gauges';
 import { Icon, type IconName } from './icons';
 import './time.css';
@@ -218,12 +219,72 @@ function MoodGauge({ game, open, onOpen }: { game: Game; open: boolean; onOpen: 
 }
 
 /**
+ * La température du corps : l'anneau est plein à 37 °C et se vide en s'en éloignant ; bleu quand
+ * le perso a froid, orangé quand il a chaud. Au survol : la température, le ressenti et pourquoi.
+ */
+function BodyGauge({ game, open, onOpen }: { game: Game; open: boolean; onOpen: (open: boolean) => void }) {
+  const b = game.body;
+  const { label, tip } = BODY_STATES[b.state];
+  const pct = Math.max(0, 100 - (Math.abs(b.temp - NORMAL_TEMP) / 4) * 100);
+  const tone = b.state === 'normal' ? 'ok' : b.state === 'froid' || b.state === 'hypothermie' ? 'cold' : 'hot';
+  const danger = b.state === 'hypothermie' || b.state === 'coup de chaleur';
+  const trend = b.trend > 0 ? 'Se réchauffe' : b.trend < 0 ? 'Se refroidit' : null;
+  const touch = useRef<string | null>(null);
+  return (
+    <div className={`gauge body ${tone}${danger ? ' low' : ''}`}>
+      <button
+        className="gauge-ring"
+        aria-label={`Température : ${b.label}, ${label.toLowerCase()}`}
+        aria-expanded={open}
+        onPointerEnter={(e) => e.pointerType === 'mouse' && onOpen(true)}
+        onPointerLeave={(e) => e.pointerType === 'mouse' && onOpen(false)}
+        onPointerDown={(e) => (touch.current = e.pointerType === 'mouse' ? null : e.pointerType)}
+        onClick={() => {
+          if (touch.current) onOpen(!open);
+          touch.current = null;
+        }}
+        onFocus={() => !touch.current && onOpen(true)}
+        onBlur={() => onOpen(false)}
+      >
+        <svg className="gauge-track" viewBox="0 0 36 36" aria-hidden>
+          <circle className="gauge-bg" cx="18" cy="18" r="15.5" pathLength={100} />
+          <circle className="gauge-fill" cx="18" cy="18" r="15.5" pathLength={100} strokeDasharray={`${Math.max(0.01, pct)} 100`} />
+        </svg>
+        <Icon name="thermo" size={15} />
+        {b.state !== 'normal' && b.trend !== 0 && (
+          <span className={`gauge-trend ${(b.trend > 0) === (tone === 'cold') ? 'up' : 'fast'}`}>
+            <Icon name={b.trend > 0 ? 'up' : 'down'} size={9} />
+          </span>
+        )}
+      </button>
+      {tone !== 'ok' && !open && <span className="gauge-low" aria-hidden>{b.label}</span>}
+      {open && (
+        <div className="gauge-tip" role="tooltip">
+          <div className="gauge-tip-head">
+            <Icon name="thermo" size={15} />
+            <b>Température</b>
+            <span className="gauge-tip-value">{b.label}</span>
+          </div>
+          <div className="gauge-tip-bar"><span style={{ width: `${pct}%` }} /></div>
+          <div className="gauge-tip-row">{label}{trend && ` · ${trend.toLowerCase()}`}</div>
+          <div className="gauge-tip-row">
+            Ressenti {degrees(b.felt)} · {b.causes.join(', ')}
+          </div>
+          <div className="gauge-tip-row gauge-tip-hint">Dehors {degrees(b.outdoor)}, maison {degrees(indoorTemp(b.outdoor))}</div>
+          {tip && <div className="gauge-tip-row gauge-tip-hint">{tip}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * En haut à droite : les jauges de besoins (rondes, sans texte ; le détail au survol) et
  * l'horloge, qui ouvre le réglage de l'heure.
  */
 export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => void }) {
   const read = useGauges(game);
-  const [open, setOpen] = useState<GaugeKey | 'skill' | 'mood' | null>(null);
+  const [open, setOpen] = useState<GaugeKey | 'body' | 'skill' | 'mood' | null>(null);
   if (!game || !read) return null;
   const { clock } = game;
   return (
@@ -242,6 +303,7 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
             minutes={clock.minutes}
           />
         ))}
+        <BodyGauge game={game} open={open === 'body'} onOpen={(o) => setOpen((cur) => (o ? 'body' : cur === 'body' ? null : cur))} />
         <SkillGauge game={game} open={open === 'skill'} onOpen={(o) => setOpen((cur) => (o ? 'skill' : cur === 'skill' ? null : cur))} />
         <MoodGauge game={game} open={open === 'mood'} onOpen={(o) => setOpen((cur) => (o ? 'mood' : cur === 'mood' ? null : cur))} />
       </div>
@@ -252,7 +314,8 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
         <b>{clock.label}</b>
         {clock.speed === 0 && <Icon name="pause" size={13} className="hud-paused" />}
         <span className="hud-day" title={`Jour ${clock.day} · lever ${hhmm(clock.sun.rise)}, coucher ${hhmm(clock.sun.set)}`}>{clock.dateLabel}</span>
-        <span className="hud-weather" title={game.weather.label}>{game.weather.icon}</span>
+        <span className="hud-weather" title={`${game.weather.label}, ${degrees(game.body.outdoor)} dehors`}>{game.weather.icon}</span>
+        <span className="hud-outdoor">{degrees(game.body.outdoor)}</span>
       </button>
     </div>
   );
@@ -284,7 +347,7 @@ export function TimeControls({ game }: { game: Game | null }) {
         ))}
       </div>
       <small>Soleil : lever {hhmm(sun.rise)}, coucher {hhmm(sun.set)}. Une saison dure {SEASON_DAYS} jours.</small>
-      <span>Météo : <b>{game.weather.label}</b></span>
+      <span>Météo : <b>{game.weather.label}</b>, {degrees(game.body.outdoor)} dehors</span>
       <div className="time-speeds">
         <button className={game.weather.force === null ? 'active' : ''} title="Selon la saison" onClick={() => (game.weather.force = null)}>Auto</button>
         {(Object.keys(WEATHERS) as WeatherKind[]).map((k) => (
