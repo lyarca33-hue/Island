@@ -31,6 +31,7 @@ import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
 import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
+import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { CHANNELS, Tv } from './tv';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, type Quality } from './postfx';
 
@@ -431,7 +432,7 @@ const the = (name: string) => (PLURAL.has(name) ? `les ${name}` : elides(name) ?
 /** « au frigo », « à la table », « à l’évier », « aux quartiers de pomme ». */
 const toThe = (name: string) => (PLURAL.has(name) ? `aux ${name}` : elides(name) ? `à l’${name}` : FEMININE.has(name) ? `à la ${name}` : `au ${name}`);
 
-/** La compétence cuisine est gardée dans le navigateur (le reste de la partie ne l'est pas encore). */
+/** La compétence cuisine est gardée dans le navigateur (et avec la partie, voir save.ts). */
 const SKILL_KEY = 'island-cuisine-points';
 function loadSkill(): number {
   try {
@@ -7202,6 +7203,96 @@ export class Game {
     c.lookAt(this.focus);
     // lumière selon l'heure et la saison ; soleil et carte d'ombre suivent le perso
     applySky(this.clock.solarHour, this.clock.noonElevation, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus, this.weather.cloud);
+  }
+
+  /** La partie en cours, à sauver (voir save.ts). */
+  saveState(): GameSave {
+    return captureGame(this.saveAccess());
+  }
+
+  /** Reprend une partie sauvée ; à appeler sur un jeu tout juste construit. */
+  loadState(s: GameSave): void {
+    applyGame(this.saveAccess(), s);
+  }
+
+  private saveAccess(): SaveAccess {
+    const asArray = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null);
+    return {
+      items: this.items,
+      held: this.character.carried,
+      add: (id) => {
+        const def = ITEM_BY_ID.get(id);
+        if (!def) return null;
+        const item = new WorldItem(def);
+        this.items.push(item);
+        this.scene.add(item.object);
+        return item;
+      },
+      remove: (item) => this.removeItem(item),
+      liquidColor,
+      refresh: (item) => {
+        showDoneness(item);
+        if (item.def.food) item.setMoldy(freshness(item.def, item.age) === 'périmé');
+      },
+      extras: (item) => {
+        const x: Record<string, unknown> = {};
+        const put = (k: string, v: unknown) => v !== undefined && (x[k] = v);
+        put('pastilles', this.tablets.get(item));
+        put('sachets', this.teaBoxes.get(item));
+        put('rouleau', this.rolls.get(item));
+        put('poubelle', this.binFill.get(item));
+        put('jus', this.blended.get(item));
+        put('sac', this.bags.get(item));
+        put('melange', this.mixes.get(item));
+        put('epices', this.seasoned.has(item) ? [...this.seasoned.get(item)!] : undefined);
+        put('garniture', this.toppings.get(item));
+        if (this.bagless.has(item)) x.sansSac = true;
+        if (this.lamps.get(item)?.on) x.lampe = true;
+        return x;
+      },
+      setExtras: (item, x) => {
+        if (typeof x.pastilles === 'number') this.tablets.set(item, x.pastilles);
+        if (typeof x.sachets === 'number') this.teaBoxes.set(item, x.sachets);
+        if (typeof x.rouleau === 'number') this.rolls.set(item, x.rouleau);
+        if (typeof x.poubelle === 'number') {
+          this.binFill.set(item, x.poubelle);
+          this.showTrash(item);
+        }
+        if (typeof x.jus === 'number') {
+          this.blended.set(item, x.jus);
+          this.showBlend(item);
+        }
+        const bag = asArray(x.sac);
+        if (bag) this.bags.set(item, bag);
+        const mix = x.melange as { parts?: unknown; batter?: unknown } | undefined;
+        const parts = asArray(mix?.parts);
+        if (parts) this.mixes.set(item, { parts, batter: typeof mix!.batter === 'string' ? mix!.batter : null });
+        const spices = asArray(x.epices);
+        if (spices) this.seasoned.set(item, new Set(spices));
+        const tops = asArray(x.garniture);
+        if (tops) this.toppings.set(item, tops);
+        if (x.sansSac) this.bagless.add(item);
+        if (x.lampe) this.setLamp(item, true);
+      },
+      perso: this.character,
+      clock: this.clock,
+      needs: this.needs,
+      mood: this.mood,
+      skill: this.skillPoints,
+      setMood: (n) => {
+        this.mood = THREE.MathUtils.clamp(n, 0, 100);
+        this.onMood?.(this.mood);
+      },
+      setSkill: (n) => {
+        this.skillPoints = Math.max(0, n);
+        saveSkill(this.skillPoints);
+        this.onSkill?.(this.skillPoints);
+      },
+      weather: this.weather,
+      done: () => {
+        this.character.nav = this.buildNav();
+      },
+    };
   }
 
   private disposed = false;
