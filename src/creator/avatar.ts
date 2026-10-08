@@ -326,6 +326,8 @@ export class Avatar {
   private body: Body = { height: 1, head: 1, legs: 1, build: 1 };
   private tinted = new Map<Tintable, { color: THREE.Color; shade: THREE.Color | null; map: THREE.Texture | null; shadeMap: THREE.Texture | null }>();
   private others: VRM[] = [];
+  /** Maillages retirés (visage, coiffure ou cuir chevelu remplacés) : libérés avec le perso. */
+  private dropped = new THREE.Group();
   /** Accessoires : repères posés sur la tête et le cou, mesures, objets portés par emplacement. */
   private headAnchor = new THREE.Group();
   private neckAnchor = new THREE.Group();
@@ -351,7 +353,7 @@ export class Avatar {
     // visage d'un autre modèle : ses yeux gardent leurs propres os (place des yeux propre au visage)
     if (r.face !== r.outfit) {
       const faceVrm = vrms.get(r.face)!;
-      for (const m of meshes(base, 'face')) m.removeFromParent();
+      for (const m of meshes(base, 'face')) this.drop(m);
       graft(meshes(faceVrm, 'face'), faceVrm, base, (n) => n.startsWith('J_Adj_') && n.includes('FaceEye'));
       this.faceVrm = faceVrm;
     }
@@ -360,10 +362,10 @@ export class Avatar {
     // coiffure d'un autre modèle : ses os de mèches (HairJoint-…) et leurs ressorts viennent avec
     if (r.hair !== r.outfit) {
       const hairVrm = vrms.get(r.hair)!;
-      for (const m of meshes(base, 'hair')) m.removeFromParent();
+      for (const m of meshes(base, 'hair')) this.drop(m);
       // cuir chevelu du modèle de la tenue : fait pour sa propre coiffure, il dépasserait de l'autre
       const head = base.humanoid.getRawBoneNode('head');
-      if (head) for (const m of meshes(base, 'body')) if (onHead(m, head)) m.removeFromParent();
+      if (head) for (const m of meshes(base, 'body')) if (onHead(m, head)) this.drop(m);
       const springs = base.springBoneManager;
       if (springs) for (const j of [...springs.joints]) if (j.bone.name.startsWith('HairJoint')) springs.deleteJoint(j);
       const roots = graft(meshes(hairVrm, 'hair'), hairVrm, base, (n) => n.startsWith('HairJoint'));
@@ -407,6 +409,10 @@ export class Avatar {
     const a = new Avatar(new Map(ids.map((id, i) => [id, vrms[i]])), r);
     a.applyLook(r);
     return a;
+  }
+
+  private drop(m: THREE.Object3D): void {
+    this.dropped.add(m);
   }
 
   /** Mêmes pièces que la recette (sinon il faut reconstruire le perso). */
@@ -472,7 +478,8 @@ export class Avatar {
       eye.z = Math.max(eye.z, skull.max.z - 0.02);
       const mid = (eye.y + skull.max.y) / 2;
       const c = skull.getCenter(new THREE.Vector3());
-      const ys: number[] = [], rs: number[] = [], zs: number[] = [];
+      const ys: number[] = [], zs: number[] = [];
+      const pts: THREE.Vector3[] = [];
       for (const m of meshes(this.base, 'hair')) {
         eachVertex(m, (p) => {
           p.sub(o);
@@ -480,8 +487,8 @@ export class Avatar {
           const d = Math.hypot(p.x - c.x, p.z - c.z);
           if (p.y < mid || d > 0.25) return;
           ys.push(p.y);
-          rs.push(d);
           zs.push(p.z);
+          pts.push(p.clone());
         });
       }
       // centiles plutôt que maximums : une mèche rebelle (épi) ne soulève pas le chapeau
@@ -491,9 +498,19 @@ export class Avatar {
         return Math.max(min, a[Math.min(a.length - 1, Math.floor(a.length * q))]);
       };
       const hairTop = pct(ys, 0.97, skull.max.y);
-      const hairRadius = pct(rs, 0.9, 0);
       const hairFront = pct(zs, 0.95, skull.max.z);
-      this.headFit = { skull, hairTop, hairRadius, hairFront, eye };
+      // tour de la coiffure là où se pose un chapeau (un peu sous le sommet) : centre et rayon
+      // mesurés sur la coiffure elle-même, souvent plus en arrière que le crâne
+      const band = pts.filter((p) => p.y > hairTop - 0.1 && p.y < hairTop - 0.04);
+      const bx = band.map((p) => p.x), bz = band.map((p) => p.z);
+      const hairCenter = new THREE.Vector2(c.x, c.z);
+      let hairRadius = (skull.max.x - skull.min.x) * 0.4;
+      if (band.length > 20) {
+        const [x0, x1, z0, z1] = [pct(bx, 0.02, -1), pct(bx, 0.98, -1), pct(bz, 0.02, -1), pct(bz, 0.98, -1)];
+        hairCenter.set((x0 + x1) / 2, (z0 + z1) / 2);
+        hairRadius = ((x1 - x0) / 2 + (z1 - z0) / 2) / 2;
+      }
+      this.headFit = { skull, hairTop, hairRadius, hairCenter, hairFront, eye };
     }
     if (neck) {
       const o = pinOn(neck, this.neckAnchor);
@@ -713,11 +730,44 @@ export class Avatar {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       if (!seen.has(m.geometry)) (seen.add(m.geometry), m.geometry.dispose());
-      for (const mat of materialsOf(m)) if (!seen.has(mat)) (seen.add(mat), mat.dispose());
+      // texture des matrices d'os de chaque squelette
+      const sk = (m as THREE.SkinnedMesh).skeleton;
+      if (sk && !seen.has(sk)) (seen.add(sk), sk.dispose());
+      for (const mat of materialsOf(m)) {
+        if (seen.has(mat)) continue;
+        seen.add(mat);
+        // textures aussi : chaque modèle chargé a les siennes (40 à 50 par perso), sinon la
+        // mémoire du GPU grossit à chaque changement de tenue et tout ralentit
+        for (const t of texturesOf(mat)) freeTex(t);
+        mat.dispose();
+      }
+    };
+    const freeTex = (t: THREE.Texture | null | undefined) => {
+      if (t && !seen.has(t)) (seen.add(t), t.dispose());
     };
     this.base.scene.traverse(free);
+    this.dropped.traverse(free);
     for (const v of this.others) v.scene.traverse(free);
+    // textures d'origine mises de côté par les teintes, et leurs versions en gris
+    for (const o of this.tinted.values()) {
+      for (const t of [o.map, o.shadeMap]) {
+        freeTex(t);
+        if (t) freeTex(grayCache.get(t));
+      }
+    }
   }
+}
+
+/** Textures d'un matériau : propriétés (map...) et uniforms (matériaux MToon). */
+function texturesOf(mat: THREE.Material): THREE.Texture[] {
+  const out: THREE.Texture[] = [];
+  const add = (v: unknown) => {
+    if (v && (v as THREE.Texture).isTexture) out.push(v as THREE.Texture);
+  };
+  for (const v of Object.values(mat)) add(v);
+  const uniforms = (mat as THREE.Material & { uniforms?: Record<string, { value: unknown }> }).uniforms;
+  if (uniforms) for (const u of Object.values(uniforms)) add(u?.value);
+  return out;
 }
 
 function freeObject(root: THREE.Object3D): void {

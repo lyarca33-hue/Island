@@ -48,7 +48,7 @@ export class CreatorScene {
     const key = lightAllPasses(new THREE.DirectionalLight(new THREE.Color(1.0, 0.94, 0.84), 2.1));
     key.position.set(-2.2, 4, 3.2);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.mapSize.set(1024, 1024);
     const sc = key.shadow.camera;
     sc.left = -1.5; sc.right = 1.5; sc.top = 2.5; sc.bottom = -0.5; sc.near = 0.5; sc.far = 12;
     key.shadow.bias = -0.0004;
@@ -135,8 +135,8 @@ export class CreatorScene {
 
   private resize(): void {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
-    // un seul perso à l'écran : au moins la qualité normale
-    fitRenderer(this.renderer, w, h, Math.max(QUALITY_PIXELS[loadQuality()], QUALITY_PIXELS.normale));
+    // même qualité que le jeu (réglage de l'affichage) : un ordinateur lent reste fluide
+    fitRenderer(this.renderer, w, h, QUALITY_PIXELS[loadQuality()]);
     this.post.setSize(w, h);
   }
 
