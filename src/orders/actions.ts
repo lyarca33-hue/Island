@@ -472,6 +472,21 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.sleepIn(a.lit),
   },
   {
+    name: 'sieste',
+    description: 'Faire la sieste allongé sur le canapé (`canape` facultatif : sinon le plus proche) : le temps file, la fatigue remonte, le perso se réveille seul au bout d’une à deux heures. Mains vides ; refusé si la fatigue est presque pleine.',
+    params: { canape: 'ref du canapé' },
+    run: (g, a) => g.nap(a.canape),
+  },
+  {
+    name: 'regler_reveil',
+    description: 'Régler le réveil-matin de la chambre à l’heure `heure` (ex. 7 ou 6.5 pour 6 h 30), ou le couper (`heure` = off). Réglé, il sonne à cette heure (« Driiing ! ») et le perso qui dort dans le lit se lève à ce moment-là au lieu d’attendre d’être reposé.',
+    params: { heure: 'heure du réveil, ou off' },
+    run: (g, a) => {
+      const h = Number(String(a.heure ?? '7').replace(',', '.').replace(/\s*h\s*(\d+)?/, (_m, mm) => (mm ? `.${Math.round((Number(mm) / 60) * 100)}` : '')));
+      return g.setAlarm(a.heure === 'off' ? null : Number.isFinite(h) ? h : 7, a.reveil);
+    },
+  },
+  {
     name: 'reveiller',
     description: 'Se réveiller et sortir du lit quand on dort.',
     params: {},
