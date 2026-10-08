@@ -22,6 +22,7 @@ import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } fro
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
 import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
+import { DRAINS, FECULENT_FEMININE, FECULENT_PLURAL, FECULENT_RECIPES, PACKETS, SAUCE_SERVINGS, SOUP_BROTH, SOUP_VEG, SOUPS, TOPPED } from './items/feculents';
 import { BAGS_PER_ROLL, UPKEEP_FEMININE, UPKEEP_PLURAL } from './items/upkeep';
 import { HOT_WATER, INFUSE, LIFE_FEMININE, LIFE_PLURAL, TEA, TEA_BAGS, TEA_COLOR, teaBag } from './items/life';
 import { KitchenSound } from './sound';
@@ -319,6 +320,10 @@ const START_STORED: Array<[string, string, number]> = [
   ['levure', 'garde-manger', 15],
   ['biscuits', 'garde-manger', 16],
   ['chocolat', 'garde-manger', 17],
+  // pâtes, riz et soupe en brique, au fond du bas
+  ['paquet-pates', 'garde-manger', 5],
+  ['paquet-riz', 'garde-manger', 6],
+  ['brique-soupe', 'garde-manger', 7],
   // les surgelés
   ['frites', 'congelateur', 2],
   ['legumes-surgeles', 'congelateur', 4],
@@ -415,9 +420,9 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...FECULENT_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
-const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL]);
+const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL, ...FECULENT_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
 /** Pronom de l'objet : « lave-la », « lave-le », « lave-les ». */
 const it = (name: string) => (PLURAL.has(name) ? 'les' : FEMININE.has(name) ? 'la' : 'le');
@@ -4579,7 +4584,9 @@ export class Game {
     const what = theLiquid(p.liquid);
     if (p.sink) {
       const kept = this.inPan(p.from);
-      this.onNotice?.(kept.length ? `${cap(what)} est égoutté${elides(p.liquid) ? 'e' : ''} : ${kept.map((i) => the(i.name)).join(' et ')} reste${kept.length > 1 ? 'nt' : ''} dans ${the(p.from.name)}.` : `${cap(the(p.from.name))} est vidé${FEMININE.has(p.from.name) ? 'e' : ''} dans l’évier.`);
+      // égoutter : toute l'eau part, ce qui a cuit reste au fond
+      if (kept.length) this.emptyPot(p.from);
+      this.onNotice?.(kept.length ? `${cap(what)} est égoutté${elides(p.liquid) ? 'e' : ''} : ${kept.map((i) => the(i.name)).join(' et ')} reste${kept.length > 1 || PLURAL.has(kept[0].name) ? 'nt' : ''} dans ${the(p.from.name)}.` : `${cap(the(p.from.name))} est vidé${FEMININE.has(p.from.name) ? 'e' : ''} dans l’évier.`);
     } else if (p.into) {
       const full = p.into.level > 0.98;
       this.onNotice?.(`${cap(what)} est versé${elides(p.liquid) ? 'e' : ''} dans ${the(p.into.name)}${full ? ` (plein${agree(p.into.name)})` : ''}.`);
@@ -5856,7 +5863,7 @@ export class Game {
       const full = this.pourable();
       if (full) {
         add(`Verser ${theLiquid(full.contents!)}`, () => this.pourInto());
-        if (this.sinks.size) add(`Vider ${the(full.name)} dans l’évier`, () => this.emptyHeld());
+        if (this.sinks.size) add(`${this.drainsFood(full) ? 'Égoutter' : 'Vider'} ${the(full.name)} dans l’évier`, () => this.emptyHeld());
       }
       if (can.read) add('Lire', () => this.read());
       if (can.reading) add('Fermer le livre', () => this.stopReading());
@@ -5969,7 +5976,7 @@ export class Game {
     }
     const sink = this.sinks.get(item);
     if (sink) {
-      if (full) add(`Vider ${the(full.name)}`, () => this.emptyInto(item, false));
+      if (full) add(`${this.drainsFood(full) ? 'Égoutter' : 'Vider'} ${the(full.name)}`, () => this.emptyInto(item, false));
       add(sink.tap ? 'Fermer le robinet' : 'Ouvrir le robinet', () => this.setTap(!sink.tap, ref));
       add(sink.plug ? 'Enlever le bouchon' : `Boucher ${the(item.name)}`, () => this.setPlug(!sink.plug, ref));
       if (!held.length) add('Boire au robinet', () => this.washAt(item, true, false, true));
@@ -6562,6 +6569,17 @@ export class Game {
     if (tool && item.def.mixes && this.mixes.get(item)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(ref));
     const batter = bowl && this.mixes.get(bowl)?.batter;
     if (batter && item.def.cookware && !item.def.fill) add(`Verser ${theLiquid(batter)} dedans`, () => this.pourBatter(ref));
+    // pâtes, riz et soupes à la casserole (feculents.ts)
+    const packet = held.find((h) => PACKETS[h.name] !== undefined);
+    const veg = held.find((h) => SOUP_VEG.includes(h.name));
+    const carton = held.find((h) => h.def.id === 'brique-soupe');
+    const topping = held.find((h) => h.name === 'beurre' || h.name === 'sauce tomate');
+    if (item.def.cookware && item.def.fill) {
+      if (packet) add(`Verser ${PACKETS[packet.name].what} dans ${the(item.name)}`, () => this.pourStarch(ref));
+      if (veg) add(`Mettre ${the(veg.name)} dans la soupe`, () => this.addToSoup(ref));
+      if (carton) add(`Verser la soupe dans ${the(item.name)}`, () => this.pourSoup(ref));
+    }
+    if (topping && foods.some((f) => TOPPED[f.name] && doneness(f.def, f.cooking) === 'cuit')) add(topping.name === 'beurre' ? 'Ajouter du beurre' : 'Napper de sauce tomate', () => this.topStarch(ref));
     if (item.def.cookware && foods.length) {
       if (tool) add('Remuer', () => this.stirPan(ref));
       if (!item.def.fill && (c.carried.includes(item) || c.freeHand(item))) add('Faire sauter', () => this.tossPan(ref));
@@ -6828,6 +6846,135 @@ export class Game {
     return false;
   }
 
+  /** L'eau de la casserole bout : elle est posée sur un feu allumé et bien chaud. */
+  private boils(pan: WorldItem): boolean {
+    const under = this.stoveUnder(pan);
+    const h = under && this.heaters.get(under.heater);
+    return pan.contents === 'eau' && pan.level > 0.01 && !!under && !!h && h.on[under.i] && h.warm[under.i] > 0.6;
+  }
+
+  /** Vidé dans l'évier, l'ustensile tenu garde ce qui y cuit : on égoutte (pâtes, riz, pommes de terre). */
+  private drainsFood(pan: WorldItem): boolean {
+    return !!pan.def.cookware && this.riders.some((r) => r.base === pan);
+  }
+
+  /** La casserole se vide (la soupe servie emporte son bouillon). */
+  private emptyPot(pan: WorldItem): void {
+    pan.contents = null;
+    pan.setLevel(0);
+    pan.setLiquidColor(liquidColor('eau'));
+  }
+
+  /** Un paquet ou un pot entamé : il en reste moins ; vide, il part. Rend vrai s'il est fini. */
+  private usePortion(item: WorldItem, part: number): boolean {
+    item.portion = Math.max(0, item.portion - part);
+    if (item.portion > 0.01) return false;
+    if (this.character.loseItem(item)) this.removeItem(item);
+    return true;
+  }
+
+  /** Verse le paquet tenu (pâtes, riz) dans la casserole `ref` (sinon celle sur le feu) : il faut que l'eau bouille. */
+  pourStarch(ref?: string, running = false): boolean {
+    const c = this.character;
+    const packet = this.heldWith((h) => PACKETS[h.name] !== undefined);
+    const what = packet && PACKETS[packet.name];
+    const pan = this.panFor(ref, (p) => !!p.def.fill && !c.carried.includes(p));
+    if (!packet || !what) this.onNotice?.('Prends un paquet de pâtes ou de riz (au garde-manger).');
+    else if (!pan?.def.cookware || !pan.def.fill) this.onNotice?.('Il faut une casserole pour cuire les pâtes ou le riz.');
+    else if (pan.contents !== 'eau' || pan.level <= 0.01) this.onNotice?.(`Remplis d’abord ${the(pan.name)} d’eau à l’évier.`);
+    else if (this.inPan(pan).length) this.onNotice?.(`Il y a déjà ${this.inPan(pan).map((i) => i.name).join(' et ')} dans ${the(pan.name)}.`);
+    else if (!this.boils(pan)) this.onNotice?.(`Attends que l’eau bouille : pose ${the(pan.name)} sur un feu allumé.`);
+    else {
+      return this.gesture(packet, pan, 'tilt', this.above(pan, 0.12), () => {
+        const at = this.panSpot(pan, true);
+        if (!at || !c.carried.includes(packet) || this.inPan(pan).length) return;
+        const made = this.spawnAt(what.cooks, at, pan.object.rotation.y);
+        const empty = this.usePortion(packet, 1 / what.servings);
+        this.practice(XP_GESTURE);
+        if (made) this.onNotice?.(`${cap(the(made.name))} cui${PLURAL.has(made.name) ? 'sent' : 't'} dans l’eau qui bout : égoutte à l’évier quand c’est cuit.${empty ? ` ${cap(the(packet.name))} est vide.` : ''}`);
+      }, running);
+    }
+    return false;
+  }
+
+  /** Met le légume tenu (coupé) dans l'eau de la casserole `ref` : une soupe de légumes, qui cuit sur le feu. */
+  addToSoup(ref?: string, running = false): boolean {
+    const c = this.character;
+    const veg = this.heldWith((h) => SOUP_VEG.includes(h.name));
+    const pan = this.panFor(ref, (p) => !!p.def.fill && p.contents === 'eau' && !c.carried.includes(p));
+    const others = pan ? this.inPan(pan).filter((f) => f.def.id !== 'soupe-legumes') : [];
+    if (!veg) this.onNotice?.('Prends des légumes coupés (rondelles de carotte, tranches de tomate…).');
+    else if (!pan?.def.cookware || !pan.def.fill) this.onNotice?.('Il faut une casserole pour faire la soupe.');
+    else if (c.carried.includes(pan)) this.onNotice?.(`Pose d’abord ${the(pan.name)}.`);
+    else if (pan.contents !== 'eau' || pan.level <= 0.01) this.onNotice?.(`Remplis d’abord ${the(pan.name)} d’eau à l’évier.`);
+    else if (others.length) this.onNotice?.(`Il y a déjà ${others.map((i) => i.name).join(' et ')} dans ${the(pan.name)}.`);
+    else {
+      return this.gesture(veg, pan, 'tilt', this.above(pan, 0.1), () => {
+        const soup = this.inPan(pan).find((f) => f.def.id === 'soupe-legumes');
+        const at = this.panSpot(pan, true);
+        if (!c.carried.includes(veg) || (!soup && !at)) return;
+        if (c.loseItem(veg)) this.removeItem(veg);
+        if (!soup) this.spawnAt('soupe-legumes', at!, pan.object.rotation.y);
+        pan.setLiquidColor(SOUP_BROTH['soupe de légumes']);
+        this.practice(XP_GESTURE);
+        this.onNotice?.(soup ? `${cap(the(veg.name))} rejoi${PLURAL.has(veg.name) ? 'gnent' : 'nt'} la soupe.` : `La soupe de légumes cuit dans ${the(pan.name)}${this.stoveUnder(pan) ? '' : ' (pose-la sur un feu allumé)'} : sers-la à la louche dans un bol.`);
+      }, running);
+    }
+    return false;
+  }
+
+  /** Verse la brique de soupe tenue dans la casserole `ref` (vide) : elle se réchauffe sur le feu. */
+  pourSoup(ref?: string, running = false): boolean {
+    const c = this.character;
+    const carton = this.heldWith((h) => h.def.id === 'brique-soupe');
+    const pan = this.panFor(ref, (p) => !!p.def.fill && !p.contents && !this.inPan(p).length && !c.carried.includes(p));
+    if (!carton) this.onNotice?.('Prends la brique de soupe (au garde-manger).');
+    else if (!pan?.def.cookware || !pan.def.fill) this.onNotice?.('Il faut une casserole pour réchauffer la soupe.');
+    else if (c.carried.includes(pan)) this.onNotice?.(`Pose d’abord ${the(pan.name)}.`);
+    else if (pan.contents || this.inPan(pan).length) this.onNotice?.(`Vide d’abord ${the(pan.name)}.`);
+    else {
+      return this.gesture(carton, pan, 'tilt', this.above(pan, 0.12), () => {
+        const at = this.panSpot(pan, true);
+        if (!at || !c.carried.includes(carton) || pan.contents) return;
+        this.spawnAt('soupe-brique', at, pan.object.rotation.y);
+        // le bouillon : de « l'eau » pour la cuisson (elle ne brûle pas tant qu'il en reste), couleur soupe
+        pan.contents = 'eau';
+        pan.setLiquidColor(SOUP_BROTH.soupe);
+        pan.setLevel(0.45);
+        if (c.loseItem(carton)) this.removeItem(carton);
+        this.onNotice?.(`La soupe est dans ${the(pan.name)} : réchauffe-la sur le feu, puis sers-la à la louche dans un bol.`);
+      }, running);
+    }
+    return false;
+  }
+
+  /** Met le beurre ou la sauce tomate tenus sur les pâtes ou le riz cuits de `ref` (la casserole égouttée, l'assiette). */
+  topStarch(ref?: string, running = false): boolean {
+    const c = this.character;
+    const top = this.heldWith((h) => h.name === 'beurre' || h.name === 'sauce tomate');
+    const ok = (f: WorldItem) => !!TOPPED[f.name] && doneness(f.def, f.cooking) === 'cuit';
+    const target = ref ? this.byRef(ref) : (this.nearest((i) => !!i.def.plate && !c.carried.includes(i) && this.foodsAt(i).some(ok)) ?? this.panFor(undefined, (p) => this.inPan(p).some(ok)));
+    const food = target && this.foodsAt(target).find(ok);
+    if (!top) this.onNotice?.('Prends le beurre (au frigo) ou la sauce tomate (au garde-manger).');
+    else if (!target || !food) this.onNotice?.('Pas de pâtes ou de riz cuits où le mettre.');
+    else if (target.def.cookware && target.contents === 'eau' && target.level > 0.01) this.onNotice?.(`Égoutte d’abord ${the(food.name)} : vide l’eau de ${the(target.name)} dans l’évier.`);
+    else {
+      return this.gesture(top, target, 'tilt', this.above(target, 0.06), () => {
+        if (!this.items.includes(food) || !c.carried.includes(top)) return;
+        const cooking = food.cooking;
+        const made = this.turnInto(food, TOPPED[food.name][top.name]);
+        if (!made) return;
+        // le même plat, garni : il garde sa cuisson (et reste dans la casserole)
+        made.cooking = cooking;
+        showDoneness(made);
+        const empty = top.name === 'sauce tomate' && this.usePortion(top, 1 / SAUCE_SERVINGS);
+        this.practice(XP_GESTURE);
+        this.onNotice?.(`${cap(made.name)}, prêt${agree(made.name)} !${empty ? ' Le pot de sauce tomate est fini.' : ''}`);
+      }, running);
+    }
+    return false;
+  }
+
   /** Remue ce qui cuit dans l'ustensile `ref` (sinon celui sur le feu) avec la spatule ou la cuillère en bois : ça n'attache plus. */
   stirPan(ref?: string, running = false): boolean {
     const tool = this.heldWith((h) => !!h.def.stirs);
@@ -6937,6 +7084,8 @@ export class Game {
     else if (this.shelfOf(plate)) this.onNotice?.(`Sors d’abord ${the(plate.name)} du rangement.`);
     else if (plate.dirty) this.onNotice?.(`${cap(the(plate.name))} est sale.`);
     else if (this.foodOn(plate)) this.onNotice?.(`Il y a déjà ${this.foodOn(plate)!.name} dans ${the(plate.name)}.`);
+    else if (DRAINS.some((n) => food.name.startsWith(n)) && from.contents === 'eau' && from.level > 0.01) this.onNotice?.(`Égoutte d’abord ${the(food.name)} : prends ${the(from.name)} et vide l’eau dans l’évier.`);
+    else if (SOUPS.includes(food.name) && !plate.def.deep) this.onNotice?.('La soupe se sert dans un bol (il y en a au placard).');
     else {
       // 1. dans l'ustensile : l'aliment passe sur la spatule ; 2. au-dessus de l'assiette : il y glisse
       return this.gesture(tool, from, 'stir', this.above(from, 0.01), () => {
@@ -6950,6 +7099,8 @@ export class Game {
           food.object.quaternion.setFromAxisAngle(UP, plate.object.rotation.y);
           food.object.position.copy(spot).setY(spot.y + food.restLift(food.object.quaternion));
           tool.setDirty(true);
+          // la soupe part avec son bouillon
+          if (SOUPS.includes(food.name)) this.emptyPot(from);
           this.onNotice?.(`${cap(the(food.name))} est servi${agree(food.name)} dans ${the(plate.name)}.`);
           this.practice(XP_GESTURE);
         }, running);
@@ -7127,7 +7278,11 @@ export class Game {
       const needs = list(r.needs);
       return { name: r.name, needs, extras: [], how: r.how, ready: needs.every((n) => n.have), task: r.task };
     });
-    return [...stove, ...book];
+    const pot = FECULENT_RECIPES.map((r) => {
+      const needs = list(r.needs);
+      return { name: r.name, needs, extras: [], how: r.how, ready: needs.every((n) => n.have) };
+    });
+    return [...stove, ...pot, ...book];
   }
 
   /** Ce qui manque à la maison par rapport au stock voulu (STOCK) : [nom, combien]. */
