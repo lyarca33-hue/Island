@@ -3,8 +3,9 @@
  * café et s'assoit, sans aucune erreur dans la console. Les gestes passent par window.game (les
  * mêmes appels que la console : game.pickUp('tasse')…), l'état par game.describe().
  *
- * Sans carte graphique (CI), le rendu tourne à quelques images par seconde et le jeu avance au
- * ralenti : d'où les longues attentes.
+ * Sans carte graphique (CI), le rendu tombe à une image par seconde environ. Le jeu, qui n'avance
+ * que de 50 ms par image, tournerait vingt fois au ralenti (le café coulait en cinq minutes, ou pas
+ * du tout à temps) : game.catchUp lui fait rattraper le temps réel en jouant plusieurs pas par image.
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -47,6 +48,10 @@ test('le jeu se lance : prendre la tasse, faire un café, s’asseoir', async ({
   await expect(page.getByText('Chargement…')).toBeVisible();
   await expect(page.getByText('Chargement…')).toHaveCount(0, { timeout: 120_000 });
   expect(await page.evaluate(() => 'game' in window)).toBe(true);
+  // le jeu suit le temps réel même à une image par seconde
+  await page.evaluate(() => {
+    (window as unknown as { game: { catchUp: number } }).game.catchUp = 40;
+  });
   await page.screenshot({ path: info.outputPath('1-charge.png') });
 
   // la tasse posée sur la table, prise en main

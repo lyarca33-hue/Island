@@ -639,6 +639,13 @@ export class Game {
   /** Compteur d'images : images et temps cumulés depuis le dernier relevé, et dernier relevé. */
   private fpsAcc = { frames: 0, since: performance.now() };
   private fpsNow = { fps: 0, ms: 0 };
+  /**
+   * Pas de jeu (de 50 ms au plus) joués au plus par image pour rattraper le temps réel. À 1 (par
+   * défaut), une image lente ne fait avancer le jeu que de 50 ms : sous 20 images par seconde, il
+   * tourne au ralenti. Le test de fumée le monte (game.catchUp = 40) : sans carte graphique, le
+   * rendu tombe à une image par seconde et le café mettrait sinon cinq minutes à couler.
+   */
+  catchUp = 1;
   private resizeObs: ResizeObserver;
   private raycaster = new THREE.Raycaster();
   private disposers: Array<() => void> = [];
@@ -6912,7 +6919,7 @@ export class Game {
 
   private frame = (now: number): void => {
     this.raf = requestAnimationFrame(this.frame);
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const real = (now - this.last) / 1000;
     this.last = now;
     const acc = this.fpsAcc;
     acc.frames++;
@@ -6921,6 +6928,16 @@ export class Game {
       acc.frames = 0;
       acc.since = now;
     }
+    // image lente : plusieurs pas de jeu avant de dessiner (voir catchUp)
+    const steps = THREE.MathUtils.clamp(Math.ceil(real / 0.05), 1, Math.max(1, Math.floor(this.catchUp)));
+    const dt = Math.min(0.05, real / steps);
+    for (let i = 0; i < steps; i++) this.step(dt, now);
+    this.scheduleShadows();
+    this.post.render();
+  };
+
+  /** Un pas de jeu de `dt` secondes : le perso, les objets, les besoins, la caméra, la météo… */
+  private step(dt: number, now: number): void {
     this.character.setMoveInput(this.keyboardDir(), this.shift);
     // R : pivoter le meuble vers la droite, F : vers la gauche
     this.character.setTurnInput((this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
@@ -7017,9 +7034,7 @@ export class Game {
     this.paysage.update(dt);
     this.laundry.update(dt, this.clock.speed / TIME_SPEED);
     this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
-    this.scheduleShadows();
-    this.post.render();
-  };
+  }
 
   /** Le point (x, z) est-il sous le toit d'une pièce (murs compris) ? La pluie n'y tombe pas. */
   private underRoof = (x: number, z: number): boolean => this.rooms.some((r) => r.contains(roofProbe.set(x, 0, z), WALL_T));
