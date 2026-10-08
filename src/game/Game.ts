@@ -30,6 +30,7 @@ import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, points
 import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
 import { DRAINS, FECULENT_FEMININE, FECULENT_PLURAL, FECULENT_RECIPES, PACKETS, SAUCE_SERVINGS, SOUP_BROTH, SOUP_VEG, SOUPS, TOPPED } from './items/feculents';
 import { BAGS_PER_ROLL, UPKEEP_FEMININE, UPKEEP_PLURAL } from './items/upkeep';
+import { CAKE_BATTER, CAKE_MIX, CAKE_USED_UP, cakeFor, FLAT_CAKE, HOT_DISH_HARM, PATISSERIE_FEMININE, PATISSERIE_PLURAL, TIN_CAKES, TOO_HOT } from './items/patisserie';
 import { HOT_WATER, INFUSE, LIFE_FEMININE, LIFE_PLURAL, TEA, TEA_BAGS, TEA_COLOR, teaBag } from './items/life';
 import { KitchenSound } from './sound';
 import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
@@ -256,7 +257,7 @@ const START_ON_WORKTOP: Array<[string, number, number, number]> = [
 ];
 
 /** Posés au départ sur l'îlot : [id, x, z, rotation] dans le repère de l'îlot. */
-const START_ON_ISLAND: Array<[string, number, number, number]> = [['theiere', 0.3, 0.05, Math.PI / 2]];
+const START_ON_ISLAND: Array<[string, number, number, number]> = [['theiere', 0.3, 0.05, Math.PI / 2], ['moule', -0.25, 0.05, 0]];
 
 /** Rangés au départ dans un meuble : [id, meuble, place]. */
 const START_STORED: Array<[string, string, number]> = [
@@ -457,9 +458,9 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE, ...FECULENT_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...PATISSERIE_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE, ...FECULENT_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
-const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL, ...FECULENT_PLURAL]);
+const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...PATISSERIE_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL, ...FECULENT_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
 /** Pronom de l'objet : « lave-la », « lave-le », « lave-les ». */
 const it = (name: string) => (PLURAL.has(name) ? 'les' : FEMININE.has(name) ? 'la' : 'le');
@@ -492,7 +493,7 @@ function saveSkill(points: number): void {
 }
 
 /** Ingrédients secs qu'on verse dans le saladier, et de combien ils le remplissent. */
-const MIX_DRY: Record<string, number> = { farine: 0.15, sucre: 0.05, levure: 0.02 };
+const MIX_DRY: Record<string, number> = { farine: 0.15, sucre: 0.05, levure: 0.02, ...CAKE_MIX };
 /** Sur le feu sans eau, un aliment qu'on ne remue pas attache au bout de tant de secondes, et cuit (brûle) d'autant plus vite. */
 const STICK_AFTER = 10;
 const STICK_SPEED = 0.6;
@@ -753,6 +754,8 @@ export class Game {
   private dirtyHands: string | null = null;
   /** Plats préparés ou cuits avec les mains sales (une étoile de moins). */
   private grubby = new WeakSet<WorldItem>();
+  /** Gâteaux (et leurs parts) faits sans levure : ils n'ont pas levé. */
+  private flatCakes = new WeakSet<WorldItem>();
   /** Odeur de brûlé dans la cuisine (0 à 1), et déjà prévenu ; la fenêtre ouverte la chasse. */
   private smell = 0;
   private smellWarned = false;
@@ -4235,6 +4238,8 @@ export class Game {
     }
     if (!food.def.cut) return fail(`${theName(food.name)} ne se coupe pas.`);
     if (food.portion < 1) return fail(`${theName(food.name)} est entamé${agree(food.name)} : mange-l${FEMININE.has(food.name) ? 'a' : 'e'} plutôt.`);
+    if (TIN_CAKES.includes(food.def.id) && doneness(food.def, food.cooking) === 'cru') return fail(`${theName(food.name)} est encore cru${agree(food.name)} : fais-${it(food.name)} cuire au four.`);
+    if (food.heat > TOO_HOT && TIN_CAKES.includes(food.def.id)) return fail(`${theName(food.name)} est brûlant${agree(food.name)} : laisse-${it(food.name)} refroidir avant de ${it(food.name)} couper.`);
     if (!board) return fail(held.some((h) => h.def.board) ? 'Pose d’abord la planche sur le plan de travail.' : 'Il n’y a pas de planche à découper.');
     if (board.object.position.y < 0.5) return fail('Pose d’abord la planche sur le plan de travail (ou une table).');
     const knife = held.find((h) => h.def.knife) ?? this.nearest((i) => !!i.def.knife && !c.carried.includes(i) && !this.flying.some((f) => f.item === i));
@@ -4284,6 +4289,7 @@ export class Game {
     const top = this.boardTop(board);
     pieces.object.position.set(food.object.position.x, top.y + pieces.restLift(pieces.object.quaternion), food.object.position.z);
     pieces.setCondition(food.condition);
+    if (TIN_CAKES.includes(food.def.id)) this.cakeOut(food, pieces, board);
     this.items = this.items.filter((i) => i !== food);
     this.riders = this.riders.filter((r) => r.item !== food && r.base !== food);
     this.lastBite.delete(food);
@@ -4293,6 +4299,21 @@ export class Game {
     this.onNotice?.(`${cap(food.name)} coupé${agree(food.name)} : ${pieces.name} sur la planche.`);
     this.soilUnder(pieces);
     this.practice(XP_GESTURE);
+  }
+
+  /** Le gâteau coupé : les parts gardent sa cuisson, son âge, ses étoiles ; le moule revient, sale, à côté de la planche. */
+  private cakeOut(cake: WorldItem, pieces: WorldItem, board: WorldItem): void {
+    pieces.cooking = cake.cooking;
+    pieces.age = cake.age;
+    pieces.heat = cake.heat;
+    pieces.warmed = cake.warmed;
+    pieces.stars = cake.stars;
+    showDoneness(pieces);
+    if (this.flatCakes.has(cake)) this.flatCakes.add(pieces);
+    if (this.grubby.has(cake)) this.grubby.add(pieces);
+    const yaw = new THREE.Euler().setFromQuaternion(board.object.quaternion, 'YXZ').y;
+    const at = new THREE.Vector3(0.32, 0, 0).applyQuaternion(board.object.quaternion).add(board.object.position);
+    this.spawnAt('moule', at, yaw)?.setDirty(true);
   }
 
   /**
@@ -5976,6 +5997,14 @@ export class Game {
     else if (this.closeBookThen(() => this.take(item, running))) return true;
     // dans le frigo fermé : on ouvre d'abord
     else if (stored && this.doors.get(stored.shelf)?.target === 0 && (c.stackHand(item) || c.freeHand(item))) return this.withDoorOpen(stored.shelf, () => this.take(item, running), running);
+    // un plat brûlant au four, sans les maniques : on y va, et on se brûle les doigts
+    else if (stored?.shelf.def.heats?.burns && item.def.food && item.heat > TOO_HOT && !held.some((h) => h.def.id === 'maniques')) {
+      c.approachThen(c.standFor(item, from), item.object.position, () => {
+        this.needs.hurt(HOT_DISH_HARM);
+        this.onNotice?.(`Aïe ! ${cap(the(item.name))} est brûlant${agree(item.name)}. Prends les maniques (aux crochets) pour ${it(item.name)} sortir du four.`);
+      }, running);
+      return true;
+    }
     // un livre de plus sur la pile tenue (l'autre main libre), sinon dans l'autre main
     else if (c.stackHand(item)) return c.collect(item, running, from);
     else if (c.freeHand(item)) return c.pickUp(item, running, from);
@@ -6576,6 +6605,7 @@ export class Game {
     else if (f === 'à manger vite') s -= 1;
     if (item.warmed && warmth(item.heat) === 'froid' && item.def.cook) s -= 0.5;
     if (this.grubby.has(item)) s -= 1;
+    if (this.flatCakes.has(item)) s -= 1;
     return Math.max(1, Math.min(5, Math.round(s)));
   }
 
@@ -7151,7 +7181,7 @@ export class Game {
     if (dry && item.def.mixes) add(`Verser ${the(dry.name)} dedans`, () => this.addToBowl(ref));
     if (tool && item.def.mixes && this.mixes.get(item)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(ref));
     const batter = bowl && this.mixes.get(bowl)?.batter;
-    if (batter && item.def.cookware && !item.def.fill) add(`Verser ${theLiquid(batter)} dedans`, () => this.pourBatter(ref));
+    if (batter && (batter === CAKE_BATTER ? item.def.id === 'moule' && !item.dirty : item.def.cookware && !item.def.fill)) add(`Verser ${theLiquid(batter)} dedans`, () => this.pourBatter(ref));
     // pâtes, riz et soupes à la casserole (feculents.ts)
     const packet = held.find((h) => PACKETS[h.name] !== undefined);
     const veg = held.find((h) => SOUP_VEG.includes(h.name));
@@ -7358,13 +7388,19 @@ export class Game {
   addToBowl(ref?: string, running = false): boolean {
     const dry = this.heldWith((h) => MIX_DRY[h.name] !== undefined);
     const bowl = this.bowlFor(ref);
-    if (!dry) this.onNotice?.('Prends de la farine, du sucre ou de la levure (au garde-manger) pour la mettre dans le saladier.');
+    if (!dry) this.onNotice?.('Prends de la farine, du sucre ou de la levure (au garde-manger), du chocolat ou un yaourt pour les mettre dans le saladier.');
     else if (!bowl?.def.mixes) this.onNotice?.('Il n’y a pas de saladier (il est au placard).');
     else if (bowl.dirty) this.onNotice?.('Le saladier est sale : lave-le d’abord.');
     else if (bowl.level > 0.95) this.onNotice?.('Le saladier est plein.');
     else {
       return this.gesture(dry, bowl, 'tilt', this.above(bowl, 0.1), () => {
+        if (!this.items.includes(dry)) return;
         this.addToMix(bowl, dry.name, MIX_DRY[dry.name]);
+        // la tablette et le pot de yaourt y passent entiers
+        if (CAKE_USED_UP.includes(dry.name)) {
+          this.character.loseItem(dry);
+          this.removeItem(dry);
+        }
         this.onNotice?.(`${cap(the(dry.name))} est dans le saladier.`);
       }, running);
     }
@@ -7388,13 +7424,13 @@ export class Game {
         const parts = new Set(mix.parts);
         const batter = BATTERS.find((b) => b.needs.every((n) => parts.has(n)) && (b.name !== 'œufs battus' || [...parts].every((p) => p === 'œuf' || p === 'lait')));
         if (!batter) {
-          this.onNotice?.(parts.has('œuf') ? 'Ça ne donne rien de bon : pour des crêpes, il faut aussi du lait et de la farine.' : 'Il manque des œufs : casse-en au moins un.');
+          this.onNotice?.(parts.has('œuf') ? 'Ça ne donne rien de bon : pour des crêpes, il faut aussi du lait et de la farine ; pour un gâteau, de la farine et du sucre.' : 'Il manque des œufs : casse-en au moins un.');
           return;
         }
         mix.batter = batter.name;
         this.practice(XP_GESTURE);
         this.showMix(bowl);
-        this.onNotice?.(batter.name === 'œufs battus' ? 'Les œufs sont battus : verse-les dans la poêle pour faire une omelette.' : 'La pâte à crêpes est prête : verses-en dans la poêle chaude, une crêpe à la fois.');
+        this.onNotice?.(batter.name === 'œufs battus' ? 'Les œufs sont battus : verse-les dans la poêle pour faire une omelette.' : batter.name === CAKE_BATTER ? `La pâte à gâteau est prête${parts.has('levure') ? '' : ' (sans levure, il ne lèvera pas)'} : verse-la dans le moule à gâteau, puis au four.` : 'La pâte à crêpes est prête : verses-en dans la poêle chaude, une crêpe à la fois.');
       }, running);
     }
     return false;
@@ -7405,6 +7441,7 @@ export class Game {
     const bowl = this.heldWith((h) => !!h.def.mixes);
     const mix = bowl && this.mixes.get(bowl);
     const batter = mix?.batter ? BATTERS.find((b) => b.name === mix.batter) : undefined;
+    if (bowl && mix && batter?.name === CAKE_BATTER) return this.pourCake(bowl, mix.parts, ref, running);
     const cooks = batter && ITEM_BY_ID.get(batter.cooks)!.name;
     const pan = cooks ? this.panFor(ref, (p) => !!p.def.cookware!.holds.includes(cooks) && !this.character.carried.includes(p)) : undefined;
     if (!bowl) this.onNotice?.('Prends le saladier pour verser la pâte.');
@@ -7506,6 +7543,29 @@ export class Game {
     return false;
   }
 
+  /** Verse la pâte à gâteau du saladier tenu dans le moule `ref` (sinon le plus proche) : le gâteau cru, à enfourner. */
+  private pourCake(bowl: WorldItem, parts: string[], ref: string | undefined, running: boolean): boolean {
+    const carried = this.character.carried;
+    const tin = ref ? this.byRef(ref) : this.nearest((i) => i.def.id === 'moule' && !i.dirty && !carried.includes(i)) ?? this.heldWith((h) => h.def.id === 'moule');
+    if (!tin || tin.def.id !== 'moule') this.onNotice?.('Verse la pâte à gâteau dans le moule à gâteau.');
+    else if (tin.dirty) this.onNotice?.('Le moule est sale : lave-le d’abord.');
+    else if (carried.includes(tin)) this.onNotice?.('Pose d’abord le moule (sur le plan de travail).');
+    else {
+      return this.gesture(bowl, tin, 'tilt', this.above(tin, 0.12), () => {
+        if (!this.mixes.has(bowl)) return;
+        const cake = this.turnInto(tin, cakeFor(parts));
+        if (!cake) return;
+        if (!parts.includes('levure')) this.flatten(cake);
+        this.mixes.delete(bowl);
+        this.showMix(bowl);
+        bowl.setDirty(true);
+        this.practice(XP_GESTURE);
+        this.onNotice?.(`${cap(the(cake.name))} est dans le moule : enfourne-le, porte fermée, et lance le four. Pour le sortir, prends les maniques.`);
+      }, running);
+    }
+    return false;
+  }
+
   /** Verse la brique de soupe tenue dans la casserole `ref` (vide) : elle se réchauffe sur le feu. */
   pourSoup(ref?: string, running = false): boolean {
     const c = this.character;
@@ -7556,6 +7616,13 @@ export class Game {
       }, running);
     }
     return false;
+  }
+
+  /** Un gâteau sans levure : il reste plat (et perd une étoile). */
+  private flatten(cake: WorldItem): void {
+    this.flatCakes.add(cake);
+    const body = cake.part('cuit');
+    if (body && TIN_CAKES.includes(cake.def.id)) body.scale.y = FLAT_CAKE;
   }
 
   /** Remue ce qui cuit dans l'ustensile `ref` (sinon celui sur le feu) avec la spatule ou la cuillère en bois : ça n'attache plus. */
@@ -8088,6 +8155,7 @@ export class Game {
         put('papier', this.paper.get(item));
         if (item.def.id === 'brosse-a-dents' && this.lastBrush >= 0) x.brossage = Math.round(this.lastBrush);
         if (this.bagless.has(item)) x.sansSac = true;
+        if (this.flatCakes.has(item)) x.sansLevure = true;
         if (this.lamps.get(item)?.on) x.lampe = true;
         Object.assign(x, this.entree.extras(item));
         put('reveil', this.alarms.get(item));
@@ -8120,6 +8188,7 @@ export class Game {
           showRoll(item.object, x.papier / ROLL_USES);
         }
         if (typeof x.brossage === 'number') this.lastBrush = x.brossage;
+        if (x.sansLevure) this.flatten(item);
         if (x.lampe) this.setLamp(item, true);
         this.entree.setExtras(item, x);
         if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, x.reveil);
