@@ -78,12 +78,14 @@ export const SALON_SPEC: RoomSpec = {
   name: 'salon',
   rect: SALON,
   floor: () => parquet(SALON),
-  // passage vers la cuisine (ouest) et vers la chambre (nord, x 7.6 à 8.4 : voir chambre.ts)
+  // passage vers la cuisine (ouest) et porte de la chambre (nord, x 7.6 à 8.4 : son battant est
+  // dans chambre.ts)
   doors: [{ wall: 'ouest', u0: SALON_PASS.z0, u1: SALON_PASS.z1 }, { wall: 'nord', u0: 7.6, u1: 8.4 }],
   joined: ['ouest', 'nord'],
   windows: () => [
-    { wall: 'sud', u0: 5.3, u1: 6.5, y0: 0.95, y1: WIN_HIGH },
-    { wall: 'est', u0: 1.25, u1: 2.25, y0: 0.95, y1: WIN_HIGH },
+    // rideaux bleu canard, comme la bordure du tapis
+    { wall: 'sud', u0: 5.3, u1: 6.5, y0: 0.95, y1: WIN_HIGH, curtain: 0x2f6f73 },
+    { wall: 'est', u0: 1.25, u1: 2.25, y0: 0.95, y1: WIN_HIGH, curtain: 0x2f6f73 },
   ],
   lamps: () => [{ x: 5.25, z: 1.55, kind: 'lampadaire', shade: 0xb99a6c }],
   lightSwitch: { wall: 'ouest', u: SALON_PASS.z1 + 0.2 },

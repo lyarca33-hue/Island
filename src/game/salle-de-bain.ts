@@ -84,7 +84,8 @@ export const BATHROOM_SPEC: RoomSpec = {
   name: 'salle de bain',
   rect: BATHROOM,
   floor: () => bathFloor(BATHROOM),
-  doors: [{ wall: 'est', u0: BATHROOM_DOOR.z0, u1: BATHROOM_DOOR.z1, leaf: true }],
+  // la porte vers la chambre : son battant est dans chambre.ts
+  doors: [{ wall: 'est', u0: BATHROOM_DOOR.z0, u1: BATHROOM_DOOR.z1 }],
   joined: ['sud', 'est'],
   // petite fenêtre haute au fond, au-dessus de rien
   windows: () => [{ wall: 'nord', u0: 2.15, u1: 2.85, y0: 1.45, y1: 2.05 }],

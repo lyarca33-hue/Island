@@ -1878,6 +1878,42 @@ export class Game {
     lamp.shade?.color.set(on ? 0xfff3d6 : 0xe9dcc0);
   }
 
+  /** La porte intérieure ou les rideaux sous ce pixel (avant tout objet), et leur pièce. */
+  private fixtureAt(cx: number, cy: number): { room: Room; kind: 'porte' | 'rideaux'; index: number } | null {
+    this.aim(cx, cy);
+    let best: { room: Room; kind: 'porte' | 'rideaux'; index: number; distance: number } | null = null;
+    for (const room of this.rooms) {
+      const hit = room.fixtureHit(this.raycaster);
+      if (hit && (!best || hit.distance < best.distance)) best = { room, ...hit };
+    }
+    if (!best) return null;
+    const carried = this.character.carried;
+    const item = this.raycaster.intersectObjects(this.items.filter((i) => !carried.includes(i)).map((i) => i.object), true)[0];
+    return !item || item.distance > best.distance ? best : null;
+  }
+
+  /** Porte ouverte, ou rideaux tirés ? */
+  private fixtureOn(f: { room: Room; kind: 'porte' | 'rideaux'; index: number }): boolean {
+    return f.kind === 'porte' ? f.room.doorOpen(f.index) : f.room.curtainsDrawn(f.index);
+  }
+
+  /** Va ouvrir (`on`) ou fermer la porte, ou tirer (`on`) ou ouvrir les rideaux. */
+  private useFixture(f: { room: Room; kind: 'porte' | 'rideaux'; index: number }, on: boolean, running = false): boolean {
+    if (this.moving) {
+      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+      return false;
+    }
+    const c = this.character;
+    if (c.seated) return c.standUp(() => this.useFixture(f, on, running));
+    const { stand, face } = f.room.fixtureSpot(f.kind, f.index, c.position);
+    c.approachThen(stand, face, () => {
+      if (f.kind === 'porte') f.room.setDoor(f.index, on);
+      else f.room.setCurtains(f.index, on);
+      this.onNotice?.(f.kind === 'porte' ? (on ? 'Porte ouverte.' : 'Porte fermée.') : (on ? 'Rideaux tirés.' : 'Rideaux ouverts.'));
+    }, running);
+    return true;
+  }
+
   /** Va allumer (`on`) ou éteindre la lampe `ref` (sinon la plus proche) ; sans `on`, inverse. */
   switchLamp(ref?: string, on?: boolean, running = false): boolean {
     const item = ref ? this.byRef(ref) : this.nearest((i) => this.lamps.has(i));
@@ -5777,6 +5813,14 @@ export class Game {
         this.onHover?.({ name: 'interrupteur', grade: gradeName(1, false), condition: 1, state: hovered.lightsOn ? 'lumière allumée' : 'lumière éteinte', x: e.clientX - r.left, y: e.clientY - r.top });
         return;
       }
+      const fixture = e.buttons ? null : this.fixtureAt(e.clientX, e.clientY);
+      if (fixture) {
+        const r = el.getBoundingClientRect();
+        const on = this.fixtureOn(fixture);
+        const state = fixture.kind === 'porte' ? (on ? 'ouverte' : 'fermée') : (on ? 'tirés' : 'ouverts');
+        this.onHover?.({ name: fixture.kind, grade: gradeName(1, fixture.kind === 'porte'), condition: 1, state, x: e.clientX - r.left, y: e.clientY - r.top });
+        return;
+      }
       const item = e.buttons ? null : this.itemAt(e.clientX, e.clientY);
       if (!item) {
         this.onHover?.(null);
@@ -5793,6 +5837,13 @@ export class Game {
       if (sw) {
         const on = sw.lightsOn;
         this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: 'interrupteur', entries: [{ label: on ? 'Éteindre la lumière' : 'Allumer la lumière', run: () => this.switchLights(!on, false, sw) }] });
+        return;
+      }
+      const fixture = this.fixtureAt(e.clientX, e.clientY);
+      if (fixture) {
+        const on = this.fixtureOn(fixture);
+        const label = fixture.kind === 'porte' ? (on ? 'Fermer la porte' : 'Ouvrir la porte') : (on ? 'Ouvrir les rideaux' : 'Tirer les rideaux');
+        this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: fixture.kind, entries: [{ label, run: () => this.useFixture(fixture, !on) }] });
         return;
       }
       const item = this.hitAt(e.clientX, e.clientY)?.item ?? null;
