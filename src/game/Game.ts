@@ -19,6 +19,7 @@ import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
 import { SOFA_NAP } from './items/salon';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
+import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { brushModel, showRoll, TOOTH_SPOT } from './items/bathroom';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/catalog';
@@ -566,8 +567,6 @@ const ON_INV = new THREE.Matrix4();
 const ON_BOX = new THREE.Box3();
 const ON_TMP = new THREE.Vector3();
 const ON_POS = new THREE.Vector3();
-/** Rayon (m) sous lequel une pièce d'objet ne fait pas d'ombre. */
-const SMALL_CASTER = 0.035;
 const roofProbe = new THREE.Vector3();
 
 export class Game {
@@ -791,6 +790,8 @@ export class Game {
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // les pièces « ombre seule » des objets (voir merge.ts) ne sont dessinées que dans les ombres
+    shadowOnlyPass(this.renderer);
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.touchAction = 'none';

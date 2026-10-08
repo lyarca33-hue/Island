@@ -49,6 +49,8 @@ export function createToonMaterial(o: ToonOptions): THREE.MeshToonMaterial {
         );
     };
     m.customProgramCacheKey = () => `toon-rim-${strength}`;
+    // réglages du liseré, cachés dans onBeforeCompile : deux matériaux pareils se reconnaissent (merge.ts)
+    m.userData.rim = `${rim.getHexString()}-${strength}`;
   }
   return m;
 }

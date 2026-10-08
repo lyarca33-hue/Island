@@ -13,6 +13,7 @@ import type { ItemDef } from './catalog';
 import { GRIPS, guessGrip, isTwoHanded, vec, type GripSpec, type GripType, type HandSpec } from './grips';
 import { gradeIndex, showWear } from './durability';
 import { basisRotation, Rig, solveTwoBone, twistForearm } from './ik';
+import { mergeStaticParts } from './merge';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
 function gripRotation(spec: GripSpec): THREE.Quaternion {
@@ -59,6 +60,8 @@ export class WorldItem {
 
   constructor(readonly def: ItemDef) {
     const model = def.build();
+    // pièces fixes regroupées : bien moins de dessins (voir merge.ts)
+    mergeStaticParts(model);
     this.closed = model;
     this.object.add(model);
     this.object.name = def.id;
@@ -67,6 +70,7 @@ export class WorldItem {
     if (def.buildOpen) {
       // livre ouvert : centré sur le livre fermé, caché (hors de la boîte de l'objet)
       this.opened = def.buildOpen();
+      mergeStaticParts(this.opened);
       this.opened.position.copy(this.box.getCenter(new THREE.Vector3()));
       this.opened.visible = false;
       this.object.add(this.opened);
