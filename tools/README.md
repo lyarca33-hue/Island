@@ -37,6 +37,39 @@ python3 tools/build_anim_assets.py --src /tmp/ual/UAL2_Standard.glb --out public
     --clips Idle_FoldArms_Loop Idle_TalkingPhone_Loop Consume
 ```
 
+Les gestes de cuisine (tendre la main vers un appareil, prendre sur la table, s'agenouiller
+devant une porte basse, pousser un meuble ; voir `src/game/character.ts`) :
+
+```bash
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public/anim/ual_kitchen.glb \
+    --clips Interact PickUp_Table Fixing_Kneeling Push_Loop
+```
+
+La réserve (les 30 autres clips du volume 1, chargés seulement à la demande par
+`Puppet.loadExtraAnimations()`) :
+
+```bash
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public/anim/ual_extra.glb \
+    --clips A_TPose Crouch_Fwd_Loop Death01 Driving_Loop Hit_Chest Hit_Head Idle_Loop Idle_Torch_Loop \
+    Jog_Fwd_Loop Jump_Land Jump_Loop Jump_Start Pistol_Aim_Down Pistol_Aim_Neutral Pistol_Aim_Up \
+    Pistol_Idle_Loop Pistol_Reload Pistol_Shoot Punch_Cross Punch_Jab Roll Spell_Simple_Enter \
+    Spell_Simple_Exit Spell_Simple_Shoot Sprint_Loop Swim_Fwd_Loop Swim_Idle_Loop Sword_Attack \
+    Sword_Idle Walk_Loop
+```
+
+et les 39 autres clips du volume 2 :
+
+```bash
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL2_Standard.glb --out public/anim/ual_extra2.glb \
+    --clips Chest_Open ClimbUp_1m Farm_Harvest Farm_PlantSeed Farm_Watering Hit_Knockback \
+    Idle_Lantern_Loop Idle_No_Loop Idle_Rail_Call Idle_Rail_Loop Idle_Shield_Break Idle_Shield_Loop \
+    LayToIdle Melee_Hook Melee_Hook_Rec NinjaJump_Idle_Loop NinjaJump_Land NinjaJump_Start \
+    OverhandThrow Shield_Dash Shield_OneShot Slide_Exit Slide_Loop Slide_Start Sword_Block Sword_Dash \
+    Sword_Heavy_Combo Sword_Regular_A Sword_Regular_A_Rec Sword_Regular_B Sword_Regular_B_Rec \
+    Sword_Regular_C Sword_Regular_Combo TreeChopping_Loop Walk_Carry_Loop Yes Zombie_Idle_Loop \
+    Zombie_Scratch Zombie_Walk_Fwd_Loop
+```
+
 Les os sont lus par `src/creator/retarget.ts` (`UAL_TO_VRM`).
 
 Les clips Mixamo du jeu (`public/anim/mixamo.glb`) viennent de X Bot, sans le mannequin, avec
@@ -47,6 +80,35 @@ python3 tools/build_anim_assets.py --src public/models/xbot.glb --out public/ani
     --root mixamorig:Hips --clips agree headShake idle run sad_pose sneak_pose walk
 ```
 
+
+## `build_nature_assets.py` : le jardin (pack nature de Quaternius)
+
+Regroupe dans `public/models/nature.glb` les modèles du jardin pris dans le « Stylized Nature
+MegaKit » de Quaternius (CC0, version gratuite, à télécharger sur quaternius.com) : seulement
+ceux de la liste `MODELS`, textures réduites en WebP, sans les cartes de relief.
+
+```bash
+pip install pillow numpy
+python3 tools/build_nature_assets.py --src "Stylized Nature MegaKit[Standard]/glTF" --out public/models/nature.glb
+```
+
+Pour ajouter un modèle : l'ajouter à `MODELS` (et son matériau à `MATERIALS` s'il est nouveau),
+puis le placer dans `src/game/nature.ts`.
+
+
+## `build_interior_assets.py` : les meubles (pack intérieur de Quaternius)
+
+Regroupe dans `public/models/interior.glb` les meubles de l'« Ultimate House Interior Pack » de
+Quaternius (CC0, à télécharger sur quaternius.com) listés dans `MODELS`, à faces plates et aux
+couleurs du pack.
+
+```bash
+python3 tools/build_interior_assets.py --src "Ultimate House Interior Pack - June 2020/OBJ" --out public/models/interior.glb
+```
+
+Pour habiller un autre meuble : ajouter son modèle à `MODELS`, puis la fiche du jeu et le modèle
+dans `INTERIOR_LOOKS` (`src/game/items/interior.ts`). Le modèle prend la boîte des pièces sans
+nom du meuble : les pièces nommées (portes, tiroirs, écran…) restent celles du jeu.
 
 ## `build_pack_assets.mjs` : packs de Quaternius
 

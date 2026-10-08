@@ -32,7 +32,17 @@ const PALETTE: Record<string, THREE.ColorRepresentation> = {
   'asdf1:Beta_HighLimbsGeoSG2': 0xe0cfb4,
 };
 
-type Gait = 'idle' | 'walk' | 'run';
+type Gait = 'idle' | 'walk' | 'run' | 'push' | 'gesture';
+
+/** Gestes de cuisine (Quaternius, voir creator/source.ts) ; absents tant que le fichier n'est pas arrivé. */
+const KITCHEN = { interact: 'Interact', pickUp: 'PickUp_Table', kneel: 'Fixing_Kneeling', push: 'Push_Loop' };
+type Gesture = 'interact' | 'pickUp' | 'kneel';
+/** À genoux devant un placard bas : le début du clip seulement (il continue en bricolant). */
+const KNEEL_TIME = 1.7;
+/** Haut d'une porte (m) sous lequel on s'agenouille pour l'ouvrir plutôt que de tendre la main. */
+const KNEEL_BELOW = 0.6;
+/** Plan de travail, table : hauteurs (m) où l'on prend un objet en se penchant (clip PickUp_Table). */
+const TABLE_HEIGHT: [number, number] = [0.55, 1.2];
 
 /** Clips pour s'asseoir (Quaternius, voir creator/source.ts). */
 const SIT = { enter: 'Sitting_Enter', idle: 'Sitting_Idle_Loop', talk: 'Sitting_Talking_Loop', exit: 'Sitting_Exit' };
@@ -103,6 +113,8 @@ export class Character {
   private stuckFor = 0;
   /** Appelé quand le perso renonce à une marche bloquée. */
   onStuck?: () => void;
+  /** Geste de cuisine en cours et temps qu'il lui reste. */
+  private gestureNow: { kind: Gesture; left: number } | null = null;
 
   /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
   async load(recipe?: Recipe | null): Promise<void> {
@@ -362,6 +374,8 @@ export class Character {
     this.approachThen(this.standFor(item, from), item.object.position, () => {
       const hand = this.freeHand(item);
       if (hand?.pickUp(item, then)) {
+        const y = item.object.getWorldPosition(new THREE.Vector3()).y;
+        if (y > TABLE_HEIGHT[0] && y < TABLE_HEIGHT[1]) this.gesture('pickUp');
         this.order = [...this.order.filter((s) => s !== hand.side), hand.side];
         this.onGrab?.(item, hand);
       }
@@ -519,8 +533,9 @@ export class Character {
 
   /** Rien en cours : ni marche vers un point, ni approche d'un objet, ni geste des mains. */
   /** Allure en cours : immobile, marche, course. */
-  get moveGait(): Gait {
-    return this.gait;
+  get moveGait(): 'idle' | 'walk' | 'run' {
+    // pousser un meuble fatigue comme marcher ; un geste sur place, comme rester debout
+    return this.gait === 'push' ? 'walk' : this.gait === 'gesture' ? 'idle' : this.gait;
   }
 
   get idle(): boolean {
@@ -570,7 +585,7 @@ export class Character {
           moved = true;
         } else this.turnLeft = 0;
       }
-      this.setGait(moved ? 'walk' : 'idle');
+      this.setGait(moved ? (this.puppet?.clipDuration(KITCHEN.push) ? 'push' : 'walk') : 'idle');
       this.mixer?.update(dt);
       this.puppet?.update(dt);
       return;
@@ -643,7 +658,13 @@ export class Character {
         then();
       }
     }
-    this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
+    const g = this.gestureNow;
+    if (g) {
+      g.left -= dt;
+      // le geste s'arrête à la fin, ou dès qu'on bouge (ou qu'une main se tend, sauf pour prendre sur la table)
+      if (g.left <= 0 || moving || (g.kind !== 'pickUp' && this.busy)) this.gestureNow = null;
+    }
+    if (!this.gestureNow) this.setGait(moving ? (this.running ? 'run' : 'walk') : 'idle');
     this.mixer?.update(dt);
     this.puppet?.update(dt);
   }
@@ -814,7 +835,27 @@ export class Character {
   private setGait(g: Gait): void {
     if (g === this.gait) return;
     this.gait = g;
-    this.play(g, 0.25);
+    this.play(g === 'push' ? KITCHEN.push : g, 0.25);
+  }
+
+  /**
+   * Petit geste sur place (perso du créateur) : tendre la main vers un bouton ou une porte,
+   * se pencher pour prendre sur la table, s'agenouiller devant un placard bas. Rien si le clip
+   * manque ou si le perso est assis, couché, en train de pousser ou de se laver.
+   */
+  gesture(kind: Gesture): void {
+    const p = this.puppet;
+    const name = KITCHEN[kind];
+    const d = p?.clipDuration(name) ?? 0;
+    if (!p || !d || this.seat || this.bed || this.pushing || this.washing) return;
+    this.gestureNow = { kind, left: kind === 'kneel' ? Math.min(KNEEL_TIME, d) : d };
+    this.gait = 'gesture';
+    p.play(name, 0.2, true);
+  }
+
+  /** Geste pour ouvrir ou fermer `door` : à genoux si elle est basse, sinon la main tendue. */
+  gestureAt(door: THREE.Object3D): void {
+    this.gesture(new THREE.Box3().setFromObject(door).max.y < KNEEL_BELOW ? 'kneel' : 'interact');
   }
 
   /** Joue un clip en fondu enchaîné depuis le clip courant. */

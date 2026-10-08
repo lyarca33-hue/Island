@@ -2,7 +2,8 @@
  * La salle de bain, au nord de la cuisine (sans couvrir la fenêtre de l'évier) : on y entre par
  * la porte de son mur est, depuis la chambre. Carrelage blanc et bleu, faïence autour de la douche
  * et du lavabo, douche à l'italienne dans le coin, toilettes, lavabo et son miroir le long du
- * fond, porte-serviettes contre le mur ouest, petite fenêtre haute au fond.
+ * fond, puis la machine à laver et le sèche-linge sous la petite fenêtre haute ; porte-serviettes
+ * contre le mur ouest, panier à linge dans le coin sud-est (la lessive : buanderie.ts).
  */
 import * as THREE from 'three';
 import { box, ROOM, tiles, toon, WALL_T, type Anchors, type Rect, type Room, type RoomSpec } from './room';
@@ -31,9 +32,9 @@ function faience(room: Room, u0: number, u1: number, h: number): void {
   room.wallGroup('nord').add(f);
 }
 
-/** Faïence derrière la douche et le lavabo, tapis de bain, rouleau de papier, panier à linge. */
+/** Faïence derrière la douche et le lavabo, tapis de bain, rouleau de papier, patère. */
 function bathroomDecor(room: Room, anchor: Anchors): void {
-  const { x0, z0, z1 } = room.rect;
+  const { x0, z0 } = room.rect;
   const shower = anchor('douche');
   const toilet = anchor('toilettes');
   const sink = anchor('lavabo');
@@ -57,19 +58,6 @@ function bathroomDecor(room: Room, anchor: Anchors): void {
     roll.add(box(0.1, 0.02, 0.02, chrome, 0.05, 0, 0.06, false), box(0.1, 0.02, 0.02, chrome, 0.05, 0, -0.06, false), paper);
     room.wallGroup('nord').add(roll);
   }
-  // panier à linge en osier dans le coin sud-ouest
-  const basket = new THREE.Group();
-  const wicker = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.5, 18), toon(0xc7a26b));
-  wicker.position.y = 0.25;
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.02, 6, 18).rotateX(Math.PI / 2), toon(0xa9844e));
-  rim.position.y = 0.5;
-  const linen = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 8).scale(1, 0.4, 1), toon(0xe8d5e0));
-  linen.position.y = 0.5;
-  basket.add(wicker, rim, linen);
-  basket.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
-  basket.position.set(x0 + 0.3, 0, z1 - 0.3);
-  room.group.add(basket);
-  room.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.21, 0, -0.21), new THREE.Vector3(0.21, 0.55, 0.21)), pos: basket.position.clone(), yaw: 0, wall: false });
   // patère et peignoir à côté de la porte
   const hook = room.wallFrame('est', BATHROOM_DOOR.z1 + 0.55, 1.6);
   hook.add(
@@ -93,8 +81,15 @@ export const BATHROOM_SPEC: RoomSpec = {
   lightSwitch: { wall: 'est', u: BATHROOM_DOOR.z1 + 0.2 },
   runs: [
     // douche dans le coin, toilettes, puis le lavabo et son miroir
-    { wall: 'nord', from: BATHROOM.x0, items: ['douche', 0.25, 'toilettes', 0.35, 'lavabo'] },
+    // puis, sous la petite fenêtre, la machine à laver et le sèche-linge côte à côte (buanderie.ts)
+    { wall: 'nord', from: BATHROOM.x0, items: ['douche', 0.25, 'toilettes', 0.35, 'lavabo', 0.12, 'machine-a-laver', 0.04, 'seche-linge'] },
     { wall: 'ouest', from: BATHROOM.z0 + 1.35, items: ['porte-serviettes'] },
+  ],
+  // le panier à linge en osier dans le coin sud-est, sous le peignoir : chaque douche y laisse une tenue sale
+  items: [
+    ['panier-linge', BATHROOM.x1 - 0.3, 0, BATHROOM.z1 - 0.3, 0],
+    // l'étendoir, dehors au soleil devant la cuisine : on le rentre (on le pousse) quand il pleut
+    ['etendoir', -1.3, 0, 3.95, 0],
   ],
   decor: bathroomDecor,
 };

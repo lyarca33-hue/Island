@@ -5,6 +5,7 @@
  */
 import { ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from './accessories';
 import { MODELS, MODEL_BY_ID, type Gender } from './catalog';
+import { isImportedId } from './imported';
 import { BLUSH_COLORS, FACE_MARK_BY_ID, FACE_MARKS, LIP_COLORS, MARK_COLORS, SHADOW_COLORS, NO_MAKEUP, PATTERN_BY_ID, PATTERNS, type Makeup, type WornPattern } from './looks';
 
 export interface Body {
@@ -22,7 +23,10 @@ export interface Recipe {
   version: 2;
   name: string;
   gender: Gender;
-  /** Modèle qui fournit le corps et les vêtements. */
+  /**
+   * Modèle qui fournit le corps et les vêtements. Un perso VRoid importé (« perso:… ») fournit
+   * tout : tenue, visage et coiffure portent alors le même identifiant.
+   */
   outfit: string;
   /** Modèle qui fournit le visage (même genre que la tenue). */
   face: string;
@@ -156,6 +160,18 @@ export function randomRecipe(): Recipe {
   };
 }
 
+/** Perso VRoid importé porté par la recette (null = pièces des modèles du créateur). */
+export const importedOf = (r: Recipe): string | null => (isImportedId(r.outfit) ? r.outfit : null);
+
+/** Recette qui porte le perso importé `id` en entier (couleurs, proportions et accessoires gardés). */
+export const withImported = (r: Recipe, id: string): Recipe => ({ ...r, outfit: id, face: id, hair: id });
+
+/** Change une pièce ; quitte le perso importé (les autres pièces reviennent au modèle de base). */
+export function withPiece(r: Recipe, piece: 'outfit' | 'face' | 'hair', id: string): Recipe {
+  const parts = importedOf(r) ? defaultRecipe(r.gender) : r;
+  return { ...r, outfit: parts.outfit, face: parts.face, hair: parts.hair, [piece]: id };
+}
+
 /** Recette lue d'un fichier ou du stockage : complétée et corrigée (anciennes versions, ids inconnus). */
 export function sanitizeRecipe(raw: unknown): Recipe | null {
   const r = raw as Partial<Recipe> | null;
@@ -164,12 +180,13 @@ export function sanitizeRecipe(raw: unknown): Recipe | null {
   const base = defaultRecipe(gender);
   const ok = (id: unknown, g?: Gender) => typeof id === 'string' && MODEL_BY_ID.has(id) && (!g || MODEL_BY_ID.get(id)!.gender === g);
   const color = (c: unknown) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : null);
+  const imported = typeof r.outfit === 'string' && isImportedId(r.outfit) ? r.outfit : null;
   return {
     ...base,
     name: typeof r.name === 'string' ? r.name.slice(0, 24) : base.name,
-    outfit: ok(r.outfit, gender) ? r.outfit! : base.outfit,
-    face: ok(r.face, gender) ? r.face! : base.face,
-    hair: ok(r.hair) ? r.hair! : base.hair,
+    outfit: imported ?? (ok(r.outfit, gender) ? r.outfit! : base.outfit),
+    face: imported ?? (ok(r.face, gender) ? r.face! : base.face),
+    hair: imported ?? (ok(r.hair) ? r.hair! : base.hair),
     hairColor: color(r.hairColor),
     eyeColor: color(r.eyeColor),
     skinTone: color(r.skinTone),

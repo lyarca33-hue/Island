@@ -11,6 +11,20 @@
   Idle_TalkingPhone_Loop, Consume) : même [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)
   de Quaternius, **CC0**, volumes 1 et 2 (`UAL1_Standard.glb`, `UAL2_Standard.glb` de la même copie publique), extraits par
   `tools/build_anim_assets.py`.
+- Gestes de cuisine (`public/anim/ual_kitchen.glb` : Interact, PickUp_Table, Fixing_Kneeling, Push_Loop) : même
+  [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html) de Quaternius, **CC0**,
+  volume 1 (`UAL1_Standard.glb`), extraits par `tools/build_anim_assets.py`.
+- Réserve d'animations pas encore utilisées (`public/anim/ual_extra.glb` : les 30 autres clips du volume 1, sauter,
+  nager, se battre... ; `public/anim/ual_extra2.glb` : les 39 autres clips du volume 2, récolter, semer, arroser,
+  grimper, couper du bois, porter en marchant...) : même bibliothèque de Quaternius, **CC0**.
+- Jardin (`public/models/nature.glb` : feuillus, sapins, buissons, herbes, fleurs, fougères, trèfles, galets,
+  rochers, champignons) : [Stylized Nature MegaKit](https://quaternius.com/packs/ultimatestylizednature.html) de
+  Quaternius, **CC0** (version gratuite « Standard »), modèles choisis et textures réduites par
+  `tools/build_nature_assets.py`.
+- Meubles (`public/models/interior.glb` : canapé, table basse, table, chaises, tabouret) :
+  [Ultimate House Interior Pack](https://quaternius.com/packs/ultimatehomeinterior.html) de Quaternius, **CC0**,
+  modèles choisis par `tools/build_interior_assets.py`, posés dans la boîte des meubles faits pour le jeu
+  (`src/game/items/interior.ts`).
 - Plantes (`src/game/plants.ts` : arbres, sapins, buissons, fleurs, légumes du potager, plantes d'intérieur) : formes et
   textures de feuilles faites par programme pour le jeu, aucun fichier tiers.
 - Accessoires du créateur (`src/creator/accessories.ts` : toque, chapeaux, lunettes, nœuds, écharpe...) : formes three.js

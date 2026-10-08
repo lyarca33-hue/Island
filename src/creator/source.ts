@@ -31,10 +31,11 @@ export function loadSitAnimations(): Promise<{ scene: THREE.Object3D; clips: THR
 }
 
 /**
- * Poses du créateur (danser, bavarder, bras croisés...) : autres clips de la même bibliothèque
- * Quaternius (CC0), en deux fichiers (un par volume de la bibliothèque). Fichiers manquants ignorés.
+ * Poses du créateur (danser, bavarder, bras croisés...) et gestes de cuisine (tendre la main,
+ * prendre sur la table, s'agenouiller, pousser) : autres clips de la même bibliothèque Quaternius
+ * (CC0), un fichier par usage et par volume. Fichiers manquants ignorés.
  */
-const POSE_URLS = ['ual_poses1.glb', 'ual_poses2.glb'].map((f) => `${import.meta.env.BASE_URL}anim/${f}`);
+const POSE_URLS = ['ual_poses1.glb', 'ual_poses2.glb', 'ual_kitchen.glb'].map((f) => `${import.meta.env.BASE_URL}anim/${f}`);
 let poses: Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> | null = null;
 
 export function loadPoseAnimations(): Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> {
@@ -47,4 +48,27 @@ export function loadPoseAnimations(): Promise<Array<{ scene: THREE.Object3D; cli
     ),
   ).then((all) => all.flat());
   return poses;
+}
+
+/**
+ * Réserve de clips des deux volumes de la bibliothèque (CC0), pas encore reliés à une action.
+ * Volume 1 : sauter, nager, se baisser en marchant, trottiner, rouler, se battre, tomber,
+ * conduire, tenir une torche. Volume 2 : ouvrir un coffre, grimper, récolter, semer, arroser,
+ * couper du bois, porter en marchant, se relever d'une position couchée, lancer, glisser,
+ * bouclier, épée, zombie... 7,6 Mo en tout : jamais chargés au démarrage, seulement à la demande
+ * (Puppet.loadExtraAnimations). Fichiers manquants ignorés.
+ */
+const EXTRA_URLS = ['ual_extra.glb', 'ual_extra2.glb'].map((f) => `${import.meta.env.BASE_URL}anim/${f}`);
+let extra: Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> | null = null;
+
+export function loadExtraAnimations(): Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> {
+  extra ??= Promise.all(
+    EXTRA_URLS.map((url) =>
+      new GLTFLoader()
+        .loadAsync(url)
+        .then((g) => [{ scene: g.scene, clips: g.animations }])
+        .catch(() => []),
+    ),
+  ).then((all) => all.flat());
+  return extra;
 }

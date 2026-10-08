@@ -22,6 +22,7 @@ import { GARDEN_ITEMS } from '../jardin';
 import { ENTREE_ITEMS } from './entree';
 import { FECULENT_ITEMS } from './feculents';
 import { OUTDOOR_ITEMS } from './plein-air';
+import { LINGE_ITEMS } from './linge';
 
 export interface ItemDef {
   id: string;
@@ -1417,6 +1418,8 @@ export const ITEMS: ItemDef[] = [
   ...OUTDOOR_ITEMS,
   // pâtes, riz et soupes à la casserole (feculents.ts)
   ...FECULENT_ITEMS,
+  // la lessive : panier à linge, machine à laver, sèche-linge, étendoir (linge.ts)
+  ...LINGE_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

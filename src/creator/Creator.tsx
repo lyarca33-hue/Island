@@ -4,11 +4,12 @@ import { ACC_COLORS, ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from '.
 import { CreatorScene, type Framing } from './CreatorScene';
 import { EXPRESSIONS } from './expressions';
 import {
-  BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, defaultRecipe, EYE_COLORS, FANTASY_SKINS, HAIR_COLORS, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
-  SKIN_TONES, type Body, type Clothes, type Recipe,
+  BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, defaultRecipe, EYE_COLORS, FANTASY_SKINS, HAIR_COLORS, importedOf, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
+  SKIN_TONES, withImported, withPiece, type Body, type Clothes, type Recipe,
 } from './recipe';
 import { BLUSH_COLORS, BROW_COLORS, FACE_MARKS, LIP_COLORS, MARK_COLORS, NO_MAKEUP, PATTERNS, SHADOW_COLORS, type Makeup } from './looks';
-import { prefetchModel } from './vrm';
+import { listImported, removeImported, type ImportedModel } from './imported';
+import { importVrmFile, prefetchModel } from './vrm';
 import './creator.css';
 
 const STORAGE_KEY = 'rp-island.recipe';
@@ -57,6 +58,13 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [height, setHeight] = useState(160);
+  /** Persos VRoid importés sur cet appareil (null = liste pas encore lue). */
+  const [imported, setImported] = useState<ImportedModel[] | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    void listImported().then(setImported);
+  }, []);
 
   useEffect(() => {
     if (!host.current) return;
@@ -115,6 +123,27 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
   }, [loading]);
 
   const set = (patch: Partial<Recipe>) => setRecipe((r) => ({ ...r, ...patch }));
+  const setPiece = (piece: 'outfit' | 'face' | 'hair', id: string) => setRecipe((r) => withPiece(r, piece, id));
+  const own = importedOf(recipe);
+  const ownModel = own ? imported?.find((m) => m.id === own) : undefined;
+  const importVrm = (f: File) => {
+    setImporting(true);
+    importVrmFile(f)
+      .then((m) => {
+        const before = imported ?? [];
+        setImported((list) => [m, ...(list ?? []).filter((x) => x.id !== m.id)]);
+        // nom inscrit dans le fichier repris, sauf si le joueur a donné le sien
+        const auto = (n: string) => !n || NAMES.f.includes(n) || NAMES.m.includes(n) || before.some((x) => x.label.slice(0, 24) === n);
+        setRecipe((r) => ({ ...withImported(r, m.id), name: auto(r.name) ? m.label.slice(0, 24) : r.name }));
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Ce fichier n’a pas pu être importé.'))
+      .finally(() => setImporting(false));
+  };
+  const forget = (id: string) => {
+    if (!confirm('Retirer ce perso VRoid de cet appareil ?')) return;
+    void removeImported(id).then(() => setImported((list) => (list ?? []).filter((m) => m.id !== id)));
+    if (own === id) setRecipe((r) => withPiece(r, 'outfit', defaultRecipe(r.gender).outfit));
+  };
   const setBody = (k: keyof Body, v: number) => setRecipe((r) => ({ ...r, body: { ...r.body, [k]: v } }));
   const setCloth = (k: keyof Clothes, c: string | null) => setRecipe((r) => ({ ...r, clothes: { ...NO_CLOTHES, ...r.clothes, [k]: c } }));
   const setAcc = (slot: AccSlot, id: string | null, color?: string) =>
@@ -145,6 +174,8 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
   const setGender = (g: Gender) =>
     setRecipe((r) => {
       if (r.gender === g) return r;
+      // un perso importé n'a pas de genre : il reste porté, seuls les prénoms proposés changent
+      if (importedOf(r)) return { ...r, gender: g };
       const d = defaultRecipe(g);
       return { ...r, gender: g, outfit: d.outfit, face: d.face, hair: d.hair };
     });
@@ -210,10 +241,38 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
                 <button className={recipe.gender === 'f' ? 'on' : ''} onClick={() => setGender('f')}>Féminin</button>
                 <button className={recipe.gender === 'm' ? 'on' : ''} onClick={() => setGender('m')}>Masculin</button>
               </div>
+              <h3>Perso VRoid</h3>
+              {imported && imported.length > 0 && (
+                <div className="picks imported">
+                  {imported.map((m) => (
+                    <div key={m.id} className="imported-item">
+                      <button className={own === m.id ? 'on' : ''} onClick={() => setRecipe((r) => withImported(r, m.id))} title={m.label}>
+                        {m.thumb ? <img src={m.thumb} alt="" /> : <span className="imported-blank">VRM</span>}
+                        <span>{m.label}</span>
+                      </button>
+                      <button className="imported-remove" onClick={() => forget(m.id)} aria-label={`Retirer ${m.label}`} title="Retirer de cet appareil">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className={`file-btn import-vrm${importing ? ' busy' : ''}`}>
+                {importing ? 'Import en cours…' : 'Importer un perso VRoid (.vrm)'}
+                <input type="file" accept=".vrm,model/gltf-binary" disabled={importing}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importVrm(f); }} />
+              </label>
+              {own ? (
+                <p className="hint">
+                  {imported && !ownModel && 'Ce perso VRoid n’est pas sur cet appareil : le perso de base le remplace. Réimporte son fichier .vrm. '}
+                  Tenue, visage et coiffure viennent du fichier. Couleurs, proportions et accessoires marchent aussi.
+                  Choisir une tenue, un visage ou une coiffure ci-dessous revient aux persos du créateur.
+                </p>
+              ) : (
+                <p className="hint">Fais ton perso dans VRoid Studio, exporte-le en .vrm, puis importe-le ici. Il reste sur cet appareil et suit ta partie.</p>
+              )}
               <h3>Tenue</h3>
               <div className="picks list">
                 {same.map((m) => (
-                  <button key={m.id} className={recipe.outfit === m.id ? 'on' : ''} onClick={() => set({ outfit: m.id })}>
+                  <button key={m.id} className={recipe.outfit === m.id ? 'on' : ''} onClick={() => setPiece('outfit', m.id)}>
                     <span>{m.outfit}</span>
                     <small>de {m.label}</small>
                   </button>
@@ -242,7 +301,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
               <h3>Visage</h3>
               <div className="picks">
                 {same.map((m) => (
-                  <Pick key={m.id} id={m.id} label={m.label} on={recipe.face === m.id} onClick={() => set({ face: m.id })} />
+                  <Pick key={m.id} id={m.id} label={m.label} on={recipe.face === m.id} onClick={() => setPiece('face', m.id)} />
                 ))}
               </div>
               <p className="hint">Les yeux, la bouche et les expressions viennent avec le visage.</p>
@@ -275,7 +334,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
               <h3>Coiffure</h3>
               <div className="picks">
                 {[...same, ...MODELS.filter((m) => m.gender !== recipe.gender)].map((m) => (
-                  <Pick key={m.id} id={m.id} label={m.hair} on={recipe.hair === m.id} onClick={() => set({ hair: m.id })} />
+                  <Pick key={m.id} id={m.id} label={m.hair} on={recipe.hair === m.id} onClick={() => setPiece('hair', m.id)} />
                 ))}
               </div>
               <h3>Couleur des cheveux</h3>

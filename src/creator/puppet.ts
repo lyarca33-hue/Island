@@ -8,7 +8,7 @@ import { EXPRESSIONS } from './expressions';
 import type { Recipe } from './recipe';
 import { retargetClips, UAL_TO_VRM, type AnimationSource } from './retarget';
 import { PoseLayer } from './pose';
-import { loadAnimationSource, loadPoseAnimations, loadSitAnimations } from './source';
+import { loadAnimationSource, loadExtraAnimations, loadPoseAnimations, loadSitAnimations } from './source';
 
 /** Retouche de pose par-dessus les clips (ex. porter un objet, voir game/items/carry.ts). */
 export interface PoseHook {
@@ -143,6 +143,23 @@ export class Puppet {
     const toRoot = this.root.matrixWorld.clone().invert().multiply(hips.parent.matrixWorld);
     const a = first.applyMatrix4(toRoot), b = last.applyMatrix4(toRoot);
     return { shift: b.clone().sub(a), endY: b.y };
+  }
+
+  /**
+   * Charge la réserve de clips pas encore utilisés (sauter, nager, se battre...) et les ajoute au
+   * perso ; rend leurs noms. Console : game.character.puppet.loadExtraAnimations().then(console.log)
+   */
+  async loadExtraAnimations(): Promise<string[]> {
+    const names: string[] = [];
+    for (const s of await loadExtraAnimations()) {
+      const src = { ...s, bones: UAL_TO_VRM };
+      if (!this.extra.some((e) => e.scene === s.scene)) this.extra.push(src);
+      for (const clip of retargetClips(src, this.avatar.base)) {
+        this.actions.set(clip.name, this.mixer.clipAction(clip));
+        names.push(clip.name);
+      }
+    }
+    return names;
   }
 
   /** Durée d'un clip (s), 0 s'il manque. */

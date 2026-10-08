@@ -100,6 +100,13 @@ function positionsOnly(g: THREE.BufferGeometry, m: THREE.Matrix4): THREE.BufferG
   return out.applyMatrix4(m);
 }
 
+/** Oublie les pièces « ombre seule » de `root`, retiré de la scène (meuble rhabillé). */
+export function forgetGhosts(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh) ghosts.delete(o);
+  });
+}
+
 /**
  * Regroupe les pièces fixes de `root` (le modèle d'un objet) : moins de dessins dans l'image et
  * dans les ombres, pour le même rendu.
