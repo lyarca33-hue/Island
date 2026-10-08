@@ -888,6 +888,9 @@ export class Game {
       health: () => this.needs.health,
       heal: (n) => this.needs.heal(n),
       night: () => this.clock.isNight,
+      items: () => this.items,
+      lit: (fire) => !!this.heaters.get(fire)?.on.some(Boolean),
+      useFire: (fire) => this.useStove(fire, false),
     });
     this.mouvements = new Mouvements({
       character: this.character,
@@ -2278,7 +2281,7 @@ export class Game {
       const stand = toWorld(edge + sx * 0.38, 0, 0.1).setY(0);
       if (this.character.nav?.blocked(stand)) continue;
       // couché de son côté du lit, la tête sur l'oreiller (le haut du crâne à 25 cm de la tête de lit)
-      const feet = toWorld(sx * (b.max.x - b.min.x) * 0.22, def.top + 0.08, b.min.z + 0.25 + 1.62);
+      const feet = toWorld(sx * (b.max.x - b.min.x) * 0.22, def.top + 0.08, (def.head ?? b.min.z) + 0.25 + 1.62);
       return { stand, feet, head };
     }
     return null;
@@ -5983,7 +5986,7 @@ export class Game {
       // dans l'eau, ça cuit sans jamais brûler
       // sans eau, ce qu'on ne remue pas attache au fond : ça cuit et brûle plus vite
       const left = (this.unstirred.get(food) ?? 0) + dt * warm;
-      if (!water) this.unstirred.set(food, left);
+      if (!water && !pan.def.cookware?.grate) this.unstirred.set(food, left);
       if (!water && left > STICK_AFTER && left - dt * warm <= STICK_AFTER && doneness(food.def, before) !== 'brûlé') this.onNotice?.(`${cap(the(food.name))} attache au fond : remue avec la spatule (ou fais sauter).`);
       const sticks = !water && left > STICK_AFTER ? 1 + STICK_SPEED : 1;
       if (warm > 0.3) {
