@@ -18,6 +18,7 @@ import { BATHROOM_ITEMS } from './bathroom';
 import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
 import { UPKEEP_ITEMS } from './upkeep';
 import { LIFE_ITEMS } from './life';
+import { GARDEN_ITEMS } from '../jardin';
 
 export interface ItemDef {
   id: string;
@@ -635,7 +636,7 @@ export const ITEMS: ItemDef[] = [
     durability: 300,
     // la tasse se pose au fond de la cuve, sous le robinet, l'anse vers l'avant
     // la tasse, la bouteille, ou la casserole pour faire cuire à l'eau
-    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'verre', 'carafe', 'casserole', "bouteille d'eau"], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
+    pour: { at: [0, COUNTER_H - BASIN_H, TAP_Z], fills: ['tasse', 'verre', 'carafe', 'casserole', "bouteille d'eau", 'arrosoir'], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
     // la vaisselle au fond de la cuve, de part et d'autre du filet d'eau
     wash: { hands: [0, COUNTER_H + 0.08, TAP_Z + 0.05], dishes: [[-0.11, COUNTER_H - BASIN_H, BASIN_Z + 0.02], [0.11, COUNTER_H - BASIN_H, BASIN_Z - 0.04]] },
     build: () => {
@@ -1407,6 +1408,7 @@ export const ITEMS: ItemDef[] = [
   // meubles et entretien : barre à couteaux, crochets, horloge, fenêtre, îlot, balai… (upkeep.ts)
   ...UPKEEP_ITEMS,
   ...LIFE_ITEMS,
+  ...GARDEN_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));
