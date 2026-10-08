@@ -17,6 +17,8 @@
 - Sauter, nager, grimper, lancer (`public/anim/ual_moves1.glb` : Jump_Start, Jump_Loop, Jump_Land, Swim_Fwd_Loop,
   Swim_Idle_Loop ; `public/anim/ual_moves2.glb` : ClimbUp_1m, OverhandThrow) : même bibliothèque de Quaternius,
   **CC0**, extraits de la réserve ci-dessous par `tools/build_anim_assets.py`.
+- Récolter, semer, arroser, couper du bois (`public/anim/ual_work.glb` : Farm_Harvest, Farm_PlantSeed,
+  Farm_Watering, TreeChopping_Loop) : même bibliothèque de Quaternius, **CC0**, extraits de la réserve.
 - Réserve d'animations pas encore utilisées (`public/anim/ual_extra.glb` : les 30 autres clips du volume 1, sauter,
   nager, se battre... ; `public/anim/ual_extra2.glb` : les 39 autres clips du volume 2, récolter, semer, arroser,
   grimper, couper du bois, porter en marchant...) : même bibliothèque de Quaternius, **CC0**.

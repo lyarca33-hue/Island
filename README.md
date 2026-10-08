@@ -267,6 +267,12 @@ clavier ou au clic (Maj : plus vite), et se hisse sur la rive en y arrivant (« 
 au clic droit sur le perso). « Grimper dessus » au clic droit sur un meuble de 35 cm à 1,25 m
 (table, plan de travail, lit) : le perso s'y hisse, s'y promène, et retombe en passant le bord.
 
+Travaux du jardin (clips de Quaternius) : le perso s'accroupit pour récolter un légume, désherber
+ou cueillir un bouquet, s'agenouille pour semer, et tout son corps accompagne l'arrosoir. Couper du
+bois : la hache en main, « Couper du bois » au clic droit sur le perso près d'un arbre du jardin ;
+le bras frappe au rythme du clip (la hache suit la main), et une bûche tombe au pied de l'arbre
+(douze au plus dans le jardin).
+
 Déplacer un gros meuble (fiche `movable` : table, bibliothèque, machine à café) : mains vides,
 clic sur le meuble. Le perso se place contre le côté le plus proche et pose les mains dessus ;
 Z Q S D le poussent ou le tirent (ce qui est posé ou rangé dedans suit), il bute sur les autres

@@ -57,7 +57,7 @@ export class Puppet {
     p.extra = sit ? [{ ...sit, bones: UAL_TO_VRM }] : [];
     p.loadClips(source);
     p.play('idle', 0);
-    // poses du créateur (1,7 Mo), sauter, nager, grimper, lancer (500 ko) : ajoutés à leur
+    // poses du créateur (1,7 Mo), sauter, nager, grimper, lancer, travaux du jardin (900 ko) : ajoutés à leur
     // arrivée, sans retarder l'entrée dans le jeu
     const add = (sets: AnimationSource[]) => {
       for (const s of sets) {

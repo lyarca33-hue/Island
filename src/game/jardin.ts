@@ -438,9 +438,12 @@ function cropModel(crop: Crop, x: number): { plant: THREE.Group; grow: THREE.Gro
 
 // ——— le décor : arbres, sapins, buissons, chemin, bordure fleurie ———
 
-/** Feuillus et sapins autour de la maison (loin du côté de la caméra, pour ne pas cacher le perso). */
-const OAKS: Array<[number, number, number]> = [[-9.8, 10, 1.1], [-9.5, -1.5, 1.25], [11.5, 5.5, 1.2], [12, -4.5, 1.0], [-6.5, -10, 1.15], [2.5, -13, 1.3], [-12.5, 12, 1.0]];
-const PINES: Array<[number, number, number]> = [[-11.5, 3.2, 1.1], [-7.5, -6, 1.0], [14, 0.5, 1.2], [-2, -14, 1.1], [9.5, -12.5, 1.0], [-14, -8, 1.25]];
+/**
+ * Feuillus et sapins autour de la maison (loin du côté de la caméra, pour ne pas cacher le perso) :
+ * x, z, taille. On y coupe du bois (mouvements.ts).
+ */
+export const OAKS: Array<[number, number, number]> = [[-9.8, 10, 1.1], [-9.5, -1.5, 1.25], [11.5, 5.5, 1.2], [12, -4.5, 1.0], [-6.5, -10, 1.15], [2.5, -13, 1.3], [-12.5, 12, 1.0]];
+export const PINES: Array<[number, number, number]> = [[-11.5, 3.2, 1.1], [-7.5, -6, 1.0], [14, 0.5, 1.2], [-2, -14, 1.1], [9.5, -12.5, 1.0], [-14, -8, 1.25]];
 const BUSHES: Array<[number, number, number]> = [[9.3, 2.3, 0.45], [9.4, -1.0, 0.5], [-3.85, -0.9, 0.4], [-3.9, -2.1, 0.45], [-7.4, 5.4, 0.35]];
 /** Chemin de pierres plates : de la porte de l'entrée (entree.ts) jusqu'au potager, au banc et au pommier. */
 const PATH: Array<[number, number]> = [
@@ -937,6 +940,8 @@ export class Garden {
     if (!w) return;
     w.t += dt;
     const pouring = this.host.pouring();
+    // l'eau coule : tout le corps accompagne l'arrosoir
+    if (pouring && !w.started) this.host.character.gesture('water');
     if (pouring) w.started = true;
     if (pouring || (!w.started && w.t < 12)) return;
     this.watering = null;
@@ -956,7 +961,8 @@ export class Garden {
     if (wait !== null) return wait;
     const c = this.host.character;
     if (c.hands.free < 1) return this.tell(`Les mains sont prises : pose quelque chose pour récolter ${p.crop.feminine ? 'une' : 'un'} ${p.crop.name}.`);
-    return this.atParcel(i, running, () => {
+    // accroupi, on arrache (ou cueille) le légume
+    return this.atParcel(i, running, () => c.work('harvest', () => {
       if (p.left <= 0) return;
       // le légume, arraché ou cueilli, posé sur le rebord du potager, puis pris en main
       const at = this.parcelWorld(i, BED_H, BED_D / 2 - 0.025);
@@ -972,7 +978,7 @@ export class Garden {
       this.host.mood(1);
       this.practice(GARDEN_XP.harvest);
       if (!c.pickUp(veg, running)) this.host.notice(`${p.crop.feminine ? 'La' : 'Le'} ${p.crop.name} est posé${p.crop.feminine ? 'e' : ''} sur le bord du potager.`);
-    });
+    }));
   }
 
   private sow(i: number, running: boolean): boolean {
@@ -981,7 +987,8 @@ export class Garden {
     if (this.season === 3) return this.tell('La terre est gelée : on sèmera au printemps.');
     const wait = this.ready(() => this.sow(i, running));
     if (wait !== null) return wait;
-    return this.atParcel(i, running, () => {
+    // à genoux, on met les graines en terre
+    return this.atParcel(i, running, () => this.host.character.work('plant', () => {
       if (p.stage !== null) return;
       p.stage = 0;
       p.left = 0;
@@ -989,7 +996,7 @@ export class Garden {
       this.host.soilHands('la terre du jardin');
       this.practice(GARDEN_XP.sow);
       this.host.notice(`Graines de ${p.crop.plural} semées.${this.water < 0.35 ? ' Pense à arroser le potager.' : ''}`);
-    });
+    }));
   }
 
   private weed(running: boolean): boolean {
@@ -997,14 +1004,14 @@ export class Garden {
     const wait = this.ready(() => this.weed(running));
     if (wait !== null) return wait;
     // du côté du potager où l'on est
-    return this.atParcel(this.nearestParcel(() => true), running, () => {
+    return this.atParcel(this.nearestParcel(() => true), running, () => this.host.character.work('harvest', () => {
       this.weeds = 0;
       this.showBed();
       this.host.soilHands('la terre du jardin');
       this.host.mood(1);
       this.practice(GARDEN_XP.weed);
       this.host.notice('Mauvaises herbes arrachées : les légumes pousseront mieux.');
-    });
+    }));
   }
 
   private pickApple(running: boolean): boolean {
@@ -1048,7 +1055,7 @@ export class Garden {
     if (wait !== null) return wait;
     const c = this.host.character;
     if (c.hands.free < 1) return this.tell('Les mains sont prises : pose quelque chose pour cueillir un bouquet.');
-    c.approachThen(c.standFor(item), item.object.position, () => {
+    c.approachThen(c.standFor(item), item.object.position, () => c.work('harvest', () => {
       if (this.blooming(item) < BOUQUET) return;
       this.beds.set(item, (this.beds.get(item) ?? 0) + BOUQUET);
       this.showFlowers(item);
@@ -1061,7 +1068,7 @@ export class Garden {
       this.practice(GARDEN_XP.bouquet);
       this.host.say('Un joli bouquet pour la maison.');
       c.pickUp(flowers, running);
-    }, running);
+    }), running);
     return true;
   }
 

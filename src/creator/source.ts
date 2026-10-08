@@ -51,10 +51,11 @@ export function loadPoseAnimations(): Promise<Array<{ scene: THREE.Object3D; cli
 }
 
 /**
- * Sauter, nager, grimper, lancer : quelques clips de la réserve ci-dessous (Quaternius, CC0),
- * extraits à part (500 ko au lieu de 7,6 Mo). Fichiers manquants ignorés.
+ * Sauter, nager, grimper, lancer, récolter, semer, arroser, couper du bois : quelques clips de la
+ * réserve ci-dessous (Quaternius, CC0), extraits à part (900 ko au lieu de 7,6 Mo). Fichiers
+ * manquants ignorés.
  */
-const MOVES_URLS = ['ual_moves1.glb', 'ual_moves2.glb'].map((f) => `${import.meta.env.BASE_URL}anim/${f}`);
+const MOVES_URLS = ['ual_moves1.glb', 'ual_moves2.glb', 'ual_work.glb'].map((f) => `${import.meta.env.BASE_URL}anim/${f}`);
 let moves: Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> | null = null;
 
 export function loadMoveAnimations(): Promise<Array<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>> {
