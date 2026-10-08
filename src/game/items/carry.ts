@@ -648,7 +648,7 @@ export class Carry {
    * le couteau revenu en main.
    */
   cut(at: () => THREE.Vector3, onDone?: () => void): boolean {
-    if (!(this.item?.def.knife || this.item?.def.wipes || this.item?.def.towel || this.item?.def.bathTowel || this.item?.def.stirs || this.item?.def.grates || this.item?.name === 'couteau de table') || this.phase !== 'hold' || this.stack.length) return false;
+    if (!(this.item?.def.knife || this.item?.def.wipes || this.item?.def.towel || this.item?.def.bathTowel || this.item?.def.stirs || this.item?.def.grates || this.item?.def.sweeps || this.item?.def.mops || this.item?.def.spray || this.item?.name === 'couteau de table') || this.phase !== 'hold' || this.stack.length) return false;
     this.cutAt = at;
     // le buste se penche vers la planche (voir weights)
     this.target.copy(at());

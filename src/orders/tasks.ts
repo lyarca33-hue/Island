@@ -65,6 +65,14 @@ export type Intent =
   /** Empiler les assiettes ; essuyer les flaques par terre. */
   | { kind: 'empiler' }
   | { kind: 'essuyer_sol' }
+  /** L'entretien : balai, serpillière, spray et éponge, gants, poubelle au conteneur, sac neuf, horloge. */
+  | { kind: 'balayer' }
+  | { kind: 'serpillere' }
+  | { kind: 'nettoyer'; ref?: string }
+  | { kind: 'gants'; mettre: boolean }
+  | { kind: 'sortir_poubelle' }
+  | { kind: 'sac_neuf'; ref?: string }
+  | { kind: 'heure' }
   /** Essuyer au torchon ces pièces de vaisselle mouillées (toutes si `refs` est vide) ; s'essuyer les mains. */
   | { kind: 'essuyer_vaisselle'; refs: string[] }
   | { kind: 'essuyer_mains' }
@@ -612,6 +620,32 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await take(game, act, sponge.ref);
       return act('essuyer_sol');
     }
+    case 'balayer':
+      await takeTool(game, act, ['balai']);
+      return act('balayer');
+    case 'serpillere':
+      await takeTool(game, act, ['serpillière']);
+      return act('serpillere');
+    case 'nettoyer': {
+      const spray = await takeTool(game, act, ['spray nettoyant']);
+      await takeTool(game, act, ['éponge'], (ref) => ref === spray);
+      return act('nettoyer', intent.ref ? { objet: intent.ref } : {});
+    }
+    case 'gants':
+      if (intent.mettre) {
+        await freeHands(game, act);
+        return act('gants', { etat: 'mettre' });
+      }
+      await freeHands(game, act);
+      return act('gants', { etat: 'enlever' });
+    case 'sortir_poubelle':
+      await freeHands(game, act);
+      return act('sortir_poubelle');
+    case 'sac_neuf':
+      await freeHands(game, act);
+      return act('sac_neuf', intent.ref ? { objet: intent.ref } : {});
+    case 'heure':
+      return act('heure');
     case 'essuyer_vaisselle': {
       const towel = world(game).objets.find((o) => o.nom === 'torchon');
       if (!towel) throw new Failed('Il n’y a pas de torchon.');

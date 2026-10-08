@@ -295,6 +295,39 @@ export class Character {
     return pick ?? best;
   }
 
+  /**
+   * Habille les deux mains (gants de ménage) : `make()` donne la forme d'un gant, la paume au
+   * bout du poignet vers les doigts ; elle suit l'os de la main. Rend ce qui a été ajouté (à
+   * passer à `undress`), vide si le perso n'a pas de mains (perso par défaut).
+   */
+  dressHands(make: () => THREE.Object3D): THREE.Object3D[] {
+    const h = this.puppet?.vrm.humanoid;
+    if (!h) return [];
+    const out: THREE.Object3D[] = [];
+    for (const side of ['right', 'left'] as const) {
+      const hand = h.getRawBoneNode(`${side}Hand`);
+      const finger = h.getRawBoneNode(`${side}MiddleProximal`);
+      if (!hand) continue;
+      hand.updateWorldMatrix(true, false);
+      const glove = make();
+      // tourné de son axe +Y vers les doigts (dans le repère de l'os de la main)
+      const dir = finger ? hand.worldToLocal(finger.getWorldPosition(new THREE.Vector3())) : new THREE.Vector3(0, 0.08, 0);
+      const len = dir.length() || 0.08;
+      glove.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+      // l'os peut être mis à l'échelle (modèles VRM) : le gant garde sa taille en mètres
+      const s = hand.getWorldScale(new THREE.Vector3());
+      glove.scale.set(1 / s.x, 1 / s.y, 1 / s.z).multiplyScalar(len * s.x / 0.08);
+      hand.add(glove);
+      out.push(glove);
+    }
+    return out;
+  }
+
+  /** Retire ce qu'avait ajouté `dressHands`. */
+  undress(parts: THREE.Object3D[]): void {
+    for (const p of parts) p.removeFromParent();
+  }
+
   /** Peut-on porter des objets avec ce perso ? (pas X Bot) */
   get canCarry(): boolean {
     return !!this.carries;

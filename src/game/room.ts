@@ -123,6 +123,8 @@ export interface Opening {
   u1: number;
   y0: number;
   y1: number;
+  /** Fenêtre qui s'ouvre : le battant (croisillon, vitre) est un objet (la fiche `fenetre`), le mur n'en garde que le cadre. */
+  sash?: boolean;
 }
 
 /** Porte ou passage : `leaf` = porte d'entrée avec un battant qui s'ouvre seul devant le perso. */
@@ -794,11 +796,13 @@ export class Room {
     add(o.u1 - f / 2, ym, f, ly, WALL_T, frame);
     add(um, o.y0 + f / 2, lu, f, WALL_T, frame);
     add(um, o.y1 - f / 2, lu, f, WALL_T, frame);
-    add(um, ym, 0.03, ly, 0.05, frame);
-    add(um, ym, lu, 0.03, 0.05, frame);
-    const pane = add(um, ym, lu - 2 * f, ly - 2 * f, 0.01, glass);
-    pane.receiveShadow = false;
-    pane.name = 'vitre';
+    if (!o.sash) {
+      add(um, ym, 0.03, ly, 0.05, frame);
+      add(um, ym, lu, 0.03, 0.05, frame);
+      const pane = add(um, ym, lu - 2 * f, ly - 2 * f, 0.01, glass);
+      pane.receiveShadow = false;
+      pane.name = 'vitre';
+    }
     // rebord, qui dépasse un peu dans la pièce
     add(um, o.y0 - 0.015, lu + 0.08, 0.03, WALL_T + 0.06, frame, sgn * 0.03);
   }
@@ -905,13 +909,11 @@ export class Room {
 }
 
 /**
- * Décor de la cuisine : crédence, hotte, horloge qui donne l'heure du jeu,
- * meuble d'angle, tapis.
+ * Décor de la cuisine : crédence, hotte, meuble d'angle, tapis.
  */
 function kitchenDecor(room: Room, anchor: Anchors): void {
   const { x0, z0 } = room.rect;
   const stoveX = anchor('gaziniere')?.x ?? 0;
-  const coffeeZ = anchor('machine-a-cafe')?.z ?? -1.9;
   const sinkX = anchor('evier')?.x ?? -1.6;
   const tableAt = anchor('table');
   const north = room.wallGroup('nord'), west = room.wallGroup('ouest');
@@ -943,32 +945,7 @@ function kitchenDecor(room: Room, anchor: Anchors): void {
 
   // l'étagère à épices au-dessus du plan de travail est un objet (prep.ts) : ses pots se prennent
 
-  // horloge au-dessus du coin café : elle donne l'heure du jeu
-  const clock = new THREE.Group();
-  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.03, 32).rotateZ(Math.PI / 2), toon(0xfbf8f0));
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.015, 8, 32).rotateY(Math.PI / 2), toon(DARK_WOOD));
-  clock.add(face, rim);
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const tick = box(0.01, i % 3 ? 0.02 : 0.035, 0.012, toon(0x333333), 0.016, Math.cos(a) * 0.135, Math.sin(a) * 0.135, false);
-    tick.rotation.x = a;
-    clock.add(tick);
-  }
-  const hand = (len: number, w: number) => {
-    const pivot = new THREE.Group();
-    pivot.position.x = 0.022;
-    pivot.add(box(0.006, len, w, toon(0x222222), 0, len / 2 - 0.02, 0, false));
-    clock.add(pivot);
-    return pivot;
-  };
-  const hourHand = hand(0.09, 0.016), minuteHand = hand(0.13, 0.01);
-  clock.position.set(x0 + 0.02, 1.85, coffeeZ);
-  west.add(clock);
-  room.onTick((_dt, hour) => {
-    const m = ((hour % 12) + 12) % 12;
-    hourHand.rotation.x = -(m / 12) * Math.PI * 2;
-    minuteHand.rotation.x = -(hour % 1) * Math.PI * 2;
-  });
+  // l'horloge au-dessus du coin café est un objet (upkeep.ts) : elle donne l'heure du jeu
 
   // meuble d'angle (les deux rangées partent de lui), une plante dessus
   const corner = new THREE.Group();
@@ -1019,7 +996,8 @@ export const KITCHEN: RoomSpec = {
     const sinkX = anchor('evier')?.x ?? -1.6;
     const tableZ = anchor('table')?.z ?? 1;
     return [
-      { wall: 'nord', u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH },
+      // celle de l'évier s'ouvre : son battant est l'objet `fenetre` (KITCHEN.items)
+      { wall: 'nord', u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH, sash: true },
       { wall: 'est', u0: tableZ - 0.55, u1: tableZ + 0.55, y0: 0.95, y1: WIN_HIGH },
     ];
   },
@@ -1043,9 +1021,25 @@ export const KITCHEN: RoomSpec = {
     // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
     ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
     ['egouttoir', 'lave-vaisselle', 0.145, 0],
-    ['torchon', 'lave-vaisselle', -0.15, 0.17, 0.1],
     ['mixeur', 'four'],
+    // au mur : la barre à couteaux sous l'étagère à épices, les crochets (torchon, maniques) au-dessus du four
+    ['barre-couteaux', 'plan-de-travail', 0.12, -0.24],
+    ['crochets', 'four', 0, -0.31],
     ['frigo', 'congelateur'],
+  ],
+  items: [
+    // l'horloge au mur au-dessus du coin café, le battant de la fenêtre de l'évier
+    ['horloge', ROOM.x0 + 0.004, 1.68, -1.89, Math.PI / 2],
+    ['fenetre', -1.57, WIN_LOW + 0.05, ROOM.z0 - 0.03, 0],
+    // l'îlot au milieu, ses deux tabourets côté table (on s'y assoit face à l'îlot)
+    ['ilot', -0.9, 0, -0.3, 0],
+    ['tabouret', -1.2, 0, 0.75, Math.PI],
+    ['tabouret', -0.6, 0, 0.75, Math.PI],
+    // le balai et le seau (la serpillière dedans) dans le coin, après le garde-manger
+    ['balai', 2.55, 0, -2.66, 0],
+    ['seau', 2.95, 0, -2.5, 0],
+    // dehors, à côté de la porte d'entrée : le conteneur où vont les sacs poubelle
+    ['conteneur', ROOM.x0 - 0.95, 0, 0.55, Math.PI / 2],
   ],
   decor: kitchenDecor,
 };

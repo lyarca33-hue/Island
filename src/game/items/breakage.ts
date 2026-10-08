@@ -1,7 +1,8 @@
 /**
  * Objet qui se brise : il disparaît et laisse des éclats de ses propres couleurs, projetés
- * autour du point d'impact, qui rebondissent, glissent puis s'effacent. Un récipient plein
- * laisse aussi une flaque (café renversé).
+ * autour du point d'impact, qui rebondissent, glissent puis s'effacent. Tombés par terre, ils
+ * restent au sol jusqu'à ce qu'on les balaie (sweep). Un récipient plein laisse aussi une flaque
+ * (café renversé).
  *
  * Fragilité (fiche de l'objet) : 1 très fragile, 10 très solide. Chance de casser en tombant :
  * breakChance().
@@ -15,6 +16,22 @@ const LIFE = 3.2;
 const FADE = 0.6;
 /** Une flaque essuyée s'efface en ce temps (s). */
 const WIPE_FADE = 0.8;
+/** Sous cette hauteur, la surface touchée est le sol : les éclats y restent (à balayer). */
+const FLOOR_Y = 0.05;
+/** Éclats ou miettes balayés : ils s'effacent en ce temps (s). */
+const SWEEP_FADE = 0.4;
+
+/** Saleté au sol qui se ramasse au balai : éclats d'un objet brisé, miettes. */
+export interface FloorMess {
+  readonly kind: 'éclats' | 'miettes';
+  /** Coupant (verre, porcelaine) : marcher dessus fait mal. */
+  readonly sharp: boolean;
+  /** Où elle est, au sol. */
+  readonly position: THREE.Vector3;
+  /** Encore par terre (pas balayée). */
+  readonly dirty: boolean;
+  sweep(): void;
+}
 
 /**
  * Chance qu'un objet lancé se casse en touchant le sol, selon sa fragilité (1 à 10) et la
@@ -35,10 +52,17 @@ interface Shard {
 }
 
 /** Éclats d'un objet brisé ; update() rend faux quand tout a disparu. */
-export class Debris {
+export class Debris implements FloorMess {
   private shards: Shard[] = [];
   private puddle: THREE.Mesh | null = null;
   private t = 0;
+  readonly kind = 'éclats';
+  /** Les éclats sont tombés par terre : ils restent jusqu'au coup de balai. */
+  readonly keep: boolean;
+  readonly sharp: boolean;
+  readonly position: THREE.Vector3;
+  /** Balayés : le temps de s'effacer (s), sinon null. */
+  private sweeping: number | null = null;
   /** Hauteur de la surface où les éclats retombent. */
   private floor: number;
   readonly group = new THREE.Group();
@@ -52,6 +76,9 @@ export class Debris {
     item.object.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(item.object);
     const center = box.getCenter(new THREE.Vector3());
+    this.keep = shatter && floor < FLOOR_Y;
+    this.sharp = (item.def.fragility ?? 5) <= 4;
+    this.position = center.clone().setY(floor);
     const size = box.getSize(new THREE.Vector3());
     const span = Math.max(size.x, size.y, size.z);
     // les pièces visibles de l'objet, et leur part de la taille : chacune donne des éclats
@@ -116,9 +143,10 @@ export class Debris {
           if (s.vel.y === 0 && s.vel.lengthSq() < 0.01) s.vel.set(0, 0, 0);
         }
       }
-      const k = THREE.MathUtils.clamp((LIFE - this.t) / FADE, 0, 1);
+      const k = this.keep ? (this.sweeping === null ? 1 : THREE.MathUtils.clamp(this.sweeping / SWEEP_FADE, 0, 1)) : THREE.MathUtils.clamp((LIFE - this.t) / FADE, 0, 1);
       m.scale.setScalar(k);
     }
+    if (this.sweeping !== null) this.sweeping -= dt;
     if (this.puddle) {
       const grow = 1 - Math.pow(1 - Math.min(1, this.t / 1.2), 3);
       this.puddle.scale.setScalar(Math.max(0.01, this.puddle.userData.size * grow));
@@ -126,9 +154,27 @@ export class Debris {
       const mat = this.puddle.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.85 * THREE.MathUtils.clamp((LIFE * 2.5 - this.t) / 2, 0, 1);
     }
-    const alive = this.t < (this.puddle ? LIFE * 2.5 : LIFE);
+    const shardsLeft = this.keep ? this.sweeping === null || this.sweeping > 0 : this.t < LIFE;
+    const alive = shardsLeft || (!!this.puddle && this.t < LIFE * 2.5);
     if (!alive) this.dispose();
     return alive;
+  }
+
+  /** Éclats encore par terre (à balayer). */
+  get dirty(): boolean {
+    return this.keep && this.sweeping === null && this.shards.length > 0;
+  }
+
+  /** Les éclats tombés par terre, en monde (pour s'y couper en marchant dessus). */
+  get spread(): number {
+    let r = 0.1;
+    for (const s of this.shards) r = Math.max(r, Math.hypot(s.mesh.position.x - this.position.x, s.mesh.position.z - this.position.z));
+    return Math.min(r, 0.6);
+  }
+
+  /** Balayés : ils s'effacent. */
+  sweep(): void {
+    if (this.sweeping === null) this.sweeping = SWEEP_FADE;
   }
 
   dispose(): void {
@@ -176,6 +222,11 @@ export class Spill {
     return alive;
   }
 
+  /** Rayon de la flaque une fois étalée (m) : grande, elle demande la serpillière. */
+  get radius(): number {
+    return this.size;
+  }
+
   /** Où est la flaque (au sol). */
   get position(): THREE.Vector3 {
     return this.mesh.position;
@@ -194,6 +245,50 @@ export class Spill {
   dispose(): void {
     this.mesh.geometry.dispose();
     (this.mesh.material as THREE.Material).dispose();
+    this.group.removeFromParent();
+  }
+}
+
+/** Miettes tombées par terre (manger debout) : elles restent jusqu'au coup de balai. */
+export class Crumbs implements FloorMess {
+  readonly group = new THREE.Group();
+  readonly kind = 'miettes';
+  readonly sharp = false;
+  readonly position: THREE.Vector3;
+  private sweeping: number | null = null;
+
+  constructor(at: THREE.Vector3, color: THREE.ColorRepresentation) {
+    this.position = at.clone().setY(0);
+    const mat = new THREE.MeshToonMaterial({ color });
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, r = 0.05 + Math.random() * 0.16;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.006, 0.011), mat);
+      m.position.set(at.x + Math.cos(a) * r, 0.004, at.z + Math.sin(a) * r);
+      m.rotation.y = Math.random() * Math.PI;
+      this.group.add(m);
+    }
+  }
+
+  update(dt: number): boolean {
+    if (this.sweeping === null) return true;
+    this.sweeping -= dt;
+    const k = THREE.MathUtils.clamp(this.sweeping / SWEEP_FADE, 0, 1);
+    for (const m of this.group.children) m.scale.setScalar(k);
+    const alive = this.sweeping > 0;
+    if (!alive) this.dispose();
+    return alive;
+  }
+
+  get dirty(): boolean {
+    return this.sweeping === null;
+  }
+
+  sweep(): void {
+    if (this.sweeping === null) this.sweeping = SWEEP_FADE;
+  }
+
+  dispose(): void {
+    for (const m of this.group.children) (m as THREE.Mesh).geometry.dispose();
     this.group.removeFromParent();
   }
 }
