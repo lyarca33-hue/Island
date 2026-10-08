@@ -11,7 +11,7 @@ import type { VRM, VRMExpressionManager, VRMSpringBoneManager } from '@pixiv/thr
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYER_CHARACTER } from '../game/postfx';
-import { ACCESSORY_BY_ID, SLOTS, type AccSlot, type HeadFit, type NeckFit } from './accessories';
+import { ACCESSORY_BY_ID, SLOTS, type AccSlot, type BackFit, type HeadFit, type NeckFit } from './accessories';
 import { paintedFace, patternedCloth, type WornPattern } from './looks';
 import type { Body, Recipe } from './recipe';
 import { loadVrm } from './vrm';
@@ -331,6 +331,9 @@ export class Avatar {
   private neckAnchor = new THREE.Group();
   private headFit: HeadFit | null = null;
   private neckFit: NeckFit = { radius: 0.05, base: 0 };
+  private chestAnchor = new THREE.Group();
+  private hipsAnchor = new THREE.Group();
+  private backFit: BackFit = { back: -0.1, seat: -0.1 };
   private worn = new Map<AccSlot, { key: string; obj: THREE.Object3D }>();
   /** Formes du visage pilotées directement (Fcl_…), et ce qui leur a été ajouté à la dernière image. */
   private morphs: Record<string, number> = {};
@@ -509,6 +512,23 @@ export class Avatar {
       }
       this.neckFit = { radius: n ? Math.min(radius, (sum / n) * 1.25) : 0.05, base: 0 };
     }
+    // dos (sac, ailes) et bas du dos (queue) : surface arrière du corps habillé, au niveau des os
+    const backOf = (bone: THREE.Object3D | null, anchor: THREE.Group, fallback: number) => {
+      if (!bone) return fallback;
+      const o = pinOn(bone, anchor);
+      let z = 0;
+      for (const m of meshes(this.base, 'body')) {
+        eachVertex(m, (p) => {
+          p.sub(o);
+          if (Math.abs(p.y) < 0.05 && Math.abs(p.x) < 0.08) z = Math.min(z, p.z);
+        });
+      }
+      return z < -0.02 ? z : fallback;
+    };
+    this.backFit = {
+      back: backOf(h.getRawBoneNode('upperChest') ?? h.getRawBoneNode('chest'), this.chestAnchor, -0.1),
+      seat: backOf(h.getRawBoneNode('hips'), this.hipsAnchor, -0.1),
+    };
   }
 
   private applyAccessories(r: Recipe): void {
@@ -524,7 +544,7 @@ export class Avatar {
         this.worn.delete(slot);
       }
       if (!acc || !this.headFit) continue;
-      const obj = acc.build(this.headFit, this.neckFit, new THREE.Color(w.color).multiplyScalar(0.85));
+      const obj = acc.build(this.headFit, this.neckFit, new THREE.Color(w.color).multiplyScalar(0.85), this.backFit);
       obj.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
@@ -532,7 +552,8 @@ export class Avatar {
         m.receiveShadow = true;
         m.layers.enable(LAYER_CHARACTER);
       });
-      (slot === 'cou' ? this.neckAnchor : this.headAnchor).add(obj);
+      const anchor = { cou: this.neckAnchor, dos: this.chestAnchor, queue: this.hipsAnchor }[slot as string] ?? this.headAnchor;
+      anchor.add(obj);
       this.worn.set(slot, { key, obj });
     }
   }

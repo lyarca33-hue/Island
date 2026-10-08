@@ -203,6 +203,62 @@ export const FACE_MARKS: FaceMark[] = [
       ctx.stroke();
     },
   },
+  {
+    id: 'cernes', label: 'Cernes', tinted: false,
+    draw(ctx) {
+      for (const s of [-1, 1]) {
+        const x = 0.5 + s * EYE_X, y = EYE_Y + 0.045;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 0.05);
+        g.addColorStop(0, 'rgba(110, 80, 120, 0.45)');
+        g.addColorStop(1, 'rgba(110, 80, 120, 0)');
+        ctx.fillStyle = g;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(1.3, 0.45);
+        ctx.translate(-x, -y);
+        ctx.fillRect(x - 0.06, y - 0.06, 0.12, 0.12);
+        ctx.restore();
+      }
+    },
+  },
+  {
+    id: 'paillettes', label: 'Paillettes', tinted: true,
+    draw(ctx, c) {
+      const rnd = seeded(23);
+      ctx.fillStyle = c;
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < 9; i++) {
+          const x = 0.5 + s * (EYE_X + 0.06 + rnd() * 0.035), y = EYE_Y - 0.02 + rnd() * 0.07;
+          if (i % 3 === 0) star(ctx, x, y, 0.009);
+          else dot(ctx, x, y, 0.0035);
+        }
+      }
+    },
+  },
+  {
+    id: 'fleur', label: 'Fleur', tinted: true,
+    draw(ctx, c) {
+      const x = 0.5 + CHEEK_X + 0.01, y = CHEEK_Y + 0.005;
+      ctx.fillStyle = c;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        dot(ctx, x + Math.cos(a) * 0.012, y + Math.sin(a) * 0.012, 0.009);
+      }
+      ctx.fillStyle = '#f2d06b';
+      dot(ctx, x, y, 0.006);
+    },
+  },
+  {
+    id: 'lune', label: 'Lune sur le front', tinted: true,
+    draw(ctx, c) {
+      const x = 0.5, y = 0.43;
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(x, y, 0.022, 0, Math.PI * 2);
+      ctx.arc(x + 0.011, y - 0.006, 0.019, 0, Math.PI * 2, true);
+      ctx.fill('evenodd');
+    },
+  },
 ];
 
 export const FACE_MARK_BY_ID = new Map(FACE_MARKS.map((m) => [m.id, m]));
@@ -211,6 +267,9 @@ export const FACE_MARK_BY_ID = new Map(FACE_MARKS.map((m) => [m.id, m]));
 export const BLUSH_COLORS = ['#ff9aa8', '#ff7f7f', '#f7a072', '#e58bb0', '#c86b9a', '#d9775e'];
 export const MARK_COLORS = ['#1d1a22', '#7a4a33', '#c2413a', '#e58bb0', '#e9c27a', '#3e78c9', '#3c9c78', '#6c4ab8', '#f4efe6'];
 /** Sourcils et cils (sinon couleur d'origine). */
+/** Fard à paupières et rouge à lèvres. */
+export const SHADOW_COLORS = ['#c88a9e', '#b06a5a', '#d9a35b', '#8a6bc0', '#5a8fd0', '#4fa08a', '#7a5a4a', '#3a3040'];
+export const LIP_COLORS = ['#e07a86', '#c2413a', '#9c2a3a', '#e58bb0', '#d98b6a', '#b05a8a', '#6c4ab8', '#3a2030'];
 export const BROW_COLORS = ['#1d1a22', '#3b2a22', '#6b4429', '#a8743f', '#e3c27a', '#f1ece2', '#9aa3b5', '#c2413a', '#e58bb0', '#6c4ab8', '#3e78c9'];
 
 export interface Makeup {
@@ -218,19 +277,39 @@ export interface Makeup {
   blush: string | null;
   brows: string | null;
   lashes: string | null;
+  /** Fard à paupières (null = aucun). */
+  shadow: string | null;
+  /** Rouge à lèvres (null = aucun). */
+  lips: string | null;
   /** Dessins portés (ids de FACE_MARKS). */
   marks: string[];
   markColor: string;
 }
 
-export const NO_MAKEUP: Makeup = { blush: null, brows: null, lashes: null, marks: [], markColor: '#1d1a22' };
+export const NO_MAKEUP: Makeup = { blush: null, brows: null, lashes: null, shadow: null, lips: null, marks: [], markColor: '#1d1a22' };
+
+/** Tache de couleur douce, ellipse étirée (rx, ry) autour de (x, y). */
+function softSpot(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, hex: string, alpha: number) {
+  const rgb = srgb(hex).join(', ');
+  const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
+  g.addColorStop(0, `rgba(${rgb}, ${alpha})`);
+  g.addColorStop(0.6, `rgba(${rgb}, ${alpha / 2})`);
+  g.addColorStop(1, `rgba(${rgb}, 0)`);
+  ctx.fillStyle = g;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, ry / rx);
+  ctx.translate(-x, -y);
+  ctx.fillRect(x - rx, y - rx, rx * 2, rx * 2);
+  ctx.restore();
+}
 
 const faceCache = new Map<string, THREE.Texture>();
 
 /** Texture du visage avec joues et dessins ; null = rien à peindre (texture d'origine). */
 export function paintedFace(tex: THREE.Texture, m: Makeup | undefined): THREE.Texture | null {
-  if (!m || (!m.blush && !m.marks.length)) return null;
-  const key = `${tex.uuid}|${m.blush}|${m.marks.join(',')}|${m.markColor}`;
+  if (!m || (!m.blush && !m.shadow && !m.lips && !m.marks.length)) return null;
+  const key = `${tex.uuid}|${m.blush}|${m.shadow}|${m.lips}|${m.marks.join(',')}|${m.markColor}`;
   const hit = faceCache.get(key);
   if (hit) return hit;
   const img = tex.image as CanvasImageSource & { width: number; height: number };
@@ -242,22 +321,21 @@ export function paintedFace(tex: THREE.Texture, m: Makeup | undefined): THREE.Te
   ctx.save();
   // les textures glTF ne sont pas retournées : (0, 0) en haut à gauche, comme le canevas
   ctx.scale(canvas.width, canvas.height);
-  if (m.blush) {
-    for (const s of [-1, 1]) {
-      const x = 0.5 + s * CHEEK_X, y = CHEEK_Y;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, 0.06);
-      const rgb = srgb(m.blush).join(', ');
-      g.addColorStop(0, `rgba(${rgb}, 0.6)`);
-      g.addColorStop(0.6, `rgba(${rgb}, 0.3)`);
-      g.addColorStop(1, `rgba(${rgb}, 0)`);
-      ctx.fillStyle = g;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(1.25, 0.75);
-      ctx.translate(-x, -y);
-      ctx.fillRect(x - 0.07, y - 0.07, 0.14, 0.14);
-      ctx.restore();
-    }
+  for (const s of [-1, 1]) {
+    if (m.blush) softSpot(ctx, 0.5 + s * CHEEK_X, CHEEK_Y, 0.075, 0.045, m.blush, 0.6);
+    // fard : au-dessus de l'œil, la paupière (le globe de l'œil cache le bas)
+    if (m.shadow) softSpot(ctx, 0.5 + s * (EYE_X + 0.008), EYE_Y - 0.022, 0.075, 0.042, m.shadow, 0.75);
+  }
+  if (m.lips) {
+    const [r, g, b] = srgb(m.lips);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.85)`;
+    const y = MOUTH_Y;
+    ctx.beginPath();
+    ctx.moveTo(0.5 - 0.038, y);
+    ctx.quadraticCurveTo(0.5 - 0.02, y - 0.016, 0.5, y - 0.008);
+    ctx.quadraticCurveTo(0.5 + 0.02, y - 0.016, 0.5 + 0.038, y);
+    ctx.quadraticCurveTo(0.5, y + 0.024, 0.5 - 0.038, y);
+    ctx.fill();
   }
   for (const id of m.marks) FACE_MARK_BY_ID.get(id)?.draw(ctx, m.markColor);
   ctx.restore();
@@ -340,6 +418,60 @@ export const PATTERNS: Pattern[] = [
           const a = (i / 5) * Math.PI * 2;
           dot(ctx, p * (x + Math.cos(a) * r), p * (y + Math.sin(a) * r), p * r * 0.75);
         }
+      }
+    },
+  },
+  {
+    id: 'damier', label: 'Damier',
+    tile(ctx, p) {
+      ctx.fillRect(0, 0, p / 2, p / 2);
+      ctx.fillRect(p / 2, p / 2, p / 2, p / 2);
+    },
+  },
+  {
+    id: 'losanges', label: 'Losanges',
+    tile(ctx, p) {
+      ctx.globalAlpha = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(p / 2, 0);
+      ctx.lineTo(p, p / 2);
+      ctx.lineTo(p / 2, p);
+      ctx.lineTo(0, p / 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    },
+  },
+  {
+    id: 'zigzag', label: 'Zigzag',
+    tile(ctx, p) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = p * 0.16;
+      ctx.lineJoin = 'miter';
+      ctx.beginPath();
+      ctx.moveTo(-p * 0.25, p * 0.55);
+      ctx.lineTo(0, p * 0.3);
+      ctx.lineTo(p / 2, p * 0.7);
+      ctx.lineTo(p, p * 0.3);
+      ctx.lineTo(p * 1.25, p * 0.55);
+      ctx.stroke();
+    },
+  },
+  {
+    id: 'leopard', label: 'Léopard',
+    tile(ctx, p) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = p * 0.07;
+      const rnd = seeded(5);
+      // taches en anneaux ouverts, gardées loin des bords (le motif se répète)
+      for (const [x, y] of [[0.25, 0.25], [0.72, 0.3], [0.3, 0.72], [0.75, 0.78]]) {
+        const a = rnd() * Math.PI * 2;
+        ctx.beginPath();
+        ctx.ellipse(p * x, p * y, p * 0.1, p * 0.075, a, 0.3, Math.PI * 2 - 0.6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(p * (x + 0.01), p * y, p * 0.03, 0, Math.PI * 2);
+        ctx.fill();
       }
     },
   },
