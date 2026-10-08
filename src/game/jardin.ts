@@ -9,6 +9,10 @@
  * rousses puis branches nues et neige l'hiver, où la terre gelée ne pousse plus. Les légumes
  * poussent avec les heures du jeu, plus vite arrosés et désherbés.
  *
+ * Jardiner fait monter la compétence jardinage (0 à 10) : les légumes poussent plus vite et les
+ * récoltes sont plus grosses. Le potager, les pommes et les fleurs cueillies sont gardés avec la
+ * partie (rangés avec leurs objets, voir extras), comme la compétence.
+ *
  * Les fiches des objets sont ici (ajoutées au catalogue) ; Game ne fait que brancher le jardin
  * (menu, clic, heures qui passent, saison) par l'interface GardenHost.
  */
@@ -326,6 +330,56 @@ const CROPS: Crop[] = [
   { id: 'concombre', name: 'concombre', plural: 'concombres', feminine: false, hours: 32, yield: 3 },
 ];
 
+// ——— la compétence jardinage ———
+
+/** La compétence jardinage va de 0 à GARDEN_SKILL_MAX, comme la cuisine, avec des paliers plus courts (on jardine moins souvent qu'on cuisine). */
+export const GARDEN_SKILL_MAX = 10;
+const GARDEN_STEP = 6;
+/** Points qu'il faut pour atteindre le niveau `level`. */
+export const gardenPointsFor = (level: number) => (GARDEN_STEP * level * (level + 1)) / 2;
+export function gardenLevel(points: number): number {
+  let n = 0;
+  while (n < GARDEN_SKILL_MAX && points >= gardenPointsFor(n + 1)) n++;
+  return n;
+}
+/** Points gagnés : semer un carré, arroser, désherber, récolter un légume, cueillir une pomme ou un bouquet. */
+export const GARDEN_XP = { sow: 3, water: 2, weed: 3, harvest: 1, apple: 1, bouquet: 1 };
+/** Légumes en plus à chaque récolte : un tous les trois niveaux. */
+export const extraYield = (level: number) => Math.floor(level / 3);
+/** Les légumes poussent plus vite : +4 % par niveau. */
+export const growthBoost = (level: number) => 1 + level * 0.04;
+/** Les mauvaises herbes ralentissent la pousse de moitié, d'un quart seulement à partir du niveau 5. */
+export const weedSlowdown = (level: number) => (level >= 5 ? 0.75 : 0.5);
+/** Ce que la compétence apporte, pour l'infobulle. */
+export function gardenPerks(level: number): string[] {
+  const out = [`Légumes ${Math.round((growthBoost(level) - 1) * 100)} % plus rapides à pousser`];
+  if (extraYield(level)) out.push(`+${extraYield(level)} légume${extraYield(level) > 1 ? 's' : ''} par récolte`);
+  if (level >= 5) out.push('Les mauvaises herbes gênent moins');
+  return out;
+}
+
+/** L'état du potager gardé avec la partie (voir Garden.extras) : chaque carré [pousse, légumes mûrs], la terre, la compétence. */
+export interface BedSave {
+  carres: Array<[number | null, number]>;
+  eau: number;
+  herbes: number;
+  points: number;
+}
+
+const num = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null);
+
+/** Relit l'état du potager sauvé ; null s'il est absent ou abîmé. Les valeurs hors bornes sont ramenées dedans. */
+export function readBedSave(v: unknown): BedSave | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (!Array.isArray(o.carres)) return null;
+  const carres = o.carres.map((c): [number | null, number] => {
+    const [stage, left] = Array.isArray(c) ? c : [];
+    return [stage === null ? null : num(stage, 0, 1) ?? null, Math.round(num(left, 0, 99) ?? 0)];
+  });
+  return { carres, eau: num(o.eau, 0, 1) ?? 0.6, herbes: num(o.herbes, 0, 1) ?? 0.35, points: num(o.points, 0, Infinity) ?? 0 };
+}
+
 /** Un carré du potager : son légume, sa pousse (0 à 1, null pas semé), les légumes mûrs qui restent. */
 interface Parcel {
   crop: Crop;
@@ -469,6 +523,8 @@ export class Garden {
   /** Où est chaque fleur de la bordure : son maillage de têtes et sa place dedans. */
   private borderSlot: Array<[THREE.InstancedMesh, number]> = [];
   private lastLook = { yearPos: -1, snow: -1 };
+  /** Points de la compétence jardinage. */
+  private points = 0;
 
   constructor(host: GardenHost) {
     this.host = host;
@@ -607,9 +663,10 @@ export class Garden {
     let changed = false;
     for (const p of this.parcels) {
       if (p.stage === null || p.stage >= 1 || winter || this.water <= 0) continue;
-      p.stage = Math.min(1, p.stage + (hours / p.crop.hours) * (this.weeds > 0.6 ? 0.5 : 1));
+      const level = this.level;
+      p.stage = Math.min(1, p.stage + (hours / p.crop.hours) * growthBoost(level) * (this.weeds > 0.6 ? weedSlowdown(level) : 1));
       if (p.stage >= 1) {
-        p.left = p.crop.yield;
+        p.left = p.crop.yield + extraYield(level);
         this.host.notice(`Les ${p.crop.plural} sont mûr${p.crop.feminine ? 'e' : ''}s au potager.`);
       }
       changed = true;
@@ -841,6 +898,7 @@ export class Garden {
     if (litres <= 0.01) return;
     this.water = Math.min(1, this.water + litres / BED_THIRST);
     this.showBed();
+    this.practice(GARDEN_XP.water);
     this.host.notice(this.water >= 0.95 ? 'Le potager est bien arrosé.' : 'Le potager a bu, mais la terre est encore un peu sèche : encore un peu d’eau.');
     if (w.can.level <= 0.02) this.host.say('L’arrosoir est vide.');
   }
@@ -866,6 +924,7 @@ export class Garden {
       this.showBed();
       if (p.crop.id === 'carotte' || p.crop.id === 'pomme-de-terre') this.host.soilHands('la terre du jardin');
       this.host.mood(1);
+      this.practice(GARDEN_XP.harvest);
       if (!c.pickUp(veg, running)) this.host.notice(`${p.crop.feminine ? 'La' : 'Le'} ${p.crop.name} est posé${p.crop.feminine ? 'e' : ''} sur le bord du potager.`);
     });
   }
@@ -882,6 +941,7 @@ export class Garden {
       p.left = 0;
       this.showBed();
       this.host.soilHands('la terre du jardin');
+      this.practice(GARDEN_XP.sow);
       this.host.notice(`Graines de ${p.crop.plural} semées.${this.water < 0.35 ? ' Pense à arroser le potager.' : ''}`);
     });
   }
@@ -896,6 +956,7 @@ export class Garden {
       this.showBed();
       this.host.soilHands('la terre du jardin');
       this.host.mood(1);
+      this.practice(GARDEN_XP.weed);
       this.host.notice('Mauvaises herbes arrachées : les légumes pousseront mieux.');
     });
   }
@@ -919,6 +980,7 @@ export class Garden {
     const apple = this.host.spawn('pomme', spot, 0);
     if (!apple) return false;
     this.host.mood(1);
+    this.practice(GARDEN_XP.apple);
     return c.pickUp(apple, running) || this.tell('Pomme cueillie : elle attend sur la branche.');
   }
 
@@ -950,10 +1012,70 @@ export class Garden {
       const flowers = this.host.spawn('bouquet', at, 0);
       if (!flowers) return;
       this.host.mood(3);
+      this.practice(GARDEN_XP.bouquet);
       this.host.say('Un joli bouquet pour la maison.');
       c.pickUp(flowers, running);
     }, running);
     return true;
+  }
+
+  // ——— la compétence jardinage ———
+
+  /** Niveau de la compétence jardinage (0 à GARDEN_SKILL_MAX). */
+  get level(): number {
+    return gardenLevel(this.points);
+  }
+
+  /** La compétence jardinage : niveau, points, et ceux du prochain niveau (null au maximum). */
+  get skill(): { level: number; points: number; from: number; next: number | null } {
+    const level = this.level;
+    return { level, points: this.points, from: gardenPointsFor(level), next: level < GARDEN_SKILL_MAX ? gardenPointsFor(level + 1) : null };
+  }
+
+  /** Le perso s'exerce au jardin : des points, et un message au passage d'un niveau. */
+  private practice(points: number): void {
+    const before = this.level;
+    this.points += points;
+    const after = this.level;
+    if (after > before) this.host.notice(`Compétence jardinage : niveau ${after} ! Les légumes pousseront mieux.`);
+  }
+
+  // ——— la sauvegarde (rangé avec les objets : voir Game.saveAccess) ———
+
+  /** États du jardin gardés avec l'objet `item` : le potager (et la compétence), les pommes, les fleurs cueillies. */
+  extras(item: WorldItem): Record<string, unknown> {
+    const round = (n: number) => Math.round(n * 1000) / 1000;
+    if (item === this.bed) {
+      const potager: BedSave = { carres: this.parcels.map((p) => [p.stage === null ? null : round(p.stage), p.left]), eau: round(this.water), herbes: round(this.weeds), points: round(this.points) };
+      return { potager };
+    }
+    if (item === this.tree) return { pommes: round(this.apples) };
+    const picked = this.beds.get(item);
+    return picked ? { cueillies: round(picked) } : {};
+  }
+
+  /** Remet les états gardés par `extras`. */
+  setExtras(item: WorldItem, x: Record<string, unknown>): void {
+    if (item === this.bed) {
+      const s = readBedSave(x.potager);
+      if (!s) return;
+      s.carres.forEach(([stage, left], i) => {
+        const p = this.parcels[i];
+        if (!p) return;
+        p.stage = stage;
+        p.left = stage !== null && stage >= 1 ? left : 0;
+      });
+      this.water = s.eau;
+      this.weeds = s.herbes;
+      this.points = s.points;
+      this.showBed();
+    } else if (item === this.tree && typeof x.pommes === 'number' && Number.isFinite(x.pommes)) {
+      this.apples = THREE.MathUtils.clamp(x.pommes, 0, APPLES_MAX);
+      this.showApples();
+    } else if (this.beds.has(item) && typeof x.cueillies === 'number' && Number.isFinite(x.cueillies)) {
+      this.beds.set(item, THREE.MathUtils.clamp(x.cueillies, 0, FLOWERS));
+      this.showFlowers(item);
+    }
   }
 
   // ——— ce qui se voit ———
