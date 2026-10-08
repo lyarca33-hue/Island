@@ -5,6 +5,12 @@
 Monde de RP en 3D dans le navigateur : un créateur de personnage, puis une map (un sol d'herbe)
 où le perso créé se promène, en cel shading avec le rendu HD-2D d'Arena Tactic.
 
+## Jouer en ligne
+
+**https://lyarca33-hue.github.io/Island/** : rien à installer, le lien ne change pas.
+Le jeu y est remis à jour tout seul à chaque fusion sur `main` (la version jouée s'affiche dans la
+fenêtre « Signaler »).
+
 ## Lancer le jeu
 
 ```bash
@@ -12,7 +18,9 @@ npm install
 npm run dev
 ```
 
-Puis ouvrir http://localhost:5173. Le jeu s'ouvre directement sur la map avec le dernier perso
+Puis ouvrir http://localhost:5173. La partie se sauvegarde toute seule (Menu → Partie) ; pour
+la retrouver sur un autre ordinateur, se connecter avec Google : voir
+[docs/compte-google.md](docs/compte-google.md). Le jeu s'ouvre directement sur la map avec le dernier perso
 créé (un perso par défaut la première fois) ; Menu → Personnage → « ✎ Modifier le personnage »
 ouvre le créateur, et « Jouer » ramène sur la map.
 
@@ -58,6 +66,24 @@ s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra.
 Les meubles sont rangés par rangées dos au mur (`RUNS`) : pour en ajouter un, l'ajouter dans la
 liste de son mur, les autres se décalent. Le perso contourne les murs ; un meuble poussé ou un
 objet lancé ne les traverse pas.
+
+### Le jardin
+
+Dehors (`src/game/jardin.ts`), un chemin de pierres part de la porte d'entrée vers le jardin :
+arbres, sapins, buissons, une bordure fleurie au pied du salon, et de quoi faire.
+
+- Le potager : quatre carrés (carottes, tomates, pommes de terre, concombres). Clic : récolter un
+  légume mûr (il arrive en main, c'est le même que celui du frigo), semer un carré vide,
+  désherber, ou arroser si l'on tient l'arrosoir plein. Les légumes poussent avec les heures du
+  jeu, seulement si la terre est humide (elle sèche en un jour) ; les mauvaises herbes les
+  ralentissent. La terre salit les mains.
+- Le robinet du jardin remplit l'arrosoir (et une bouteille, une carafe…), comme l'évier.
+- Le pommier : on y cueille des pommes l'été et l'automne ; il fleurit au printemps.
+- Le massif de fleurs : les sentir (humeur), en cueillir un bouquet qu'on rapporte à la maison.
+- Le banc : on s'y assoit ; au grand air, l'humeur monte doucement.
+
+Tout suit les saisons : feuilles rousses à l'automne, branches nues et sapins enneigés l'hiver,
+où la terre gelée ne pousse plus et les fleurs disparaissent.
 
 ### Les ordres
 
@@ -129,6 +155,7 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/toon.ts` | Matériau cel shading (3 paliers nets + liseré de lumière) |
 | `src/game/character.ts` | Perso glTF au squelette Mixamo, animations repos / marche / course |
 | `src/game/ground.ts` | Sol d'herbe (texture peinte par programme) |
+| `src/game/jardin.ts` | Le jardin : arbres, fleurs, potager, pommier, banc, robinet et arrosoir, saisons |
 | `src/game/room.ts` | La cuisine : carrelage, murs en coupe, porte, fenêtres, décor ; meubles rangés contre les murs |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
