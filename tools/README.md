@@ -46,3 +46,19 @@ seulement les rotations et le déplacement du bassin (ce que lit `retarget.ts`) 
 python3 tools/build_anim_assets.py --src public/models/xbot.glb --out public/anim/mixamo.glb \
     --root mixamorig:Hips --clips agree headShake idle run sad_pose sneak_pose walk
 ```
+
+
+## `build_pack_assets.mjs` : packs de Quaternius
+
+Fait un `.glb` par pack dans `public/packs` (survie, peche, voitures, trains, armes, fantasy,
+scifi) et écrit `src/game/packs/manifest.ts` (taille de chaque modèle). Chaque modèle devient un
+nœud nommé comme son fichier, posé au sol et centré ; sommets compressés (meshopt), textures en
+WebP 1024 px, décor simplifié. Les monstres (puglin, imp) sont gardés avec leur squelette.
+
+```bash
+npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
+node tools/build_pack_assets.mjs --src <dossier des packs> --out public/packs [--only puglin,imp]
+```
+
+`<dossier des packs>` contient les dossiers tels que téléchargés sur quaternius.com
+(« Survival Pack - Sept 2020 », « Fantasy Props MegaKit[Standard] »…).

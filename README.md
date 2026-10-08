@@ -85,6 +85,26 @@ arbres, sapins, buissons, une bordure fleurie au pied du salon, et de quoi faire
 Tout suit les saisons : feuilles rousses à l'automne, branches nues et sapins enneigés l'hiver,
 où la terre gelée ne pousse plus et les fleurs disparaissent.
 
+### Au-delà du jardin
+
+Les modèles viennent des packs de Quaternius (`public/packs`, voir `src/game/packs/assets.ts`).
+
+- **La pêche** (`src/game/loisirs.ts`, objets dans `src/game/items/plein-air.ts`) : un étang
+  avec son ponton et une barque. Canne en main, un clic sur l'étang ou le ponton : le perso va au
+  bout du ponton et lance. Le flotteur plonge au bout d'un moment ; le poisson (35 espèces, de
+  commune à légendaire) arrive dans la main libre, ou au sol. Plus la canne est bonne (5 cannes,
+  au magasin), plus les poissons rares mordent. Chaque prise remonte l'humeur, davantage pour une
+  espèce jamais pêchée ; les poissons se vendent au marché. Bouger ou lâcher la canne coupe la ligne.
+- **Le camp** : feu de camp (il chauffe et cuit dans une poêle, comme la gazinière), bûches pour
+  s'asseoir, tente, torches qui brillent la nuit, et des objets de survie : trousse de secours et
+  pansements (ils soignent), hache, pelle, sac à dos, boussole, lampe torche, radio, gourde…
+- **Deux monstres** du « Bestiary » (`creatureModel`) : un puglin près du camp et un diablotin à
+  la station. Ils se promènent, regardent le perso qui approche, et dansent quand on les salue.
+- **Le décor** (`src/game/paysage.ts`) : une route avec ses trottoirs, des voitures garées et un
+  taxi qui passe ; un marché et une brocante de l'autre côté ; un atelier ; une voie ferrée au nord
+  où passent trois trains ; une station futuriste avec une armurerie et des aliens sous verre.
+  Les armes, les trains et les voitures sont du décor : on ne les prend pas.
+
 ### Les ordres
 
 Les ordres simples sont compris directement par le jeu, sans IA (`src/orders/parser.ts`) :
@@ -156,6 +176,10 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/character.ts` | Perso glTF au squelette Mixamo, animations repos / marche / course |
 | `src/game/ground.ts` | Sol d'herbe (texture peinte par programme) |
 | `src/game/jardin.ts` | Le jardin : arbres, fleurs, potager, pommier, banc, robinet et arrosoir, saisons |
+| `src/game/loisirs.ts` | La pêche, les soins, les torches, les monstres qui se promènent |
+| `src/game/paysage.ts` | Le décor : route, marché, brocante, atelier, voie ferrée et trains, station |
+| `src/game/packs/assets.ts` | Chargement des packs de Quaternius, modèles mis à la taille, monstres |
+| `src/game/items/plein-air.ts` | Fiches des objets du dehors : étang, cannes, poissons, camp, survie, monstres |
 | `src/game/room.ts` | La cuisine : carrelage, murs en coupe, porte, fenêtres, décor ; meubles rangés contre les murs |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |

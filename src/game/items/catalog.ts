@@ -21,6 +21,7 @@ import { LIFE_ITEMS } from './life';
 import { GARDEN_ITEMS } from '../jardin';
 import { ENTREE_ITEMS } from './entree';
 import { FECULENT_ITEMS } from './feculents';
+import { OUTDOOR_ITEMS } from './plein-air';
 
 export interface ItemDef {
   id: string;
@@ -1413,6 +1414,7 @@ export const ITEMS: ItemDef[] = [
   ...GARDEN_ITEMS,
   // l'entrée : banc à chaussures, miroir, portemanteau et vêtements, boîte aux lettres (entree.ts)
   ...ENTREE_ITEMS,
+  ...OUTDOOR_ITEMS,
   // pâtes, riz et soupes à la casserole (feculents.ts)
   ...FECULENT_ITEMS,
 ];

@@ -132,7 +132,7 @@ export function Magasin({ game }: { game: Game | null }) {
         )}
         {tab === 'marche' && (
           <>
-            <p className="shop-note">Le marché rachète les légumes du jardin, les pommes et les plats faits maison : plus il y a d’étoiles, mieux c’est payé.</p>
+            <p className="shop-note">Le marché rachète les légumes du jardin, les pommes, les poissons de l’étang et les plats faits maison : plus il y a d’étoiles (ou plus le poisson est rare), mieux c’est payé.</p>
             {market.length ? (
               <ul className="shop-list">
                 {market.map((m) => (
