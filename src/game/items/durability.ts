@@ -6,6 +6,7 @@
  * bords plus sombres (texture « d'usure » posée sur ses pièces).
  */
 import * as THREE from 'three';
+import { SHADOW_ONLY } from './merge';
 
 /** Grades d'usure, du meilleur au pire : à partir de quelle part de la jauge (0 à 1). */
 export const GRADES = [
@@ -29,7 +30,7 @@ export function gradeName(ratio: number, feminine = false): string {
 }
 
 /** Pièces qui ne s'usent pas (le café, le jet de la machine). */
-const NO_WEAR = new Set(['liquide', 'jet', 'flamme', 'voyant', 'gouttes']);
+const NO_WEAR = new Set(['liquide', 'jet', 'flamme', 'voyant', 'gouttes', SHADOW_ONLY]);
 
 const textures: Array<THREE.CanvasTexture | null> = [];
 

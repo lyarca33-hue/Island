@@ -23,6 +23,8 @@ type Part = 'face' | 'hair' | 'body';
 const HAIR_INFLATE = 1.03;
 
 const LIGHT_COMP = 0.62;
+/** Matériaux VRoid du dedans du visage (yeux, traits, cils, sourcils, bouche) : jamais visibles dans une ombre. */
+const FACE_INNER = /_EYE$|FaceMouth|FaceEyeline|FaceEyelash|FaceBrow/;
 
 function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -386,7 +388,8 @@ export class Avatar {
     base.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
-      m.castShadow = true;
+      // yeux, cils, sourcils, bouche : dans l'ombre de la tête, un dessin de moins par carte d'ombre
+      m.castShadow = !materialsOf(m).every((mat) => FACE_INNER.test(mat.name));
       m.receiveShadow = true;
       m.frustumCulled = false; // animé hors de sa boîte de repos (sphère large posée par cullAsOne)
       m.layers.enable(LAYER_CHARACTER);

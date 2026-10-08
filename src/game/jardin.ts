@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import type { Character } from './character';
 import type { ItemDef } from './items/catalog';
 import type { WorldItem } from './items/carry';
+import { mergeStaticParts } from './items/merge';
 import { createToonMaterial } from './toon';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
@@ -399,6 +400,8 @@ function cropModel(crop: Crop, x: number): { plant: THREE.Group; grow: THREE.Gro
       fruits.push(c);
     }
   }
+  // les feuilles poussent ensemble (grow change d'échelle) : un seul dessin ; les fruits se montrent un à un
+  mergeStaticParts(grow);
   const plant = group(grow, ...fruits);
   plant.position.set(x, SOIL_Y, 0);
   return { plant, grow, fruits };
@@ -521,7 +524,11 @@ export class Garden {
         const a = rand() * Math.PI * 2, r = k === 0 ? 0 : 0.6 + rand() * 0.4;
         crown.add(mesh(new THREE.IcosahedronGeometry(k === 0 ? 1.15 : 0.7 + rand() * 0.25, 1), this.oakLeaves, Math.cos(a) * r, k === 0 ? 0 : rand() * 0.8 - 0.4, Math.sin(a) * r));
       }
+      // le feuillage change avec la saison (taille, caché l'hiver) : regroupé à part du tronc
+      crown.name = 'couronne';
+      mergeStaticParts(crown);
       t.add(crown);
+      mergeStaticParts(t);
       this.oakCrowns.push(crown);
       t.scale.setScalar(s);
       t.position.set(x, 0, z);
@@ -532,6 +539,7 @@ export class Garden {
     for (const [x, z, s] of PINES) {
       const t = group(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.8, 8), bark, 0, 0.4, 0));
       for (const [y, r, h] of [[1.3, 1.1, 1.5], [2.1, 0.85, 1.3], [2.8, 0.55, 1.1]]) t.add(mesh(new THREE.ConeGeometry(r, h, 9), this.pineLeaves, 0, y, 0));
+      mergeStaticParts(t);
       t.scale.setScalar(s);
       t.position.set(x, 0, z);
       add(t, x, z, 0.6 * s);
@@ -540,17 +548,22 @@ export class Garden {
     const bush = toon(0x3d7a3a);
     for (const [x, z, r] of BUSHES) {
       const b = group(mesh(new THREE.IcosahedronGeometry(r, 1), bush, 0, r * 0.8, 0), mesh(new THREE.IcosahedronGeometry(r * 0.7, 1), bush, r * 0.6, r * 0.6, r * 0.2));
+      mergeStaticParts(b);
       b.position.set(x, 0, z);
       add(b, x, z, r * 0.9, r * 1.6);
     }
     // chemin de pierres plates
     const stone = toon(0xa4a29b);
+    const path = group();
     PATH.forEach(([x, z], i) => {
       const s = mesh(new THREE.CylinderGeometry(0.22 + (i % 3) * 0.03, 0.24, 0.03, 9), stone, x, 0.012, z, false);
       s.rotation.y = i * 1.3;
       s.scale.z = 0.8 + (i % 2) * 0.15;
-      this.group.add(s);
+      path.add(s);
     });
+    // toutes les pierres en un seul dessin
+    mergeStaticParts(path);
+    this.group.add(path);
     // bordure fleurie au pied du salon : terre, petite bordure de bois, fleurs (instanciées)
     const len = BORDER.x1 - BORDER.x0, cx = (BORDER.x0 + BORDER.x1) / 2;
     this.group.add(box(len, 0.05, BORDER.d, 0x5b3d26, cx, 0.025, BORDER.z), box(len, 0.08, 0.03, 0x8a6440, cx, 0.04, BORDER.z + BORDER.d / 2));
@@ -593,6 +606,7 @@ export class Garden {
           b.rotation.z = (k - 1.5) * 0.3;
           tuft.add(b);
         }
+        mergeStaticParts(tuft);
         tuft.position.set((rand() - 0.5) * (BED_W - 0.25), SOIL_Y, (rand() - 0.5) * (BED_D - 0.25));
         this.bed.object.add(tuft);
         this.weedTufts.push(tuft);
