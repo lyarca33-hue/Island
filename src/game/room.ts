@@ -53,7 +53,7 @@ const DOOR_NEAR = 1.4;
 const DOOR_SPEED = 1.8;
 /** Rideaux : vitesse (part tirée par seconde), part de la lumière de la fenêtre qu'ils arrêtent. */
 const CURTAIN_SPEED = 1.5;
-const CURTAIN_DIM = 0.85;
+const CURTAIN_DIM = 0.97;
 /** Bas et haut des fenêtres (celle du fond, au-dessus de l'évier, passe au-dessus du robinet). */
 const WIN_LOW = 1.3;
 export const WIN_HIGH = 2.1;
