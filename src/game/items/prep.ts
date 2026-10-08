@@ -47,6 +47,7 @@ export const PREP_LIQUIDS: Record<string, THREE.ColorRepresentation> = {
   'œufs battus': 0xf2c94c,
   'pâte à crêpes': 0xf1deb0,
   'préparation': 0xe9dcc0,
+  'pâte à gâteau': 0xe8cf94,
 };
 
 /**
@@ -54,6 +55,8 @@ export const PREP_LIQUIDS: Record<string, THREE.ColorRepresentation> = {
  * poêle devient `cooks` (une crêpe par louche : `per` du saladier plein).
  */
 export const BATTERS: Array<{ name: string; needs: string[]; cooks: string; per: number }> = [
+  // le sucre en fait une pâte à gâteau, qui se verse tout entière dans le moule (Game.pourBatter)
+  { name: 'pâte à gâteau', needs: ['œuf', 'farine', 'sucre'], cooks: 'gateau', per: 1 },
   { name: 'pâte à crêpes', needs: ['œuf', 'lait', 'farine'], cooks: 'crepe', per: 0.2 },
   { name: 'œufs battus', needs: ['œuf'], cooks: 'omelette', per: 1 },
 ];
@@ -424,11 +427,14 @@ export interface StoveRecipe {
   /** Ingrédients (un nom par unité : deux œufs = « œuf » deux fois). */
   needs: string[];
   how: string;
-  /** La tâche d'ordre qui la fait (orders/tasks.ts). */
-  task: 'omelette' | 'crepe' | 'oeuf_plat';
+  /** La tâche d'ordre qui la fait (orders/tasks.ts) ; sans : on la fait à la main. */
+  task?: 'omelette' | 'crepe' | 'oeuf_plat';
 }
 export const STOVE_RECIPES: StoveRecipe[] = [
   { name: 'omelette', needs: ['œuf', 'œuf'], how: 'Casse 2 œufs dans le saladier, fouette, verse dans la poêle chaude, remue à la spatule, puis sers.', task: 'omelette' },
   { name: 'crêpe', needs: ['œuf', 'lait', 'farine'], how: 'Saladier : un œuf, du lait, de la farine, fouette ; une louche de pâte dans la poêle chaude, fais-la sauter, puis tartine-la.', task: 'crepe' },
   { name: 'œuf au plat', needs: ['œuf'], how: 'Casse un œuf directement dans la poêle sur le feu, attends qu’il soit cuit.', task: 'oeuf_plat' },
+  { name: 'gâteau', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure'], how: 'Saladier : 2 œufs, farine, sucre et levure, fouette ; verse dans le moule, enfourne. Sors-le avec les maniques, laisse-le refroidir, puis coupe-le en parts sur la planche.' },
+  { name: 'gâteau au chocolat', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure', 'tablette de chocolat'], how: 'Comme le gâteau, avec la tablette de chocolat dans le saladier.' },
+  { name: 'gâteau au yaourt', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure', 'yaourt'], how: 'Comme le gâteau, avec un pot de yaourt dans le saladier.' },
 ];

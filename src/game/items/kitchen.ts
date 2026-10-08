@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
 import { FROZEN_FOOD, MORE_FRUITS, OVEN_EXTRA } from './pantry';
+import { PATISSERIE_CUPBOARD, PATISSERIE_ITEMS, PATISSERIE_OVEN } from './patisserie';
 import { PREP_CUPBOARD, STOVE_RECIPES } from './prep';
 import { DISHES as RECIPE_DISHES } from './recipes';
 import { UPKEEP_CUPBOARD } from './upkeep';
@@ -84,7 +85,7 @@ const RACK_SLOTS: Array<[[number, number, number], string[]]> = [
   ...[-0.02, 0.02].map((dx): [[number, number, number], string[]] => [[RACK_BASKET[0] + dx, RACK_FLOOR, RACK_BASKET[1]], ['fourchette', 'couteau de table', 'cuillère']]),
 ];
 /** Ce qui se met au four et au micro-ondes. */
-export const OVEN_FOOD = ['lasagne', 'steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte', ...OVEN_EXTRA];
+export const OVEN_FOOD = ['lasagne', 'steak', 'pomme de terre', 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'tranches de pain', 'rondelles de carotte', ...OVEN_EXTRA, ...PATISSERIE_OVEN];
 
 /** Caisson de meuble bas (côtés, fond, socle) et son plan de travail, ouvert à l'avant. */
 function carcass(w: number, d: number, color: THREE.ColorRepresentation = WOOD): THREE.Group {
@@ -157,7 +158,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     fragility: 7,
     // la porte : charnière à droite, comme le frigo
     door: THREE.MathUtils.degToRad(100),
-    holds: [...DISHES.filter((d) => !DRAWER_THINGS.includes(d)), "bouteille d'eau", 'pomme', 'pain', 'boîte de pastilles', ...PREP_CUPBOARD, ...UPKEEP_CUPBOARD],
+    holds: [...DISHES.filter((d) => !DRAWER_THINGS.includes(d)), "bouteille d'eau", 'pomme', 'pain', 'boîte de pastilles', ...PREP_CUPBOARD, ...UPKEEP_CUPBOARD, ...PATISSERIE_CUPBOARD],
     slots: CUP_SLOTS,
     build: () => {
       const g = carcass(CUP_W, CUP_D);
@@ -684,4 +685,5 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       return g;
     },
   },
+  ...PATISSERIE_ITEMS,
 ];
