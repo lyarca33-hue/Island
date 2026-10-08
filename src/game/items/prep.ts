@@ -414,3 +414,21 @@ export const PREP_ITEMS: ItemDef[] = [
   spiceJar('herbes', 'herbes de Provence', 0x6d9a3e, 0x7a5232),
   { ...spiceJar('huile', "huile d'olive", 0xb8b23a, 0x2a2b2e, 0.2), fragility: 3 },
 ];
+
+/**
+ * Les recettes au fourneau du livre de recettes (les autres sont les assemblages de recipes.ts) :
+ * ce qu'il faut, et comment faire, en une phrase.
+ */
+export interface StoveRecipe {
+  name: string;
+  /** Ingrédients (un nom par unité : deux œufs = « œuf » deux fois). */
+  needs: string[];
+  how: string;
+  /** La tâche d'ordre qui la fait (orders/tasks.ts). */
+  task: 'omelette' | 'crepe' | 'oeuf_plat';
+}
+export const STOVE_RECIPES: StoveRecipe[] = [
+  { name: 'omelette', needs: ['œuf', 'œuf'], how: 'Casse 2 œufs dans le saladier, fouette, verse dans la poêle chaude, remue à la spatule, puis sers.', task: 'omelette' },
+  { name: 'crêpe', needs: ['œuf', 'lait', 'farine'], how: 'Saladier : un œuf, du lait, de la farine, fouette ; une louche de pâte dans la poêle chaude, fais-la sauter, puis tartine-la.', task: 'crepe' },
+  { name: 'œuf au plat', needs: ['œuf'], how: 'Casse un œuf directement dans la poêle sur le feu, attends qu’il soit cuit.', task: 'oeuf_plat' },
+];

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { hhmm, SEASON_DAYS, SEASONS, TIME_SPEED, YEAR_DAYS } from '../game/clock';
 import type { Game } from '../game/Game';
+import { skillPerks } from '../game/items/freshness';
 import { NEEDS } from '../game/needs';
 import { forecast, type GaugeKey, type GaugeState, GaugeWatch } from './gauges';
 import { Icon, type IconName } from './icons';
@@ -125,13 +126,58 @@ function Gauge({ label, icon, state, level, open, onOpen, minutes, tip }: {
   );
 }
 
+/** La compétence cuisine, à côté des besoins : l'anneau montre l'avancée vers le niveau suivant. */
+function SkillGauge({ game, open, onOpen }: { game: Game; open: boolean; onOpen: (open: boolean) => void }) {
+  const { level, points, from, next } = game.cookingSkill;
+  const pct = next === null ? 100 : Math.round(((points - from) / (next - from)) * 100);
+  const touch = useRef<string | null>(null);
+  return (
+    <div className="gauge ok skill">
+      <button
+        className="gauge-ring"
+        aria-label={`Compétence cuisine : niveau ${level}`}
+        aria-expanded={open}
+        onPointerEnter={(e) => e.pointerType === 'mouse' && onOpen(true)}
+        onPointerLeave={(e) => e.pointerType === 'mouse' && onOpen(false)}
+        onPointerDown={(e) => (touch.current = e.pointerType === 'mouse' ? null : e.pointerType)}
+        onClick={() => {
+          if (touch.current) onOpen(!open);
+          touch.current = null;
+        }}
+        onFocus={() => !touch.current && onOpen(true)}
+        onBlur={() => onOpen(false)}
+      >
+        <svg className="gauge-track" viewBox="0 0 36 36" aria-hidden>
+          <circle className="gauge-bg" cx="18" cy="18" r="15.5" pathLength={100} />
+          <circle className="gauge-fill" cx="18" cy="18" r="15.5" pathLength={100} strokeDasharray={`${Math.max(0.01, pct)} 100`} />
+        </svg>
+        <Icon name="pot" size={15} />
+        <span className="skill-level">{level}</span>
+      </button>
+      {open && (
+        <div className="gauge-tip" role="tooltip">
+          <div className="gauge-tip-head">
+            <Icon name="pot" size={15} />
+            <b>Cuisine</b>
+            <span className="gauge-tip-value">niveau {level}</span>
+          </div>
+          <div className="gauge-tip-bar"><span style={{ width: `${pct}%` }} /></div>
+          <div className="gauge-tip-row">{next === null ? 'Niveau maximum' : `${points - from} / ${next - from} points pour le niveau ${level + 1}`}</div>
+          {level > 0 && skillPerks(level).map((p) => <div key={p} className="gauge-tip-row gauge-tip-hint">{p}</div>)}
+          <div className="gauge-tip-row gauge-tip-hint">Monte en coupant, cuisant et préparant des plats</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * En haut à droite : les jauges de besoins (rondes, sans texte ; le détail au survol) et
  * l'horloge, qui ouvre le réglage de l'heure.
  */
 export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => void }) {
   const read = useGauges(game);
-  const [open, setOpen] = useState<GaugeKey | null>(null);
+  const [open, setOpen] = useState<GaugeKey | 'skill' | null>(null);
   if (!game || !read) return null;
   const { clock } = game;
   return (
@@ -150,6 +196,7 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
             minutes={clock.minutes}
           />
         ))}
+        <SkillGauge game={game} open={open === 'skill'} onOpen={(o) => setOpen((cur) => (o ? 'skill' : cur === 'skill' ? null : cur))} />
       </div>
       <button className="hud-clock" onClick={onClock} title="Régler l’heure (Menu → Heure)">
         <span className={`hud-sky${clock.isNight ? ' night' : ''}`}>

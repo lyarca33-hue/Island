@@ -19,7 +19,8 @@ import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/cata
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
-import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS } from './items/prep';
+import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
+import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
 import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
@@ -366,11 +367,28 @@ const flat = (i: WorldItem) => !!i.def.plate && !i.def.deep;
 const agree = (name: string) => `${FEMININE.has(name) ? 'e' : ''}${PLURAL.has(name) ? 's' : ''}`;
 /** « cuit », « congelée » (un plat surgelé pas encore réchauffé : ItemDef.rawWord). */
 const doneWord = (item: WorldItem, d: Doneness) => (d === 'cru' && item.def.rawWord ? `${item.def.rawWord}${FEMININE.has(item.name) ? 'e' : ''}` : donenessWord(d, FEMININE.has(item.name)));
-const theName = (name: string) => `${PLURAL.has(name) ? 'Les' : FEMININE.has(name) ? 'La' : 'Le'} ${name}`;
+const theName = (name: string) => (PLURAL.has(name) ? `Les ${name}` : elides(name) ? `L’${name}` : FEMININE.has(name) ? `La ${name}` : `Le ${name}`);
 /** « le steak », « la poêle », « l’évier ». */
 const the = (name: string) => (PLURAL.has(name) ? `les ${name}` : elides(name) ? `l’${name}` : FEMININE.has(name) ? `la ${name}` : `le ${name}`);
 /** « au frigo », « à la table », « à l’évier », « aux quartiers de pomme ». */
 const toThe = (name: string) => (PLURAL.has(name) ? `aux ${name}` : elides(name) ? `à l’${name}` : FEMININE.has(name) ? `à la ${name}` : `au ${name}`);
+
+/** La compétence cuisine est gardée dans le navigateur (le reste de la partie ne l'est pas encore). */
+const SKILL_KEY = 'island-cuisine-points';
+function loadSkill(): number {
+  try {
+    return Math.max(0, Number(localStorage.getItem(SKILL_KEY)) || 0);
+  } catch {
+    return 0;
+  }
+}
+function saveSkill(points: number): void {
+  try {
+    localStorage.setItem(SKILL_KEY, String(points));
+  } catch {
+    // stockage indisponible (navigation privée) : la compétence repart de zéro au prochain lancement
+  }
+}
 
 /** Ingrédients secs qu'on verse dans le saladier, et de combien ils le remplissent. */
 const MIX_DRY: Record<string, number> = { farine: 0.15, sucre: 0.05, levure: 0.02 };
@@ -430,6 +448,8 @@ export interface HandActions {
   moving: boolean;
   read: boolean;
   reading: boolean;
+  /** Le livre lu est le livre de recettes (la liste des recettes s'affiche). */
+  recipes: boolean;
   /** Assis : on peut se lever. */
   seated: boolean;
   /** Couché dans le lit (endormi) : on peut se réveiller. */
@@ -508,6 +528,14 @@ export class Game {
   private unstirred = new Map<WorldItem, number>();
   /** Assaisonnements d'un aliment (sel, poivre…), et ce qu'on a mis dessus (fromage râpé). */
   private seasoned = new Map<WorldItem, Set<string>>();
+  /** Aliments déjà entamés : le perso a dit ce qu'il en pensait (périmé, étoiles). */
+  private judged = new WeakSet<WorldItem>();
+  /** Aliments dont la vapeur se voit. */
+  private steaming = new WeakSet<WorldItem>();
+  /** Compétence cuisine : points gagnés (gardés dans le navigateur d'une partie à l'autre). */
+  skillPoints = loadSkill();
+  /** Appelé quand la compétence cuisine change (jauge du HUD). */
+  onSkill?: (points: number) => void;
   private toppings = new Map<WorldItem, string[]>();
   /** Saut en cours dans la poêle tenue : l'aliment, sa place dans la poêle, le temps, s'il tombe à côté. */
   private tossing: { pan: WorldItem; food: WorldItem; rel: THREE.Matrix4; t: number; fall: boolean } | null = null;
@@ -874,6 +902,11 @@ export class Game {
     else if (c.busy) return false;
     else return hand.read();
     return false;
+  }
+
+  /** Le perso lit le livre de recettes : la liste des recettes est ouverte à l'écran. */
+  get readingRecipes(): boolean {
+    return this.character.reading?.held?.def.id === 'livre-recettes';
   }
 
   /** Ferme le livre qu'on lit. */
@@ -1918,7 +1951,8 @@ export class Game {
     const f = food.def.food!;
     const n = this.cutUp.has(food) ? 2 : 1;
     for (let i = 0; i < n; i++) food.bite();
-    this.needs.restore('faim', ((f.hunger * n) / f.bites) * TABLE_MEAL);
+    this.needs.restore('faim', ((f.hunger * n) / f.bites) * TABLE_MEAL * this.biteWorth(food));
+    this.firstBite(food);
     plate.setDirty(true);
     fork.setDirty(true);
     this.wearItem(fork, WEAR_FORK);
@@ -1929,8 +1963,7 @@ export class Game {
     this.lastBite.delete(food);
     food.object.removeFromParent();
     this.dropCrumbs(plate, f.color);
-    const fem = FEMININE.has(food.name);
-    this.onNotice?.(`${fem ? 'La' : 'Le'} ${food.name} est fini${fem ? 'e' : ''}. Miam ! Reste la vaisselle.`);
+    this.onNotice?.(`${theName(food.name)} ${PLURAL.has(food.name) ? 'sont' : 'est'} fini${agree(food.name)}. Miam ! Reste la vaisselle.`);
   }
 
   /**
@@ -2790,8 +2823,9 @@ export class Game {
       const before = this.lastBite.get(item) ?? item.portion;
       // brûlé, ça ne nourrit presque plus
       const done = doneness(item.def, item.cooking);
-      if (before > item.portion) this.needs.restore('faim', (before - item.portion) * food.hunger * (done ? DONENESS_HUNGER[done] : 1));
+      if (before > item.portion) this.needs.restore('faim', (before - item.portion) * food.hunger * this.biteWorth(item));
       if (before === 1 && item.portion < 1 && done === 'brûlé') this.onNotice?.('Beurk, c’est brûlé…');
+      if (before > item.portion) this.firstBite(item);
       this.lastBite.set(item, item.portion);
       if (item.portion > 0 || !c.loseItem(item)) continue;
       this.lastBite.delete(item);
@@ -2895,6 +2929,11 @@ export class Game {
       if (heats) {
         for (const [it, c0] of r.start) {
           const cook = it.def.cook;
+          // tout ce qui se mange en ressort chaud (réchauffer un plat refroidi)
+          if (it.def.food && this.items.includes(it) && k > 0.5) {
+            it.heat = 1;
+            it.warmed = true;
+          }
           if (!cook || !this.items.includes(it)) continue;
           // le four cuit d'un cran (cru → cuit, cuit → brûlé) ; le micro-ondes cuit sans jamais brûler
           const to = !heats.burns ? Math.max(c0, waterCap(it.def)) : c0 < cook.seconds ? waterCap(it.def) : cook.seconds + cook.burn;
@@ -2933,7 +2972,14 @@ export class Game {
       const done = inside.flatMap((it) => {
         const d = doneness(it.def, it.cooking);
         if (!d || d === 'cru') return [];
-        return [`${cap(the(it.name))} ${PLURAL.has(it.name) ? 'sont' : 'est'} ${doneWord(it, d)}${PLURAL.has(it.name) ? 's' : ''}.`];
+        // déjà cuit avant (il a ses étoiles) : on l'a seulement réchauffé
+        const again = !!it.stars && d !== 'brûlé';
+        if (!it.stars && it.def.food) {
+          it.stars = this.baseStars(false);
+          this.practice(XP_COOKED);
+        }
+        const word = again ? `réchauffé${agree(it.name)}` : `${doneWord(it, d)}${PLURAL.has(it.name) ? 's' : ''}`;
+        return [`${cap(the(it.name))} ${PLURAL.has(it.name) ? 'sont' : 'est'} ${word}.`];
       });
       this.endAppliance(item, `Ding ! ${done.join(' ') || 'C’est chaud.'}`);
     }
@@ -2947,6 +2993,12 @@ export class Game {
     made.object.position.copy(item.object.position);
     made.object.quaternion.copy(item.object.quaternion);
     made.setCondition(item.condition);
+    // la même nourriture, transformée : son âge, sa chaleur et ses étoiles la suivent
+    made.age = item.age;
+    made.heat = item.heat;
+    made.warmed = item.warmed;
+    made.stars = item.stars;
+    made.setMoldy(freshness(made.def, made.age) === 'périmé');
     this.removeItem(item);
     this.items.push(made);
     this.scene.add(made.object);
@@ -3174,6 +3226,7 @@ export class Game {
     this.items.push(pieces);
     this.scene.add(pieces.object);
     this.onNotice?.(`${cap(food.name)} coupé${agree(food.name)} : ${pieces.name} sur la planche.`);
+    this.practice(XP_GESTURE);
   }
 
   /**
@@ -3315,6 +3368,15 @@ export class Game {
     // l'assaisonnement et le fromage râpé des ingrédients restent sur le plat
     const spices = new Set(use.flatMap((i) => [...(this.seasoned.get(i) ?? [])]));
     if (spices.size) this.seasoned.set(dish, spices);
+    // aussi frais que son ingrédient le moins frais, aussi chaud qu'eux en moyenne ; les étoiles
+    // viennent de la compétence (un ingrédient pas frais en coûte)
+    const fresh = use.map((i) => freshness(i.def, i.age));
+    dish.age = Math.max(0, ...use.map((i) => i.age * ((shelfLife(dish.def) ?? 1) / (shelfLife(i.def) ?? Infinity))));
+    dish.warmed = use.some((i) => i.warmed);
+    dish.heat = use.reduce((sum, i) => sum + i.heat, 0) / use.length;
+    dish.stars = this.baseStars(true) - (fresh.includes('périmé') ? 2 : fresh.includes('à manger vite') ? 1 : 0);
+    dish.setMoldy(freshness(dish.def, dish.age) === 'périmé');
+    this.practice(XP_DISH);
     for (const i of use) {
       this.items = this.items.filter((x) => x !== i);
       this.riders = this.riders.filter((r) => r.item !== i && r.base !== i);
@@ -4561,7 +4623,13 @@ export class Game {
       if (!water) this.unstirred.set(food, left);
       if (!water && left > STICK_AFTER && left - dt * warm <= STICK_AFTER && doneness(food.def, before) !== 'brûlé') this.onNotice?.(`${cap(the(food.name))} attache au fond : remue avec la spatule (ou fais sauter).`);
       const sticks = !water && left > STICK_AFTER ? 1 + STICK_SPEED : 1;
-      const t = water ? Math.min(before + dt * warm, Math.max(before, waterCap(food.def))) : before + dt * warm * sticks;
+      if (warm > 0.3) {
+        food.heat = 1;
+        food.warmed = true;
+      }
+      // une fois cuit, un cuisinier exercé le laisse moins vite brûler
+      const skill = doneness(food.def, before) === 'cru' ? 1 : 1 - 0.05 * this.cookingLevel;
+      const t = water ? Math.min(before + dt * warm, Math.max(before, waterCap(food.def))) : before + dt * warm * sticks * skill;
       if (t === before) continue;
       food.cooking = t;
       showDoneness(food);
@@ -4572,6 +4640,8 @@ export class Game {
       if (now === 'cuit' && was === 'cru') {
         this.onNotice?.(PLURAL.has(food.name) ? `${name} sont cuit${fem}s.` : `${name} est cuit${fem}.`);
         this.wearItem(pan, WEAR_COOK);
+        if (!food.stars) food.stars = this.baseStars(false);
+        this.practice(XP_COOKED);
       } else if (before < cap0 && t >= cap0) this.onNotice?.(`Ça sent le brûlé : retire ${the(food.name)} du feu !`);
       else if (now === 'brûlé' && was !== 'brûlé') this.onNotice?.(`${name} a brûlé.`);
       // ça fume dès que ça commence à brûler, de plus en plus
@@ -5136,6 +5206,125 @@ export class Game {
   }
 
   /** État visible d'un objet pour l'infobulle : « cuit », « sale », « plein de café », « en marche »… */
+  /** Niveau de la compétence cuisine (0 à SKILL_MAX). */
+  get cookingLevel(): number {
+    return skillLevel(this.skillPoints);
+  }
+
+  /** La compétence cuisine : niveau, points, et ceux du prochain niveau (null au maximum). */
+  get cookingSkill(): { level: number; points: number; from: number; next: number | null } {
+    const level = this.cookingLevel;
+    return { level, points: this.skillPoints, from: pointsFor(level), next: level < SKILL_MAX ? pointsFor(level + 1) : null };
+  }
+
+  /** Le perso s'exerce en cuisine : des points, et un message au passage d'un niveau. */
+  private practice(points: number): void {
+    const before = this.cookingLevel;
+    this.skillPoints += points;
+    saveSkill(this.skillPoints);
+    this.onSkill?.(this.skillPoints);
+    const after = this.cookingLevel;
+    if (after > before) this.onNotice?.(`Compétence cuisine : niveau ${after} ! Les plats seront mieux réussis.`);
+  }
+
+  /** Étoiles de base d'un plat qu'on vient de cuire ou de préparer : meilleures avec la compétence. */
+  private baseStars(dish: boolean): number {
+    return (dish ? 3 : 2) + this.cookingLevel / 4;
+  }
+
+  /** Étoiles d'un plat (1 à 5), selon sa cuisson, son assaisonnement, sa fraîcheur et sa chaleur ; 0 : pas un plat. */
+  starsOf(item: WorldItem): number {
+    if (!item.stars) return 0;
+    let s = item.stars;
+    if (this.seasoned.get(item)?.size) s += 1;
+    if (this.toppings.get(item)?.length) s += 0.5;
+    const d = doneness(item.def, item.cooking);
+    if (d === 'brûlé' || d === 'cru') s -= 2;
+    const f = freshness(item.def, item.age);
+    if (f === 'périmé') s -= 3;
+    else if (f === 'à manger vite') s -= 1;
+    if (item.warmed && warmth(item.heat) === 'froid' && item.def.cook) s -= 0.5;
+    return Math.max(1, Math.min(5, Math.round(s)));
+  }
+
+  /** Ce que rapporte une bouchée de l'aliment (cuisson, chaleur, fraîcheur, étoiles), de 0 à ~1,3. */
+  private biteWorth(item: WorldItem): number {
+    const d = doneness(item.def, item.cooking);
+    const stars = this.starsOf(item);
+    return (d ? DONENESS_HUNGER[d] : 1) * (item.warmed ? WARMTH_HUNGER[warmth(item.heat)] : 1) * FRESH_HUNGER[freshness(item.def, item.age)] * (stars ? starsHunger(stars) : 1);
+  }
+
+  /** Première bouchée : un aliment périmé rend malade ; un plat dit ses étoiles (le perso le dit à voix haute). */
+  private firstBite(item: WorldItem): void {
+    if (this.judged.has(item)) return;
+    this.judged.add(item);
+    if (freshness(item.def, item.age) === 'périmé') {
+      this.needs.hurt(SPOILED_HARM);
+      this.say('Beurk, c’est périmé…');
+      this.onNotice?.(`${cap(the(item.name))} ${PLURAL.has(item.name) ? 'étaient périmés' : `était périmé${agree(item.name)}`} : mal au ventre (santé −${SPOILED_HARM}).`);
+      return;
+    }
+    const stars = this.starsOf(item);
+    if (!stars || doneness(item.def, item.cooking) === 'brûlé') return;
+    if (stars >= 5) this.needs.heal(STAR_HEAL);
+    this.say(STAR_VERDICT[stars]);
+    this.onNotice?.(`${cap(item.name)} ${starText(stars)} : ${STAR_VERDICT[stars].toLowerCase()}${stars >= 5 ? ` (santé +${STAR_HEAL})` : ''}`);
+  }
+
+  /** Mots d'état d'un aliment : fraîcheur, chaleur, étoiles. */
+  private lifeWords(item: WorldItem): string[] {
+    if (!item.def.food) return [];
+    const words: string[] = [];
+    const f = freshness(item.def, item.age);
+    if (f !== 'frais') words.push(f === 'périmé' ? `périmé${agree(item.name)}${PLURAL.has(item.name) ? 's' : ''}` : f);
+    if (item.warmed) {
+      const w = warmth(item.heat);
+      words.push(w === 'tiède' ? w + (PLURAL.has(item.name) ? 's' : '') : w + agree(item.name));
+    }
+    const stars = this.starsOf(item);
+    if (stars) words.push(starText(stars));
+    return words;
+  }
+
+  /**
+   * Le temps passe pour les aliments : ils vieillissent (dix fois moins vite au frigo, pas au
+   * congélateur) et refroidissent ; ce qui est sur le feu ou dans un appareil qui chauffe reste chaud.
+   */
+  private tickLife(hours: number): void {
+    const t = performance.now() / 1000;
+    for (const item of this.items) {
+      if (!item.def.food) continue;
+      const box = this.shelfOf(item)?.shelf.def;
+      if (hours > 0) {
+        const was = freshness(item.def, item.age);
+        item.age += hours * (box?.freezer ? 0 : box?.cold ? AGE_FRIDGE : 1);
+        const now = freshness(item.def, item.age);
+        if (now !== was) item.setMoldy(now === 'périmé');
+        if (item.heat > 0 && !this.warming(item)) item.heat = Math.max(0, item.heat - hours * (box?.cold ? COOL_PER_HOUR * COOL_FRIDGE : COOL_PER_HOUR));
+      }
+      // la vapeur ondule au-dessus d'un plat chaud
+      const k = item.heat > 0.5 && !box ? (item.heat - 0.5) * 2 : 0;
+      if (!k && !this.steaming.has(item)) continue;
+      item.setSteam(k);
+      if (!k) {
+        this.steaming.delete(item);
+        continue;
+      }
+      this.steaming.add(item);
+      item.part('vapeur')?.children.forEach((w, i) => {
+        w.position.y = item.box.max.y + 0.035 + 0.01 * Math.sin(t * 2 + i * 2);
+        w.rotation.z = 0.25 * Math.sin(t * 1.3 + i);
+      });
+    }
+  }
+
+  /** L'aliment est sur un feu allumé, ou dans un appareil qui chauffe en marche. */
+  private warming(item: WorldItem): boolean {
+    if (this.heating(item)) return true;
+    for (const [app, r] of this.appliances) if (app.def.heats && r.start.has(item)) return true;
+    return false;
+  }
+
   private stateOf(item: WorldItem): string {
     const words: string[] = [];
     const a = agree(item.name);
@@ -5418,6 +5607,7 @@ export class Game {
       moving: !!this.moving,
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
       reading: !!c.reading,
+      recipes: this.readingRecipes,
       seated: !!this.sitting,
       sleeping: !!this.sleep,
     };
@@ -5426,6 +5616,7 @@ export class Game {
   /** Le temps passe : les besoins baissent ; boire (café) remonte la soif et réveille un peu. */
   private tickNeeds(dt: number): void {
     const hours = this.clock.tick(dt);
+    this.tickLife(hours);
     const before = this.needs.health;
     this.needs.tick(hours, this.character.lying ? 'sleep' : this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
     // prévenir le joueur quand la santé passe sous un seuil
@@ -5485,6 +5676,8 @@ export class Game {
     }
     const ref = this.ref(item);
     const foods = this.foodsAt(item);
+    // le livre de recettes : le prendre et l'ouvrir (une main libre)
+    if (item.def.id === 'livre-recettes' && !c.carried.includes(item) && !this.shelfOf(item)) add('Lire les recettes', () => this.chain([() => this.take(item, false), () => this.read()]));
     if (egg && (item.def.mixes || item.def.cookware?.holds.includes('œuf au plat'))) add(`Casser l’œuf dans ${the(item.name)}`, () => this.crackEgg(ref));
     if (dry && item.def.mixes) add(`Verser ${the(dry.name)} dedans`, () => this.addToBowl(ref));
     if (tool && item.def.mixes && this.mixes.get(item)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(ref));
@@ -5511,6 +5704,7 @@ export class Game {
     if (spices?.size) words.push(`assaisonné${agree(item.name)} (${[...spices].join(', ')})`);
     if (this.toppings.get(item)?.includes('fromage')) words.push('fromage râpé dessus');
     if ((this.unstirred.get(item) ?? 0) > STICK_AFTER && this.heating(item) && doneness(item.def, item.cooking) !== 'brûlé') words.push('attache au fond');
+    words.push(...this.lifeWords(item));
     return words;
   }
 
@@ -5669,12 +5863,14 @@ export class Game {
         this.addToMix(into, 'œuf', 0.12);
         const n = this.mixes.get(into)!.parts.filter((p) => p === 'œuf').length;
         this.onNotice?.(`Œuf cassé dans le saladier (${n} œuf${n > 1 ? 's' : ''}). Mélange au fouet pour une omelette, ou ajoute lait et farine pour des crêpes.`);
+        this.practice(XP_GESTURE);
         return;
       }
       const at = this.panSpot(into);
       if (!at) return;
       this.spawnAt('oeuf-plat', at, into.object.rotation.y);
       this.onNotice?.(this.stoveUnder(into) ? 'Œuf cassé dans la poêle : il cuit sur le feu.' : 'Œuf cassé dans la poêle : mets-la sur le feu pour le cuire.');
+      this.practice(XP_GESTURE);
     }, running);
   }
 
@@ -5716,6 +5912,7 @@ export class Game {
           return;
         }
         mix.batter = batter.name;
+        this.practice(XP_GESTURE);
         this.showMix(bowl);
         this.onNotice?.(batter.name === 'œufs battus' ? 'Les œufs sont battus : verse-les dans la poêle pour faire une omelette.' : 'La pâte à crêpes est prête : verses-en dans la poêle chaude, une crêpe à la fois.');
       }, running);
@@ -5764,6 +5961,7 @@ export class Game {
         const was = this.inPan(pan).some((f) => (this.unstirred.get(f) ?? 0) > STICK_AFTER);
         for (const f of this.inPan(pan)) this.unstirred.set(f, 0);
         this.onNotice?.(was ? 'Remué : ça n’attache plus au fond.' : `Tu remues ${the(pan.name)}.`);
+        this.practice(XP_GESTURE);
       }, running);
     }
     return false;
@@ -5804,7 +6002,7 @@ export class Game {
       return false;
     }
     // une crêpe tombe plus souvent qu'un steak
-    const miss = r.item.name === 'crêpe' ? 0.2 : 0.1;
+    const miss = (r.item.name === 'crêpe' ? 0.2 : 0.1) * (1 - 0.07 * this.cookingLevel);
     this.tossing = { pan, food: r.item, rel: r.rel.clone(), t: 0, fall: Math.random() < miss };
     return true;
   }
@@ -5838,6 +6036,7 @@ export class Game {
     }
     // retournée : à plat de nouveau dans la poêle
     r.rel.copy(s.rel);
+    this.practice(XP_GESTURE);
     this.onNotice?.(`Hop ! ${name} ${PLURAL.has(s.food.name) ? 'sont retournés' : `est retourné${agree(s.food.name)}`}.`);
   }
 
@@ -5873,6 +6072,7 @@ export class Game {
           food.object.position.copy(spot).setY(spot.y + food.restLift(food.object.quaternion));
           tool.setDirty(true);
           this.onNotice?.(`${cap(the(food.name))} est servi${agree(food.name)} dans ${the(plate.name)}.`);
+          this.practice(XP_GESTURE);
         }, running);
       }, running);
     }
@@ -5892,6 +6092,7 @@ export class Game {
         for (const f of foods) (this.seasoned.get(f) ?? this.seasoned.set(f, new Set()).get(f)!).add(jar.name);
         this.wearItem(jar, 1, false);
         this.onNotice?.(`${cap(jar.def.spice!)} sur ${foods.map((f) => the(f.name)).join(' et ')}.`);
+        this.practice(XP_GESTURE);
       }, running);
     }
     return false;
@@ -5912,6 +6113,9 @@ export class Game {
         if (!this.items.includes(bread)) return;
         const made = this.turnInto(bread, `${SPREAD_ON[bread.name]}-${SPREADS[pot.name]}`);
         knife.setDirty(true);
+        // des tartines : un petit plat (la crêpe garde ses étoiles de cuisson)
+        if (made && !made.stars) made.stars = this.baseStars(false);
+        this.practice(XP_GESTURE);
         if (made) this.onNotice?.(`${cap(made.name)}, prêt${agree(made.name)} !`);
       }, running);
     }
@@ -5935,6 +6139,7 @@ export class Game {
         if (foods.length) {
           for (const f of foods) this.topWithCheese(f);
           this.onNotice?.(`Du fromage râpé sur ${foods.map((f) => the(f.name)).join(' et ')}.`);
+          this.practice(XP_GESTURE);
         } else if (target.def.board) {
           this.spawnAt('fromage-rape', this.boardSpot(target, target), target.object.rotation.y);
           this.onNotice?.('Un tas de fromage râpé sur la planche.');
@@ -5987,9 +6192,13 @@ export class Game {
         const spices = this.seasoned.get(f);
         if (d === 'cru') return f.def.cook ? `${cap(the(f.name))} : pas encore cuit${agree(f.name)}.` : '';
         if (d === 'brûlé') return 'Beurk, c’est brûlé.';
-        if (!spices?.size) return 'C’est un peu fade : il manque du sel.';
-        if (spices.size >= 2) return 'Délicieux, bien assaisonné !';
-        return 'C’est bon !';
+        if (freshness(f.def, f.age) === 'périmé') return 'Pouah, ça sent bizarre : c’est périmé !';
+        const stars = this.starsOf(f);
+        const note = stars ? ` (${starText(stars)})` : '';
+        if (f.warmed && warmth(f.heat) === 'froid') return `C’est froid : réchauffe-${it(f.name)} au micro-ondes.${note}`;
+        if (!spices?.size) return `C’est un peu fade : il manque du sel.${note}`;
+        if (spices.size >= 2) return `Délicieux, bien assaisonné !${note}`;
+        return `C’est bon !${note}`;
       };
       const go = () => {
         const hand = c.handOf(spoon);
@@ -6009,6 +6218,37 @@ export class Game {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Le livre de recettes : chaque recette (assemblages et plats au fourneau) avec ses ingrédients,
+   * ce qui en manque à la maison (un aliment entier à couper compte), et comment la faire.
+   */
+  recipeBook(): Array<{ name: string; needs: Array<{ name: string; have: boolean }>; extras: string[]; how: string; ready: boolean; plat?: string; task?: StoveRecipe['task'] }> {
+    const count = new Map<string, number>();
+    for (const it of [...this.items, ...[...this.bags.values()].flat().map((n) => ({ name: n }))]) count.set(it.name, (count.get(it.name) ?? 0) + 1);
+    const wholeOf = (piece: string) => [...ITEM_BY_ID.values()].find((d) => d.cut && ITEM_BY_ID.get(d.cut)?.name === piece)?.name;
+    const list = (needs: string[]) => {
+      const used = new Map<string, number>();
+      return needs.map((n) => {
+        const k = (used.get(n) ?? 0) + 1;
+        used.set(n, k);
+        const whole = wholeOf(n);
+        return { name: n, have: (count.get(n) ?? 0) >= k || (!!whole && (count.get(whole) ?? 0) > 0) };
+      });
+    };
+    const book = RECIPES.map((r) => {
+      const needs = list(r.needs);
+      const where = r.on === 'planche' ? 'sur la planche' : 'dans l’assiette';
+      const cut = r.needs.filter((n) => wholeOf(n));
+      const how = `${cut.length ? `Coupe ${cut.map((n) => `${wholeOf(n)} (${n})`).join(', ')}. ` : ''}Réunis tout ${where}, puis « Préparer » (G).`;
+      return { name: ITEM_BY_ID.get(r.dish)!.name, needs, extras: r.extras ?? [], how, ready: needs.every((n) => n.have), plat: r.dish };
+    });
+    const stove = STOVE_RECIPES.map((r) => {
+      const needs = list(r.needs);
+      return { name: r.name, needs, extras: [], how: r.how, ready: needs.every((n) => n.have), task: r.task };
+    });
+    return [...stove, ...book];
   }
 
   /** Ce qui manque à la maison par rapport au stock voulu (STOCK) : [nom, combien]. */

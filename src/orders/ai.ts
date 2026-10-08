@@ -146,6 +146,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "tartiner", "pot": "confiture", "objet": "<ref>"} : tartiner des tranches de pain ou une crêpe cuite (« pot » : confiture, miel, pâte à tartiner ou beurre ; facultatif)
 - {"tache": "raper", "objet": "<ref>"} : râper du fromage (frigo) à la râpe (placard) sur le plat de l'assiette ou de la poêle, ou sur la planche
 - {"tache": "gouter", "objet": "<ref>"} : goûter à la cuillère ce qui cuit ou ce qui est servi ; le perso dit si c'est bon
+- Les aliments vieillissent hors du frigo (« à manger vite », puis « périmé » : mal au ventre) ; un plat cuit refroidit (« froid » : le réchauffer au micro-ondes avec « cuire ») ; un plat préparé a des étoiles (★, meilleures avec la compétence cuisine, un plat assaisonné, chaud, frais). Le livre de recettes (dans la cuisine) se lit avec « lire »
 - Ustensiles : fouet, spatule, cuillère en bois et louche dans le pot à ustensiles ; saladier et râpe au placard ; œufs, lait, beurre, fromage au frigo
 - {"tache": "laver", "visage": true} : se laver à l'évier ou au lavabo (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
 - {"tache": "douche"} : prendre une douche dans la salle de bain (hygiène à fond) ; le perso en sort mouillé

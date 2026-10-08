@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
 import { FROZEN_FOOD, MORE_FRUITS, OVEN_EXTRA } from './pantry';
-import { PREP_CUPBOARD } from './prep';
+import { PREP_CUPBOARD, STOVE_RECIPES } from './prep';
+import { DISHES as RECIPE_DISHES } from './recipes';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -483,7 +484,8 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     fragility: 5,
     // charnière à gauche : la porte s'ouvre vers la gauche (angle négatif)
     door: -THREE.MathUtils.degToRad(100),
-    holds: OVEN_FOOD,
+    // on y réchauffe aussi les plats préparés
+    holds: [...OVEN_FOOD, ...STOVE_RECIPES.map((r) => r.name), ...RECIPE_DISHES.map((d) => d.name)],
     slots: [[-MW_W / 2 + WALL + MW_CAV / 2 - 0.01, 0.024, 0]],
     heats: { seconds: 4, burns: false },
     build: () => {
