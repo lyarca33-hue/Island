@@ -36,5 +36,13 @@
     Sakurada Fumiriya : **CC0**.
   - Copie utilisée : dépôt public [madjin/vrm-samples](https://github.com/madjin/vrm-samples), dossier `vroid/`
     (textures réencodées en WebP par `tools/build_vrm_assets.py`, rien d'autre de modifié).
+- Packs de [Quaternius](https://quaternius.com), **CC0** (`public/packs/*.glb`, convertis par
+  `tools/build_pack_assets.mjs`) : Survival Pack (camp, survie), Cute Fish Pack (poissons, pêche),
+  Realistic Car Pack (voitures), Train Pack (trains, rails), Ultimate Gun Pack (armurerie),
+  Fantasy Props MegaKit (marché, brocante, atelier), Modular SciFi MegaKit (station, aliens).
+- Monstres (`public/packs/puglin.glb`, `imp.glb`) : Bestiary - Dungeon Monsters Kit de
+  [Quaternius](https://quaternius.com), sous la **Quaternius Asset License (QAL)** : usage dans le jeu
+  autorisé, crédit non obligatoire, mais les fichiers ne doivent pas être repris ni redistribués comme
+  modèles à part. Leurs animations sont celles de la Universal Animation Library (CC0, ci-dessus).
 - [three-vrm](https://github.com/pixiv/three-vrm) (MIT) : lecture des VRM, shader MToon, expressions, ressorts.
 - three.js (MIT), React (MIT), Vite (MIT).

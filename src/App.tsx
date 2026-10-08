@@ -6,6 +6,7 @@ import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
+import { loadCreature, preloadPacks } from './game/packs/assets';
 import { AutoSave, clearLocal, type GameSave, loadLocal, saveLocal } from './game/save';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
@@ -60,6 +61,11 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const [ready, setReady] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // les modèles dont sont faits des objets (camping, pêche) : chargés avant de construire la maison
+  const [packsReady, setPacksReady] = useState(false);
+  useEffect(() => {
+    void Promise.all([preloadPacks(['survie', 'peche']), loadCreature('puglin'), loadCreature('imp')]).then(() => setPacksReady(true));
+  }, []);
   const [held, setHeld] = useState<string | null>(null);
   const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, recipes: false, book: null, seated: false, sleeping: false });
   const [notice, setNotice] = useState<string | null>(null);
@@ -122,6 +128,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
     for (const id of new Set([recipe.outfit, recipe.face, recipe.hair])) prefetchModel(id);
     void loadAnimationSource().catch(() => {});
     void loadSitAnimations().catch(() => {});
+    if (!packsReady) return;
     const g = new Game(host.current, recipe);
     game.current = g;
     setReady(g);
@@ -171,7 +178,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       game.current = null;
       setReady(null);
     };
-  }, [recipe, flash, replaceGame]);
+  }, [recipe, flash, replaceGame, packsReady]);
 
   // le compte a une partie plus récente : le menu s'ouvre sur la question
   useEffect(() => cloud.subscribe((st) => {

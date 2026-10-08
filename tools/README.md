@@ -110,3 +110,17 @@ Pour habiller un autre meuble : ajouter son modèle à `MODELS`, puis la fiche d
 dans `INTERIOR_LOOKS` (`src/game/items/interior.ts`). Le modèle prend la boîte des pièces sans
 nom du meuble : les pièces nommées (portes, tiroirs, écran…) restent celles du jeu.
 
+## `build_pack_assets.mjs` : packs de Quaternius
+
+Fait un `.glb` par pack dans `public/packs` (survie, peche, voitures, trains, armes, fantasy,
+scifi) et écrit `src/game/packs/manifest.ts` (taille de chaque modèle). Chaque modèle devient un
+nœud nommé comme son fichier, posé au sol et centré ; sommets compressés (meshopt), textures en
+WebP 1024 px, décor simplifié. Les monstres (puglin, imp) sont gardés avec leur squelette.
+
+```bash
+npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
+node tools/build_pack_assets.mjs --src <dossier des packs> --out public/packs [--only puglin,imp]
+```
+
+`<dossier des packs>` contient les dossiers tels que téléchargés sur quaternius.com
+(« Survival Pack - Sept 2020 », « Fantasy Props MegaKit[Standard] »…).
