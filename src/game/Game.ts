@@ -897,6 +897,8 @@ export class Game {
       items: () => this.items,
       notice: (t) => this.onNotice?.(t),
       obstacle: (it) => this.isObstacle(it),
+      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
+      mood: (n) => this.addMood(n),
     });
     this.scene.add(this.paysage.group);
     this.laundry = new Buanderie({

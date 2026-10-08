@@ -813,6 +813,13 @@ export class Carry {
     }
   }
 
+  /**
+   * 1 : le bras qui tient l'objet suit le clip joué (couper du bois, voir character.ts), l'objet
+   * suit la main ; 0 : la prise tient le bras (par défaut).
+   */
+  loosen = 0;
+  private loose = 0;
+
   apply(dt: number): void {
     this.advance(dt);
     if (this.phase === 'idle' || (!this.item && this.phase !== 'throw' && this.phase !== 'let' && !this.bracing)) return;
@@ -820,7 +827,10 @@ export class Carry {
     const adding = this.phase === 'add' && this.t < DURATION.add / 2 ? this.stack[this.stack.length - 1] : null;
     if (this.phase !== 'reach') for (const e of this.stack) if (e !== adding) e.age += dt;
     if (this.bracing) this.washT += dt;
-    const { w, r, c } = this.weights();
+    const { w: held, r, c } = this.weights();
+    // le bras suit l'animation (couper du bois) : la prise le lâche en fondu
+    this.loose += (this.loosen - this.loose) * Math.min(1, dt * 8);
+    const w = held * (1 - this.loose);
     this.sip = this.phase === 'drink' || this.phase === 'eat' ? this.sipAmount() : 0;
     this.swing = this.phase === 'throw' ? this.throwSwing() : null;
     // gorgée : le niveau baisse quand la tasse est à la bouche

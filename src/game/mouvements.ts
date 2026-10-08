@@ -5,7 +5,9 @@
  * - nager : « Nager » au menu de l'étang (les mains vides) : le perso plonge depuis la rive, nage
  *   au clavier ou au clic, et remonte sur la rive en y arrivant ;
  * - grimper : « Grimper dessus » au menu d'un meuble d'une hauteur de table (les mains vides) ;
- *   au bord, on retombe.
+ *   au bord, on retombe ;
+ * - couper du bois : la hache en main, « Couper du bois » au menu du perso près d'un arbre du
+ *   jardin : quelques coups, et une bûche (un siège à pousser près du feu) tombe au pied de l'arbre.
  *
  * Game ne fait que brancher (menu, touche) par l'interface MouvementsHost.
  */
@@ -14,6 +16,7 @@ import type { Character } from './character';
 import type { WorldItem } from './items/carry';
 import { Pond } from './nage';
 import { DOCK_L } from './items/plein-air';
+import { OAKS, PINES } from './jardin';
 
 export interface MouvementsHost {
   readonly character: Character;
@@ -21,6 +24,9 @@ export interface MouvementsHost {
   notice(text: string): void;
   /** Meuble (ou gros objet posé) qu'on contourne : on peut tenir dessus. */
   obstacle(item: WorldItem): boolean;
+  /** Fait apparaître l'objet `id` posé en `at` (monde), tourné de `yaw`. */
+  spawn(id: string, at: THREE.Vector3, yaw: number): WorldItem | null;
+  mood(n: number): void;
 }
 
 /** Hauteurs (m) d'un dessus sur lequel on grimpe : d'un banc à un plan de travail. */
@@ -33,6 +39,13 @@ const CLIMB_STAND = 0.38;
 const CLIMB_IN = 0.28;
 /** Plus grand demi-côté d'un meuble (m) : au-delà, il ne peut pas être sous le perso. */
 const ITEM_REACH = 3;
+/** Couper du bois : distance max à l'arbre pour le proposer (m), où se tenir (m du tronc), durée (s). */
+const TREE_NEAR = 6;
+const CHOP_STAND = 1.05;
+const CHOP_TIME = 3.9;
+/** Au-delà de tant de bûches posées dans le jardin, on a assez de bois. */
+const LOGS_MAX = 12;
+const TREES = [...OAKS, ...PINES].map(([x, z]) => new THREE.Vector3(x, 0, z));
 
 export class Mouvements {
   private host: MouvementsHost;
@@ -77,10 +90,69 @@ export class Mouvements {
     if (!item) {
       if (c.swimming) add('Sortir de l’eau', () => this.leaveWater());
       else if (c.canJump) add('Sauter', () => this.jump());
+      if (this.axe() && this.nearestTree()) add('Couper du bois', () => this.chop(false));
       return;
     }
     if (item === this.pond && !c.swimming) add('Nager', () => this.swim(false));
     if (this.climbable(item) && !c.swimming) add('Grimper dessus', () => this.climb(item, false));
+  }
+
+  /** La hache tenue (seule dans la main). */
+  private axe(): WorldItem | undefined {
+    return this.host.character.heldItems.find((h) => h.def.id === 'hache');
+  }
+
+  /** L'arbre le plus proche du perso, s'il est assez près. */
+  private nearestTree(): THREE.Vector3 | null {
+    const at = this.host.character.position;
+    const tree = TREES.reduce<THREE.Vector3 | null>((best, t) => (!best || t.distanceTo(at) < best.distanceTo(at) ? t : best), null);
+    return tree && tree.distanceTo(at) < TREE_NEAR ? tree : null;
+  }
+
+  /** Va au pied de l'arbre le plus proche, la hache en main, et en coupe une bûche. */
+  chop(running: boolean): boolean {
+    const c = this.host.character;
+    const axe = this.axe();
+    if (!axe) {
+      this.host.notice('Prends la hache pour couper du bois.');
+      return false;
+    }
+    const tree = this.nearestTree();
+    if (!tree) {
+      this.host.notice('Approche-toi d’un arbre pour couper du bois.');
+      return false;
+    }
+    if (this.host.items().filter((i) => i.def.id === 'buche').length >= LOGS_MAX) {
+      this.host.notice('Il y a déjà bien assez de bois coupé.');
+      return false;
+    }
+    if (c.swimming || c.busy) return false;
+    // du côté d'où l'on vient (sinon le premier côté libre autour du tronc)
+    const from = c.position.clone().sub(tree).setY(0);
+    const a0 = Math.atan2(from.x, from.z);
+    let stand: THREE.Vector3 | null = null;
+    for (let i = 0; i < 12 && !stand; i++) {
+      const a = a0 + Math.ceil(i / 2) * (i % 2 ? 1 : -1) * (Math.PI / 6);
+      const p = tree.clone().add(new THREE.Vector3(Math.sin(a), 0, Math.cos(a)).multiplyScalar(CHOP_STAND));
+      if (!c.nav?.blocked(p)) stand = p;
+    }
+    if (!stand) {
+      this.host.notice('Pas de place autour de cet arbre.');
+      return false;
+    }
+    const spot = stand;
+    c.approachThen(spot, tree, () => {
+      if (!this.axe()) return;
+      c.work('chop', () => {
+        // la bûche tombe à côté du perso, au pied de l'arbre
+        const side = new THREE.Vector3(spot.z - tree.z, 0, tree.x - spot.x).normalize();
+        const at = tree.clone().lerp(spot, 0.5).addScaledVector(side, 0.55);
+        if (!this.host.spawn('buche', at, Math.atan2(side.x, side.z))) return;
+        this.host.mood(1);
+        this.host.notice('Une bûche de plus : pousse-la près du feu de camp pour t’y asseoir.');
+      }, CHOP_TIME, axe);
+    }, running);
+    return true;
   }
 
   jump(): boolean {

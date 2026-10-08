@@ -38,7 +38,11 @@ type Gait = 'idle' | 'walk' | 'run' | 'push' | 'gesture' | 'swim' | 'tread';
 
 /** Gestes de cuisine (Quaternius, voir creator/source.ts) ; absents tant que le fichier n'est pas arrivé. */
 const KITCHEN = { interact: 'Interact', pickUp: 'PickUp_Table', kneel: 'Fixing_Kneeling', push: 'Push_Loop' };
-type Gesture = 'interact' | 'pickUp' | 'kneel' | 'throw';
+type Gesture = 'interact' | 'pickUp' | 'kneel' | 'throw' | 'water';
+/** Travaux sur place : récolter (ou désherber, cueillir des fleurs), semer, couper du bois. */
+export type Work = 'harvest' | 'plant' | 'chop';
+/** Gestes que les mains occupées n'interrompent pas (le clip accompagne ce qu'elles font). */
+const HANDS_ON: Array<Gesture | Work> = ['pickUp', 'throw', 'water', 'harvest', 'plant', 'chop'];
 /** À genoux devant un placard bas : le début du clip seulement (il continue en bricolant). */
 const KNEEL_TIME = 1.7;
 /** Haut d'une porte (m) sous lequel on s'agenouille pour l'ouvrir plutôt que de tendre la main. */
@@ -47,7 +51,9 @@ const KNEEL_BELOW = 0.6;
 const TABLE_HEIGHT: [number, number] = [0.55, 1.2];
 
 /** Sauter, nager, grimper, lancer (Quaternius, voir creator/source.ts) ; absents tant que le fichier n'est pas arrivé. */
-const MOVES = { jump: 'Jump_Start', fall: 'Jump_Loop', land: 'Jump_Land', swim: 'Swim_Fwd_Loop', tread: 'Swim_Idle_Loop', climb: 'ClimbUp_1m', throw: 'OverhandThrow' };
+const MOVES = { jump: 'Jump_Start', fall: 'Jump_Loop', land: 'Jump_Land', swim: 'Swim_Fwd_Loop', tread: 'Swim_Idle_Loop', climb: 'ClimbUp_1m', throw: 'OverhandThrow', water: 'Farm_Watering', harvest: 'Farm_Harvest', plant: 'Farm_PlantSeed', chop: 'TreeChopping_Loop' };
+/** Travaux : où, dans le clip (part de sa durée), le geste aboutit (le légume sort de terre, la graine est en terre). */
+const WORK_AT: Record<Work, number> = { harvest: 0.6, plant: 0.7, chop: 1 };
 /** Saut : élan (s) avant de quitter le sol, vitesse au départ (m/s), pesanteur (m/s²) : 50 cm de haut. */
 const TAKEOFF = 0.12;
 const JUMP_SPEED = 3.4;
@@ -136,7 +142,7 @@ export class Character {
   /** Appelé quand le perso renonce à une marche bloquée. */
   onStuck?: () => void;
   /** Geste de cuisine en cours et temps qu'il lui reste. */
-  private gestureNow: { kind: Gesture; left: number } | null = null;
+  private gestureNow: { kind: Gesture | Work; left: number; then?: () => void; at?: number; hand?: Carry } | null = null;
   /**
    * Saut : l'élan, en l'air (vitesse verticale), la réception. `dive` : plongeon dans l'étang,
    * vers `dive.to` à `dive.speed`, depuis la rive `dive.bank`.
@@ -248,6 +254,7 @@ export class Character {
     this.swimNow = null;
     this.climbNow = null;
     this.submerge(false);
+    this.endGesture();
     this.setRoute(null);
     this.approach = null;
     this.setGait('idle');
@@ -589,7 +596,7 @@ export class Character {
   }
 
   get idle(): boolean {
-    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && !this.bed && !this.jumpNow && !this.climbNow && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
+    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && !this.bed && !this.jumpNow && !this.climbNow && !this.gestureNow?.then && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
   }
 
   update(dt: number, bounds: number): void {
@@ -726,7 +733,13 @@ export class Character {
     if (g) {
       g.left -= dt;
       // le geste s'arrête à la fin, ou dès qu'on bouge (ou qu'une main se tend, sauf pour prendre sur la table ou lancer)
-      if (g.left <= 0 || moving || (g.kind !== 'pickUp' && g.kind !== 'throw' && this.busy)) this.gestureNow = null;
+      // un travail aboutit à son moment (une seule fois)
+      if (g.then && g.left <= (g.at ?? 0)) {
+        const then = g.then;
+        g.then = undefined;
+        then();
+      }
+      if (g.left <= 0 || moving || (!HANDS_ON.includes(g.kind) && this.busy)) this.endGesture();
     }
     if (this.climbNow) {
       // on vient de sortir de l'eau : le clip pour grimper est lancé
@@ -762,7 +775,7 @@ export class Character {
 
   private takeOff(dive?: { to: THREE.Vector3; speed: number; bank: THREE.Vector3 }): void {
     this.jumpNow = { phase: 'takeoff', t: 0, vy: JUMP_SPEED, dive };
-    this.gestureNow = null;
+    this.endGesture();
     this.gait = 'gesture';
     this.puppet?.play(MOVES.jump, 0.08, true);
   }
@@ -807,7 +820,7 @@ export class Character {
     this.root.position.copy(from);
     this.heading = Math.atan2(to.x - from.x, to.z - from.z);
     this.root.rotation.y = this.heading;
-    this.gestureNow = null;
+    this.endGesture();
     this.gait = 'gesture';
     this.puppet?.play(MOVES.climb, 0.15, true, CLIMB_SPEED);
   }
@@ -1117,13 +1130,41 @@ export class Character {
    */
   gesture(kind: Gesture): void {
     const p = this.puppet;
-    const name = kind === 'throw' ? MOVES.throw : KITCHEN[kind];
+    const name = kind === 'throw' || kind === 'water' ? MOVES[kind] : KITCHEN[kind];
     const speed = kind === 'throw' ? THROW_SPEED : 1;
     const d = (p?.clipDuration(name) ?? 0) / speed;
     if (!p || !d || this.seat || this.bed || this.pushing || this.washing || this.jumpNow || this.swimNow || this.climbNow) return;
+    this.endGesture();
     this.gestureNow = { kind, left: kind === 'kneel' ? Math.min(KNEEL_TIME, d) : d };
     this.gait = 'gesture';
     p.play(name, 0.2, true, speed);
+  }
+
+  /**
+   * Travail sur place (perso du créateur) : récolter, semer, couper du bois (`seconds` : le clip
+   * en boucle tout ce temps). `then` quand le geste aboutit ; s'il est interrompu (le perso
+   * repart), `then` n'est pas appelé. `tool` : l'outil tenu, que le bras mène au rythme du clip.
+   * Sans clip (pas encore chargé, X Bot), `then` tout de suite.
+   */
+  work(kind: Work, then: () => void, seconds?: number, tool?: WorldItem): void {
+    const p = this.puppet;
+    const name = MOVES[kind];
+    const d = p?.clipDuration(name) ?? 0;
+    if (!p || !d || this.seat || this.bed || this.pushing || this.washing || this.jumpNow || this.swimNow || this.climbNow) return then();
+    this.endGesture();
+    const left = seconds ?? d;
+    // seul le bras droit suit le clip (c'est la main droite qui frappe)
+    const hand = tool ? this.handOf(tool) : null;
+    if (hand?.side === 'right') hand.loosen = 1;
+    this.gestureNow = { kind, left, then, at: seconds ? 0 : d * (1 - WORK_AT[kind]), hand: hand ?? undefined };
+    this.gait = 'gesture';
+    p.play(name, 0.25, !seconds);
+  }
+
+  /** Fin du geste ou du travail : l'outil revient dans la main. */
+  private endGesture(): void {
+    if (this.gestureNow?.hand) this.gestureNow.hand.loosen = 0;
+    this.gestureNow = null;
   }
 
   /** Geste pour ouvrir ou fermer `door` : à genoux si elle est basse, sinon la main tendue. */
