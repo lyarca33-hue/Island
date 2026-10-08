@@ -117,7 +117,14 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "chaise", "objet": "<ref>", "sous": true} : ranger la chaise sous la table (« sous »: false pour la tirer)
 - {"tache": "essuyer", "objet": "<ref>"} : essuyer les miettes de la table avec l'éponge (« objet » facultatif)
 - {"tache": "empiler"} : empiler les assiettes propres (prendre celle du dessous emporte la pile)
-- {"tache": "essuyer_sol"} : essuyer les flaques d'eau par terre avec l'éponge
+- {"tache": "essuyer_sol"} : essuyer les petites flaques d'eau par terre avec l'éponge
+- {"tache": "serpillere"} : passer la serpillière (dans le seau) sur les flaques, même grosses
+- {"tache": "balayer"} : balayer les éclats de verre et les miettes par terre avec le balai (marcher sur des éclats coupe)
+- {"tache": "nettoyer", "objet": "<ref>"} : nettoyer au spray et à l'éponge une surface tachée par la cuisine (« objet » facultatif)
+- {"tache": "gants", "mettre": true} : enfiler les gants de ménage (« mettre » faux pour les enlever) ; ils protègent les mains à la vaisselle
+- {"tache": "sortir_poubelle"} : sortir le sac de la poubelle au conteneur dehors
+- {"tache": "sac_neuf", "objet": "<ref>"} : remettre un sac neuf dans la poubelle
+- {"tache": "heure"} : regarder l'heure à l'horloge
 - {"tache": "essuyer_vaisselle", "objets": ["<ref>", ...]} : essuyer au torchon la vaisselle mouillée (sortie de l'évier ; liste vide = toute). Sinon « mettre » la vaisselle mouillée dans l'égouttoir, où elle sèche seule
 - {"tache": "essuyer_mains"} : s'essuyer les mains au torchon après les avoir lavées
 - {"tache": "liste_courses"} : lire la liste de courses (ce qui manque à la maison)
@@ -239,6 +246,13 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'essuyer': return { kind: 'essuyer', ref: s('objet') || undefined };
     case 'empiler': return { kind: 'empiler' };
     case 'essuyer_sol': return { kind: 'essuyer_sol' };
+    case 'serpillere': return { kind: 'serpillere' };
+    case 'balayer': return { kind: 'balayer' };
+    case 'nettoyer': return { kind: 'nettoyer', ref: s('objet') || undefined };
+    case 'gants': return { kind: 'gants', mettre: o.mettre !== false };
+    case 'sortir_poubelle': return { kind: 'sortir_poubelle' };
+    case 'sac_neuf': return { kind: 'sac_neuf', ref: s('objet') || undefined };
+    case 'heure': return { kind: 'heure' };
     case 'essuyer_vaisselle': return { kind: 'essuyer_vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'essuyer_mains': return { kind: 'essuyer_mains' };
     case 'liste_courses': return { kind: 'liste_courses' };

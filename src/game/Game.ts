@@ -11,7 +11,7 @@ import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
-import { breakChance, Debris, Spill } from './items/breakage';
+import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
@@ -21,7 +21,9 @@ import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } fro
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
 import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
+import { BAGS_PER_ROLL, UPKEEP_FEMININE, UPKEEP_PLURAL } from './items/upkeep';
 import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
+import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
 import { placeRuns, Room, WALL_T } from './room';
@@ -82,6 +84,30 @@ const TAP_DRINK = { seconds: 3 * SPLASH_CYCLE, thirst: 25 };
 const AIR_DRY_MINUTES = 120;
 /** Courses commandées : le sac arrive au bout de tant d'heures de jeu. */
 const DELIVERY_HOURS = 0.5;
+/**
+ * Entretien : une grande flaque (rayon, m) demande la serpillière ; la serpillière essuie d'un
+ * coup les flaques à cette distance (m) ; se couper sur des éclats de verre (santé) ; manger avec
+ * les mains sales (santé) ; mains abîmées par vaisselle lavée sans gants, et ce qu'elles
+ * récupèrent par heure de jeu ; odeur de brûlé chassée par heure, fenêtre fermée ou ouverte ;
+ * heure du camion qui vide le conteneur.
+ */
+const BIG_PUDDLE = 0.2;
+/** Dessus de la gazinière (sous les grilles) : où vont ses taches. */
+const COUNTER_TOP = 0.9;
+const MOP_REACH = 1.6;
+const GLASS_CUT = 3;
+const DIRTY_EAT = 3;
+const ROUGH_PER_DISH = 0.12;
+const ROUGH_HEAL = 0.25;
+const SMELL_CLOSED = 0.5;
+const SMELL_OPEN = 5;
+const TRUCK_HOUR = 6;
+/** Aliments qui font des miettes quand on les mange debout. */
+const CRUMBY = /pain|sandwich|biscuit|chips|tartine|crêpe|pizza|hot-dog|gâteau/;
+/** Toucher cru à mains nues : les mains sont à laver avant de cuisiner. */
+const RAW_TOUCH = ['steak', 'poulet', 'poisson', 'saucisses', 'œuf'];
+/** Mains salies par un aliment cru du plat lui-même (voir firstStars). */
+const RAW_DIRT = ['viande crue', 'œuf cru'];
 /** Mains mouillées après les avoir lavées : sèchent seules en tant de minutes de jeu. */
 const HANDS_DRY_MINUTES = 10;
 /** Verser : litres par seconde quand le récipient est incliné. */
@@ -163,8 +189,8 @@ const START_ON_STOVE: Array<[string, string, number]> = [
  */
 const START_ON_WORKTOP: Array<[string, number, number, number]> = [
   ['planche', -0.14, 0.02, 0],
-  // couché à plat, le long de la profondeur, le manche vers l'avant
-  ['couteau', 0.14, 0.04, -Math.PI / 2],
+  // le savon, au bout du plan de travail contre l'évier
+  ['savon', -0.4, -0.16, 0],
   ['pain', 0.32, -0.08, 0.3],
   // l'éponge, près de l'évier
   ['eponge', -0.42, 0.1, 0.2],
@@ -176,6 +202,8 @@ const START_ON_WORKTOP: Array<[string, number, number, number]> = [
 const START_STORED: Array<[string, string, number]> = [
   // les pulls pliés dans l'armoire de la chambre
   ['pull', 'armoire', 0],
+  // le couteau de cuisine, aimanté sur la barre au-dessus du plan de travail
+  ['couteau', 'barre-couteaux', 1],
   ['pull-bleu', 'armoire', 1],
   ['pull-vert', 'armoire', 4],
   ['bouteille-eau', 'frigo', 8],
@@ -216,6 +244,14 @@ const START_STORED: Array<[string, string, number]> = [
   ['oeuf', 'frigo', 39],
   ['saladier', 'placard', 3],
   ['rape', 'placard', 5],
+  // l'entretien : torchon et maniques aux crochets, la serpillière dans son seau, les sacs poubelle,
+  // le spray et les gants au placard (sous l'évier, en vrai)
+  ['torchon', 'crochets', 0],
+  ['maniques', 'crochets', 2],
+  ['serpilliere', 'seau', 0],
+  ['gants', 'placard', 4],
+  ['sacs-poubelle', 'placard', 10],
+  ['spray', 'placard', 11],
   ['fouet', 'pot-ustensiles', 0],
   ['spatule', 'pot-ustensiles', 1],
   ['cuillere-bois', 'pot-ustensiles', 2],
@@ -321,7 +357,7 @@ const START_BOOKS: Array<[string, number | [number, number, number, number]]> = 
   ['livre-vert', SLOTS_PER_SHELF + 1],
   ['livre-ocre', SLOTS_PER_SHELF + 2],
   ['livre-violet', 2 * SLOTS_PER_SHELF],
-  ['livre', [-1.3, 0, 0.9, 0.4]],
+  ['livre', [-1.9, 0, 1.35, 0.4]],
   // de quoi demander au perso de « ranger tous les livres »
   ['livre-vert', [0.2, 0, 2.1, 1.3]],
   ['livre-ocre', [1.04, TABLE_H, 1.25, 1.42]],
@@ -356,9 +392,9 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
-const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL]);
+const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
 /** Pronom de l'objet : « lave-la », « lave-le », « lave-les ». */
 const it = (name: string) => (PLURAL.has(name) ? 'les' : FEMININE.has(name) ? 'la' : 'le');
@@ -541,7 +577,7 @@ export class Game {
   private tossing: { pan: WorldItem; food: WorldItem; rel: THREE.Matrix4; t: number; fall: boolean } | null = null;
   /** Objets lancés en vol, et éclats des objets brisés. */
   private flying: Flying[] = [];
-  private debris: Array<Debris | Spill> = [];
+  private debris: Array<Debris | Spill | Crumbs> = [];
   /** Café en train de couler : la machine, la tasse posée dessous, le temps écoulé (s). */
   private brew: { machine: WorldItem; cup: WorldItem; t: number } | null = null;
   /**
@@ -598,6 +634,26 @@ export class Game {
   private tabletIn = new Set<WorldItem>();
   /** Miettes laissées sur une table après un repas (à essuyer avec l'éponge). */
   private crumbs = new Map<WorldItem, THREE.Group>();
+  /** Éclats de verre sur lesquels on s'est déjà coupé (une fois chacun). */
+  private cutBy = new WeakSet<Debris>();
+  /** Poubelles sans sac (sorti, pas encore remplacé) ; sacs qui restent dans chaque rouleau. */
+  private bagless = new Set<WorldItem>();
+  private rolls = new Map<WorldItem, number>();
+  /** Taches de cuisine sur la gazinière, le plan de travail, l'îlot : à nettoyer au spray et à l'éponge. */
+  private grime = new Map<WorldItem, THREE.Group>();
+  /** Gants de ménage enfilés : la paire (retirée de la pièce le temps qu'on la porte), les gants montrés aux mains. */
+  private gloved: { item: WorldItem; shown: THREE.Object3D[] } | null = null;
+  /** Mains abîmées à force de laver sans gants (0 à 1). */
+  private roughHands = 0;
+  /** Mains sales (viande crue, poubelle, ménage, toilettes) : pourquoi ; à laver au savon. */
+  private dirtyHands: string | null = null;
+  /** Plats préparés ou cuits avec les mains sales (une étoile de moins). */
+  private grubby = new WeakSet<WorldItem>();
+  /** Odeur de brûlé dans la cuisine (0 à 1), et déjà prévenu ; la fenêtre ouverte la chasse. */
+  private smell = 0;
+  private smellWarned = false;
+  /** Dernier jour où le camion a vidé le conteneur. */
+  private truckDay = -1;
   /** Une chaise glisse (tirée sans la saisir) : pas encore fini. */
   private sliding = false;
   /** Fenêtre « ce qu'il y a dedans » ouverte sur un meuble (null : la fermer). */
@@ -662,6 +718,7 @@ export class Game {
     this.character.onStuck = () => this.onNotice?.('Je n’arrive pas à passer : quelque chose bloque le chemin.');
     this.character.onGrab = (item, hand) => {
       this.wearItem(item, WEAR_GRAB);
+      if (RAW_TOUCH.includes(item.name) && (item.name === 'œuf' || doneness(item.def, item.cooking) === 'cru')) this.soilHands(item.name === 'œuf' ? 'œuf cru' : 'viande crue');
       const riders = this.ridersOf(item);
       // une pile se porte à deux mains : seulement si l'autre main est libre
       const same = item.def.stack && this.character.otherFree(hand) ? riders.filter((r) => r.item.def.stack === item.def.stack) : [];
@@ -947,10 +1004,18 @@ export class Game {
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
-    for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(it.box, it.object.position, it.object.rotation.y);
+    for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
     // on entre dans la douche : seule sa paroi vitrée (côté +X) se contourne
     for (const it of this.items) if (it !== skip && it.def.shower) nav.add(new THREE.Box3(new THREE.Vector3(it.box.max.x - 0.04, 0, it.box.min.z), new THREE.Vector3(it.box.max.x, 2, it.box.max.z - 0.15)), it.object.position, it.object.rotation.y);
     return nav;
+  }
+
+  /** Ce qui bloque le passage d'un meuble : sa boîte ; l'îlot, son caisson seulement (les genoux passent sous le plateau). */
+  private navBox(it: WorldItem): THREE.Box3 {
+    if (it.def.table !== 'comptoir') return it.box;
+    const b = it.box.clone();
+    b.max.z = Math.min(b.max.z, -b.min.z);
+    return b;
   }
 
   /** Le rectangle au sol d'un meuble déplacé entre-t-il dans un mur ? */
@@ -1341,7 +1406,7 @@ export class Game {
     return true;
   }
 
-  private addDebris(d: Debris | Spill): void {
+  private addDebris(d: Debris | Spill | Crumbs): void {
     this.debris.push(d);
     this.scene.add(d.group);
   }
@@ -1384,8 +1449,8 @@ export class Game {
       if (item === this.brew?.cup) ou += ` (${theLiquid(this.brew.machine.def.pour!.liquid)} coule dedans)`;
       const door = this.doors.get(item);
       if (door) {
-        const part = item.def.drawer ? 'tiroir' : item.def.bin ? 'couvercle' : 'porte';
-        ou += `, ${part} ${door.target ? 'ouvert' : 'fermé'}${part === 'porte' ? 'e' : ''}`;
+        const part = item.def.window ? '' : item.def.drawer ? 'tiroir ' : item.def.bin ? 'couvercle ' : 'porte ';
+        ou += `, ${part}${door.target ? 'ouvert' : 'fermé'}${part === 'porte ' || item.def.window ? 'e' : ''}`;
       }
       if (this.appliances.has(item)) ou += ', en marche';
       const tv = this.tvs.get(item);
@@ -1400,8 +1465,13 @@ export class Game {
       if (this.tablets.has(item)) ou += `, ${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`;
       if (item.def.bin) {
         const n = this.binFill.get(item) ?? 0;
-        ou += n >= item.def.bin ? ', pleine' : n ? `, ${n} objet${n > 1 ? 's' : ''} jeté${n > 1 ? 's' : ''}` : ', vide';
+        ou += n >= item.def.bin ? `, plein${agree(item.name)}` : n ? `, ${n} objet${n > 1 ? 's' : ''} jeté${n > 1 ? 's' : ''}` : `, vide`;
+        if (this.bagless.has(item)) ou += ', sans sac (en remettre un)';
       }
+      if (item.def.id === 'sacs-poubelle') ou += `, ${this.bagsLeft(item)} sac${this.bagsLeft(item) > 1 ? 's' : ''} dans le rouleau`;
+      if (this.grime.has(item)) ou += `, taché${agree(item.name)} (à nettoyer au spray)`;
+      if (item.def.clock) ou += `, indique ${this.clockText()}`;
+      if (item.def.window && this.smell > 0.1) ou += ', la cuisine sent le brûlé (ouvrir pour aérer)';
       if (item.def.food && item.portion < 1) ou += `, entamé${agree(item.name)}`;
       if (item.def.tank) {
         const cups = Math.floor((item.level * item.def.tank) / SERVING + 0.2);
@@ -1438,7 +1508,10 @@ export class Game {
       const coupable = (!!item.def.cut && item.portion === 1) || undefined;
       return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, cuisson, coupable, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
     });
-    const perso = this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)';
+    let perso = this.character.canCarry ? 'peut porter des objets' : 'ne peut pas porter d’objets (perso par défaut)';
+    if (this.gloved) perso += ', porte les gants de ménage';
+    if (this.dirtyHands) perso += `, mains sales (${this.dirtyHands}) : se laver les mains au savon avant de cuisiner ou manger`;
+    if (this.roughHands >= 1) perso += ', mains abîmées (vaisselle sans gants)';
     return {
       perso: this.sleep ? `${perso}, endormi dans ${this.ref(this.sleep.bed)}` : this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
@@ -1551,7 +1624,10 @@ export class Game {
       this.onNotice?.(`Aucun objet « ${ref} ».`);
       return false;
     }
-    this.character.approachThen(this.character.standFor(item), item.object.position, () => {});
+    // l'horloge et la fenêtre, au mur : on se tient devant, dans la pièce (pas dehors, derrière le mur)
+    const wall = item.def.clock || item.def.window;
+    const stand = wall ? item.object.position.clone().addScaledVector(new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion), 0.95).setY(0) : this.character.standFor(item);
+    this.character.approachThen(stand, item.object.position, () => {});
     return true;
   }
 
@@ -1855,6 +1931,7 @@ export class Game {
     const c = this.character;
     const food = c.heldItems.find((i) => i.def.food);
     const fem = !!food && FEMININE.has(food.name);
+    if (this.gloved) return this.notice('Enlève d’abord les gants de ménage pour manger.');
     if (!food) return this.eatFromPlate();
     if (doneness(food.def, food.cooking) === 'cru') this.onNotice?.(food.def.rawWord ? `${cap(the(food.name))} est ${doneWord(food, 'cru')} : réchauffe-${fem ? 'la' : 'le'} d’abord (micro-ondes ou four).` : `${cap(the(food.name))} est cru${fem ? 'e' : ''} : fais-${fem ? 'la' : 'le'} cuire d’abord (poêle ou casserole sur la gazinière).`);
     else if (this.closeBookThen(() => this.eat())) return true;
@@ -2014,7 +2091,7 @@ export class Game {
 
   /** La table et la chaise d'où l'on y mange (la plus proche d'elle). */
   private dinnerTable(): { table: WorldItem; seat: WorldItem } | null {
-    const table = this.nearest((i) => i.name === 'table' && !this.character.carried.includes(i));
+    const table = this.nearest((i) => i.def.table === 'repas' && !this.character.carried.includes(i));
     if (!table) return null;
     const at = table.object.position;
     const seat = this.items.filter((i) => i.def.seat && !this.character.carried.includes(i)).sort((a, b) => a.object.position.distanceTo(at) - b.object.position.distanceTo(at))[0];
@@ -2271,10 +2348,10 @@ export class Game {
     });
   }
 
-  /** Quelques miettes sur la table autour de l'assiette `plate`, à la fin d'un repas. */
+  /** Quelques miettes sur la table autour de l'assiette `plate`, à la fin d'un repas (par terre si on a mangé ailleurs). */
   private dropCrumbs(plate: WorldItem, color: THREE.ColorRepresentation = 0xc89a5a): void {
-    const table = this.items.find((t) => t.name === 'table' && plate.object.position.y > t.object.position.y && this.isAbove(plate, t));
-    if (!table) return;
+    const table = this.items.find((t) => !!t.def.table && plate.object.position.y > t.object.position.y && this.isAbove(plate, t));
+    if (!table) return this.dropFloorCrumbs(color);
     let g = this.crumbs.get(table);
     if (!g) {
       g = new THREE.Group();
@@ -2297,15 +2374,15 @@ export class Game {
   /** Essuie la table `ref` (sinon la plus proche qui a des miettes) avec l'éponge tenue. */
   wipeTable(ref?: string, running = false): boolean {
     const c = this.character;
-    const table = ref ? this.byRef(ref) : (this.nearest((i) => this.crumbs.has(i)) ?? this.nearest((i) => i.name === 'table'));
+    const table = ref ? this.byRef(ref) : (this.nearest((i) => this.crumbs.has(i)) ?? this.nearest((i) => !!i.def.table));
     const sponge = c.heldItems.find((h) => h.def.wipes);
     const fail = (t: string) => {
       this.onNotice?.(t);
       return false;
     };
-    if (!table || table.name !== 'table') return fail('Il n’y a pas de table à essuyer.');
+    if (!table?.def.table) return fail('Il n’y a pas de table à essuyer.');
     if (!sponge) return fail('Prends l’éponge (près de l’évier) pour essuyer la table.');
-    if (!this.crumbs.has(table)) return fail('La table est propre, pas une miette.');
+    if (!this.crumbs.has(table)) return fail(`${cap(the(table.name))} est propre, pas une miette.`);
     if (c.busy || c.bracing || this.moving) return false;
     if (c.seated) return c.standUp(() => this.wipeTable(ref, running));
     const g = this.crumbs.get(table)!;
@@ -2318,7 +2395,7 @@ export class Game {
         g.removeFromParent();
         this.crumbs.delete(table);
         this.wearItem(sponge, 2);
-        this.onNotice?.('La table est essuyée.');
+        this.onNotice?.(`${cap(the(table.name))} est essuyé${agree(table.name)}.`);
       })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
     }, running);
     return true;
@@ -2457,22 +2534,364 @@ export class Game {
       return false;
     };
     if (!this.puddles().length) return fail('Pas de flaque par terre.');
-    if (!sponge) return fail('Prends l’éponge (près de l’évier) pour essuyer la flaque.');
+    if (c.heldItems.some((h) => h.def.mops)) return this.mopFloor(running);
+    if (!sponge) return fail('Prends l’éponge (près de l’évier) ou la serpillière (dans le seau) pour essuyer la flaque.');
     if (c.busy || c.bracing || this.moving) return false;
     if (c.seated) return c.standUp(() => this.cleanFloor(running));
     const p = c.position;
-    const spill = this.puddles().sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
+    const small = this.puddles().filter((d) => d.radius < BIG_PUDDLE);
+    if (!small.length) return fail('Cette flaque est trop grande pour l’éponge : prends la serpillière (dans le seau, au coin de la cuisine).');
+    const spill = small.sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
     const at = spill.position.clone();
     c.approachThen(this.standNear(at, 0.2), at, () => {
       if (!c.handOf(sponge)?.cut(() => at.clone().setY(0.03), () => {
         spill.wipe();
         this.wearItem(sponge, 1);
-        // la suivante, s'il en reste
-        if (this.puddles().length) requestAnimationFrame(() => this.cleanFloor(running));
-        else this.onNotice?.('Le sol est sec.');
+        // la suivante, s'il en reste (les grandes attendent la serpillière)
+        if (this.puddles().some((d) => d.radius < BIG_PUDDLE)) requestAnimationFrame(() => this.cleanFloor(running));
+        else this.onNotice?.(this.puddles().length ? 'Il reste une grande flaque : prends la serpillière.' : 'Le sol est sec.');
       })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
     }, running);
     return true;
+  }
+
+
+  // ——— entretien : balai, serpillière, poubelle, spray, gants, mains ———
+
+  /** Éclats et miettes encore par terre (à balayer). */
+  private floorMess(): FloorMess[] {
+    return this.debris.filter((d): d is Debris | Crumbs => (d instanceof Debris || d instanceof Crumbs) && d.dirty);
+  }
+
+  /** Des miettes tombent par terre aux pieds du perso (il a mangé debout, ou hors d'une table). */
+  private dropFloorCrumbs(color: THREE.ColorRepresentation = 0xc89a5a): void {
+    const c = this.character;
+    // dehors, l'herbe les avale
+    if (!this.rooms.some((r) => r.contains(c.position))) return;
+    this.addDebris(new Crumbs(p0(c.position).addScaledVector(c.forward, 0.25), color));
+  }
+
+  /**
+   * Balaie avec le balai tenu les éclats et les miettes par terre, l'un après l'autre (les plus
+   * proches d'abord), puis vide la pelle dans la poubelle.
+   */
+  sweepFloor(running = false): boolean {
+    const c = this.character;
+    const broom = c.heldItems.find((h) => h.def.sweeps);
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!this.floorMess().length) return fail('Rien à balayer : le sol est propre.');
+    if (!broom) return fail('Prends le balai (au coin de la cuisine, après le garde-manger) pour balayer.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.sweepFloor(running));
+    const p = c.position;
+    const mess = this.floorMess().sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
+    const at = mess.position.clone();
+    c.approachThen(this.standNear(at, 0.3), at, () => {
+      if (!c.handOf(broom)?.cut(() => at.clone().setY(0.05), () => {
+        mess.sweep();
+        this.wearItem(broom, 1);
+        this.soilHands('ménage');
+        if (this.floorMess().length) requestAnimationFrame(() => this.sweepFloor(running));
+        else this.emptyDustpan(mess.kind, running);
+      })) this.onNotice?.('Impossible de balayer pour l’instant.');
+    }, running);
+    return true;
+  }
+
+  /** La pelle pleine va à la poubelle la plus proche (si elle a un sac et de la place). */
+  private emptyDustpan(kind: string, running: boolean): void {
+    const bin = this.nearest((i) => !!i.def.bin && !i.def.outdoor);
+    if (!bin || this.bagless.has(bin) || (this.binFill.get(bin) ?? 0) >= bin.def.bin!) {
+      this.onNotice?.(`Sol balayé : les ${kind} sont dans la pelle${bin ? ' (la poubelle est pleine ou sans sac : vide-la ou remets un sac)' : ''}.`);
+      return;
+    }
+    this.character.approachThen(this.doorStand(bin), bin.object.position, () => this.withDoorOpen(bin, () => {
+      this.binFill.set(bin, (this.binFill.get(bin) ?? 0) + 1);
+      this.showTrash(bin);
+      const d = this.doors.get(bin);
+      if (d) d.target = 0;
+      this.onNotice?.(`Sol balayé : les ${kind} sont à la poubelle.`);
+    }), running);
+  }
+
+  /** Passe la serpillière tenue : la flaque la plus proche et toutes celles autour, d'un geste chacune. */
+  mopFloor(running = false): boolean {
+    const c = this.character;
+    const mop = c.heldItems.find((h) => h.def.mops);
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!this.puddles().length) return fail('Pas de flaque par terre.');
+    if (!mop) return fail('Prends la serpillière (dans le seau, au coin de la cuisine) pour essuyer.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.mopFloor(running));
+    const p = c.position;
+    const first = this.puddles().sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
+    const at = first.position.clone();
+    c.approachThen(this.standNear(at, 0.3), at, () => {
+      const around = this.puddles().filter((d) => d.position.distanceTo(at) < MOP_REACH);
+      if (!c.handOf(mop)?.cut(() => at.clone().setY(0.04), () => {
+        for (const d of around) d.wipe();
+        this.wearItem(mop, around.length);
+        this.soilHands('ménage');
+        if (this.puddles().length) requestAnimationFrame(() => this.mopFloor(running));
+        else this.onNotice?.('Serpillière passée : le sol est sec.');
+      })) this.onNotice?.('Impossible de passer la serpillière pour l’instant.');
+    }, running);
+    return true;
+  }
+
+  /** Taches sur le dessus d'un meuble (gazinière après la cuisson, plan de travail après la coupe). */
+  private soil(item: WorldItem, spots = 2, color: THREE.ColorRepresentation = 0x9a7b4f): void {
+    let g = this.grime.get(item);
+    if (!g) {
+      g = new THREE.Group();
+      g.name = 'taches';
+      item.object.add(g);
+      this.grime.set(item, g);
+    }
+    if (g.children.length >= 12) return;
+    const b = item.box;
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false });
+    for (let i = 0; i < spots; i++) {
+      const r = 0.015 + Math.random() * 0.025;
+      const m = new THREE.Mesh(new THREE.CircleGeometry(r, 10).rotateX(-Math.PI / 2), mat);
+      m.position.set(THREE.MathUtils.lerp(b.min.x + 0.06, b.max.x - 0.06, Math.random()), (item.def.heat ? COUNTER_TOP : b.max.y) + 0.002, THREE.MathUtils.lerp(b.min.z + 0.08, b.max.z - 0.05, Math.random()));
+      g.add(m);
+    }
+  }
+
+  /** Le meuble sous l'aliment coupé ou préparé (plan de travail, îlot) se tache un peu. */
+  private soilUnder(item: WorldItem): void {
+    const under = this.items.find((o) => o !== item && !o.def.portable && (o.def.board || o.def.table === 'comptoir' || o.def.id === 'plan-de-travail') && this.isAbove(item, o));
+    const board = this.items.find((o) => o.def.board && this.isAbove(item, o));
+    const top = board ? this.items.find((o) => !o.def.portable && (o.def.table === 'comptoir' || o.def.id === 'plan-de-travail') && this.isAbove(board, o)) : under;
+    if (top && !top.def.board && Math.random() < 0.5) this.soil(top, 1, 0xb08a5a);
+  }
+
+  /**
+   * Nettoie au spray et à l'éponge (tenus) le dessus taché du meuble `ref` (sinon le plus proche
+   * qui est taché) : gazinière, plan de travail, îlot.
+   */
+  cleanSurface(ref?: string, running = false): boolean {
+    const c = this.character;
+    const p = c.position;
+    const target = ref ? this.byRef(ref) : [...this.grime.keys()].sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    const spray = c.heldItems.find((h) => h.def.spray);
+    const sponge = c.heldItems.find((h) => h.def.wipes);
+    const fail = (t: string) => {
+      this.onNotice?.(t);
+      return false;
+    };
+    if (!target || !this.grime.has(target)) return fail(ref ? `${cap(the(this.byRef(ref)?.name ?? ref))} est propre.` : 'Rien à nettoyer : les plans et la gazinière sont propres.');
+    if (!spray) return fail('Prends le spray nettoyant (au placard) et l’éponge pour nettoyer.');
+    if (!sponge) return fail('Prends aussi l’éponge (près de l’évier) pour essuyer après le spray.');
+    if (c.busy || c.bracing || this.moving) return false;
+    if (c.seated) return c.standUp(() => this.cleanSurface(ref, running));
+    const g = this.grime.get(target)!;
+    target.object.updateMatrixWorld(true);
+    const mid = new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
+    const top = () => mid.clone().setY(mid.y + 0.04);
+    c.approachThen(this.frontOf(target), mid, () => {
+      // un coup de spray, puis l'éponge
+      if (!c.handOf(spray)?.cut(top, () => {
+        this.wearItem(spray, 3);
+        if (!this.items.includes(sponge) || !c.handOf(sponge)?.cut(top, () => {
+          g.removeFromParent();
+          this.grime.delete(target);
+          this.wearItem(sponge, 2);
+          this.soilHands('ménage');
+          this.onNotice?.(`${cap(the(target.name))} est propre et brille.`);
+        })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
+      })) this.onNotice?.('Impossible de nettoyer pour l’instant.');
+    }, running);
+    return true;
+  }
+
+  /** Les mains se salissent (viande crue, poubelle, ménage), sauf avec les gants. */
+  private soilHands(why: string): void {
+    if (this.gloved) return;
+    // la viande crue ne lave pas la saleté de la poubelle ou des toilettes : la pire reste
+    if (RAW_DIRT.includes(why) && this.dirtyHands && !RAW_DIRT.includes(this.dirtyHands)) return;
+    this.dirtyHands = why;
+  }
+
+  /** Enfile les gants de ménage tenus (ils couvrent les mains : le perso garde l'autre main libre). */
+  putOnGloves(running = false): boolean {
+    const c = this.character;
+    const gloves = c.heldItems.find((h) => h.def.gloves) ?? this.nearest((i) => !!i.def.gloves);
+    if (this.gloved) return this.notice('Tu portes déjà les gants de ménage.');
+    if (!gloves) return this.notice('Les gants de ménage sont au placard (sous la vaisselle).');
+    if (!c.handOf(gloves)) return this.chain([() => this.take(gloves, running), () => this.putOnGloves(running)]);
+    if (c.heldItems.length > 1) return this.notice('Pose d’abord ce que tu tiens dans l’autre main pour enfiler les gants.');
+    if (!c.loseItem(gloves)) return false;
+    this.items = this.items.filter((i) => i !== gloves);
+    gloves.object.removeFromParent();
+    const color = 0xf2c94c;
+    this.gloved = {
+      item: gloves,
+      shown: c.dressHands(() => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.11, 0.035), createToonMaterial({ color, rimStrength: 0.15 }));
+        m.position.y = 0.04;
+        return m;
+      }),
+    };
+    this.onNotice?.('Gants de ménage enfilés : vaisselle et ménage sans s’abîmer ni se salir les mains.');
+    return true;
+  }
+
+  /** Retire les gants de ménage : ils reviennent dans une main libre. */
+  takeOffGloves(): boolean {
+    const c = this.character;
+    const g = this.gloved;
+    if (!g) return this.notice('Tu ne portes pas de gants.');
+    if (!c.hands.free) return this.notice('Pose d’abord ce que tu tiens pour enlever les gants.');
+    c.undress(g.shown);
+    this.gloved = null;
+    this.items.push(g.item);
+    this.scene.add(g.item.object);
+    g.item.object.position.copy(p0(c.position).addScaledVector(c.forward, 0.3)).setY(0.9);
+    this.take(g.item, false);
+    this.onNotice?.('Gants enlevés.');
+    return true;
+  }
+
+  /** Message au joueur, et faux (pour les refus). */
+  private notice(t: string): boolean {
+    this.onNotice?.(t);
+    return false;
+  }
+
+  /** Sacs qui restent dans le rouleau `roll`. */
+  private bagsLeft(roll: WorldItem): number {
+    return this.rolls.get(roll) ?? BAGS_PER_ROLL;
+  }
+
+  /** Met un sac neuf (rouleau tenu, sinon celui du placard) dans la poubelle `ref` (la plus proche sans sac). */
+  newBinBag(ref?: string, running = false): boolean {
+    const c = this.character;
+    const bin = ref ? this.byRef(ref) : this.nearest((i) => this.bagless.has(i));
+    const roll = c.heldItems.find((h) => h.def.id === 'sacs-poubelle') ?? this.nearest((i) => i.def.id === 'sacs-poubelle');
+    if (!bin?.def.bin || bin.def.outdoor) return this.notice('Pas de poubelle où mettre un sac.');
+    if (!this.bagless.has(bin)) return this.notice(`${cap(the(bin.name))} a déjà un sac.`);
+    if (!roll) return this.notice('Plus de sacs poubelle : ajoute-les à la liste de courses.');
+    if (!c.handOf(roll)) return this.chain([() => this.take(roll, running), () => this.newBinBag(this.ref(bin), running)]);
+    c.approachThen(this.doorStand(bin), bin.object.position, () => this.withDoorOpen(bin, () => {
+      this.bagless.delete(bin);
+      const left = this.bagsLeft(roll) - 1;
+      this.rolls.set(roll, left);
+      const d = this.doors.get(bin);
+      if (d) d.target = 0;
+      if (left > 0) return void this.onNotice?.(`Sac neuf mis dans ${the(bin.name)} (encore ${left} sac${left > 1 ? 's' : ''} dans le rouleau).`);
+      // rouleau fini : le carton part à la poubelle, il manque sur la liste de courses
+      if (c.loseItem(roll)) this.removeItem(roll);
+      this.binFill.set(bin, 1);
+      this.showTrash(bin);
+      this.onNotice?.(`Sac neuf mis dans ${the(bin.name)} : c’était le dernier, le rouleau vide est jeté (sacs poubelle sur la liste de courses).`);
+    }), running);
+    return true;
+  }
+
+  /** Sort le sac plein de la poubelle `bin` : noué, il passe dans une main ; il ira au conteneur dehors. */
+  private takeOutBag(bin: WorldItem, running: boolean): boolean {
+    const c = this.character;
+    if (!c.hands.free) return this.notice('Pose d’abord ce que tu tiens pour sortir le sac.');
+    c.approachThen(this.doorStand(bin), bin.object.position, () => this.withDoorOpen(bin, () => {
+      this.binFill.set(bin, 0);
+      this.bagless.add(bin);
+      this.showTrash(bin);
+      const bag = new WorldItem(ITEM_BY_ID.get('sac-poubelle')!);
+      bin.object.updateMatrixWorld(true);
+      bag.object.position.copy(new THREE.Vector3(0, bin.size.y * 0.3, 0).applyMatrix4(bin.object.matrixWorld));
+      this.items.push(bag);
+      this.scene.add(bag.object);
+      this.soilHands('poubelle');
+      this.take(bag, running);
+      const d = this.doors.get(bin);
+      if (d) d.target = 0;
+      this.onNotice?.('Sac fermé et sorti : jette-le dans le conteneur dehors (à côté de la porte d’entrée), puis remets un sac neuf (sacs poubelle, au placard).');
+    }), running);
+    return true;
+  }
+
+  /** Porte le sac poubelle tenu au conteneur dehors et l'y jette. */
+  takeOutTrash(running = false): boolean {
+    const c = this.character;
+    const bag = c.heldItems.find((h) => h.def.id === 'sac-poubelle');
+    const box = this.nearest((i) => !!i.def.outdoor);
+    if (!bag) {
+      const full = this.nearest((i) => !!i.def.bin && !i.def.outdoor && (this.binFill.get(i) ?? 0) > 0);
+      if (full) return this.chain([() => this.takeOutBag(full, running), () => this.takeOutTrash(running)]);
+      return this.notice('La poubelle est vide : rien à sortir.');
+    }
+    if (!box) return this.notice('Il n’y a pas de conteneur dehors.');
+    return this.throwInto(box, bag, running);
+  }
+
+  /** L'heure à l'horloge : « 9 h 05 ». */
+  private clockText(): string {
+    const h = this.clock.hour;
+    const hh = Math.floor(h) % 24, mm = Math.floor((h % 1) * 60);
+    return `${hh} h ${String(mm).padStart(2, '0')}`;
+  }
+
+  /** Regarde l'horloge : le perso dit l'heure. */
+  readClock(): boolean {
+    const t = this.clockText();
+    this.say(`Il est ${t}.`);
+    this.onNotice?.(`L’horloge indique ${t}.`);
+    return true;
+  }
+
+  /**
+   * L'entretien au fil du temps : les aiguilles de l'horloge ; l'odeur de brûlé (la fenêtre
+   * ouverte la chasse) ; le camion vide le conteneur le matin ; les mains abîmées se remettent ;
+   * on se coupe en marchant sur des éclats de verre.
+   */
+  private tickUpkeep(dt: number): void {
+    const hour = this.clock.hour;
+    for (const item of this.items) {
+      if (!item.def.clock) continue;
+      const hh = item.part('aiguille-heures'), mm = item.part('aiguille-minutes');
+      if (hh) hh.rotation.z = -((hour % 12) / 12) * Math.PI * 2;
+      if (mm) mm.rotation.z = -(hour % 1) * Math.PI * 2;
+    }
+    const hours = (Math.max(0, dt) * this.clock.speed) / 3600;
+    const open = [...this.doors].some(([w, d]) => w.def.window && d.open > 0.5);
+    if (this.smell > 0) {
+      const before = this.smell;
+      this.smell = Math.max(0, this.smell - hours * (open ? SMELL_OPEN : SMELL_CLOSED));
+      if (before > 0.05 && this.smell <= 0.05 && open) this.onNotice?.('L’air frais a chassé l’odeur de brûlé.');
+    }
+    if (this.smell > 0.4 && !this.smellWarned) {
+      this.smellWarned = true;
+      this.onNotice?.('Ça sent le brûlé dans la cuisine : ouvre la fenêtre pour aérer.');
+    }
+    if (this.smell < 0.1) this.smellWarned = false;
+    if (this.roughHands > 0) this.roughHands = Math.max(0, this.roughHands - hours * ROUGH_HEAL);
+    // le camion passe le matin : le conteneur est vidé
+    const day = this.clock.day;
+    if (hour >= TRUCK_HOUR && day !== this.truckDay) {
+      this.truckDay = day;
+      for (const box of this.items.filter((i) => i.def.outdoor)) {
+        this.binFill.set(box, 0);
+        this.showTrash(box);
+      }
+    }
+    // marcher sur des éclats de verre
+    const p = p0(this.character.position);
+    for (const d of this.debris) {
+      if (!(d instanceof Debris) || !d.dirty || !d.sharp || this.cutBy.has(d) || this.character.lying) continue;
+      if (p.distanceTo(p0(d.position)) > d.spread + 0.1) continue;
+      this.cutBy.add(d);
+      this.needs.hurt(GLASS_CUT);
+      this.say('Aïe !');
+      this.onNotice?.(`Aïe, du verre par terre (santé −${GLASS_CUT}) : passe le balai.`);
+    }
   }
 
   /**
@@ -2491,7 +2910,7 @@ export class Game {
         return true;
       }
       // le geste du menu de la cible qui sert l'objet tenu ; sinon on le pose dessus
-      const skip = /^(Prendre|Aller|Déplacer|S’asseoir|S’attabler|Regarder|Laisser|Mettre la table|Débarrasser|Ouvrir|Fermer|Tirer|Ranger sous|Allumer|Éteindre|Arrêter|Changer|Lancer un lavage|Mettre en marche|Vider la poubelle|Vider et ranger|Charger|Ouvrir le robinet|Fermer le robinet|Boire au robinet|Se lever|Couper ici|Préparer)/;
+      const skip = /^(Prendre|Aller|Déplacer|S’asseoir|S’attabler|Regarder|Laisser|Mettre la table|Débarrasser|Ouvrir|Fermer|Tirer|Ranger sous|Allumer|Éteindre|Arrêter|Changer|Lancer un lavage|Mettre en marche|Vider la poubelle|Sortir le sac|Mettre un sac neuf|Enfiler les gants|Vider et ranger|Charger|Ouvrir le robinet|Fermer le robinet|Boire au robinet|Se lever|Couper ici|Préparer)/;
       const entry = this.menuFor(target).find((e) => !skip.test(e.label));
       if (entry) return entry.run();
       if (target.def.slots) return this.storeIn(target, false, item);
@@ -2651,7 +3070,8 @@ export class Game {
         const put = (i: number) => {
           if (i >= dishes.length) {
             c.startWash(this.frontOf(sink), o.position, this.handsUnderTap(sink), false, () => {
-              this.washing = { sink, t: 0, seconds: DISH_SECONDS * dishes.length, hygiene: 0, face: false, dishes };
+              // les mains abîmées lavent moins vite
+              this.washing = { sink, t: 0, seconds: DISH_SECONDS * dishes.length * (this.roughHands >= 1 && !this.gloved ? 1.5 : 1), hygiene: 0, face: false, dishes };
             });
             return;
           }
@@ -2765,6 +3185,9 @@ export class Game {
 
   /** Où se tenir pour ouvrir un meuble et s'en servir : en retrait d'une porte qui s'abaisse. */
   private doorStand(item: WorldItem): THREE.Vector3 {
+    // la fenêtre de l'évier : devant l'évier, les bras tendus au-dessus
+    const sink = item.def.window ? this.items.find((i) => i.def.wash && Math.abs(i.object.position.x - item.object.position.x) < 0.6 && Math.abs(i.object.position.z - item.object.position.z) < 0.8) : undefined;
+    if (sink) return this.frontOf(sink);
     const reach = this.doors.get(item)?.reach ?? 0;
     return this.standBefore(item, reach ? DOOR_GAP + reach / 2 : 0.45);
   }
@@ -2783,7 +3206,7 @@ export class Game {
     dt = Math.max(0, dt);
     const p = this.character.position;
     for (const [item, d] of this.doors) {
-      if (d.target === 1 && !d.then && !d.keep && this.character.idle && p0(item.object.position).distanceTo(p0(p)) > DOOR_AUTOCLOSE) d.target = 0;
+      if (d.target === 1 && !d.then && !d.keep && !item.def.window && this.character.idle && p0(item.object.position).distanceTo(p0(p)) > DOOR_AUTOCLOSE) d.target = 0;
       const next = THREE.MathUtils.clamp(d.open + (d.target ? dt : -dt) / DOOR_TIME, 0, 1);
       const drawer = item.def.drawer;
       // ce qui est rangé dans le tiroir glisse avec lui
@@ -2826,11 +3249,19 @@ export class Game {
       if (before > item.portion) this.needs.restore('faim', (before - item.portion) * food.hunger * this.biteWorth(item));
       if (before === 1 && item.portion < 1 && done === 'brûlé') this.onNotice?.('Beurk, c’est brûlé…');
       if (before > item.portion) this.firstBite(item);
+      // manger avec les doigts sales : mal au ventre (une fois par aliment)
+      if (before === 1 && item.portion < 1 && this.dirtyHands && !this.grubby.has(item)) {
+        this.grubby.add(item);
+        this.needs.hurt(DIRTY_EAT);
+        this.onNotice?.(`Mangé avec les mains sales (${this.dirtyHands}) : mal au ventre (santé −${DIRTY_EAT}). Lave-toi les mains au savon.`);
+      }
       this.lastBite.set(item, item.portion);
       if (item.portion > 0 || !c.loseItem(item)) continue;
       this.lastBite.delete(item);
       this.items = this.items.filter((i) => i !== item);
       item.object.removeFromParent();
+      // debout (pas à table), ça fait des miettes par terre
+      if (CRUMBY.test(item.name) && !(this.sitting && this.items.some((t) => t.def.table && p0(t.object.position).distanceTo(p0(c.position)) < 1.2))) this.dropFloorCrumbs(food.color);
       this.onNotice?.(`${theName(item.name)} ${PLURAL.has(item.name) ? 'sont' : 'est'} fini${agree(item.name)}. Miam !`);
     }
   }
@@ -2975,7 +3406,7 @@ export class Game {
         // déjà cuit avant (il a ses étoiles) : on l'a seulement réchauffé
         const again = !!it.stars && d !== 'brûlé';
         if (!it.stars && it.def.food) {
-          it.stars = this.baseStars(false);
+          this.firstStars(it, false);
           this.practice(XP_COOKED);
         }
         const word = again ? `réchauffé${agree(it.name)}` : `${doneWord(it, d)}${PLURAL.has(it.name) ? 's' : ''}`;
@@ -3035,7 +3466,9 @@ export class Game {
     const c = this.character;
     if (c.handOf(held)?.stacked) this.onNotice?.('On ne jette pas une pile de livres.');
     else if (isTwoHanded(held.grip)) this.onNotice?.(`Trop gros pour la poubelle : ${held.name}.`);
-    else if ((this.binFill.get(bin) ?? 0) >= bin.def.bin!) this.onNotice?.('La poubelle est pleine : vide-la d’abord.');
+    else if (held.def.id === 'sac-poubelle' && !bin.def.outdoor) this.onNotice?.('Le sac plein va dans le conteneur dehors, à côté de la porte d’entrée.');
+    else if (this.bagless.has(bin)) this.onNotice?.('Il n’y a plus de sac dans la poubelle : mets-en un neuf (sacs poubelle, au placard).');
+    else if ((this.binFill.get(bin) ?? 0) >= bin.def.bin!) this.onNotice?.(bin.def.outdoor ? 'Le conteneur est plein : le camion le vide demain matin.' : 'La poubelle est pleine : sors le sac.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
     else if (this.closeBookThen(() => this.throwInto(bin, held, running))) return true;
     else {
@@ -3049,7 +3482,7 @@ export class Game {
           this.wearItem(bin, WEAR_BIN);
           const d = this.doors.get(bin);
           if (d) d.target = 0;
-          this.onNotice?.(`${cap(the(held.name))} est à la poubelle.`);
+          this.onNotice?.(held.def.id === 'sac-poubelle' ? `Sac poubelle jeté dans ${the(bin.name)}.${this.items.some((i) => this.bagless.has(i)) ? ' Pense à remettre un sac neuf dans la poubelle de la cuisine.' : ''}` : `${cap(the(held.name))} est à la poubelle.`);
         }, true, held);
       };
       c.approachThen(this.doorStand(bin), bin.object.position, () => this.withDoorOpen(bin, put), running);
@@ -3058,20 +3491,14 @@ export class Game {
     return false;
   }
 
-  /** Vide la poubelle `ref` (sans ref, la plus proche) : on sort le sac. */
+  /** Vide la poubelle `ref` (sans ref, la plus proche) : on ferme le sac et on le sort (il ira au conteneur dehors). */
   emptyBin(ref?: string, running = false): boolean {
-    const bin = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.bin);
+    const bin = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.bin && !i.def.outdoor);
     if (!bin?.def.bin) this.onNotice?.(ref ? `Ce n’est pas une poubelle : ${ref}.` : 'Il n’y a pas de poubelle.');
-    else if (!this.binFill.get(bin)) this.onNotice?.('La poubelle est déjà vide.');
+    else if (bin.def.outdoor) this.onNotice?.('Le conteneur, c’est le camion qui le vide, chaque matin.');
+    else if (!this.binFill.get(bin)) this.onNotice?.(this.bagless.has(bin) ? 'La poubelle n’a pas de sac : mets-en un neuf.' : 'La poubelle est déjà vide.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-    else {
-      this.character.approachThen(this.doorStand(bin), bin.object.position, () => {
-        this.binFill.set(bin, 0);
-        this.showTrash(bin);
-        this.onNotice?.('Sac poubelle sorti : la poubelle est vide.');
-      }, running);
-      return true;
-    }
+    else return this.takeOutBag(bin, running);
     return false;
   }
 
@@ -3226,6 +3653,7 @@ export class Game {
     this.items.push(pieces);
     this.scene.add(pieces.object);
     this.onNotice?.(`${cap(food.name)} coupé${agree(food.name)} : ${pieces.name} sur la planche.`);
+    this.soilUnder(pieces);
     this.practice(XP_GESTURE);
   }
 
@@ -3374,7 +3802,8 @@ export class Game {
     dish.age = Math.max(0, ...use.map((i) => i.age * ((shelfLife(dish.def) ?? 1) / (shelfLife(i.def) ?? Infinity))));
     dish.warmed = use.some((i) => i.warmed);
     dish.heat = use.reduce((sum, i) => sum + i.heat, 0) / use.length;
-    dish.stars = this.baseStars(true) - (fresh.includes('périmé') ? 2 : fresh.includes('à manger vite') ? 1 : 0);
+    this.firstStars(dish, true);
+    dish.stars! -= fresh.includes('périmé') ? 2 : fresh.includes('à manger vite') ? 1 : 0;
     dish.setMoldy(freshness(dish.def, dish.age) === 'périmé');
     this.practice(XP_DISH);
     for (const i of use) {
@@ -3534,7 +3963,9 @@ export class Game {
     const frozen = all.find((s) => s.def.freezer && (item.name === 'bac à glaçons' || item.def.rawWord));
     const cold = (item.def.food || item.def.startFull) && !item.dirty ? all.find((s) => s.def.cold && !s.def.freezer) : undefined;
     const rack = item.def.dish && item.wet > 0 ? all.find((s) => s.def.rack) : undefined;
-    return rack ?? frozen ?? cold ?? all.find((s) => !s.def.cold) ?? all[0];
+    // au mur (barre à couteaux, crochets), ce qui y pend
+    const wall = all.find((s) => s.def.slotTilt);
+    return rack ?? frozen ?? cold ?? wall ?? all.find((s) => !s.def.cold) ?? all[0];
   }
 
   /** Range ce qu'on tient à sa place (meuble choisi par homeOf), un objet après l'autre. */
@@ -4041,6 +4472,7 @@ export class Game {
     if (done < 1) return;
     this.toiletVisit = null;
     this.handsToWash = true;
+    this.soilHands('toilettes');
     this.character.standUp(() => this.flush(this.ref(v.toilet)));
   }
 
@@ -4203,6 +4635,11 @@ export class Game {
         d.setWet(1);
         this.wearItem(d, WEAR_DISHWASH);
       }
+      // sans gants, l'eau et le liquide vaisselle abîment les mains ; avec, ce sont les gants qui s'usent
+      const rough = this.roughHands;
+      if (this.gloved) this.gloved.item.wear(w.dishes.length);
+      else this.roughHands = Math.min(1, this.roughHands + ROUGH_PER_DISH * w.dishes.length);
+      if (rough < 1 && this.roughHands >= 1) this.onNotice?.('Tes mains sont abîmées à force de laver sans gants : la vaisselle ira moins vite. Les gants de ménage sont au placard.');
       // puis le perso reprend la vaisselle propre
       const from = new THREE.Vector3(0, 0, 1).applyQuaternion(w.sink.object.quaternion);
       const dishes = w.dishes;
@@ -4215,7 +4652,12 @@ export class Game {
     }
     this.character.stopWash();
     if (!w.thirst) this.wetHands = 1;
-    this.onNotice?.(w.thirst ? 'Tu as bu au robinet.' : w.face ? 'Toilette faite : visage et mains propres.' : 'Mains lavées.');
+    // les mains sales ne sont propres qu'avec du savon (le flacon à côté de l'évier, ou le lavabo)
+    const soap = this.items.some((i) => i.def.soap && i.object.position.distanceTo(w.sink.object.position) < 1.2) || !!w.sink.def.mirror;
+    const was = this.dirtyHands;
+    if (!w.thirst && soap) this.dirtyHands = null;
+    const hands = !was || w.thirst ? '' : soap ? ' au savon : elles sont propres' : ' : sans savon elles restent sales (le savon est à côté de l’évier)';
+    this.onNotice?.(w.thirst ? 'Tu as bu au robinet.' : w.face ? `Toilette faite : visage et mains propres${hands ? `, mains lavées${hands}` : ''}.` : `Mains lavées${hands}.`);
   }
 
   /**
@@ -4640,7 +5082,10 @@ export class Game {
       if (now === 'cuit' && was === 'cru') {
         this.onNotice?.(PLURAL.has(food.name) ? `${name} sont cuit${fem}s.` : `${name} est cuit${fem}.`);
         this.wearItem(pan, WEAR_COOK);
-        if (!food.stars) food.stars = this.baseStars(false);
+        if (!food.stars) this.firstStars(food, false);
+        // la gazinière se tache un peu à chaque cuisson
+        const stove = this.stoveUnder(pan);
+        if (stove) this.soil(stove.heater, 1);
         this.practice(XP_COOKED);
       } else if (before < cap0 && t >= cap0) this.onNotice?.(`Ça sent le brûlé : retire ${the(food.name)} du feu !`);
       else if (now === 'brûlé' && was !== 'brûlé') this.onNotice?.(`${name} a brûlé.`);
@@ -4648,6 +5093,8 @@ export class Game {
       if (t > cap0) {
         const at = food.object.position.clone().setY(food.object.position.y + 0.03);
         this.puffs.emit(`fumee-${food.object.id}`, at, dt, (now === 'brûlé' ? 8 : 3) * warm, 0x3b3735, 0.55);
+        // l'odeur de brûlé envahit la cuisine
+        this.smell = Math.min(1, this.smell + dt * warm * (now === 'brûlé' ? 0.04 : 0.015));
       }
     }
   }
@@ -4683,7 +5130,7 @@ export class Game {
     // appareil (four, micro-ondes, lave-vaisselle) : clic sur le côté, on le met en marche ou on l'arrête
     else if (program(item.def)) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
-    else if (item.def.bin && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
+    else if (item.def.bin && !item.def.outdoor && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
     // télé, mains vides : on l'allume ou on l'éteint
     else if (item.def.screen && !held.length) return this.setTv(item, undefined, running);
     // mains vides : un gros meuble s'agrippe pour le déplacer
@@ -4735,6 +5182,9 @@ export class Game {
     // dos du livre (-Z) vers l'avant du meuble ; dans un frigo, l'avant de l'objet vers la porte
     const turn = shelf.def.holds ? 0 : Math.PI;
     const rot = shelf.object.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn));
+    // au mur (barre à couteaux, crochets) : ce qui est rangé pend
+    const tilt = shelf.def.slotTilt;
+    if (tilt) rot.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt[0], tilt[1], tilt[2], 'YXZ')));
     return { pos, rot };
   }
 
@@ -5062,6 +5512,14 @@ export class Game {
       const cup = held.find((h) => h !== tray && h.def.fill && !h.def.cookware && !h.def.mouth);
       if (tray && cup && !this.iced.has(cup)) add(`Glaçons dans ${the(cup.name)}`, () => this.addIce(this.ref(cup)));
       if (held.some((h) => h.def.wipes) && this.puddles().length) add('Essuyer la flaque', () => this.cleanFloor());
+      // l'entretien : balai, serpillière, spray, gants, sac poubelle
+      if (held.some((h) => h.def.sweeps) && this.floorMess().length) add('Balayer', () => this.sweepFloor());
+      if (held.some((h) => h.def.mops) && this.puddles().length) add('Passer la serpillière', () => this.mopFloor());
+      if (held.some((h) => h.def.spray) && this.grime.size) add('Nettoyer au spray', () => this.cleanSurface());
+      if (held.some((h) => h.def.gloves) && !this.gloved) add('Enfiler les gants', () => this.putOnGloves());
+      if (this.gloved) add('Enlever les gants', () => this.takeOffGloves());
+      if (held.some((h) => h.def.id === 'sac-poubelle')) add('Sortir le sac au conteneur', () => this.takeOutTrash());
+      if (held.some((h) => h.def.id === 'sacs-poubelle') && this.bagless.size) add('Mettre un sac neuf dans la poubelle', () => this.newBinBag());
       // le torchon : la vaisselle mouillée qu'on tient, les mains après les avoir lavées
       const towel = held.find((h) => h.def.towel);
       const wetDish = held.find((h) => h.def.dish && h.wet > 0);
@@ -5083,14 +5541,14 @@ export class Game {
     const heat = this.heaters.get(item);
     // porte, tiroir, couvercle
     if (door) {
-      const part = item.def.drawer ? 'le tiroir' : item.def.bin ? 'le couvercle' : 'la porte';
+      const part = item.def.window ? 'la fenêtre' : item.def.drawer ? 'le tiroir' : item.def.bin ? 'le couvercle' : 'la porte';
       if (door.target || door.open > 0) add(`Fermer ${part}`, () => this.closeDoor(ref));
       else add(`Ouvrir ${part}`, () => this.openDoor(ref));
     }
     // ranger ce qu'on tient
     if (item.def.slots && held.some((h) => this.fits(item, h))) add('Ranger ici ce que je tiens', () => this.storeIn(item, false));
     if (item.def.slots && !program(item.def)) add('Regarder dedans', () => this.lookInside(ref));
-    if (door && (door.target || door.open > 0) && !door.keep) add('Laisser ouvert', () => this.keepOpen(ref));
+    if (door && (door.target || door.open > 0) && !door.keep && !item.def.window) add('Laisser ouvert', () => this.keepOpen(ref));
     // essuyer au torchon la vaisselle mouillée posée là
     // la liste et le sac de courses
     if (item.def.id === 'liste-courses') {
@@ -5127,7 +5585,12 @@ export class Game {
     }
     // poubelle
     if (item.def.bin && held.length) add(`Jeter : ${c.held!.name}`, () => this.throwInto(item, c.held!, false));
-    if (item.def.bin && this.binFill.get(item)) add('Vider la poubelle', () => this.emptyBin(ref));
+    if (item.def.bin && !item.def.outdoor && this.binFill.get(item)) add('Sortir le sac', () => this.emptyBin(ref));
+    if (this.bagless.has(item)) add('Mettre un sac neuf', () => this.newBinBag(ref));
+    // horloge, meubles tachés
+    if (item.def.clock) add('Regarder l’heure', () => this.readClock());
+    if (this.grime.has(item) && held.some((h) => h.def.spray)) add('Nettoyer au spray', () => this.cleanSurface(ref));
+    if (item.def.gloves && !this.gloved) add('Enfiler les gants', () => this.putOnGloves());
     // évier
     if (item.def.wash?.dishes && held.some((h) => h.def.dish && h.dirty)) add('Faire la vaisselle', () => this.washDishesAt(item, false));
     // machine qui remplit (café, thé, eau du robinet)
@@ -5179,7 +5642,7 @@ export class Game {
     if (putable && (item.def.id === 'plateau' || (item.def.plate && putable.def.plate && !this.foodOn(item)))) add(`Poser ${the(putable.name)} dessus`, () => this.placeOn(putable, item));
     if (item.def.plate && !held.length && !this.shelfOf(item) && this.items.filter((i) => i.def.plate && !i.dirty && !this.foodOn(i)).length > 1) add('Empiler les assiettes', () => this.stackPlates());
     // la table : mettre le couvert, débarrasser
-    if (item.name === 'table' && !held.length) {
+    if (item.def.table === 'repas' && !held.length) {
       add('Mettre la table', () => this.setTable());
       add('Débarrasser', () => this.clearTable());
     }
@@ -5196,7 +5659,7 @@ export class Game {
       if (this.tucked(item)) add('Tirer la chaise', () => this.slideChair(ref, false));
       else add('Ranger sous la table', () => this.slideChair(ref, true));
     }
-    if (item.name === 'table' && this.crumbs.has(item) && held.some((h) => h.def.wipes)) add('Essuyer la table', () => this.wipeTable(ref));
+    if (item.def.table && this.crumbs.has(item) && held.some((h) => h.def.wipes)) add(item.def.table === 'repas' ? 'Essuyer la table' : `Essuyer ${the(item.name)}`, () => this.wipeTable(ref));
     if (item === this.sitting) add('Se lever', () => this.standUp());
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
@@ -5227,6 +5690,16 @@ export class Game {
     if (after > before) this.onNotice?.(`Compétence cuisine : niveau ${after} ! Les plats seront mieux réussis.`);
   }
 
+  /** Donne ses étoiles à un plat qu'on vient de cuire ou de préparer ; fait avec les mains sales, il en perd une. */
+  private firstStars(item: WorldItem, dish: boolean): void {
+    item.stars = this.baseStars(dish);
+    // les mains qui ont touché l'œuf ou la viande crue du plat ne le gâchent pas (la cuisson s'en
+    // charge) ; ce qui compte, c'est la saleté d'ailleurs : toilettes, poubelle, ménage
+    if (!this.dirtyHands || RAW_DIRT.includes(this.dirtyHands)) return;
+    this.grubby.add(item);
+    this.onNotice?.(`Préparé${agree(item.name)} avec les mains sales (${this.dirtyHands}) : une étoile de moins. Lave-toi les mains au savon avant de cuisiner.`);
+  }
+
   /** Étoiles de base d'un plat qu'on vient de cuire ou de préparer : meilleures avec la compétence. */
   private baseStars(dish: boolean): number {
     return (dish ? 3 : 2) + this.cookingLevel / 4;
@@ -5244,6 +5717,7 @@ export class Game {
     if (f === 'périmé') s -= 3;
     else if (f === 'à manger vite') s -= 1;
     if (item.warmed && warmth(item.heat) === 'froid' && item.def.cook) s -= 0.5;
+    if (this.grubby.has(item)) s -= 1;
     return Math.max(1, Math.min(5, Math.round(s)));
   }
 
@@ -5331,7 +5805,7 @@ export class Game {
     const cuisson = doneness(item.def, item.cooking);
     if (cuisson) words.push(doneWord(item, cuisson) + (PLURAL.has(item.name) ? 's' : ''));
     if (item.def.food && item.portion < 1) words.push(`entamé${a}`);
-    if (item.name === 'table' && this.crumbs.has(item)) words.push('des miettes');
+    if (item.def.table && this.crumbs.has(item)) words.push('des miettes');
     if (item.def.seat && this.tucked(item)) words.push('rangée sous la table');
     if (this.tablets.has(item)) words.push(`${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`);
     if (item.def.washes && this.tabletIn.has(item)) words.push('pastille mise');
@@ -5487,6 +5961,7 @@ export class Game {
     this.tickAppliances(dt);
     this.tickEating();
     this.tickWash(dt);
+    this.tickUpkeep(dt);
     this.tickShower(dt);
     this.tickToilet(dt);
     this.tickBathroom(dt);

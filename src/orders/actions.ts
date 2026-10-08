@@ -268,6 +268,48 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.cleanFloor(),
   },
   {
+    name: 'balayer',
+    description: 'Balayer par terre avec le balai tenu : les éclats de verre ou de vaisselle cassée (on se coupe en marchant dessus) et les miettes ; la pelle finit à la poubelle.',
+    params: {},
+    run: (g) => g.sweepFloor(),
+  },
+  {
+    name: 'serpillere',
+    description: 'Passer la serpillière tenue sur les flaques par terre (les grosses flaques, l’éponge ne suffit pas).',
+    params: {},
+    run: (g) => g.mopFloor(),
+  },
+  {
+    name: 'nettoyer',
+    description: 'Nettoyer au spray (tenu) puis à l’éponge (tenue) une surface tachée par la cuisine : plan de travail, gazinière, îlot. `objet` facultatif (la plus proche).',
+    params: { objet: 'ref de la surface tachée' },
+    run: (g, a) => g.cleanSurface(a.objet),
+  },
+  {
+    name: 'gants',
+    description: 'Enfiler (etat « mettre », les gants pris au placard) ou enlever (« enlever ») les gants de ménage : ils protègent les mains à la vaisselle ; on ne mange pas avec.',
+    params: { etat: '« mettre » ou « enlever »' },
+    run: (g, a) => (a.etat === 'enlever' ? g.takeOffGloves() : g.putOnGloves()),
+  },
+  {
+    name: 'sortir_poubelle',
+    description: 'Fermer le sac de la poubelle de la cuisine et le porter au conteneur dehors (le camion le vide à 6 h). Il faut ensuite remettre un sac neuf.',
+    params: {},
+    run: (g) => g.takeOutTrash(),
+  },
+  {
+    name: 'sac_neuf',
+    description: 'Mettre un sac neuf (du rouleau de sacs poubelle, au placard) dans la poubelle `objet` qui n’en a plus.',
+    params: { objet: 'ref de la poubelle' },
+    run: (g, a) => g.newBinBag(a.objet),
+  },
+  {
+    name: 'heure',
+    description: 'Regarder l’horloge de la cuisine : le perso dit l’heure.',
+    params: {},
+    run: (g) => g.readClock(),
+  },
+  {
     name: 'essuyer_vaisselle',
     description: 'Essuyer au torchon tenu la vaisselle mouillée `objet` (tenue dans l’autre main, ou posée ; sinon la plus proche). Sortie de l’évier, la vaisselle est mouillée ; sur l’égouttoir elle sèche seule.',
     params: { objet: 'ref de la pièce mouillée' },

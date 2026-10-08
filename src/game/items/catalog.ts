@@ -16,6 +16,7 @@ import { SALON_ITEMS } from './salon';
 import { FRESH_THINGS, PAN_FOOD, PANTRY_ITEMS } from './pantry';
 import { BATHROOM_ITEMS } from './bathroom';
 import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
+import { UPKEEP_ITEMS } from './upkeep';
 
 export interface ItemDef {
   id: string;
@@ -234,6 +235,29 @@ export interface ItemDef {
   mixes?: boolean;
   /** Serviette de bain : sert à se sécher après la douche ; sa pièce `mouillee` se montre ensuite, le temps qu'elle sèche. */
   bathTowel?: boolean;
+  /**
+   * Rangement au mur (barre à couteaux, crochets) : ce qui est rangé pend, tourné de cet angle
+   * (Euler YXZ, rad) en plus de l'orientation du meuble.
+   */
+  slotTilt?: [number, number, number];
+  /** Horloge : ses pièces `aiguille-heures` et `aiguille-minutes` tournent avec l'heure du jeu (autour de Z). */
+  clock?: boolean;
+  /** Fenêtre qui s'ouvre (pièce `porte`, le battant) : ouverte, elle aère la pièce. */
+  window?: boolean;
+  /** Où l'on mange assis : `repas` (la table, on y met le couvert) ou `comptoir` (l'îlot, sur le pouce). */
+  table?: 'repas' | 'comptoir';
+  /** Balai (et sa pelle) : ramasse les éclats et les miettes au sol. */
+  sweeps?: boolean;
+  /** Serpillière : essuie d'un coup les grandes flaques. */
+  mops?: boolean;
+  /** Conteneur dehors : on y jette les sacs poubelle ; le camion le vide chaque matin. */
+  outdoor?: boolean;
+  /** Spray nettoyant : avec l'éponge, nettoie le plan de travail et la gazinière sales. */
+  spray?: boolean;
+  /** Gants de ménage : on les enfile pour laver et nettoyer sans s'abîmer ni se salir les mains. */
+  gloves?: boolean;
+  /** Savon à côté de l'évier : on se lave les mains avec. */
+  soap?: boolean;
   build(): THREE.Object3D;
 }
 
@@ -1357,6 +1381,7 @@ export const ITEMS: ItemDef[] = [
     portable: false,
     movable: true,
     durability: 300,
+    table: 'repas',
     build: () => {
       const top = mesh(new THREE.BoxGeometry(1, 0.05, 0.6), 0x9b6a3c, 0, TABLE_H - 0.025, 0);
       const g = group(top);
@@ -1378,6 +1403,8 @@ export const ITEMS: ItemDef[] = [
   ...BATHROOM_ITEMS,
   // les gestes de cuisine : œufs, lait, saladier, ustensiles, épices (prep.ts)
   ...PREP_ITEMS,
+  // meubles et entretien : barre à couteaux, crochets, horloge, fenêtre, îlot, balai… (upkeep.ts)
+  ...UPKEEP_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

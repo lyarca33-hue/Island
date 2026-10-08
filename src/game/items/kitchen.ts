@@ -12,6 +12,7 @@ import type { ItemDef } from './catalog';
 import { FROZEN_FOOD, MORE_FRUITS, OVEN_EXTRA } from './pantry';
 import { PREP_CUPBOARD, STOVE_RECIPES } from './prep';
 import { DISHES as RECIPE_DISHES } from './recipes';
+import { UPKEEP_CUPBOARD } from './upkeep';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -156,7 +157,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     fragility: 7,
     // la porte : charnière à droite, comme le frigo
     door: THREE.MathUtils.degToRad(100),
-    holds: [...DISHES.filter((d) => !DRAWER_THINGS.includes(d)), "bouteille d'eau", 'pomme', 'pain', 'boîte de pastilles', ...PREP_CUPBOARD],
+    holds: [...DISHES.filter((d) => !DRAWER_THINGS.includes(d)), "bouteille d'eau", 'pomme', 'pain', 'boîte de pastilles', ...PREP_CUPBOARD, ...UPKEEP_CUPBOARD],
     slots: CUP_SLOTS,
     build: () => {
       const g = carcass(CUP_W, CUP_D);

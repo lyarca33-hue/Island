@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
 import { PREP_STOCK } from './prep';
+import { UPKEEP_STOCK } from './upkeep';
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -82,6 +83,7 @@ export const STOCK: Record<string, number> = {
   frites: 1, pizza: 1, 'légumes surgelés': 1,
   pomme: 2, steak: 2, tomate: 1, carotte: 1, concombre: 1, 'pomme de terre': 2, pain: 1, "bouteille d'eau": 2, lasagne: 1, sandwich: 1,
   ...PREP_STOCK,
+  ...UPKEEP_STOCK,
 };
 
 /** Paquet en carton ou en papier : corps, bande de couleur (étiquette). */
