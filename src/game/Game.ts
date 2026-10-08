@@ -11,6 +11,7 @@ import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
+import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
@@ -414,7 +415,7 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -549,6 +550,8 @@ export class Game {
   /** Sacs de courses posés : les aliments (noms) encore dedans. */
   private bags = new Map<WorldItem, string[]>();
   private ground: THREE.Mesh;
+  /** Le jardin dehors : arbres, fleurs, potager, pommier (jardin.ts). */
+  private garden: Garden;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
@@ -749,6 +752,18 @@ export class Game {
 
     this.ground = createGround();
     this.scene.add(this.ground);
+    this.garden = new Garden({
+      character: this.character,
+      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
+      notice: (t) => this.onNotice?.(t),
+      say: (t) => this.say(t),
+      mood: (n) => this.addMood(n),
+      soilHands: (why) => this.soilHands(why),
+      pour: (can, at, stand) => this.pourThen(can, null, null, at, stand, at(), false),
+      pouring: () => !!this.pouring,
+      sitting: () => this.sitting,
+    });
+    this.scene.add(this.garden.group);
     this.scene.add(this.character.root);
 
     this.marker = new THREE.Mesh(
@@ -778,7 +793,7 @@ export class Game {
       this.scene.add(item.object);
       return item;
     };
-    for (const [id, x, y, z, rot] of [...START_ITEMS, ...ROOMS.flatMap((r) => r.items ?? [])]) {
+    for (const [id, x, y, z, rot] of [...START_ITEMS, ...GARDEN_START, ...ROOMS.flatMap((r) => r.items ?? [])]) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -833,6 +848,7 @@ export class Game {
       item.contents = 'eau';
       item.setLiquidColor(liquidColor('eau'));
     }
+    this.garden.attach(this.items);
     // la bouilloire a de quoi faire deux tasses au départ
     for (const item of this.items) {
       if (!item.def.tank) continue;
@@ -1064,6 +1080,7 @@ export class Game {
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
+    for (const o of this.garden.obstacles) nav.add(o.box, o.pos, o.yaw);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
     // on entre dans la douche : seule sa paroi vitrée (côté +X) se contourne
     for (const it of this.items) if (it !== skip && it.def.shower) nav.add(new THREE.Box3(new THREE.Vector3(it.box.max.x - 0.04, 0, it.box.min.z), new THREE.Vector3(it.box.max.x, 2, it.box.max.z - 0.15)), it.object.position, it.object.rotation.y);
@@ -1072,6 +1089,8 @@ export class Game {
 
   /** Ce qui bloque le passage d'un meuble : sa boîte ; l'îlot, son caisson seulement (les genoux passent sous le plateau). */
   private navBox(it: WorldItem): THREE.Box3 {
+    const garden = this.garden.navBox(it);
+    if (garden) return garden;
     if (it.def.table !== 'comptoir') return it.box;
     const b = it.box.clone();
     b.max.z = Math.min(b.max.z, -b.min.z);
@@ -5441,6 +5460,8 @@ export class Game {
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
     else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
+    // jardin : potager, pommier, massif de fleurs (jardin.ts)
+    else if (this.garden.owns(item)) return this.garden.click(item, running);
     // bouton d'un appareil (un feu de la gazinière, la machine à café) : l'allumer ou l'éteindre
     else if (opts.button !== undefined && item.def.heat) return this.toggleHeat(item, running, opts.button);
     // poubelle : on y jette ce qu'on tient
@@ -5999,6 +6020,7 @@ export class Game {
     }
     if (item.def.table && this.crumbs.has(item) && held.some((h) => h.def.wipes)) add(item.def.table === 'repas' ? 'Essuyer la table' : `Essuyer ${the(item.name)}`, () => this.wipeTable(ref));
     if (item === this.sitting) add('Se lever', () => this.standUp());
+    this.garden.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
     if (item.def.movable && !held.length) add(`Déplacer ${the(item.name)}`, () => this.grabFurniture(item, false));
@@ -6141,6 +6163,8 @@ export class Game {
   }
 
   private stateOf(item: WorldItem): string {
+    const garden = this.garden.stateOf(item);
+    if (garden) return garden;
     const words: string[] = [];
     const a = agree(item.name);
     const cuisson = doneness(item.def, item.cooking);
@@ -6367,6 +6391,8 @@ export class Game {
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
     this.sound.setRain(w.rain);
+    this.garden.update(dt, this.clock.yearPos, Math.max(look.snow, w.cover));
+    this.garden.rain(w.rain, (dt * this.clock.speed) / 3600);
     this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
     this.scheduleShadows();
     this.post.render();
@@ -6499,6 +6525,7 @@ export class Game {
     this.lastSips = sips;
     this.tickDry(hours);
     this.tickDelivery(hours);
+    this.garden.tick(hours, this.clock.season);
   }
 
   // ——— gestes de cuisine (lot 3) : casser, mélanger, remuer, faire sauter, servir, assaisonner, tartiner, râper, goûter ———
