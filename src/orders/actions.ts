@@ -3,6 +3,8 @@
  * un clic du joueur) ; perform() attend qu'il soit fini et rend un compte rendu (lisible par l'IA).
  */
 import type { Game } from '../game/Game';
+import { euros } from '../game/argent';
+import { normalize } from './parser';
 
 export interface ActionDef {
   name: string;
@@ -564,6 +566,49 @@ export const ACTIONS: ActionDef[] = [
     description: 'Goûter à la cuillère tenue ce qu’il y a dans `objet` (poêle, assiette, saladier ; sinon la poêle sur le feu) : le perso dit si c’est cuit, brûlé, fade ou bon.',
     params: {},
     run: (g, a) => g.taste(a.objet),
+  },
+  {
+    name: 'geste',
+    description: 'Faire sur l’objet `objet` le geste de son menu (clic droit) dont le nom commence par `geste` : « Lancer un lavage », « Étendre le linge », « Pêcher », « Arroser le potager », « Cueillir une pomme »…',
+    params: { objet: 'ref de l’objet', geste: 'début du nom du geste' },
+    run: (g, a) => {
+      const key = normalize(a.geste);
+      const entries = g.menuOf(a.objet);
+      const entry = entries.find((e) => normalize(e.label).startsWith(key));
+      if (entry) return entry.run();
+      g.onNotice?.(entries.length ? `Pas possible pour l’instant (${a.objet}) : ${a.geste.toLowerCase()}.` : `Aucun objet « ${a.objet} ».`);
+      return false;
+    },
+  },
+  {
+    name: 'magasin',
+    description: 'Ouvrir le magasin (épicerie et rayon maison) pour choisir ce qu’on achète.',
+    params: {},
+    run: (g) => g.openShop(),
+  },
+  {
+    name: 'acheter',
+    description: 'Commander et payer au magasin : `objets` est une liste « id×nombre » séparée par des virgules (ex. « tomate×2,lait×1 ») ; tout arrive par le livreur, devant la porte.',
+    params: { objets: 'id×nombre, séparés par des virgules' },
+    run: (g, a) => g.placeOrder(a.objets.split(',').map((l) => {
+      const [id, n] = l.split('×');
+      return { id, n: Math.max(1, Number(n) || 1) };
+    })),
+  },
+  {
+    name: 'vendre',
+    description: 'Vendre au marché l’objet `objet` (légumes du jardin, pommes, poissons, plats faits maison) ; sans `objet`, tout ce que le marché rachète.',
+    params: {},
+    run: (g, a) => (a.objet ? g.sellItem(a.objet) : g.sellAll()),
+  },
+  {
+    name: 'argent',
+    description: 'Dire combien il reste dans le porte-monnaie.',
+    params: {},
+    run: (g) => {
+      g.onNotice?.(`Il reste ${euros(g.argent.money)} dans le porte-monnaie.`);
+      return true;
+    },
   },
   {
     name: 'dire',

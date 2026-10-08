@@ -132,6 +132,14 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "liste_courses"} : lire la liste de courses (ce qui manque à la maison)
 - {"tache": "courses"} : commander ce qui manque ; le sac de courses arrive devant la porte une demi-heure plus tard
 - {"tache": "ranger_courses"} : ranger le sac de courses (frigo, congélateur, garde-manger)
+- {"tache": "magasin"} : ouvrir le magasin (épicerie, rayon maison) pour que le joueur choisisse
+- {"tache": "acheter", "objets": [{"id": "tomate", "n": 2}]} : commander et payer au magasin ces objets (« id » : l'id de leur fiche, comme le début de leur ref) ; le livreur les dépose devant la porte une demi-heure plus tard
+- {"tache": "vendre", "noms": ["tomate"], "tous": true} : vendre au marché ce qu'il rachète (légumes du potager, pommes, poissons pêchés, plats faits maison) ; « noms » facultatif (sans : tout vendre), « tous » : tous ceux de ces noms, sinon un seul
+- {"tache": "argent"} : dire combien il reste dans le porte-monnaie
+- {"tache": "linge", "etape": "laver"} : la lessive (machine à laver et sèche-linge dans la salle de bain, étendoir) ; « etape » : "laver" (le panier de linge sale dans la machine, lavage lancé), "etendre" (le linge mouillé sur l'étendoir), "secher" (au sèche-linge, séchage lancé), "sortir" (le linge d'une machine qui a fini ; « objet » facultatif : la machine), "ranger" (le linge sec, ramassé à l'étendoir ou sorti du sèche-linge, rangé dans l'armoire)
+- {"tache": "peche"} : aller pêcher au bout du ponton de l'étang, une canne à pêche en main (prise au bord de l'étang s'il le faut) ; le poisson mord un peu plus tard
+- {"tache": "jardin", "geste": "arroser", "quoi": "carottes"} : le jardin ; « geste » : "arroser" (l'arrosoir rempli au robinet du jardin), "semer", "recolter" (« quoi » facultatif : carottes, tomates, pommes de terre, concombres ; « tous » : tout ce qui est prêt), "desherber", "pomme" (cueillir une pomme au pommier), "bouquet" (cueillir des fleurs), "sentir" (les fleurs), "jardiner" (ce qui presse au potager)
+- Le feu de camp (dehors, au camping) s'allume et s'éteint avec « allumer » / « eteindre » ; on y pose une poêle comme sur la gazinière
 - Provisions : épicerie au garde-manger (farine, sucre, chocolat, confiture, miel, pâte à tartiner, sauce tomate, vinaigre, levure, biscuits, chips, oignon, ail, banane, pommes de terre), frais et boissons au frigo (jambon, saucisses, poulet, poisson, yaourt, crème, salade, orange, fraises, citron, champignons, poivron, courgette, sauces, jus d'orange, soda, eau gazeuse, vin), surgelés au congélateur (frites, pizza, légumes surgelés : à passer au four). Poulet, poisson, saucisses et légumes se cuisent à la poêle
 - La carafe (sur la table) est pleine d'eau : on ne boit pas à la carafe, on la « verse » dans un verre (« objet » : la carafe, « dans » : le verre)
 - Le plateau : « poser » un objet avec « sur »: le plateau, puis prendre le plateau emporte tout ce qui est dessus
@@ -315,6 +323,24 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'tartiner': return { kind: 'tartiner', pot: s('pot') || undefined, ref: s('objet') || undefined };
     case 'raper': return { kind: 'raper', ref: s('objet') || undefined };
     case 'gouter': return { kind: 'gouter', ref: s('objet') || undefined };
+    case 'magasin': return { kind: 'magasin' };
+    case 'acheter': {
+      const lignes = (Array.isArray(o.objets) ? o.objets : []).flatMap((l) => (l && typeof l === 'object' && typeof (l as { id?: unknown }).id === 'string' ? [{ id: (l as { id: string }).id, n: Math.max(1, Math.round(Number((l as { n?: unknown }).n) || 1)) }] : []));
+      return lignes.length ? { kind: 'acheter', lignes } : null;
+    }
+    case 'vendre': return { kind: 'vendre', noms: Array.isArray(o.noms) && o.noms.length ? o.noms.map(String) : undefined, tous: o.tous === true };
+    case 'argent': return { kind: 'argent' };
+    case 'linge': {
+      const etape = s('etape');
+      return etape === 'laver' || etape === 'etendre' || etape === 'secher' || etape === 'sortir' || etape === 'ranger' ? { kind: 'linge', etape, ref: s('objet') || undefined } : null;
+    }
+    case 'peche': return { kind: 'peche' };
+    case 'jardin': {
+      const geste = s('geste');
+      const gestes = ['arroser', 'semer', 'recolter', 'desherber', 'pomme', 'bouquet', 'sentir', 'jardiner'] as const;
+      const g = gestes.find((x) => x === geste);
+      return g ? { kind: 'jardin', geste: g, quoi: s('quoi') || undefined, tous: o.tous === true } : null;
+    }
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
     case 'manque': return s('action') || s('raison') ? 'manque' : null;

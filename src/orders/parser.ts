@@ -5,13 +5,18 @@
  * « sers le sandwich dans l'assiette », « mange à table », « fais la vaisselle », « cuis la pomme
  * de terre au four », « jette la bouteille », « lance le lave-vaisselle », et dans les autres pièces
  * « va au salon », « regarde la télé », « mets la météo », « éteins la lumière », « prends une
- * douche », « baisse la lunette », « range le pull », « va te coucher ». Rend null dès
+ * douche », « baisse la lunette », « range le pull », « va te coucher », et dehors « lance une
+ * lessive », « étends le linge », « va pêcher », « allume le feu de camp », « arrose le potager »,
+ * « achète 2 tomates », « vends les poissons ». Rend null dès
  * qu'un morceau de l'ordre n'est pas compris : l'ordre part alors au modèle de chat.
  */
 import type { WorldObject } from '../game/Game';
 import { RECIPES } from '../game/items/recipes';
 import { FRUITS } from '../game/items/kitchen';
 import { DRINK_COLORS, FRESH_THINGS, FROZEN_FOOD, PANTRY_THINGS } from '../game/items/pantry';
+import { ITEM_BY_ID } from '../game/items/catalog';
+import { FISH } from '../game/items/plein-air';
+import { groceryAisle, HOUSE_ALWAYS } from '../game/argent';
 import type { Intent } from './tasks';
 
 /** Minuscules, sans accents ni ponctuation, apostrophes et tirets en espaces. */
@@ -82,6 +87,18 @@ const VERBS: Record<string, string[]> = {
   zapper: ['zappe', 'zapper', 'zap', 'change', 'changer', 'changes'],
   baisser: ['baisse', 'baisser', 'rabats', 'rabat', 'rabattre'],
   allonger: ['allonge', 'allonger', 'allonges', 'etends', 'etendre'],
+  // la lessive, la pêche, le jardin, le marché
+  plier: ['plie', 'plier', 'plies'],
+  pecher: ['peche', 'pecher', 'peches'],
+  arroser: ['arrose', 'arroser', 'arroses'],
+  semer: ['seme', 'semer', 'semes', 'plante', 'planter'],
+  recolter: ['recolte', 'recolter', 'recoltes'],
+  cueillir: ['cueille', 'cueillir', 'cueilles'],
+  desherber: ['desherbe', 'desherber'],
+  arracher: ['arrache', 'arracher'],
+  sentir: ['sens', 'sent', 'sentir', 'renifle', 'renifler', 'hume', 'humer'],
+  jardiner: ['jardine', 'jardiner'],
+  vendre: ['vends', 'vend', 'vendre', 'revends', 'revendre'],
 };
 /** Les pièces de la maison (nom de leur RoomSpec), par mots dits. */
 const ROOM_WORDS: Array<[string[], string]> = [
@@ -303,6 +320,21 @@ const ALIASES: Record<string, string[]> = {
   'lampe de chevet': ['lampe', 'lampes', 'chevet', 'veilleuse'],
   'table de nuit': ['nuit'],
   lit: ['lit', 'lits', 'plumard', 'pieu'],
+  // la lessive
+  'machine a laver': ['machine', 'laver'],
+  'seche linge': ['seche', 'sechelinge'],
+  etendoir: ['etendoir', 'sechoir'],
+  'panier a linge': ['panier'],
+  // dehors : l'étang, le camping, le jardin
+  etang: ['etang', 'mare', 'lac'],
+  'canne a peche': ['canne', 'cannes'],
+  'canne a peche en bambou': ['canne', 'cannes', 'bambou'],
+  'canne a peche a moulinet': ['canne', 'cannes', 'moulinet'],
+  'canne a peche en carbone': ['canne', 'cannes', 'carbone'],
+  'canne a peche de champion': ['canne', 'cannes', 'champion'],
+  'feu de camp': ['feu', 'camp', 'bivouac', 'braises'],
+  'trousse de secours': ['trousse', 'secours'],
+  'massif de fleurs': ['fleurs', 'fleur', 'massif'],
 };
 
 /** Mots qui désignent l'objet : son nom, ses autres noms, et sa couleur pour les livres (« livre-rouge »). */
@@ -399,6 +431,11 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
       out.push({ kind: 'heure' });
       continue;
     }
+    // « combien il me reste ? », « combien d'argent j'ai ? »
+    if (/^(combien|j ai combien|il me reste combien|il reste combien)\b/.test(w.join(' ')) && /\b(argent|sous|fric|reste|porte monnaie|portefeuille)\b/.test(w.join(' '))) {
+      out.push({ kind: 'argent' });
+      continue;
+    }
     // « va prendre la tasse » : aller + autre verbe → seulement l'autre verbe
     // « va te laver » : le pronom entre les deux
     if (VERB_OF.get(w[0]) === 'aller' && ['te', 't'].includes(w[1]) && VERB_OF.has(w[2])) w = [w[0], ...w.slice(2)];
@@ -418,6 +455,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
   const { found, all } = findObjects(rest, world.objets);
   const appliance = (nom: string) => world.objets.find((o) => o.nom === nom);
   const held = world.objets.filter((o) => world.enMain.includes(o.ref));
+  const news = newsClause(verb, rest, world, word, found, all);
+  if (news !== undefined) return news;
   switch (verb) {
     case 'prendre': {
       // « prends une douche »
@@ -815,9 +854,6 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'reveiller':
       return [{ kind: 'reveiller' }];
-    case 'commander':
-      // « commande les courses », « achète du lait » : la liste de ce qui manque est commandée
-      return [{ kind: 'courses' }];
     case 'mixer': {
       // « mixe la pomme », « mixe les quartiers de pomme »
       const fruits = found.filter((o) => FRUITS.includes(o.nom));
@@ -976,6 +1012,173 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
   }
   return null;
+}
+
+/** Mots qui parlent de la lessive (le linge, les machines, l'étendoir). */
+const LAUNDRY = ['linge', 'lessive', 'lessives', 'lavage', 'sechage', 'vetements', 'habits', 'fringues', 'seche linge', 'lave linge', 'machine a laver', 'etendoir', 'sechoir'];
+/** Les légumes du potager, par mot dit (leur nom au pluriel, comme au menu « Semer des carottes »). */
+const CROP_WORDS: Array<[string[], string]> = [
+  [['pomme de terre', 'pommes de terre', 'patate', 'patates'], 'pommes de terre'],
+  [['carotte', 'carottes'], 'carottes'],
+  [['tomate', 'tomates'], 'tomates'],
+  [['concombre', 'concombres'], 'concombres'],
+];
+/** Ce que rachète le marché sans étoiles : légumes du potager, pommes ; et les poissons de l'étang. */
+const PRODUCE = ['carotte', 'tomate', 'pomme de terre', 'concombre', 'pomme'];
+const FISH_NAMES = FISH.map((f) => f.name);
+
+/** Ce qu'on trouve au magasin : chaque fiche et les façons de la nommer (« pommes de terre », « patates »). */
+let shop: Array<{ id: string; names: string[] }> | null = null;
+function shopNames(): Array<{ id: string; names: string[] }> {
+  shop ??= [...groceryAisle(), ...HOUSE_ALWAYS.flatMap((id) => ITEM_BY_ID.get(id) ?? [])].map((d) => {
+    const n = normalize(d.name);
+    const [first, ...others] = n.split(' ');
+    const plural = [first.endsWith('s') || first.endsWith('x') ? first : `${first}s`, ...others].join(' ');
+    return { id: d.id, names: [...new Set([n, plural, ...(ALIASES[n] ?? []).filter((a) => a.length > 3)])] };
+  });
+  return shop;
+}
+
+/** « achète 2 tomates et du lait » : les lignes de commande (fiche, nombre) ; null si un morceau n'est pas au magasin. */
+function shoppingLines(rest: string[]): Array<{ id: string; n: number }> | null {
+  const lines: Array<{ id: string; n: number }> = [];
+  for (const part of ` ${rest.join(' ')} `.split(/ et | puis /)) {
+    const text = ` ${part.trim()} `;
+    if (!text.trim()) continue;
+    // le nom le plus long dit l'emporte (« pommes de terre » plutôt que « pommes »)
+    let best: { id: string; len: number } | null = null;
+    for (const { id, names } of shopNames()) {
+      for (const n of names) if (text.includes(` ${n} `) && n.length > (best?.len ?? 0)) best = { id, len: n.length };
+    }
+    if (!best) return null;
+    const n = count(part.split(' ')) ?? 1;
+    const same = lines.find((l) => l.id === best!.id);
+    if (same) same.n += n;
+    else lines.push({ id: best.id, n });
+  }
+  return lines.length ? lines : null;
+}
+
+/** L'étape de la lessive que demande l'ordre, ou undefined s'il ne parle pas de linge. */
+function laundryStep(verb: string, word: string, rest: string[], has: (...ws: string[]) => boolean): Extract<Intent, { kind: 'linge' }>['etape'] | undefined {
+  // « lance une machine » : une lessive
+  const machine = verb === 'allumer' && has('une machine', 'une machine a laver');
+  if (!machine && !has(...LAUNDRY)) return undefined;
+  // le torchon (« linge ») : on s'essuie, on essuie la vaisselle ou la table avec
+  if (has('vaisselle', 'mains', 'main', 'torchon', 'table', 'avec', 'toi', 'te')) return undefined;
+  const dryer = has('seche linge', 'sechage');
+  const rack = has('etendoir', 'sechoir', 'dehors', 'soleil', 'fil');
+  const washer = has('machine', 'lave linge', 'machine a laver');
+  switch (verb) {
+    // « lance une lessive », « démarre le lave-linge », « lance le sèche-linge »
+    case 'allumer':
+      return dryer ? 'secher' : 'laver';
+    // « fais une lessive », « fais tourner une machine », « fais sécher le linge »
+    case 'cafe':
+      if (VERB_OF.get(rest[0]) === 'essuyer') return rack ? 'etendre' : 'secher';
+      return dryer ? 'secher' : 'laver';
+    // « lave le linge », « charge la machine à laver »
+    case 'laver':
+    case 'charger':
+      return 'laver';
+    // « étends le linge »
+    case 'allonger':
+      return 'etendre';
+    // « sèche le linge (au sèche-linge / dehors) »
+    case 'essuyer':
+      return rack ? 'etendre' : 'secher';
+    // « mets le linge au sèche-linge », « mets le linge sur l'étendoir », « mets le linge dans l'armoire »
+    case 'poser':
+      return dryer ? 'secher' : rack ? 'etendre' : has('armoire', 'placard') ? 'ranger' : 'laver';
+    // « sors le linge (de la machine) », « ramasse le linge (sec) »
+    case 'prendre':
+      if (['ramasse', 'ramasser', 'recupere', 'recuperer'].includes(word) && !washer && !dryer) return 'ranger';
+      return word.startsWith('sor') || washer || dryer ? 'sortir' : undefined;
+    // « range le linge », « plie le linge »
+    case 'ranger':
+    case 'plier':
+      return 'ranger';
+    // « vide le panier (à linge dans la machine) », « vide la machine à laver »
+    case 'vider':
+      return has('panier') ? 'laver' : 'sortir';
+  }
+  return undefined;
+}
+
+/**
+ * Les nouveautés : la lessive, la pêche, le feu de camp, le jardin, le magasin et le marché.
+ * undefined : l'ordre n'en parle pas (la suite de parseClause s'en occupe).
+ */
+function newsClause(verb: string, rest: string[], world: { enMain: string[]; objets: WorldObject[] }, word: string, found: WorldObject[], all: boolean): Intent[] | null | undefined {
+  const text = ` ${rest.join(' ')} `;
+  const has = (...ws: string[]) => ws.some((x) => text.includes(` ${x} `));
+  const refOf = (nom: string) => world.objets.find((o) => o.nom === nom)?.ref;
+  // la lessive
+  const etape = laundryStep(verb, word, rest, has);
+  if (etape) {
+    const ref = etape !== 'sortir' ? undefined : has('seche linge') ? refOf('sèche-linge') : has('machine', 'lave linge', 'machine a laver') ? refOf('machine à laver') : undefined;
+    return [{ kind: 'linge', etape, ...(ref ? { ref } : {}) }];
+  }
+  // la pêche : « va pêcher », « va à la pêche », « lance ta ligne »
+  if (verb === 'pecher' || (verb === 'aller' && has('peche')) || (verb === 'allumer' && has('ligne'))) return [{ kind: 'peche' }];
+  // « fais un feu (de camp) » : on allume celui du camping
+  if (verb === 'cafe' && has('feu') && !['sers', 'servir'].includes(word)) {
+    const fire = refOf('feu de camp');
+    return fire ? [{ kind: 'allumer', ref: fire }] : null;
+  }
+  // le magasin : « va au magasin », « ouvre l'épicerie », « va au marché »
+  if (['aller', 'lire', 'regarder'].includes(verb) && has('magasin', 'epicerie', 'supermarche', 'boutique', 'marche')) return [{ kind: 'magasin' }];
+  // « regarde ton porte-monnaie »
+  if (verb === 'regarder' && has('porte monnaie', 'portefeuille', 'argent')) return [{ kind: 'argent' }];
+  // « achète 2 tomates et du lait », « achète une canne à pêche » ; « commande les courses » : ce qui manque
+  if (verb === 'commander') {
+    if (!rest.length || has('courses', 'manque', 'liste')) return [{ kind: 'courses' }];
+    const lignes = shoppingLines(rest.filter((x) => !['moi', 'nous', 'au', 'magasin'].includes(x)));
+    return lignes ? [{ kind: 'acheter', lignes }] : null;
+  }
+  // « vends les tomates », « vends tes poissons », « vends tout (au marché) »
+  if (verb === 'vendre') {
+    const noms = new Set<string>();
+    if (has('poisson', 'poissons')) FISH_NAMES.forEach((n) => noms.add(n));
+    if (has('legumes', 'recolte', 'recoltes')) PRODUCE.slice(0, 4).forEach((n) => noms.add(n));
+    for (const o of found) if (o.portable && o.sorte !== 'récipient') noms.add(o.nom);
+    if (!noms.size) return has('tout') || !rest.filter((x) => !STOP.has(x) && !['marche', 'magasin'].includes(x)).length ? [{ kind: 'vendre' }] : null;
+    return [{ kind: 'vendre', noms: [...noms], tous: all || has('tout', 'tous', 'toutes', 'poissons', 'legumes') }];
+  }
+  // le jardin
+  const crop = CROP_WORDS.find(([ws]) => has(...ws))?.[1];
+  switch (verb) {
+    case 'arroser':
+      return refOf('potager') ? [{ kind: 'jardin', geste: 'arroser' }] : null;
+    case 'semer':
+      // « sème des carottes », « plante des tomates », « sème » (tous les carrés vides)
+      return refOf('potager') && (crop || !found.length) ? [{ kind: 'jardin', geste: 'semer', quoi: crop, tous: true }] : null;
+    case 'recolter':
+      return [{ kind: 'jardin', geste: 'recolter', quoi: crop, tous: all }];
+    case 'desherber':
+      return [{ kind: 'jardin', geste: 'desherber' }];
+    case 'arracher':
+      // « arrache les mauvaises herbes », « arrache une carotte »
+      if (has('herbe', 'herbes', 'mauvaises')) return [{ kind: 'jardin', geste: 'desherber' }];
+      return crop ? [{ kind: 'jardin', geste: 'recolter', quoi: crop, tous: all }] : null;
+    case 'cueillir':
+      // « cueille une tomate », « cueille une pomme », « cueille des fleurs », « cueille un bouquet »
+      if (crop) return [{ kind: 'jardin', geste: 'recolter', quoi: crop, tous: all }];
+      if (has('pomme', 'pommes')) return [{ kind: 'jardin', geste: 'pomme' }];
+      if (has('fleur', 'fleurs', 'bouquet')) return [{ kind: 'jardin', geste: 'bouquet' }];
+      return null;
+    case 'sentir':
+      return has('fleur', 'fleurs', 'bouquet', 'massif', 'rose', 'roses') ? [{ kind: 'jardin', geste: 'sentir' }] : null;
+    case 'jardiner':
+      return [{ kind: 'jardin', geste: 'jardiner' }];
+    case 'cafe':
+      // « fais du jardinage »
+      if (has('jardinage', 'jardin')) return [{ kind: 'jardin', geste: 'jardiner' }];
+      break;
+    case 'plier':
+      return null;
+  }
+  return undefined;
 }
 
 const NUMBERS: Record<string, number> = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, quelques: 3 };
