@@ -7484,6 +7484,7 @@ export class Game {
         this.onSkill?.(this.skillPoints);
       },
       weather: this.weather,
+      body: this.body,
       done: () => {
         this.character.nav = this.buildNav();
       },

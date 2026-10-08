@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import type { WorldItem } from './items/carry';
 import type { NeedKey } from './needs';
+import { BODY_STATES } from './temperature';
 
 /** Un objet de la maison. Les champs absents gardent leur valeur de départ. */
 export interface ItemSave {
@@ -44,6 +45,8 @@ export interface GameSave {
   skill: number;
   perso: { x: number; z: number; yaw: number };
   weather?: Record<string, unknown>;
+  /** Température du corps (°C), trempé par la pluie (0 à 1), chaleur d'une boisson (°C de ressenti), état. */
+  body?: { temp: number; soaked: number; inner: number; state: string };
   items: ItemSave[];
   /** Le perso du créateur, pour le retrouver sur un autre appareil. */
   recipe?: Recipe;
@@ -69,6 +72,7 @@ export interface SaveAccess {
   setMood(n: number): void;
   setSkill(n: number): void;
   weather: object;
+  body: { temp: number; soaked: number; inner: number; state: string };
   /** Après le chargement : chemins à refaire autour des meubles déplacés. */
   done(): void;
 }
@@ -122,6 +126,7 @@ export function captureGame(a: SaveAccess): GameSave {
     skill: a.skill,
     perso: { x: round(p.x), z: round(p.z), yaw: round(a.perso.yaw) },
     weather,
+    body: { temp: round(a.body.temp), soaked: round(a.body.soaked), inner: round(a.body.inner), state: a.body.state },
     items,
   };
 }
@@ -170,6 +175,7 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
   a.setMood(s.mood);
   a.setSkill(s.skill);
   if (s.weather) Object.assign(a.weather, s.weather);
+  if (s.body && Number.isFinite(s.body.temp) && s.body.state in BODY_STATES) Object.assign(a.body, s.body);
   a.perso.placeAt(new THREE.Vector3(s.perso.x, 0, s.perso.z), s.perso.yaw);
   a.done();
 }
