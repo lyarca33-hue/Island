@@ -54,8 +54,8 @@ export type Intent =
   | { kind: 'vider_recipient'; ref?: string }
   /** Remplir d'eau la bouilloire `ref` : un récipient d'eau (rempli à l'évier s'il le faut), versé dedans. */
   | { kind: 'remplir_bouilloire'; ref: string }
-  /** Ouvrir ou fermer le robinet de l'évier. */
-  | { kind: 'robinet'; ouvrir: boolean }
+  /** Ouvrir ou fermer le robinet de l'évier (ou du lavabo `ref`). */
+  | { kind: 'robinet'; ouvrir: boolean; ref?: string }
   /** Boucher l'évier ou enlever le bouchon. */
   | { kind: 'bouchon'; mettre: boolean }
   | { kind: 'boire_robinet' }
@@ -106,6 +106,17 @@ export type Intent =
   | { kind: 'toilettes' }
   | { kind: 'chasse' }
   | { kind: 'miroir' }
+  /** Lever (`ouvrir`) ou baisser le couvercle des toilettes. */
+  | { kind: 'couvercle'; ouvrir: boolean }
+  /** Aller dans la pièce `piece` (cuisine, salon, chambre, salle de bain). */
+  | { kind: 'piece'; piece: string }
+  /** Allumer (`on`) ou éteindre la lumière de la pièce `piece` (sinon celle où est le perso). */
+  | { kind: 'lumiere'; on: boolean; piece?: string }
+  /**
+   * La télé `ref` (sinon la plus proche) : s'asseoir d'abord sur le canapé (`assis`), puis
+   * l'allumer, ou changer de chaîne (`zapper`, vers `chaine` si elle est dite).
+   */
+  | { kind: 'tele'; ref?: string; assis?: boolean; zapper?: boolean; chaine?: string }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
@@ -682,7 +693,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act('verser', { dans: intent.ref });
     }
     case 'robinet':
-      return act('robinet', { etat: intent.ouvrir ? 'ouvrir' : 'fermer' });
+      return act('robinet', { etat: intent.ouvrir ? 'ouvrir' : 'fermer', ...(intent.ref ? { objet: intent.ref } : {}) });
     case 'bouchon':
       return act('bouchon', { etat: intent.mettre ? 'mettre' : 'enlever' });
     case 'boire_robinet':
@@ -829,6 +840,24 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act('chasse');
     case 'miroir':
       return act('miroir');
+    case 'couvercle':
+      return act('couvercle', { etat: intent.ouvrir ? 'ouvrir' : 'fermer' });
+    case 'piece':
+      return act('aller_piece', { piece: intent.piece });
+    case 'lumiere':
+      return act('lumiere', { etat: intent.on ? 'allumer' : 'eteindre', ...(intent.piece ? { piece: intent.piece } : {}) });
+    case 'tele': {
+      const tv = intent.ref ?? world(game).objets.filter((o) => o.nom === 'télé').sort((a, b) => a.distance - b.distance)[0]?.ref;
+      if (!tv) throw new Failed('Il n’y a pas de télé.');
+      // sur le canapé (sinon le siège le plus proche de la télé), à moins d'être déjà assis
+      if (intent.assis && !world(game).perso.includes('assis')) {
+        const w = world(game);
+        const sofa = w.objets.find((o) => o.nom === 'canapé' && o.sorte === 'siège');
+        await runOne(game, { kind: 'asseoir', ref: sofa?.ref }, act);
+      }
+      if (intent.zapper) return act('zapper', { objet: tv, ...(intent.chaine ? { chaine: intent.chaine } : {}) });
+      return act('allumer', { objet: tv });
+    }
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;
