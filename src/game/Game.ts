@@ -12,6 +12,8 @@ import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
 import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
+import { DELIVERY_SPOT, Entree } from './entree';
+import { ENTREE_FEMININE, ENTREE_ITEMS } from './items/entree';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
@@ -429,7 +431,7 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -572,6 +574,8 @@ export class Game {
   private ground: THREE.Mesh;
   /** Le jardin dehors : arbres, fleurs, potager, pommier (jardin.ts). */
   private garden: Garden;
+  /** L'entrée : vêtements, chaussures, boîte aux lettres et courrier (entree.ts). */
+  private entree: Entree;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
@@ -784,6 +788,20 @@ export class Game {
       sitting: () => this.sitting,
     });
     this.scene.add(this.garden.group);
+    this.entree = new Entree({
+      character: this.character,
+      items: () => this.items,
+      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
+      remove: (item) => this.removeItem(item),
+      notice: (t) => this.onNotice?.(t),
+      say: (t) => this.say(t),
+      mood: (n) => this.addMood(n),
+      sitting: () => this.sitting,
+      sit: (seat, then) => this.sit(this.ref(seat), false, then),
+      outdoors: () => !this.underRoof(this.character.position.x, this.character.position.z),
+      outdoorAir: () => this.body.outdoor,
+      rain: () => this.weather.rain,
+    });
     this.scene.add(this.character.root);
 
     this.marker = new THREE.Mesh(
@@ -869,6 +887,7 @@ export class Game {
       item.setLiquidColor(liquidColor('eau'));
     }
     this.garden.attach(this.items);
+    this.entree.attach(this.items);
     // la bouilloire a de quoi faire deux tasses au départ
     for (const item of this.items) {
       if (!item.def.tank) continue;
@@ -4925,7 +4944,7 @@ export class Game {
     if (c.seated) return c.standUp(() => this.lookInMirror(ref, running));
     c.approachThen(this.frontOf(sink), sink.object.position, () => {
       const h = this.needs.values.hygiene;
-      if (this.mirrorFog > 0.4) this.say('Le miroir est plein de buée…');
+      if (this.mirrorFog > 0.4 && sink.part('buee')) this.say('Le miroir est plein de buée…');
       else if (this.wet > 0) this.say('Tout mouillé ! Vite, la serviette.');
       else if (h > 80) this.say('Tout propre, tout beau !');
       else if (h > 45) this.say('Ça va… un brin de toilette ne ferait pas de mal.');
@@ -5520,6 +5539,8 @@ export class Game {
     else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
     // jardin : potager, pommier, massif de fleurs (jardin.ts)
     else if (this.garden.owns(item)) return this.garden.click(item, running);
+    // boîte aux lettres : relever le courrier (entree.ts)
+    else if (this.entree.owns(item)) return this.entree.click(item, running);
     // bouton d'un appareil (un feu de la gazinière, la machine à café) : l'allumer ou l'éteindre
     else if (opts.button !== undefined && item.def.heat) return this.toggleHeat(item, running, opts.button);
     // poubelle : on y jette ce qu'on tient
@@ -6079,6 +6100,7 @@ export class Game {
     if (item.def.table && this.crumbs.has(item) && held.some((h) => h.def.wipes)) add(item.def.table === 'repas' ? 'Essuyer la table' : `Essuyer ${the(item.name)}`, () => this.wipeTable(ref));
     if (item === this.sitting) add('Se lever', () => this.standUp());
     this.garden.menu(item, add);
+    this.entree.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
     if (item.def.movable && !held.length) add(`Déplacer ${the(item.name)}`, () => this.grabFurniture(item, false));
@@ -6221,7 +6243,7 @@ export class Game {
   }
 
   private stateOf(item: WorldItem): string {
-    const garden = this.garden.stateOf(item);
+    const garden = this.garden.stateOf(item) ?? this.entree.stateOf(item);
     if (garden) return garden;
     const words: string[] = [];
     const a = agree(item.name);
@@ -6250,7 +6272,7 @@ export class Game {
     words.push(...this.prepWords(item));
     if (this.towelsWet.has(item)) words.push('mouillée');
     if (item.def.shower && this.showering?.shower === item) words.push('l’eau coule');
-    if (item.def.mirror && this.mirrorFog > 0.3) words.push('miroir embué');
+    if (item.def.mirror && this.mirrorFog > 0.3 && item.part('buee')) words.push('miroir embué');
     if (this.lids.get(item)?.target) words.push('couvercle ouvert');
     if (door?.keep) words.push('laissé ouvert');
     if (this.appliances.has(item)) words.push('en marche');
@@ -6557,15 +6579,17 @@ export class Game {
   private tickBody(dt: number, hours: number): void {
     const c = this.character;
     const p = c.position;
+    const outdoors = !this.underRoof(p.x, p.z);
     const was = this.body.update(hours, {
       clock: this.clock,
       weather: this.weather,
-      outdoors: !this.underRoof(p.x, p.z),
+      outdoors,
       gait: c.lying ? 'sleep' : c.seated ? 'sit' : c.moveGait,
       inBed: !!this.sleep,
       showering: !!this.showering,
       showerWet: this.wet > 0,
-      nearHeat: this.heatNear(p),
+      // un feu à côté, et les vêtements de l'entrée (manteau, écharpe, bonnet)
+      nearHeat: this.heatNear(p) + this.entree.warmth(outdoors),
     });
     this.needs.factors = this.body.needFactors;
     this.needs.canHeal = this.body.state === 'normal';
@@ -6659,6 +6683,7 @@ export class Game {
     this.tickDry(hours);
     this.tickDelivery(hours);
     this.garden.tick(hours, this.clock.season);
+    this.entree.tick(hours, this.clock.day, this.clock.hour);
   }
 
   // ——— gestes de cuisine (lot 3) : casser, mélanger, remuer, faire sauter, servir, assaisonner, tartiner, râper, goûter ———
@@ -7308,18 +7333,14 @@ export class Game {
     if (d.hours > 0) return;
     this.delivery = null;
     const def = ITEM_BY_ID.get('sac-courses');
-    const room = ROOMS.find((r) => r.doors.some((o) => o.leaf));
-    const door = room?.doors.find((o) => o.leaf);
-    if (!def || !room || !door) return;
+    if (!def) return;
     const bag = new WorldItem(def);
-    // juste à l'intérieur, devant la porte (murs est et ouest : u le long de z ; nord et sud : le long de x)
-    const u = (door.u0 + door.u1) / 2, r = room.rect;
-    const at = door.wall === 'ouest' ? [r.x0 + 0.45, u] : door.wall === 'est' ? [r.x1 - 0.45, u] : door.wall === 'nord' ? [u, r.z0 + 0.45] : [u, r.z1 - 0.45];
-    bag.object.position.set(at[0], 0, at[1]);
+    // dans l'entrée, à côté de la porte de la maison
+    bag.object.position.copy(DELIVERY_SPOT);
     this.items.push(bag);
     this.scene.add(bag.object);
     this.bags.set(bag, d.names);
-    this.onNotice?.('Les courses sont arrivées : le sac est devant la porte. Clic droit dessus : « Ranger les courses ».');
+    this.onNotice?.('Ding-dong ! Les courses sont arrivées : le sac est dans l’entrée, à côté de la porte. Clic droit dessus : « Ranger les courses ».');
   }
 
   /**
@@ -7446,6 +7467,12 @@ export class Game {
 
   /** Reprend une partie sauvée ; à appeler sur un jeu tout juste construit. */
   loadState(s: GameSave): void {
+    // une partie sauvée avant l'entrée : ses objets (banc, portemanteau et vêtements, boîte aux
+    // lettres…) gardent leur place de départ au lieu d'être retirés comme manquants
+    if (!s.items.some((i) => i.id === 'portemanteau')) {
+      const fresh = captureGame(this.saveAccess()).items.filter((i) => ENTREE_ITEMS.some((d) => d.id === i.id));
+      s = { ...s, items: [...s.items, ...fresh] };
+    }
     applyGame(this.saveAccess(), s);
   }
 
@@ -7482,6 +7509,7 @@ export class Game {
         put('garniture', this.toppings.get(item));
         if (this.bagless.has(item)) x.sansSac = true;
         if (this.lamps.get(item)?.on) x.lampe = true;
+        Object.assign(x, this.entree.extras(item));
         return x;
       },
       setExtras: (item, x) => {
@@ -7507,6 +7535,7 @@ export class Game {
         if (tops) this.toppings.set(item, tops);
         if (x.sansSac) this.bagless.add(item);
         if (x.lampe) this.setLamp(item, true);
+        this.entree.setExtras(item, x);
       },
       perso: this.character,
       clock: this.clock,
@@ -7525,6 +7554,7 @@ export class Game {
       weather: this.weather,
       body: this.body,
       done: () => {
+        this.entree.restored();
         this.character.nav = this.buildNav();
       },
     };

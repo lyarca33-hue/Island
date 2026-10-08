@@ -410,9 +410,9 @@ function cropModel(crop: Crop, x: number): { plant: THREE.Group; grow: THREE.Gro
 const OAKS: Array<[number, number, number]> = [[-9.8, 10, 1.1], [-9.5, -1.5, 1.25], [11.5, 5.5, 1.2], [12, -4.5, 1.0], [-6.5, -10, 1.15], [2.5, -13, 1.3], [-12.5, 12, 1.0]];
 const PINES: Array<[number, number, number]> = [[-11.5, 3.2, 1.1], [-7.5, -6, 1.0], [14, 0.5, 1.2], [-2, -14, 1.1], [9.5, -12.5, 1.0], [-14, -8, 1.25]];
 const BUSHES: Array<[number, number, number]> = [[9.3, 2.3, 0.45], [9.4, -1.0, 0.5], [-3.85, -0.9, 0.4], [-3.9, -2.1, 0.45], [-7.4, 5.4, 0.35]];
-/** Chemin de pierres plates : de la porte d'entrée jusqu'au potager, au banc et au pommier. */
+/** Chemin de pierres plates : de la porte de l'entrée (entree.ts) jusqu'au potager, au banc et au pommier. */
 const PATH: Array<[number, number]> = [
-  [-3.75, 1.8], [-4.3, 2.05], [-4.6, 2.6], [-4.55, 3.2], [-4.3, 3.75], [-3.85, 4.2], [-3.3, 4.55], [-2.7, 4.8],
+  [-4.55, 3.2], [-4.3, 3.75], [-3.85, 4.2], [-3.3, 4.55], [-2.7, 4.8],
   [-2.05, 4.95], [-1.4, 5.0], [-0.75, 5.0], [-0.1, 4.95], [0.55, 4.85], [-4.45, 4.45], [-4.5, 5.05], [-4.6, 5.6], [-4.55, 6.2],
 ];
 /** Bordure fleurie au pied du mur sud du salon (x de 3.7 à 8.4). */
