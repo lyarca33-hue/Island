@@ -785,7 +785,7 @@ export const ITEMS: ItemDef[] = [
     id: 'pomme',
     name: 'pomme',
     portable: true,
-    grip: 'fist',
+    grip: 'cradle',
     gripPoint: [0, APPLE_R, APPLE_R],
     // on croque le côté opposé à la paume
     mouth: [0, APPLE_R * 1.2, -APPLE_R],
@@ -806,7 +806,7 @@ export const ITEMS: ItemDef[] = [
     id: 'sandwich',
     name: 'sandwich',
     portable: true,
-    grip: 'fist',
+    grip: 'cradle',
     // tenu par un bord, croqué par l'autre
     gripPoint: [0, 0.025, 0.045],
     mouth: [0, 0.03, -0.045],
@@ -877,7 +877,7 @@ export const ITEMS: ItemDef[] = [
     name: 'couteau',
     portable: true,
     // en poing par le manche, la lame dépasse côté pouce
-    grip: 'fist',
+    grip: 'utensil',
     gripPoint: [0, 0.055, 0],
     knife: true,
     // posé à plat sur le côté de la lame
@@ -900,7 +900,7 @@ export const ITEMS: ItemDef[] = [
     id: 'pain',
     name: 'pain',
     portable: true,
-    grip: 'fist',
+    grip: 'cradle',
     gripPoint: [0, 0.04, 0.05],
     mouth: [0, 0.05, -0.09],
     food: { hunger: 25, bites: 5 },
@@ -975,7 +975,7 @@ export const ITEMS: ItemDef[] = [
     id: 'poele',
     name: 'poêle',
     portable: true,
-    grip: 'fist',
+    grip: 'handle',
     // tenue par le bout du manche
     gripPoint: [0, PAN_H, PAN_R + 0.015 + HANDLE_L * 0.7],
     cookware: { holds: ['steak', ...PAN_FOOD, ...PREP_PAN_FOOD], places: [[-0.045, PAN_FLOOR, 0], [0.045, PAN_FLOOR, 0]] },
@@ -996,7 +996,7 @@ export const ITEMS: ItemDef[] = [
     id: 'casserole',
     name: 'casserole',
     portable: true,
-    grip: 'fist',
+    grip: 'handle',
     gripPoint: [0, POT_H - 0.02, POT_R + HANDLE_L * 0.7],
     // se remplit d'eau à l'évier ; sur le feu, l'eau bout puis s'évapore
     fill: [PAN_FLOOR + 0.004, POT_H - 0.025],
@@ -1019,7 +1019,7 @@ export const ITEMS: ItemDef[] = [
     id: 'steak',
     name: 'steak',
     portable: true,
-    grip: 'fist',
+    grip: 'cradle',
     gripPoint: [0, 0.01, 0.035],
     mouth: [0, 0.012, -0.035],
     food: { hunger: 35, bites: 4 },
@@ -1038,7 +1038,7 @@ export const ITEMS: ItemDef[] = [
     id: 'pomme-de-terre',
     name: 'pomme de terre',
     portable: true,
-    grip: 'fist',
+    grip: 'cradle',
     gripPoint: [0, 0.025, 0.03],
     mouth: [0, 0.03, -0.03],
     food: { hunger: 25, bites: 3 },
@@ -1074,7 +1074,7 @@ export const ITEMS: ItemDef[] = [
     id: 'tomate',
     name: 'tomate',
     portable: true,
-    grip: 'fist',
+    grip: 'cradle',
     gripPoint: [0, 0.03, 0.033],
     mouth: [0, 0.035, -0.033],
     food: { hunger: 6, bites: 3 },
@@ -1151,7 +1151,7 @@ export const ITEMS: ItemDef[] = [
     name: 'assiette',
     portable: true,
     // tenue par le bord, à plat, comme une tasse par l'anse
-    grip: 'fist',
+    grip: 'palm',
     gripPoint: [0, PLATE_H / 2, PLATE_R - 0.01],
     dish: true,
     plate: PLATE_IN,
@@ -1179,7 +1179,7 @@ export const ITEMS: ItemDef[] = [
     name: 'fourchette',
     portable: true,
     // par le bout du manche, les dents vers le haut ; elles vont aux lèvres
-    grip: 'fist',
+    grip: 'utensil',
     gripPoint: [0, 0.035, 0],
     mouth: [0, CUTLERY_L, 0],
     // couchée à plat sur la table (le long de +Y quand on la tient)
@@ -1213,7 +1213,7 @@ export const ITEMS: ItemDef[] = [
     // couteau de table (le couteau de cuisine, pour couper sur la planche, est « couteau »)
     name: 'couteau de table',
     portable: true,
-    grip: 'fist',
+    grip: 'utensil',
     gripPoint: [0, 0.035, 0],
     layFlat: true,
     dish: true,
@@ -1276,7 +1276,7 @@ export const ITEMS: ItemDef[] = [
     name: 'bol',
     portable: true,
     // tenu par le bord, comme l'assiette
-    grip: 'fist',
+    grip: 'palm',
     gripPoint: [0, BOWL_H - 0.012, BOWL_R - 0.004],
     dish: true,
     plate: BOWL_IN,
@@ -1302,7 +1302,7 @@ export const ITEMS: ItemDef[] = [
     name: 'cuillère',
     portable: true,
     // par le bout du manche, le creux vers le haut ; le cuilleron va aux lèvres
-    grip: 'fist',
+    grip: 'utensil',
     gripPoint: [0, 0.035, 0],
     mouth: [0, CUTLERY_L - 0.022, 0],
     layFlat: true,
