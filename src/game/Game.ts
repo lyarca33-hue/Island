@@ -14,6 +14,7 @@ import { createGround, GROUND_HALF, setGroundSeason } from './ground';
 import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
+import { LIVRES } from './items/livres';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/catalog';
@@ -133,6 +134,11 @@ const MOOD_TABLE = 10;
 const MOOD_STANDING_DISH = 2;
 const MOOD_BREAKFAST = 8;
 const MOOD_STAR = 2;
+/** Un livre lu jusqu'au bout : debout, assis, ou bien installé dans le canapé. Pas deux fois en un jour. */
+const MOOD_BOOK = 4;
+const MOOD_BOOK_SEATED = 7;
+const MOOD_BOOK_SOFA = 10;
+const BOOK_AGAIN_MIN = 24 * 60;
 /** Heures du petit-déjeuner. */
 const MORNING: [number, number] = [5, 11];
 /** Au-delà de tant de mètres, un son de cuisine ne s'entend presque plus. */
@@ -509,6 +515,8 @@ export interface HandActions {
   reading: boolean;
   /** Le livre lu est le livre de recettes (la liste des recettes s'affiche). */
   recipes: boolean;
+  /** Le livre lu est une histoire (sorte de livre, voir LIVRES) : ses pages s'affichent. */
+  book: string | null;
   /** Assis : on peut se lever. */
   seated: boolean;
   /** Couché dans le lit (endormi) : on peut se réveiller. */
@@ -1040,6 +1048,36 @@ export class Game {
   /** Le perso lit le livre de recettes : la liste des recettes est ouverte à l'écran. */
   get readingRecipes(): boolean {
     return this.character.reading?.held?.def.id === 'livre-recettes';
+  }
+
+  /** Sorte du livre d'histoire qu'on lit (ses pages s'affichent), sinon null. */
+  get readingBook(): string | null {
+    const id = this.character.reading?.held?.def.id;
+    return id && LIVRES[id] ? id : null;
+  }
+
+  /** Minute de jeu où chaque livre a été fini pour la dernière fois. */
+  private booksDone = new Map<string, number>();
+
+  /** Le livre `id` est lu jusqu'à la dernière page : l'humeur monte, plus si on est bien assis. */
+  finishBook(id: string): void {
+    const book = LIVRES[id];
+    if (!book) return;
+    const now = this.clock.minutes;
+    const last = this.booksDone.get(id);
+    this.booksDone.set(id, now);
+    if (last !== undefined && now - last < BOOK_AGAIN_MIN) {
+      this.onNotice?.(`« ${book.title} » : tu connais déjà la fin, l’humeur ne bouge pas.`);
+      return;
+    }
+    const sofa = this.sitting?.def.id === 'canape';
+    const n = sofa ? MOOD_BOOK_SOFA : this.sitting ? MOOD_BOOK_SEATED : MOOD_BOOK;
+    this.addMood(n);
+    this.onNotice?.(
+      sofa ? `« ${book.title} » lu, bien installé dans le canapé : humeur +${n}.`
+        : this.sitting ? `« ${book.title} » lu, assis : humeur +${n}.`
+        : `« ${book.title} » lu debout : humeur +${n} (assis, ce serait plus).`,
+    );
   }
 
   /** Ferme le livre qu'on lit. */
@@ -6485,6 +6523,7 @@ export class Game {
       read: !!bookHand && !bookHand.stacked && c.otherFree(bookHand),
       reading: !!c.reading,
       recipes: this.readingRecipes,
+      book: this.readingBook,
       seated: !!this.sitting,
       sleeping: !!this.sleep,
     };

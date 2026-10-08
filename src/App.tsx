@@ -13,6 +13,7 @@ import { HeldBar } from './ui/HeldBar';
 import { Icon } from './ui/icons';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { RecipeBook } from './ui/RecipeBook';
+import { BookReader } from './ui/BookReader';
 import { Menu, MenuSection, Shortcuts } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
@@ -43,7 +44,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [held, setHeld] = useState<string | null>(null);
-  const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, recipes: false, seated: false, sleeping: false });
+  const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, recipes: false, book: null, seated: false, sleeping: false });
   const [notice, setNotice] = useState<string | null>(null);
   /** Objet sous la souris : sa jauge de durabilité. */
   const [drag, setDrag] = useState<{ name: string; over: string | null; x: number; y: number } | null>(null);
@@ -223,6 +224,7 @@ function World({ recipe, onEdit }: { recipe: Recipe; onEdit: () => void }) {
         </div>
       </div>
       {can.recipes && ready && !inv && <RecipeBook game={ready} onClose={() => ready.stopReading()} />}
+      {can.book && ready && !inv && <BookReader key={can.book} game={ready} id={can.book} onClose={() => ready.stopReading()} />}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
       {drag && (
