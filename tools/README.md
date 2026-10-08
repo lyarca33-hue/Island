@@ -37,6 +37,14 @@ python3 tools/build_anim_assets.py --src /tmp/ual/UAL2_Standard.glb --out public
     --clips Idle_FoldArms_Loop Idle_TalkingPhone_Loop Consume
 ```
 
+Les gestes de cuisine (tendre la main vers un appareil, prendre sur la table, s'agenouiller
+devant une porte basse, pousser un meuble ; voir `src/game/character.ts`) :
+
+```bash
+python3 tools/build_anim_assets.py --src /tmp/ual/UAL1_Standard.glb --out public/anim/ual_kitchen.glb \
+    --clips Interact PickUp_Table Fixing_Kneeling Push_Loop
+```
+
 Les os sont lus par `src/creator/retarget.ts` (`UAL_TO_VRM`).
 
 Les clips Mixamo du jeu (`public/anim/mixamo.glb`) viennent de X Bot, sans le mannequin, avec
