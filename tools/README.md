@@ -38,3 +38,11 @@ python3 tools/build_anim_assets.py --src /tmp/ual/UAL2_Standard.glb --out public
 ```
 
 Les os sont lus par `src/creator/retarget.ts` (`UAL_TO_VRM`).
+
+Les clips Mixamo du jeu (`public/anim/mixamo.glb`) viennent de X Bot, sans le mannequin, avec
+seulement les rotations et le déplacement du bassin (ce que lit `retarget.ts`) :
+
+```bash
+python3 tools/build_anim_assets.py --src public/models/xbot.glb --out public/anim/mixamo.glb \
+    --root mixamorig:Hips --clips agree headShake idle run sad_pose sneak_pose walk
+```

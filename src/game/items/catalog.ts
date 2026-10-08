@@ -6,6 +6,7 @@
  * Les objets de test sont faits de formes simples ; un objet importé (.glb) aura la même fiche.
  */
 import * as THREE from 'three';
+import { lightAllPasses } from '../postfx';
 import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
@@ -707,7 +708,8 @@ export const ITEMS: ItemDef[] = [
       lamp.name = 'lampe';
       lamp.position.set(0, H - t - 0.012, -D / 2 + 0.12);
       lamp.visible = false;
-      const glow = new THREE.PointLight(0xfff3d6, 0, 0.45, 2);
+      // sur tous les calques comme les autres lumières (sinon recompilation de chaque matériau à chaque image)
+      const glow = lightAllPasses(new THREE.PointLight(0xfff3d6, 0, 0.45, 2));
       glow.name = 'lampe-lumiere';
       glow.position.set(0, H - t - 0.1, -0.05);
       g.add(lamp, glow);
