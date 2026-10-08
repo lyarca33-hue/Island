@@ -12,6 +12,7 @@ import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
 import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
+import { loadNature } from './nature';
 import { DELIVERY_SPOT, Entree } from './entree';
 import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
 import { ENTREE_FEMININE } from './items/entree';
@@ -830,6 +831,11 @@ export class Game {
       sitting: () => this.sitting,
     });
     this.scene.add(this.garden.group);
+    // les arbres et les plantes du pack nature, dès que le fichier est chargé (en attendant, ceux faits
+    // par programme) ; en qualité basse, moins d'herbes et de fleurs au sol
+    loadNature()
+      .then((kit) => this.garden.dress(kit, ROOMS.map((r) => r.rect), this.qualityLevel === 'basse' ? 0.4 : 1))
+      .catch((e) => console.warn('pack nature non chargé', e));
     this.entree = new Entree({
       character: this.character,
       items: () => this.items,
