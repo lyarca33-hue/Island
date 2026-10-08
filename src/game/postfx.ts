@@ -9,6 +9,11 @@
  * le navigateur quand le plafond de pixels est atteint.
  *
  * Persos : seule leur silhouette est encrée (calque LAYER_CHARACTER), comme dans Arena Tactic.
+ *
+ * Perso caché (option seeThrough, en jeu) : derrière un mur, un toit ou un meuble, il se voit en
+ * transparence, entouré d'une aura claire. Le perso est redessiné seul dans une cible à lui (couleur
+ * et profondeur) ; là où le décor est devant lui, la passe finale le mêle au décor. L'aura est son
+ * masque flouté, rangé dans le canal alpha du bloom (même passes, rien de plus à dessiner).
  */
 import * as THREE from 'three';
 
@@ -65,15 +70,21 @@ export function fitRenderer(renderer: THREE.WebGLRenderer, w: number, h: number,
 
 const VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
-/** Flou gaussien séparable à 9 prises (pas = `dir`, en texels de la cible lue). */
+/** Flou gaussien séparable à 9 prises (pas = `dir`, en texels de la cible lue), alpha compris (l'aura). */
 const BLUR_FS = `
   uniform sampler2D tSrc; uniform vec2 dir; varying vec2 vUv;
   void main(){
-    vec3 c = texture2D(tSrc, vUv).rgb * 0.227;
-    c += (texture2D(tSrc, vUv + dir * 1.385).rgb + texture2D(tSrc, vUv - dir * 1.385).rgb) * 0.316;
-    c += (texture2D(tSrc, vUv + dir * 3.231).rgb + texture2D(tSrc, vUv - dir * 3.231).rgb) * 0.070;
-    gl_FragColor = vec4(c, 1.0);
+    vec4 c = texture2D(tSrc, vUv) * 0.227;
+    c += (texture2D(tSrc, vUv + dir * 1.385) + texture2D(tSrc, vUv - dir * 1.385)) * 0.316;
+    c += (texture2D(tSrc, vUv + dir * 3.231) + texture2D(tSrc, vUv - dir * 3.231)) * 0.070;
+    gl_FragColor = c;
   }`;
+
+/**
+ * Écart de profondeur (m) au-delà duquel le décor devant le perso le cache : assez pour qu'un
+ * objet tenu en main, contre lui, ne le fasse pas voir en transparence.
+ */
+const HIDDEN_GAP = 0.3;
 
 export class PostFx {
   private renderer: THREE.WebGLRenderer;
@@ -83,8 +94,10 @@ export class PostFx {
   /** Bloom (quart de résolution). */
   private brightRT: THREE.WebGLRenderTarget;
   private blurRT: THREE.WebGLRenderTarget;
-  /** Profondeur des persos seuls (sans décor), comparée à celle de la scène. */
+  /** Persos seuls (sans décor) : profondeur comparée à celle de la scène, et couleur (perso caché). */
   private charRT: THREE.WebGLRenderTarget;
+  /** Perso caché vu en transparence avec une aura (en jeu ; inutile dans le créateur). */
+  private seeThrough: boolean;
   private charMat = new THREE.MeshBasicMaterial({ colorWrite: false, fog: false });
   private quad: THREE.Mesh;
   private quadScene = new THREE.Scene();
@@ -95,8 +108,9 @@ export class PostFx {
   private pw = 1;
   private ph = 1;
 
-  constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera) {
+  constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera, seeThrough = false) {
     this.renderer = renderer;
+    this.seeThrough = seeThrough;
     this.scene = scene;
     this.camera = camera;
     // cibles des flous sans tampon de profondeur : seuls des quads plein écran y sont dessinés
@@ -106,17 +120,32 @@ export class PostFx {
     this.sceneRT = new THREE.WebGLRenderTarget(1, 1, { ...opts, depthBuffer: true, samples: 0, depthTexture: new THREE.DepthTexture(1, 1) });
     this.brightRT = new THREE.WebGLRenderTarget(1, 1, opts);
     this.blurRT = new THREE.WebGLRenderTarget(1, 1, opts);
-    this.charRT = new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1) });
+    // couleur en HalfFloat linéaire comme la scène : les persos y gardent les mêmes shaders
+    this.charRT = new THREE.WebGLRenderTarget(1, 1, { ...opts, depthBuffer: true, samples: 0, depthTexture: new THREE.DepthTexture(1, 1) });
 
+    // bloom en rgb ; en alpha, le masque du perso caché (flouté ensuite avec le bloom : l'aura)
     this.brightMat = new THREE.ShaderMaterial({
-      uniforms: { tScene: { value: null }, threshold: { value: 0.85 } },
+      uniforms: {
+        tScene: { value: null }, threshold: { value: 0.85 },
+        tDepth: { value: this.sceneRT.depthTexture }, tCharDepth: { value: this.charRT.depthTexture },
+        fullTexel: { value: new THREE.Vector2() }, gap: { value: 0 },
+      },
       vertexShader: VS,
       fragmentShader: `
         uniform sampler2D tScene; uniform float threshold; varying vec2 vUv;
+        uniform sampler2D tDepth; uniform sampler2D tCharDepth; uniform vec2 fullTexel; uniform float gap;
+        // perso caché en ce point de l'image pleine : décor devant lui d'au moins gap (profondeur brute)
+        float hidden(vec2 o){
+          vec2 uv = vUv + o * fullTexel;
+          float cd = texture2D(tCharDepth, uv).r;
+          return step(cd, 0.9999) * step(texture2D(tDepth, uv).r + gap, cd);
+        }
         void main(){
           vec3 c = texture2D(tScene, vUv).rgb;
           float l = max(max(c.r, c.g), c.b);
-          gl_FragColor = vec4(c * smoothstep(threshold, threshold + 0.4, l), 1.0);
+          // 4 prises sur les 16 pixels pleins de ce pixel au quart : les bras fins ne disparaissent pas
+          float h = gap > 0.0 ? max(max(hidden(vec2(-1.0)), hidden(vec2(1.0))), max(hidden(vec2(-1.0, 1.0)), hidden(vec2(1.0, -1.0)))) : 0.0;
+          gl_FragColor = vec4(c * smoothstep(threshold, threshold + 0.4, l), h);
         }`,
       depthTest: false, depthWrite: false,
     });
@@ -128,6 +157,7 @@ export class PostFx {
       uniforms: {
         tScene: { value: this.sceneRT.texture }, tDepth: { value: this.sceneRT.depthTexture },
         tCharDepth: { value: this.charRT.depthTexture }, tBloom: { value: this.brightRT.texture },
+        tChar: { value: this.charRT.texture }, seeThrough: { value: seeThrough ? 1 : 0 },
         texel: { value: new THREE.Vector2() }, near: { value: 0.1 }, range: { value: 399.9 },
         ink: { value: 0.8 }, bloom: { value: 0.5 }, aspect: { value: 1 },
         sharpen: { value: 0.5 },
@@ -137,6 +167,7 @@ export class PostFx {
       vertexShader: VS,
       fragmentShader: `
         uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tCharDepth; uniform sampler2D tBloom;
+        uniform sampler2D tChar; uniform float seeThrough;
         uniform vec2 texel; uniform float near; uniform float range; uniform float ink; uniform float bloom; uniform float aspect;
         uniform float sharpen;
         uniform vec3 lift; uniform vec3 gain; uniform float saturation; varying vec2 vUv;
@@ -172,7 +203,16 @@ export class PostFx {
           // qu'au-dessus du seuil d'encre : calculé seulement là)
           if (e > 0.16) e *= 1.0 - ch(vec2(0.0), r0) * ch(vec2(1.0,0.0), rxp) * ch(vec2(-1.0,0.0), rxm) * ch(vec2(0.0,1.0), ryp) * ch(vec2(0.0,-1.0), rym);
           c = mix(c, vec3(0.02, 0.018, 0.035), smoothstep(0.16, 0.4, e) * ink);
-          c += texture2D(tBloom, vUv).rgb * bloom;
+          vec4 b = texture2D(tBloom, vUv);
+          c += b.rgb * bloom;
+          if (seeThrough > 0.5) {
+            // perso caché : vu en transparence à travers le décor, dans une aura claire
+            float cd = texture2D(tCharDepth, vUv).r;
+            float hid = step(cd, 0.9999) * step(lin(r0) + ${HIDDEN_GAP.toFixed(2)}, lin(cd));
+            vec3 aura = vec3(1.0, 0.93, 0.72);
+            c = mix(c, texture2D(tChar, vUv).rgb * 0.9 + aura * 0.1, hid * 0.7);
+            c += aura * smoothstep(0.0, 0.5, b.a) * (1.0 - hid * 0.8) * 0.45;
+          }
           c = c * gain + lift;
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
           c = mix(vec3(l), c, saturation);
@@ -209,6 +249,7 @@ export class PostFx {
     this.brightRT.setSize(qw, qh);
     this.blurRT.setSize(qw, qh);
     (this.finalMat.uniforms.texel.value as THREE.Vector2).set(1 / pw, 1 / ph);
+    (this.brightMat.uniforms.fullTexel.value as THREE.Vector2).set(1 / pw, 1 / ph);
     this.finalMat.uniforms.aspect.value = w / h;
   }
 
@@ -240,11 +281,12 @@ export class PostFx {
     u.range.value = this.camera.far - this.camera.near;
     r.setRenderTarget(this.sceneRT);
     r.render(this.scene, this.camera);
-    // bloom
+    this.renderCharacter();
+    // bloom (et masque du perso caché, en alpha)
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
+    this.brightMat.uniforms.gap.value = this.seeThrough ? HIDDEN_GAP / (this.camera.far - this.camera.near) : 0;
     this.pass(this.brightMat, this.brightRT);
     this.blur(this.brightRT, this.blurRT, 1);
-    this.renderCharacterDepth();
     this.pass(this.finalMat, null);
   }
 
@@ -262,12 +304,15 @@ export class PostFx {
     await ready;
   }
 
-  /** Profondeur des seuls maillages de persos (calque LAYER_CHARACTER). */
-  private renderCharacterDepth(): void {
+  /**
+   * Les seuls maillages de persos (calque LAYER_CHARACTER) : leur profondeur, et en jeu leur couleur
+   * (vue à travers le décor quand il les cache) ; sinon un matériau sans couleur, moins cher.
+   */
+  private renderCharacter(): void {
     const r = this.renderer, cam = this.camera, scene = this.scene;
     const bg = scene.background, layers = cam.layers.mask;
     scene.background = null;
-    scene.overrideMaterial = this.charMat;
+    scene.overrideMaterial = this.seeThrough ? null : this.charMat;
     cam.layers.set(LAYER_CHARACTER);
     r.setRenderTarget(this.charRT);
     scene.matrixWorldAutoUpdate = false; // positions déjà calculées par le rendu principal

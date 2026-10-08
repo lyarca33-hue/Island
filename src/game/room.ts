@@ -16,7 +16,8 @@
  *
  * Murs « en coupe » comme dans les Sims : quand le perso est dans une pièce, les murs tournés
  * vers la caméra s'abaissent à hauteur de plinthe dans toutes les pièces ; ils se relèvent quand
- * la caméra tourne. Le perso dehors, derrière un mur, le fait aussi s'abaisser.
+ * la caméra tourne. Dehors, murs et toit restent pleins : le perso caché derrière se voit en
+ * transparence, entouré d'une aura (passe finale, voir postfx.ts).
  *
  * Les meubles sont rangés contre les murs par rangées (runs) : chacun dos au mur, collé au
  * précédent ; leurs places viennent de leurs boîtes (placeRuns), pas de coordonnées à la main.
@@ -347,7 +348,6 @@ export class Room {
   readonly liveShadows: Array<THREE.PointLight | THREE.SpotLight> = [];
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
-  private roofBox = new THREE.Box3();
   private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
   /** Part de lumière des lampes en ce moment (0 à 1). */
   private lampK = 0;
@@ -824,7 +824,6 @@ export class Room {
       this.roof.add(m);
     }
     this.roof.updateMatrixWorld(true);
-    this.roofBox.setFromObject(this.roof);
     this.roof.visible = false;
     this.roof.name = 'toit';
     this.group.add(this.roof);
@@ -976,7 +975,7 @@ export class Room {
   /**
    * À chaque image : murs abaissés quand le perso est dans une pièce (`active`, celle-ci ou une
    * autre) : ceux tournés vers la caméra, et tous ceux qui se trouvent entre la caméra et la pièce
-   * du perso ; relevés quand il sort, sauf un mur qui le cacherait. Portes qui s'ouvrent devant le
+   * du perso ; relevés quand il sort (dehors, le toit et les murs restent pleins). Portes qui s'ouvrent devant le
    * perso, décor animé (selon l'heure `hour`), lampes et vitres selon l'heure solaire `solar`.
    */
   update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, solar: number, toCamera: THREE.Vector3, active: Rect | null, shadowRoom: boolean): void {
@@ -986,10 +985,8 @@ export class Room {
     const edge = active ? Math.max(...[active.x0, active.x1].flatMap((x) => [active.z0, active.z1].map((z) => x * view.x + z * view.y))) : 0;
     // un mur passe devant la pièce du perso si son bout côté caméra dépasse ce bord
     const inFront = (w: Wall) => w.boxes.some((b) => Math.max(b.min.x * view.x, b.max.x * view.x) + Math.max(b.min.z * view.y, b.max.z * view.y) > edge + 0.01);
-    let anyCut = false;
-    // perso hors de cette pièce : rayons du perso (jambes, buste, tête) vers la caméra
-    const here = this.contains(player);
-    const rays = here ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
+    // perso dans une autre pièce : rayons du perso (jambes, buste, tête) vers la caméra
+    const rays = !indoors || this.contains(player) ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
     // seules les lampes et les fenêtres d'UNE pièce font des ombres (`shadowRoom` : celle où est le
     // perso, gardée dehors et dans les passages) : chaque ombre prend une texture au shader, et
     // beaucoup de cartes graphiques n'en ont que 16 (au-delà, les matériaux ne s'affichent plus du
@@ -1009,17 +1006,16 @@ export class Room {
     const hides = (w: Wall) => rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
     for (const w of this.walls) {
       // dans une pièce : les murs côté caméra s'abaissent, et celui qui cache le perso dans la pièce
-      // voisine (le mur mitoyen) ; dehors, ils restent pleins, sauf celui qui cache le perso
-      const cut = indoors ? w.n.dot(view) < -0.1 || inFront(w) || hides(w) : hides(w);
-      anyCut ||= cut;
+      // voisine (le mur mitoyen) ; dehors, ils restent pleins
+      const cut = indoors && (w.n.dot(view) < -0.1 || inFront(w) || hides(w));
       if (cut !== w.cut) {
         w.cut = cut;
         w.full.visible = !cut;
         w.low.visible = cut;
       }
     }
-    // toit : dehors, sauf s'il cache le perso (ou qu'un mur abaissé le cache)
-    this.roof.visible = !indoors && !anyCut && !rays.some((r) => r.intersectsBox(this.roofBox));
+    // toit : dehors (avec les murs pleins)
+    this.roof.visible = !indoors;
     for (const l of this.leaves) {
       const near = Math.hypot(player.x - l.center.x, player.z - l.center.z) < DOOR_NEAR;
       if (!near) l.armed = true;

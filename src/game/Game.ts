@@ -1054,7 +1054,7 @@ export class Game {
     this.bubble.hidden = true;
     container.appendChild(this.bubble);
 
-    this.post = new PostFx(this.renderer, this.scene, this.camera);
+    this.post = new PostFx(this.renderer, this.scene, this.camera, true);
     this.resizeObs = new ResizeObserver(() => this.resize());
     // fenêtre passée d'un écran Retina à un écran externe (ou zoom du navigateur) : le
     // ResizeObserver ne le voit pas, mais le plafond de pixels en dépend
