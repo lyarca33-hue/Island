@@ -7,6 +7,7 @@ import {
   BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, defaultRecipe, EYE_COLORS, HAIR_COLORS, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
   SKIN_TONES, type Body, type Clothes, type Recipe,
 } from './recipe';
+import { BLUSH_COLORS, BROW_COLORS, FACE_MARKS, MARK_COLORS, NO_MAKEUP, PATTERNS, type Makeup } from './looks';
 import { prefetchModel } from './vrm';
 import './creator.css';
 
@@ -118,6 +119,19 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
       else delete acc[slot];
       return { ...r, accessories: acc };
     });
+  const setMakeup = (patch: Partial<Makeup>) => setRecipe((r) => ({ ...r, makeup: { ...NO_MAKEUP, ...r.makeup, ...patch } }));
+  const toggleMark = (id: string) =>
+    setRecipe((r) => {
+      const marks = r.makeup?.marks ?? [];
+      return { ...r, makeup: { ...NO_MAKEUP, ...r.makeup, marks: marks.includes(id) ? marks.filter((m) => m !== id) : [...marks, id] } };
+    });
+  const setPattern = (k: keyof Clothes, id: string | null, color?: string) =>
+    setRecipe((r) => {
+      const patterns = { ...r.patterns };
+      if (id) patterns[k] = { id, color: color ?? patterns[k]?.color ?? '#f4efe6' };
+      else delete patterns[k];
+      return { ...r, patterns };
+    });
   const randomName = () => {
     const names = NAMES[recipe.gender].filter((n) => n !== recipe.name);
     set({ name: names[Math.floor(Math.random() * names.length)] });
@@ -199,6 +213,22 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
                   </button>
                 ))}
               </div>
+              {CLOTHES.map(([k, label]) => {
+                const p = recipe.patterns?.[k];
+                return (
+                  <div key={k}>
+                    <h3>Motif · {label}</h3>
+                    <div className="chips wrap">
+                      <button className={!p ? 'on' : ''} onClick={() => setPattern(k, null)}>Uni</button>
+                      {PATTERNS.map((pt) => (
+                        <button key={pt.id} className={p?.id === pt.id ? 'on' : ''} onClick={() => setPattern(k, pt.id)}>{pt.label}</button>
+                      ))}
+                    </div>
+                    {p && <Swatches colors={CLOTH_COLORS} value={p.color} onChange={(c) => setPattern(k, p.id, c ?? '#f4efe6')} />}
+                  </div>
+                );
+              })}
+              <p className="hint">La couleur du fond se choisit dans l’onglet Couleurs.</p>
             </>
           )}
           {tab === 'visage' && (
@@ -210,6 +240,24 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
                 ))}
               </div>
               <p className="hint">Les yeux, la bouche et les expressions viennent avec le visage.</p>
+              <h3>Joues roses</h3>
+              <Swatches colors={BLUSH_COLORS} value={recipe.makeup?.blush ?? null} none="Aucune" onChange={(c) => setMakeup({ blush: c })} />
+              <h3>Sourcils</h3>
+              <Swatches colors={BROW_COLORS} value={recipe.makeup?.brows ?? null} onChange={(c) => setMakeup({ brows: c })} />
+              <h3>Cils et contour des yeux</h3>
+              <Swatches colors={BROW_COLORS} value={recipe.makeup?.lashes ?? null} onChange={(c) => setMakeup({ lashes: c })} />
+              <h3>Détails et dessins</h3>
+              <div className="chips wrap">
+                {FACE_MARKS.map((m) => (
+                  <button key={m.id} className={recipe.makeup?.marks.includes(m.id) ? 'on' : ''} onClick={() => toggleMark(m.id)}>{m.label}</button>
+                ))}
+              </div>
+              {recipe.makeup?.marks.some((id) => FACE_MARKS.find((m) => m.id === id)?.tinted) && (
+                <>
+                  <h3>Couleur des dessins</h3>
+                  <Swatches colors={MARK_COLORS} value={recipe.makeup.markColor} onChange={(c) => setMakeup({ markColor: c ?? NO_MAKEUP.markColor })} noOrigin />
+                </>
+              )}
             </>
           )}
           {tab === 'coiffure' && (
@@ -304,10 +352,18 @@ function Slider({ label, value, min, max, onChange, reset }: { label: string; va
 }
 
 /** Pastilles de couleur ; « Origine » = couleurs du modèle. */
-function Swatches({ colors, value, onChange }: { colors: string[]; value: string | null; onChange: (c: string | null) => void }) {
+function Swatches({ colors, value, onChange, none = 'Origine', noOrigin = false }: {
+  colors: string[];
+  value: string | null;
+  onChange: (c: string | null) => void;
+  /** Libellé du choix « null ». */
+  none?: string;
+  /** Pas de choix « null » (une couleur est toujours choisie). */
+  noOrigin?: boolean;
+}) {
   return (
     <div className="swatches">
-      <button className={`origin${value === null ? ' on' : ''}`} onClick={() => onChange(null)}>Origine</button>
+      {!noOrigin && <button className={`origin${value === null ? ' on' : ''}`} onClick={() => onChange(null)}>{none}</button>}
       {colors.map((c) => (
         <button key={c} className={value === c ? 'on' : ''} style={{ background: c }} aria-label={c} onClick={() => onChange(c)} />
       ))}
