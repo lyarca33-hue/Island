@@ -104,10 +104,12 @@ const LIGHT_WORDS = new Set(['lumiere', 'lumieres', 'plafonnier', 'suspension', 
 const LID_WORDS = new Set(['couvercle', 'lunette', 'abattant']);
 /** Les pots de l'étagère à épices, par mot dit. */
 const SPICE_WORDS: Record<string, string> = { sel: 'sel', sale: 'sel', saler: 'sel', poivre: 'poivre', poivrer: 'poivre', paprika: 'paprika', herbes: 'herbes de Provence', herbe: 'herbes de Provence', huile: "huile d'olive" };
+/** Sauces et condiments qui assaisonnent comme les épices, par mot dit. */
+const CONDIMENT_WORDS: Record<string, string> = { ketchup: 'ketchup', mayonnaise: 'mayonnaise', mayo: 'mayonnaise', moutarde: 'moutarde', vinaigre: 'vinaigre', vinaigrette: 'vinaigre', creme: 'crème', citron: 'citron', ail: 'ail' };
 /** Ce qu'on tartine, par mot dit. */
 const SPREAD_WORDS: Record<string, string> = { confiture: 'confiture', miel: 'miel', nutella: 'pâte à tartiner', chocolat: 'pâte à tartiner', pate: 'pâte à tartiner', beurre: 'beurre', beurrer: 'beurre' };
 /** Ustensiles et pots : jamais la cible d'un geste de cuisine. */
-const TOOLS = new Set(['fouet', 'spatule', 'cuillère en bois', 'louche', 'râpe', 'cuillère', 'couteau', 'couteau de table', ...Object.values(SPICE_WORDS), ...Object.values(SPREAD_WORDS)]);
+const TOOLS = new Set(['fouet', 'spatule', 'cuillère en bois', 'louche', 'râpe', 'cuillère', 'couteau', 'couteau de table', ...Object.values(SPICE_WORDS), ...Object.values(CONDIMENT_WORDS), ...Object.values(SPREAD_WORDS)]);
 /** Verbes qui réchauffent (au micro-ondes) plutôt que cuire (au four). */
 const REHEAT = new Set(['rechauffe', 'rechauffer', 'chauffe', 'chauffer']);
 /** Meubles qu'on ouvre et ferme (porte, tiroir, couvercle). */
@@ -434,6 +436,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       }
       // « mets du poivre (sur l'omelette) », « mets un peu d'huile » : assaisonner
       if (['du', 'de', 'des', 'un'].includes(rest[0]) && rest.some((x) => SPICE_WORDS[x])) return parseClause('assaisonner', rest, original, world);
+      // « mets du ketchup sur les frites », « mets un filet de citron » (mais « mets un citron sur la planche » : poser)
+      if ((['du', 'de', 'des'].includes(rest[0]) || ['peu', 'trait', 'filet', 'noix'].includes(rest[1])) && rest.some((x) => CONDIMENT_WORDS[x])) return parseClause('assaisonner', rest, original, world);
       // « mets une pastille (dans le lave-vaisselle) »
       if (rest.some((x) => x.startsWith('pastille'))) return [{ kind: 'pastille' }];
       // « mets un sachet de thé (dans la tasse / la théière) »
@@ -928,8 +932,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « fais sauter la crêpe », « retourne l'omelette »
       return [{ kind: 'sauter', ref: found.find((o) => o.nom === 'poêle')?.ref }];
     case 'assaisonner': {
-      // « sale l'omelette », « mets du poivre », « assaisonne avec des herbes »
-      const spice = SPICE_WORDS[word] ?? rest.map((x) => SPICE_WORDS[x]).find(Boolean) ?? 'sel';
+      // « sale l'omelette », « mets du poivre », « assaisonne avec des herbes », « assaisonne les frites au ketchup »
+      const spice = SPICE_WORDS[word] ?? rest.map((x) => SPICE_WORDS[x] ?? CONDIMENT_WORDS[x]).find(Boolean) ?? 'sel';
       const target = found.find((o) => !TOOLS.has(o.nom) && o.nom !== 'étagère à épices');
       return [{ kind: 'assaisonner', epice: spice, ref: target?.ref }];
     }

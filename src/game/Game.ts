@@ -19,6 +19,7 @@ import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/catalog';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
+import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
@@ -6128,7 +6129,8 @@ export class Game {
   starsOf(item: WorldItem): number {
     if (!item.stars) return 0;
     let s = item.stars;
-    if (this.seasoned.get(item)?.size) s += 1;
+    const spices = this.seasoned.get(item);
+    if (spices?.size) s += 1 + pairing(item.name, spices);
     if (this.toppings.get(item)?.length) s += 0.5;
     const d = doneness(item.def, item.cooking);
     if (d === 'brûlé' || d === 'cru') s -= 2;
@@ -6162,6 +6164,16 @@ export class Game {
     if (!stars || doneness(item.def, item.cooking) === 'brûlé') return;
     if (stars >= 5) this.needs.heal(STAR_HEAL);
     if (stars !== 3) this.addMood((stars - 3) * MOOD_STAR);
+    // une sauce qui va bien (ketchup et frites) ou qui jure (moutarde sur des fraises)
+    const match = pairing(item.name, this.seasoned.get(item) ?? []);
+    if (match) {
+      this.say(match > 0 ? PAIRING_SAY.good : PAIRING_SAY.odd);
+      // une grimace (ou un sourire), le temps de la bouchée
+      this.character.setExpression(match > 0 ? 'sourire' : 'degout');
+      setTimeout(() => this.character.setExpression('neutre'), 2500);
+      this.onNotice?.(`${cap(item.name)} ${starText(stars)} : ${match > 0 ? 'parfait, la sauce va très bien avec !' : 'drôle de mélange, cette sauce ne va pas avec…'}`);
+      return;
+    }
     this.say(STAR_VERDICT[stars]);
     this.onNotice?.(`${cap(item.name)} ${starText(stars)} : ${STAR_VERDICT[stars].toLowerCase()}${stars >= 5 ? ` (santé +${STAR_HEAL})` : ''}`);
   }
@@ -6670,7 +6682,7 @@ export class Game {
     const egg = held.find((h) => h.def.id === 'oeuf');
     const dry = held.find((h) => MIX_DRY[h.name] !== undefined);
     const tool = held.find((h) => !!h.def.stirs);
-    const jar = held.find((h) => !!h.def.spice);
+    const jar = held.find((h) => !!seasonWord(h.def));
     const pot = held.find((h) => SPREADS[h.name] !== undefined);
     const knife = held.find((h) => !!h.def.knife || h.name === 'couteau de table');
     const rasp = held.find((h) => !!h.def.grates) && held.find((h) => h.def.id === 'fromage');
@@ -6680,7 +6692,7 @@ export class Game {
     if (!item) {
       if (egg) add('Casser l’œuf', () => this.crackEgg());
       if (tool && bowl && this.mixes.get(bowl)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(this.ref(bowl)));
-      const food = held.find((h) => !!h.def.food);
+      const food = held.find((h) => !!h.def.food && h !== jar);
       if (jar && food) add(`Assaisonner ${the(food.name)} (${jar.name})`, () => this.season(this.ref(food)));
       if (rasp) add('Râper le fromage', () => this.grate());
       if (spoon && bowl && this.mixes.has(bowl)) add('Goûter', () => this.taste(this.ref(bowl)));
@@ -7094,16 +7106,16 @@ export class Game {
   /** Assaisonne avec le pot d'épices tenu ce qu'il y a dans (ou sur) `ref` : la poêle, l'assiette, la planche, ou un aliment tenu. */
   season(ref?: string, running = false): boolean {
     const c = this.character;
-    const jar = this.heldWith((h) => !!h.def.spice);
-    const target = ref ? this.byRef(ref) : (this.heldWith((h) => !!h.def.food) ?? this.panFor(undefined, (p) => this.inPan(p).length > 0) ?? this.nearest((i) => !!i.def.plate && !!this.foodOn(i) && !c.carried.includes(i) && !this.shelfOf(i)));
-    const foods = target ? this.foodsAt(target) : [];
-    if (!jar) this.onNotice?.('Prends un pot sur l’étagère à épices (sel, poivre, paprika, herbes, huile).');
+    const jar = this.heldWith((h) => !!seasonWord(h.def));
+    const target = ref ? this.byRef(ref) : (this.heldWith((h) => !!h.def.food && h !== jar) ?? this.panFor(undefined, (p) => this.inPan(p).length > 0) ?? this.nearest((i) => !!i.def.plate && !!this.foodOn(i) && !c.carried.includes(i) && !this.shelfOf(i)));
+    const foods = target ? this.foodsAt(target).filter((f) => f !== jar) : [];
+    if (!jar) this.onNotice?.('Prends un pot sur l’étagère à épices (sel, poivre, paprika, herbes, huile) ou une sauce (ketchup, mayonnaise, moutarde, vinaigre, crème, citron, ail).');
     else if (!target || !foods.length) this.onNotice?.('Rien à assaisonner : un plat dans la poêle, l’assiette ou sur la planche.');
     else {
       return this.gesture(jar, target, 'tilt', this.above(target, 0.1), () => {
         for (const f of foods) (this.seasoned.get(f) ?? this.seasoned.set(f, new Set()).get(f)!).add(jar.name);
         this.wearItem(jar, 1, false);
-        this.onNotice?.(`${cap(jar.def.spice!)} sur ${foods.map((f) => the(f.name)).join(' et ')}.`);
+        this.onNotice?.(`${cap(seasonWord(jar.def)!)} sur ${foods.map((f) => the(f.name)).join(' et ')}.`);
         this.practice(XP_GESTURE);
       }, running);
     }
@@ -7209,6 +7221,8 @@ export class Game {
         const note = stars ? ` (${starText(stars)})` : '';
         if (f.warmed && warmth(f.heat) === 'froid') return `C’est froid : réchauffe-${it(f.name)} au micro-ondes.${note}`;
         if (!spices?.size) return `C’est un peu fade : il manque du sel.${note}`;
+        const match = pairing(f.name, spices);
+        if (match) return `${match > 0 ? PAIRING_SAY.good : PAIRING_SAY.odd}${note}`;
         if (spices.size >= 2) return `Délicieux, bien assaisonné !${note}`;
         return `C’est bon !${note}`;
       };
