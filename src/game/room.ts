@@ -325,6 +325,8 @@ export class Room {
   private rocker = new THREE.Group();
   /** Ombre seule : invisible à l'écran, mais arrête la lumière (toit, murs gardés en coupe). */
   readonly shadowMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+  /** Ciel couvert (0 à 1, la météo) : moins de soleil par les fenêtres. */
+  overcast = 0;
   /** Matériau partagé des vitres, teinté selon l'heure. */
   private glassMat = new THREE.MeshBasicMaterial({ color: PANE_DAY.color, transparent: true, opacity: PANE_DAY.opacity, depthWrite: false });
 
@@ -690,7 +692,7 @@ export class Room {
     const warm = 1 - THREE.MathUtils.smoothstep(Math.min(hour - SUNRISE, SUNSET - hour), 1, 3.5);
     for (const l of this.winLights) {
       l.color.copy(WIN_DAY).lerp(WIN_WARM, warm).lerp(WIN_MOON, 1 - day);
-      l.intensity = day * WIN_I + night * WIN_MOON_I;
+      l.intensity = day * WIN_I * (1 - 0.7 * this.overcast) + night * WIN_MOON_I * (1 - 0.6 * this.overcast);
       if (this.shadowsOn && l.intensity > 0.01) this.liveShadows.push(l);
     }
   }

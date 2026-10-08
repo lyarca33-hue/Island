@@ -664,6 +664,12 @@ export class Garden {
     }
   }
 
+  /** La pluie (0 à 1) arrose le potager : deux heures de jeu d'averse le trempent. */
+  rain(amount: number, hours: number): void {
+    if (amount <= 0 || hours <= 0 || this.season === 3) return;
+    this.water = Math.min(1, this.water + (amount * hours) / 2);
+  }
+
   /** À chaque image : la saison (feuillage, fleurs, neige), et l'arrosage en cours. */
   update(dt: number, yearPos: number, snow: number): void {
     this.tickWatering(dt);

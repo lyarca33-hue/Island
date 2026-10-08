@@ -49,7 +49,7 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
   );
 }
 
-/** Sons de cuisine : activés ou coupés, et leur volume (mémorisés). */
+/** Sons (cuisine et ambiance) : activés ou coupés, et leur volume (mémorisés). */
 function SoundControls({ game }: { game: Game }) {
   const [on, setOn] = useState(game.sound.on);
   const [volume, setVolume] = useState(game.sound.volume);
@@ -57,7 +57,7 @@ function SoundControls({ game }: { game: Game }) {
     <>
       <label className="menu-check">
         <input type="checkbox" checked={on} onChange={(e) => { game.sound.on = e.target.checked; setOn(e.target.checked); }} />
-        <span>Sons de cuisine</span>
+        <span>Sons</span>
       </label>
       {on && (
         <label className="menu-check">

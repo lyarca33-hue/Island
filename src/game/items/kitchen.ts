@@ -270,7 +270,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     id: 'eponge',
     name: 'éponge',
     portable: true,
-    grip: 'fist',
+    grip: 'cradle',
     fragility: 1,
     durability: 50,
     wipes: true,
@@ -282,7 +282,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     name: 'torchon',
     portable: true,
     // plié, tenu par un coin
-    grip: 'fist',
+    grip: 'loose',
     gripPoint: [0.07, 0.006, 0.04],
     // sèche la vaisselle mouillée et les mains ; essuie aussi la table et les flaques, comme l'éponge
     towel: true,
@@ -367,7 +367,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     id: 'lasagne',
     name: 'lasagne',
     portable: true,
-    grip: 'fist',
+    grip: 'palm',
     fragility: 9,
     durability: 30,
     // une lasagne surgelée en barquette : givrée au départ, il faut la réchauffer (micro-ondes, four)

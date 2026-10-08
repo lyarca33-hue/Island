@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYER_CHARACTER } from '../game/postfx';
 import { ACCESSORY_BY_ID, SLOTS, type AccSlot, type HeadFit, type NeckFit } from './accessories';
+import { paintedFace, patternedCloth, type WornPattern } from './looks';
 import type { Body, Recipe } from './recipe';
 import { loadVrm } from './vrm';
 
@@ -633,18 +634,37 @@ export class Avatar {
       if (o.shade) mat.shadeColorFactor!.multiplyScalar(LIGHT_COMP);
       mat.needsUpdate = true;
     };
+    // vêtement imprimé : couleur et motif peints dans la texture, couleurs du matériau d'origine
+    const cloth = (mat: Tintable, color: string | null, p: WornPattern | undefined) => {
+      if (!p) return tint(mat, color, true);
+      tint(mat, null, true);
+      const o = this.remember(mat);
+      if (o.map) mat.map = patternedCloth(o.map, color, p);
+      if ('shadeMultiplyTexture' in mat && o.shadeMap) mat.shadeMultiplyTexture = patternedCloth(o.shadeMap, color, p);
+    };
+    // visage : teinte de peau, puis joues et dessins peints par-dessus
+    const face = (mat: Tintable) => {
+      tint(mat, r.skinTone, false);
+      const o = this.remember(mat);
+      mat.map = (o.map && paintedFace(o.map, r.makeup)) ?? o.map;
+      if ('shadeMultiplyTexture' in mat) mat.shadeMultiplyTexture = (o.shadeMap && paintedFace(o.shadeMap, r.makeup)) ?? o.shadeMap;
+    };
+    const m = r.makeup;
     this.base.scene.traverse((obj) => {
-      const m = obj as THREE.Mesh;
-      if (!m.isMesh) return;
-      for (const mat of materialsOf(m) as Tintable[]) {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const mat of materialsOf(mesh) as Tintable[]) {
         if (!mat.color) continue;
         const n = mat.name;
-        if (/_SKIN/.test(n)) tint(mat, r.skinTone, false);
+        if (/Face_\d+_SKIN/.test(n)) face(mat);
+        else if (/_SKIN/.test(n)) tint(mat, r.skinTone, false);
         else if (/_HAIR/.test(n)) tint(mat, r.hairColor, true);
         else if (/EyeIris/.test(n)) tint(mat, r.eyeColor, true);
-        else if (/^.*Tops_.*_CLOTH/.test(n)) tint(mat, r.clothes?.top ?? null, true);
-        else if (/Bottoms_.*_CLOTH/.test(n)) tint(mat, r.clothes?.bottom ?? null, true);
-        else if (/Shoes_.*_CLOTH/.test(n)) tint(mat, r.clothes?.shoes ?? null, true);
+        else if (/FaceBrow/.test(n)) tint(mat, m?.brows ?? null, true);
+        else if (/FaceEyelash|FaceEyeline/.test(n)) tint(mat, m?.lashes ?? null, true);
+        else if (/^.*Tops_.*_CLOTH/.test(n)) cloth(mat, r.clothes?.top ?? null, r.patterns?.top);
+        else if (/Bottoms_.*_CLOTH/.test(n)) cloth(mat, r.clothes?.bottom ?? null, r.patterns?.bottom);
+        else if (/Shoes_.*_CLOTH/.test(n)) cloth(mat, r.clothes?.shoes ?? null, r.patterns?.shoes);
         else tint(mat, null, false);
       }
     });

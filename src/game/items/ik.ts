@@ -13,6 +13,9 @@ import * as THREE from 'three';
 const HALF_TURN = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 const IDENTITY = new THREE.Quaternion();
 
+/** Bras le plus tendu (part de sa longueur) : le coude garde toujours un léger pli. */
+const SOFT_MAX = 0.975;
+
 const _q = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _a = new THREE.Vector3();
@@ -81,7 +84,9 @@ function frame(a: THREE.Vector3, b: THREE.Vector3, out: THREE.Matrix4): THREE.Ma
  * `target` (ou s'en approche bras tendu), le coude partant vers `pole`.
  *
  * `restDir` : direction de l'os du haut au repos (canonique) ; `restHinge` : axe autour duquel
- * le coude plie au repos. Renvoie la position atteinte par le bout.
+ * le coude plie au repos. `soft` (bras) : au-delà de cette part de la longueur du membre, la
+ * cible est approchée en douceur sans jamais tendre le coude à fond (un bras verrouillé droit,
+ * qui claque d'un coup en ligne, paraît s'allonger) ; 0 : jusqu'au bout (jambes, pieds au sol).
  */
 export function solveTwoBone(
   rig: Rig,
@@ -92,6 +97,7 @@ export function solveTwoBone(
   pole: THREE.Vector3,
   restDir: THREE.Vector3,
   restHinge: THREE.Vector3,
+  soft = 0,
 ): void {
   const s = rig.worldPos(upper);
   const e = rig.worldPos(middle);
@@ -99,7 +105,13 @@ export function solveTwoBone(
   const la = s.distanceTo(e);
   const lb = e.distanceTo(w);
   const toT = new THREE.Vector3().subVectors(target, s);
-  const d = THREE.MathUtils.clamp(toT.length(), Math.abs(la - lb) + 1e-3, la + lb - 1e-3);
+  let d = THREE.MathUtils.clamp(toT.length(), Math.abs(la - lb) + 1e-3, la + lb - 1e-3);
+  if (soft > 0) {
+    // au-delà de `soft`, la distance tend vers SOFT_MAX de la longueur sans l'atteindre
+    const full = la + lb, from = soft * full, room = (SOFT_MAX - soft) * full;
+    const over = toT.length() - from;
+    if (over > 0) d = from + room * (1 - Math.exp(-over / room));
+  }
   const dir = toT.normalize();
   // angle à l'épaule (loi des cosinus), coude écarté vers le pôle
   const cosA = (la * la + d * d - lb * lb) / (2 * la * d);
@@ -118,4 +130,23 @@ export function solveTwoBone(
   hinge.normalize();
   rig.setWorldRot(upper, basisRotation(restDir, restHinge, upDir, hinge));
   rig.setWorldRot(middle, basisRotation(restDir, restHinge, lowDir, hinge));
+}
+
+/**
+ * Donne à la main l'orientation monde `handRot`, en reportant une part `share` de sa torsion
+ * (autour de l'avant-bras) sur l'avant-bras : les persos n'ont pas d'os de torsion, et toute la
+ * rotation au seul poignet le pince et l'étire comme un papier de bonbon.
+ */
+export function twistForearm(rig: Rig, lower: THREE.Object3D, hand: THREE.Object3D, handRot: THREE.Quaternion, share = 0.5): void {
+  const axis = rig.worldPos(hand).sub(rig.worldPos(lower)).normalize();
+  const lowRot = rig.worldRot(lower);
+  // rotation qui mène l'avant-bras à la main ; on n'en garde que la torsion autour de l'axe
+  const rel = handRot.clone().multiply(lowRot.clone().invert());
+  const along = axis.multiplyScalar(rel.x * axis.x + rel.y * axis.y + rel.z * axis.z);
+  const twist = new THREE.Quaternion(along.x, along.y, along.z, rel.w);
+  if (twist.lengthSq() > 1e-10) {
+    twist.normalize();
+    rig.setWorldRot(lower, new THREE.Quaternion().slerp(twist, share).multiply(lowRot));
+  }
+  rig.setWorldRot(hand, handRot);
 }

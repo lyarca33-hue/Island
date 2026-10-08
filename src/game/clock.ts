@@ -265,11 +265,16 @@ const LIGHT_DIST = 20;
 const gain = new THREE.Vector3();
 const dir = new THREE.Vector3();
 
+const grey = new THREE.Color();
+/** Étalonnage sous un ciel couvert : un peu froid. */
+const OVERCAST_GAIN = new THREE.Vector3(0.94, 0.96, 1.0);
+
 /**
  * Règle la lumière pour l'heure solaire `hour` (voir GameClock.solarHour), avec le soleil à
- * `noonElev` (rad) à midi ; la lumière principale reste centrée sur `focus`.
+ * `noonElev` (rad) à midi ; la lumière principale reste centrée sur `focus`. `overcast` (0 à 1) :
+ * ciel couvert (météo), soleil voilé, lumière grise et couleurs ternes.
  */
-export function applySky(hour: number, noonElev: number, t: SkyTargets, focus: THREE.Vector3): void {
+export function applySky(hour: number, noonElev: number, t: SkyTargets, focus: THREE.Vector3, overcast = 0): void {
   let i = 0;
   while (i < KEYS.length - 2 && KEYS[i + 1].h <= hour) i++;
   const a = KEYS[i], b = KEYS[i + 1];
@@ -282,7 +287,22 @@ export function applySky(hour: number, noonElev: number, t: SkyTargets, focus: T
   t.hemi.intensity = a.hemiI + (b.hemiI - a.hemiI) * k;
   if (t.scene.background instanceof THREE.Color) lerp3(a.bg, b.bg, k, t.scene.background, THREE.SRGBColorSpace);
   lerp3(a.gain, b.gain, k, gain);
-  t.grade(gain, a.sat + (b.sat - a.sat) * k);
+  let sat = a.sat + (b.sat - a.sat) * k;
+  if (overcast > 0) {
+    // nuages : le soleil ne fait plus d'ombre franche, tout tire vers le gris
+    t.sun.intensity *= 1 - 0.85 * overcast;
+    t.hemi.intensity *= 1 + 0.2 * overcast;
+    const toGrey = (c: THREE.Color, f: number, dim = 1) => {
+      const l = (c.r * 0.3 + c.g * 0.55 + c.b * 0.15) * dim;
+      c.lerp(grey.setRGB(l, l, l * 1.04), f);
+    };
+    toGrey(t.sun.color, 0.6 * overcast);
+    toGrey(t.hemi.color, 0.55 * overcast);
+    if (t.scene.background instanceof THREE.Color) toGrey(t.scene.background, 0.7 * overcast, 0.85);
+    gain.lerp(OVERCAST_GAIN, 0.6 * overcast);
+    sat *= 1 - 0.35 * overcast;
+  }
+  t.grade(gain, sat);
 
   if (hour > SUNRISE && hour < SUNSET) {
     // le soleil se lève à l'est, passe au sud, se couche à l'ouest ; à midi il vient du même côté

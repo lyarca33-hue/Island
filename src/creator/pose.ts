@@ -1,6 +1,7 @@
 /**
  * Retouches de pose ajoutées par-dessus les animations Mixamo : coudes un peu pliés, poignets
- * et doigts détendus, épaules basses. Les clips d'X Bot ont les bras et les mains raides ; ces
+ * et doigts détendus, épaules basses et ramenées en arrière, buste droit (le repos d'X Bot a le
+ * dos rond et les épaules en avant, les mains devant les cuisses). Les clips d'X Bot ont les bras et les mains raides ; ces
  * petites rotations rendent le repos (et la marche) plus naturels.
  *
  * Angles en degrés, dans le repère du squelette VRM normalisé (perso face à +Z, bras gauche
@@ -13,7 +14,10 @@ type Side = 'left' | 'right';
 /** [os (sans « left/right »), axe, angle du côté gauche] */
 const SIDED: Array<[string, [number, number, number], number]> = [
   ['Shoulder', [0, 0, 1], -4],
-  ['UpperArm', [0, 0, 1], 5],
+  // épaules ramenées en arrière, bras qui tombent le long du corps (pas devant les cuisses)
+  ['Shoulder', [0, 1, 0], 10],
+  ['UpperArm', [0, 0, 1], 2],
+  ['UpperArm', [0, 1, 0], 6],
   ['LowerArm', [1, 0, 0], 25],
   ['Hand', [0, 0, 1], -8],
   ['IndexProximal', [0, 0, 1], -12],
@@ -38,6 +42,10 @@ const SINGLE: Array<[VRMHumanBoneName, [number, number, number], number]> = [
   ['hips', [0, 0, 1], 2],
   ['spine', [0, 0, 1], -2.5],
   ['head', [0, 0, 1], 3],
+  // buste redressé, le regard gardé droit
+  ['upperChest', [1, 0, 0], -4],
+  ['neck', [1, 0, 0], 2],
+  ['head', [1, 0, 0], 2],
 ];
 
 export class PoseLayer {

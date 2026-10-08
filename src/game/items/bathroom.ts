@@ -271,7 +271,7 @@ export const BATHROOM_ITEMS: ItemDef[] = [
     id: 'serviette',
     name: 'serviette',
     portable: true,
-    grip: 'fist',
+    grip: 'loose',
     // tenue par le pli du haut
     gripPoint: [0, TOWEL_H - 0.03, 0],
     fragility: 10,

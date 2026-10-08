@@ -342,7 +342,7 @@ export const PANTRY_ITEMS: ItemDef[] = [
     id: 'sac-courses',
     name: 'sac de courses',
     portable: true,
-    grip: 'fist',
+    grip: 'side',
     // tenu par les anses
     gripPoint: [0, 0.33, 0],
     fragility: 10,

@@ -5,6 +5,7 @@
  */
 import { ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from './accessories';
 import { MODELS, MODEL_BY_ID, type Gender } from './catalog';
+import { BLUSH_COLORS, FACE_MARK_BY_ID, FACE_MARKS, MARK_COLORS, NO_MAKEUP, PATTERN_BY_ID, PATTERNS, type Makeup, type WornPattern } from './looks';
 
 export interface Body {
   /** Échelle de tout le corps (1 = taille du modèle d'origine). */
@@ -36,6 +37,10 @@ export interface Recipe {
   clothes?: Clothes;
   /** Accessoire porté par emplacement (chapeau, lunettes...). Absent des anciennes recettes. */
   accessories?: Partial<Record<AccSlot, WornAccessory>>;
+  /** Joues, sourcils, cils et dessins du visage. Absent des anciennes recettes. */
+  makeup?: Makeup;
+  /** Motif imprimé par vêtement (rayures, pois...). Absent des anciennes recettes. */
+  patterns?: Partial<Record<keyof Clothes, WornPattern>>;
 }
 
 export interface Clothes {
@@ -94,6 +99,8 @@ export function defaultRecipe(gender: Gender = 'f'): Recipe {
     body: { ...DEFAULT_BODY },
     clothes: { ...NO_CLOTHES },
     accessories: {},
+    makeup: { ...NO_MAKEUP, marks: [] },
+    patterns: {},
   };
 }
 
@@ -113,6 +120,9 @@ export function randomRecipe(): Recipe {
     accessories[slot] = { id: a.id, color: Math.random() < 0.6 ? a.color : pick(CLOTH_COLORS) };
   }
   const cloth = () => (Math.random() < 0.6 ? null : pick(CLOTH_COLORS));
+  const patterns: Partial<Record<keyof Clothes, WornPattern>> = {};
+  if (Math.random() < 0.3) patterns[Math.random() < 0.6 ? 'top' : 'bottom'] = { id: pick(PATTERNS).id, color: pick(CLOTH_COLORS) };
+  const marks = Math.random() < 0.35 ? [pick(FACE_MARKS.filter((m) => m.id !== 'barbe' || gender === 'm')).id] : [];
   return {
     version: 2,
     name: pick(NAMES[gender]),
@@ -131,6 +141,14 @@ export function randomRecipe(): Recipe {
     },
     clothes: { top: cloth(), bottom: cloth(), shoes: cloth() },
     accessories,
+    makeup: {
+      blush: Math.random() < 0.4 ? pick(BLUSH_COLORS) : null,
+      brows: null,
+      lashes: null,
+      marks,
+      markColor: pick(MARK_COLORS),
+    },
+    patterns,
   };
 }
 
@@ -158,6 +176,20 @@ export function sanitizeRecipe(raw: unknown): Recipe | null {
         const w = r.accessories?.[slot];
         const a = w && ACCESSORY_BY_ID.get(w.id);
         return a && a.slot === slot ? [[slot, { id: a.id, color: color(w.color) ?? a.color }]] : [];
+      }),
+    ),
+    makeup: {
+      blush: color(r.makeup?.blush),
+      brows: color(r.makeup?.brows),
+      lashes: color(r.makeup?.lashes),
+      marks: Array.isArray(r.makeup?.marks) ? [...new Set(r.makeup.marks.filter((id) => FACE_MARK_BY_ID.has(id)))] : [],
+      markColor: color(r.makeup?.markColor) ?? NO_MAKEUP.markColor,
+    },
+    patterns: Object.fromEntries(
+      (['top', 'bottom', 'shoes'] as const).flatMap((k) => {
+        const p = r.patterns?.[k];
+        const c = p && color(p.color);
+        return p && c && PATTERN_BY_ID.has(p.id) ? [[k, { id: p.id, color: c }]] : [];
       }),
     ),
   };

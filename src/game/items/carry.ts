@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { ItemDef } from './catalog';
 import { GRIPS, guessGrip, isTwoHanded, vec, type GripSpec, type GripType, type HandSpec } from './grips';
 import { gradeIndex, showWear } from './durability';
-import { basisRotation, Rig, solveTwoBone } from './ik';
+import { basisRotation, Rig, solveTwoBone, twistForearm } from './ik';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
 function gripRotation(spec: GripSpec): THREE.Quaternion {
@@ -27,6 +27,8 @@ export class WorldItem {
   /** Boîte de l'objet dans son propre repère (pour le poser à plat ou debout). */
   readonly box: THREE.Box3;
   readonly gripPoint: THREE.Vector3;
+  /** Point calé dans la main une fois tenu (le dessous sur la paume, sinon le point saisi). */
+  readonly holdPoint: THREE.Vector3;
   /** Niveau de remplissage d'un récipient (0 vide, 1 plein ; voir ItemDef.fill). */
   level = 0;
   /** Ce qu'il contient (« café »), ou null. */
@@ -71,6 +73,8 @@ export class WorldItem {
     }
     this.grip = def.grip ?? guessGrip(this.size);
     this.gripPoint = def.gripPoint ? vec(def.gripPoint) : new THREE.Vector3(0, this.size.y / 2, 0);
+    const c = this.box.getCenter(new THREE.Vector3());
+    this.holdPoint = GRIPS[this.grip].point === 'bottom' ? new THREE.Vector3(c.x, this.box.min.y, c.z) : this.gripPoint.clone();
     if (def.fill) this.setLevel(def.startFull ? 1 : 0);
     this.contents = def.startFull ?? null;
     this.durability = this.maxDurability;
@@ -349,6 +353,8 @@ const ARM_REST: Record<Side, { dir: THREE.Vector3; hinge: THREE.Vector3; fingers
 };
 const PALM_REST = new THREE.Vector3(0, -1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
+/** Les bras approchent leur cible en douceur au-delà de cette part de leur longueur (voir solveTwoBone). */
+const ARM_SOFT = 0.9;
 const LEG_DIR = new THREE.Vector3(0, -1, 0);
 const LEG_HINGE = new THREE.Vector3(1, 0, 0);
 
@@ -967,7 +973,7 @@ export class Carry {
       this.rig.vrm.scene.updateMatrixWorld(true);
       if (!reach) break;
       // ce qui manque au bras (presque tendu) pour toucher la cible
-      const short = rig.worldPos(rig.node(`${reach}UpperArm`)!).distanceTo(this.target) - 0.97 * armLen;
+      const short = rig.worldPos(rig.node(`${reach}UpperArm`)!).distanceTo(this.target) - 0.92 * armLen;
       if (short < 0.005 * scale || (drop >= CROUCH_DROP_MAX && bendMore >= CROUCH_BEND_MAX)) break;
       // objet en hauteur (table) : on se penche plutôt ; au sol, on plie aussi les genoux
       drop = Math.min(CROUCH_DROP_MAX, drop + (short * low) / scale);
@@ -994,8 +1000,8 @@ export class Carry {
     const wrist = rig.worldPos(upper).addScaledVector(DOWN, 0.9 * len).addScaledVector(fwd, 0.15 * len).addScaledVector(out, 0.08 * len);
     const pole = fwd.clone().negate().addScaledVector(out, 0.4).normalize();
     const rest = ARM_REST[side];
-    solveTwoBone(rig, upper, lower, hand, wrist, pole, rest.dir, rest.hinge);
-    rig.setWorldRot(hand, basisRotation(rest.fingers, PALM_REST, DOWN.clone().addScaledVector(fwd, 0.25).normalize(), out.clone().negate()));
+    solveTwoBone(rig, upper, lower, hand, wrist, pole, rest.dir, rest.hinge, ARM_SOFT);
+    twistForearm(rig, lower, hand, basisRotation(rest.fingers, PALM_REST, DOWN.clone().addScaledVector(fwd, 0.25).normalize(), out.clone().negate()));
     nodes.forEach((n, i) => n.quaternion.copy(before[i].slerp(n.quaternion, k)));
   }
 
@@ -1100,7 +1106,7 @@ export class Carry {
         // le goulot (ou le bord) au-dessus du point, pas le poing
         const item = this.item!;
         const lip = item.def.mouth ? vec(item.def.mouth) : new THREE.Vector3(0, item.def.fill?.[1] ?? item.size.y, 0);
-        const off = lip.sub(item.gripPoint).applyQuaternion(handRot.clone().multiply(gripRotation(spec)));
+        const off = lip.sub(item.holdPoint).applyQuaternion(handRot.clone().multiply(gripRotation(spec)));
         palmTarget.x -= off.x * pouring;
         palmTarget.z -= off.z * pouring;
       }
@@ -1111,7 +1117,7 @@ export class Carry {
         const neck = this.item?.def.mouth;
         const mouth = neck ?? (this.phase === 'drink' ? this.item?.def.lip : undefined);
         if (mouth) {
-          const extra = vec(mouth).sub(this.item!.gripPoint).sub(CUP_LIP).applyQuaternion(handRot.clone().multiply(gripRotation(spec)));
+          const extra = vec(mouth).sub(this.item!.holdPoint).sub(CUP_LIP).applyQuaternion(handRot.clone().multiply(gripRotation(spec)));
           palmTarget.addScaledVector(extra, -this.sip);
           if (this.phase === 'drink' && neck) palmTarget.addScaledVector(vec(flip(NECK_IN, side)).multiplyScalar(scale).applyQuaternion(this.chestRot), this.sip);
         }
@@ -1123,8 +1129,8 @@ export class Carry {
     // gorgée : le coude descend sous la tasse
     if (sipping) pole.lerp(vec(flip(SIP_POLE, side)).normalize(), this.sip).normalize();
     pole.applyQuaternion(this.chestRot);
-    solveTwoBone(rig, upper, lower, handNode, wrist, pole, rest.dir, rest.hinge);
-    rig.setWorldRot(handNode, handRot);
+    solveTwoBone(rig, upper, lower, handNode, wrist, pole, rest.dir, rest.hinge, ARM_SOFT);
+    twistForearm(rig, lower, handNode, handRot);
     this.palms[side] = anchorPalm ?? palmTarget;
     this.handRots[side] = handRot;
     this.curl(side, hand, this.grasp(fetch));
@@ -1255,9 +1261,9 @@ export class Carry {
     return { pos: pos.clone().sub(anchor.pos).applyQuaternion(inv), rot: inv.multiply(rot) };
   }
 
-  /** Point saisi de l'objet tenu ; une pile se porte par en dessous (face opposée, +X). */
+  /** Point de l'objet tenu calé dans la main ; une pile se porte par en dessous (face opposée, +X). */
   private gripPoint(): THREE.Vector3 {
-    const p = this.item!.gripPoint.clone();
+    const p = this.item!.holdPoint.clone();
     if (this.stack.length) p.x = this.item!.box.max.x;
     return p;
   }
