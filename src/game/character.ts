@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Puppet } from '../creator/puppet';
+import type { VRMHumanBoneName } from '@pixiv/three-vrm';
 import type { Recipe } from '../creator/recipe';
 import { Carry, type Side, type WorldItem } from './items/carry';
 import { isTwoHanded } from './items/grips';
@@ -335,6 +336,11 @@ export class Character {
       out.push(glove);
     }
     return out;
+  }
+
+  /** Os du perso du créateur (« head », « neck », « leftUpperArm »…), pour l'habiller ; null sans perso du créateur. */
+  bone(name: VRMHumanBoneName): THREE.Object3D | null {
+    return this.puppet?.vrm.humanoid.getRawBoneNode(name) ?? null;
   }
 
   /** Retire ce qu'avait ajouté `dressHands`. */

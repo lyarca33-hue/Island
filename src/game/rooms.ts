@@ -7,5 +7,6 @@ import { KITCHEN, type RoomSpec } from './room';
 import { SALON_SPEC } from './salon';
 import { CHAMBRE_SPEC } from './chambre';
 import { BATHROOM_SPEC } from './salle-de-bain';
+import { ENTREE_SPEC } from './entree';
 
-export const ROOMS: RoomSpec[] = [KITCHEN, SALON_SPEC, CHAMBRE_SPEC, BATHROOM_SPEC];
+export const ROOMS: RoomSpec[] = [KITCHEN, SALON_SPEC, CHAMBRE_SPEC, BATHROOM_SPEC, ENTREE_SPEC];

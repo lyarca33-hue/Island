@@ -53,7 +53,7 @@ export function RecipeBook({ game, inline, onClose }: { game: Game; inline?: boo
                   {e.extras.length > 0 && <small> · en plus si tu en as : {e.extras.join(', ')}</small>}
                 </div>
                 <p>{e.how}</p>
-                <button onClick={() => prepare(e)} disabled={!!busy}>{busy === e.name ? 'En cours…' : 'Préparer'}</button>
+                {(e.task || e.plat) && <button onClick={() => prepare(e)} disabled={!!busy}>{busy === e.name ? 'En cours…' : 'Préparer'}</button>}
               </div>
             )}
           </li>

@@ -443,8 +443,8 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'aller_piece',
-    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre ou salle de bain (le perso s’arrête juste après l’entrée).',
-    params: { piece: 'cuisine, salon, chambre ou salle de bain' },
+    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre, salle de bain ou entrée (le perso s’arrête juste après l’entrée).',
+    params: { piece: 'cuisine, salon, chambre, salle de bain ou entrée' },
     run: (g, a) => g.walkToRoom(a.piece),
   },
   {
@@ -543,7 +543,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'assaisonner',
-    description: 'Assaisonner avec le pot d’épices tenu (sel, poivre, paprika, herbes de Provence, huile d’olive) ce qu’il y a dans ou sur `objet` : la poêle, l’assiette, la planche (sinon l’aliment tenu, la poêle sur le feu, l’assiette servie).',
+    description: 'Assaisonner avec le pot d’épices tenu (sel, poivre, paprika, herbes de Provence, huile d’olive) ou la sauce tenue (ketchup, mayonnaise, moutarde, vinaigre, crème, citron, ail) ce qu’il y a dans ou sur `objet` : la poêle, l’assiette, la planche (sinon l’aliment tenu, la poêle sur le feu, l’assiette servie).',
     params: {},
     run: (g, a) => g.season(a.objet),
   },

@@ -11,7 +11,7 @@ import { ChatBar } from './orders/ChatBar';
 import { ContextMenu } from './ui/ContextMenu';
 import { DisplayControls, FpsCounter, useFpsShown } from './ui/DisplaySettings';
 import { FeedbackPanel } from './ui/FeedbackPanel';
-import { HeldBar } from './ui/HeldBar';
+import { HeldBar, TouchPad } from './ui/HeldBar';
 import { Icon } from './ui/icons';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { RecipeBook } from './ui/RecipeBook';
@@ -268,6 +268,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           </div>
         )}
         <div className="hud-bottom-main">
+          <TouchPad game={ready} can={can} />
           <HeldBar game={ready} held={held} can={can} />
           <ChatBar
             game={ready}

@@ -151,7 +151,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "remuer", "objet": "<ref>"} : remuer à la spatule ce qui cuit (sinon ça attache au fond et brûle plus vite)
 - {"tache": "sauter", "objet": "<ref>"} : faire sauter (retourner en l'air) la crêpe ou l'omelette dans la poêle ; elle peut tomber à côté
 - {"tache": "servir_poele", "assiette": "<ref>"} : servir à la spatule ce qui est cuit dans la poêle, dans une assiette posée (« assiette » facultatif)
-- {"tache": "assaisonner", "epice": "sel", "objet": "<ref>"} : assaisonner (épices de l'étagère : sel, poivre, paprika, herbes de Provence, huile d'olive) le plat de la poêle ou de l'assiette (« objet » facultatif)
+- {"tache": "assaisonner", "epice": "sel", "objet": "<ref>"} : assaisonner (épices de l'étagère : sel, poivre, paprika, herbes de Provence, huile d'olive ; ou sauces et condiments : ketchup, mayonnaise, moutarde, vinaigre, crème, citron, ail) le plat de la poêle ou de l'assiette (« objet » facultatif)
 - {"tache": "tartiner", "pot": "confiture", "objet": "<ref>"} : tartiner des tranches de pain ou une crêpe cuite (« pot » : confiture, miel, pâte à tartiner ou beurre ; facultatif)
 - {"tache": "raper", "objet": "<ref>"} : râper du fromage (frigo) à la râpe (placard) sur le plat de l'assiette ou de la poêle, ou sur la planche
 - {"tache": "gouter", "objet": "<ref>"} : goûter à la cuillère ce qui cuit ou ce qui est servi ; le perso dit si c'est bon
