@@ -12,7 +12,9 @@ npm install
 npm run dev
 ```
 
-Puis ouvrir http://localhost:5173. Le jeu s'ouvre directement sur la map avec le dernier perso
+Puis ouvrir http://localhost:5173. La partie se sauvegarde toute seule (Menu → Partie) ; pour
+la retrouver sur un autre ordinateur, se connecter avec Google : voir
+[docs/compte-google.md](docs/compte-google.md). Le jeu s'ouvre directement sur la map avec le dernier perso
 créé (un perso par défaut la première fois) ; Menu → Personnage → « ✎ Modifier le personnage »
 ouvre le créateur, et « Jouer » ramène sur la map.
 

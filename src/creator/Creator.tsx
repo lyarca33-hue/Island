@@ -36,7 +36,7 @@ export function loadSavedRecipe(): Recipe | null {
   }
 }
 
-function save(r: Recipe): void {
+export function saveRecipe(r: Recipe): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(r));
   } catch {
@@ -91,7 +91,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
       clearTimeout(t);
       if (live) setBusy(false);
     });
-    save(recipe);
+    saveRecipe(recipe);
     return () => {
       live = false;
       clearTimeout(t);

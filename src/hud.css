@@ -109,6 +109,22 @@
 }
 .menu-form button:hover, .menu-action:hover { background: rgba(255, 240, 215, 0.16); }
 
+/* Menu → Partie : sauvegarde et compte Google */
+.save-panel small { line-height: 1.4; }
+.save-panel .google-btn { display: flex; align-items: center; justify-content: center; gap: 9px; background: #fff; color: #1f1f1f; border-color: #dadce0; font-weight: 500; }
+.save-panel .google-btn:hover { background: #f2f2f2; }
+.save-panel .google-btn:disabled { opacity: 0.7; cursor: wait; }
+.save-user { display: flex; align-items: center; gap: 10px; }
+.save-user img, .save-avatar { width: 34px; height: 34px; border-radius: 50%; flex: none; }
+.save-avatar { display: grid; place-items: center; background: var(--hud-honey); color: #2a1d08; font-weight: 600; }
+.save-user > div { display: flex; flex-direction: column; min-width: 0; }
+.save-conflict { display: flex; flex-direction: column; gap: 6px; padding: 9px; border-radius: 10px; border: 1px solid rgba(245, 190, 91, 0.5); background: rgba(245, 190, 91, 0.08); }
+.save-error { color: var(--hud-low) !important; }
+.save-panel .save-link { padding: 0; border: none; background: none; color: var(--hud-ink-3); font-size: 12px; text-decoration: underline; align-self: flex-start; }
+.save-setup summary { cursor: pointer; color: var(--hud-ink-2); }
+.save-setup[open] { display: flex; flex-direction: column; gap: 6px; }
+.save-setup textarea { padding: 7px 9px; border-radius: 8px; border: 1px solid var(--hud-line); background: var(--hud-well); color: var(--hud-ink); font: 12px/1.4 ui-monospace, monospace; resize: vertical; }
+
 /* Menu → Manques */
 .menu-note { margin: 0; color: var(--hud-ink-2); line-height: 1.4; }
 .missing-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
