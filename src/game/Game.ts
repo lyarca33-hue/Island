@@ -30,6 +30,7 @@ import { createPrecipitation, createWindowDrops, outdoorPanes, type Precipitatio
 import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
+import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
 import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
@@ -154,6 +155,12 @@ const WASH_FACE = { seconds: 3 * SPLASH_CYCLE, hygiene: 40 };
  * (deux fois plus vite sur le porte-serviettes), et pour que le miroir se désembue.
  */
 const WET_SECONDS = 45;
+/** Chaleur d'un feu de gazinière allumé, au ras de la gazinière (°C de ressenti), et du four en marche ; ça ne se sent plus au-delà de NEAR_HEAT (m). */
+const HEAT_PER_FIRE = 2.5;
+const HEAT_OVEN = 4;
+const NEAR_HEAT = 1.6;
+/** Temps (s réelles) entre deux « Brr… » ou « Pfiou… » du perso. */
+const BODY_SAY_EVERY = 40;
 const DRIP_EVERY = 1.6;
 const TOWEL_DRY = 150;
 const MIRROR_CLEAR = 40;
@@ -542,6 +549,10 @@ export class Game {
   private windowDrops: WindowDrops;
   /** Fatigue, faim, soif, hygiène du perso. */
   readonly needs = new Needs();
+  /** Température du corps : froid dehors l'hiver, sous la pluie, chaud au soleil l'été (voir temperature.ts). */
+  readonly body = new BodyTemp();
+  /** Temps (s) avant que le perso redise qu'il a froid ou chaud. */
+  private bodySayT = 0;
   /** Niveau des récipients tenus à l'image précédente : ce qui a été bu depuis. */
   private lastSips = new Map<WorldItem, { level: number; contents: string | null }>();
   /** Mains mouillées après les avoir lavées (1), sèches (0) : le torchon les sèche d'un coup. */
@@ -1598,6 +1609,8 @@ export class Game {
     if (this.dirtyHands) perso += `, mains sales (${this.dirtyHands}) : se laver les mains au savon avant de cuisiner ou manger`;
     if (this.roughHands >= 1) perso += ', mains abîmées (vaisselle sans gants)';
     perso += this.roomName ? `, dans la pièce : ${this.roomName}` : ', dehors';
+    if (this.body.state !== 'normal') perso += `, ${BODY_STATES[this.body.state].label.toLowerCase()} (${this.body.label}) : ${BODY_STATES[this.body.state].tip.toLowerCase()}`;
+    if (this.body.soaked > 0.3) perso += ', trempé par la pluie (se sécher à la serviette)';
     return {
       perso: this.sleep ? `${perso}, endormi dans ${this.ref(this.sleep.bed)}` : this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
@@ -2189,6 +2202,7 @@ export class Game {
     const n = this.cutUp.has(food) ? 2 : 1;
     for (let i = 0; i < n; i++) food.bite();
     this.needs.restore('faim', ((f.hunger * n) / f.bites) * TABLE_MEAL * this.biteWorth(food));
+    this.body.eat(food.heat, n / f.bites);
     this.firstBite(food);
     plate.setDirty(true);
     fork.setDirty(true);
@@ -3595,6 +3609,7 @@ export class Game {
       // brûlé, ça ne nourrit presque plus
       const done = doneness(item.def, item.cooking);
       if (before > item.portion) this.needs.restore('faim', (before - item.portion) * food.hunger * this.biteWorth(item));
+      if (before > item.portion) this.body.eat(item.heat, before - item.portion);
       if (before === 1 && item.portion < 1 && done === 'brûlé') this.onNotice?.('Beurk, c’est brûlé…');
       if (before > item.portion) this.firstBite(item);
       // manger avec les doigts sales : mal au ventre (une fois par aliment)
@@ -4772,17 +4787,21 @@ export class Game {
       return c.pickUp(towel, running, this.shelfOf(towel)?.forward, () => this.dryOff(this.ref(towel), running));
     }
     const at = (y: number) => () => c.position.clone().addScaledVector(c.forward, 0.2).setY(y);
-    const wasWet = this.wet > 0;
+    const wasWet = this.wet > 0 || this.body.soaked > 0.15;
     return hand.cut(at(1.15), () => {
       if (!hand.cut(at(1.5), () => {
         this.wet = 0;
+        this.body.dry();
         if (wasWet) {
           this.towelsWet.set(towel, TOWEL_DRY);
           towel.part('mouillee')?.traverse((o) => (o.visible = true));
           this.wearItem(towel, 1);
         }
         this.onNotice?.(wasWet ? 'Tu es sec. Remets la serviette sur le porte-serviettes pour qu’elle sèche.' : 'Tu es déjà sec, mais ça fait du bien.');
-      })) this.wet = 0;
+      })) {
+        this.wet = 0;
+        this.body.dry();
+      }
     });
   }
 
@@ -6491,11 +6510,84 @@ export class Game {
     };
   }
 
+  /**
+   * Température du corps : l'air dehors ou dans la maison, la pluie, un feu à côté, la couette…
+   * Trop froid ou trop chaud, les besoins baissent plus vite et la santé ne remonte plus ; en
+   * hypothermie ou en coup de chaleur, elle baisse.
+   */
+  private tickBody(dt: number, hours: number): void {
+    const c = this.character;
+    const p = c.position;
+    const was = this.body.update(hours, {
+      clock: this.clock,
+      weather: this.weather,
+      outdoors: !this.underRoof(p.x, p.z),
+      gait: c.lying ? 'sleep' : c.seated ? 'sit' : c.moveGait,
+      inBed: !!this.sleep,
+      showering: !!this.showering,
+      showerWet: this.wet > 0,
+      nearHeat: this.heatNear(p),
+    });
+    this.needs.factors = this.body.needFactors;
+    this.needs.canHeal = this.body.state === 'normal';
+    if (this.body.harm) this.needs.hurt(this.body.harm * hours);
+    if (was) this.onBodyState(was);
+    // grelotter ou transpirer : le perso le redit de temps en temps (pas en dormant)
+    this.bodySayT -= dt;
+    if (this.body.state !== 'normal' && this.bodySayT <= 0 && !this.sleep && this.clock.speed > 0) {
+      this.bodySayT = BODY_SAY_EVERY;
+      const cold = this.body.state === 'froid' || this.body.state === 'hypothermie';
+      const lines = cold ? ['Brr… j’ai froid.', 'Je grelotte…', 'Un bon thé chaud, vite…'] : ['Pfiou, quelle chaleur…', 'Je transpire…', 'Un verre bien frais, vite…'];
+      this.say(lines[Math.floor(Math.random() * lines.length)]);
+    }
+  }
+
+  /** Chaleur reçue des feux de gazinière allumés et du four en marche tout près (°C de ressenti). */
+  private heatNear(p: THREE.Vector3): number {
+    let heat = 0;
+    const near = (item: WorldItem) => {
+      const d = p0(p).distanceTo(p0(item.object.position));
+      return item.object.parent && d < NEAR_HEAT ? 1 - d / NEAR_HEAT : 0;
+    };
+    for (const [item, h] of this.heaters) {
+      if (item.def.heat?.lit !== 'flamme') continue;
+      heat += h.on.reduce((sum, on, i) => sum + (on ? h.warm[i] : 0), 0) * HEAT_PER_FIRE * near(item);
+    }
+    for (const item of this.appliances.keys()) if (item.def.heats?.burns) heat += HEAT_OVEN * near(item);
+    return heat;
+  }
+
+  /** Le corps change d'état : on prévient (et le perso le dit). */
+  private onBodyState(was: BodyState): void {
+    const b = this.body;
+    const { tip } = BODY_STATES[b.state];
+    this.bodySayT = BODY_SAY_EVERY;
+    switch (b.state) {
+      case 'froid':
+        if (was === 'hypothermie') return void this.onNotice?.(`Le perso se réchauffe (${b.label}), mais il a encore froid.`);
+        this.say('Brr… j’ai froid.');
+        return void this.onNotice?.(`Le perso a froid (${b.label}) : il grelotte, se fatigue et a faim plus vite. ${tip}.`);
+      case 'hypothermie':
+        this.say('Je… gèle…');
+        return void this.onNotice?.(`Hypothermie (${b.label}) : la santé baisse ! ${tip}.`);
+      case 'chaud':
+        if (was === 'coup de chaleur') return void this.onNotice?.(`Le perso se rafraîchit (${b.label}), mais il a encore chaud.`);
+        this.say('Pfiou, quelle chaleur…');
+        return void this.onNotice?.(`Le perso a chaud (${b.label}) : il transpire, a soif et se salit plus vite. ${tip}.`);
+      case 'coup de chaleur':
+        this.say('J’ai la tête qui tourne…');
+        return void this.onNotice?.(`Coup de chaleur (${b.label}) : la santé baisse ! ${tip}.`);
+      case 'normal':
+        return void this.onNotice?.(was === 'froid' ? `Le perso s’est réchauffé (${b.label}).` : `Le perso a retrouvé une température normale (${b.label}).`);
+    }
+  }
+
   /** Le temps passe : les besoins baissent ; boire (café) remonte la soif et réveille un peu. */
   private tickNeeds(dt: number): void {
     const hours = this.clock.tick(dt);
     this.tickLife(hours);
     const before = this.needs.health;
+    this.tickBody(dt, hours);
     this.needs.tick(hours, this.character.lying ? 'sleep' : this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
     // prévenir le joueur quand la santé passe sous un seuil
     const after = this.needs.health;
@@ -6514,6 +6606,7 @@ export class Game {
         if (last?.contents === 'café') this.needs.restore('fatigue', drunk * COFFEE_ENERGY);
         if (last?.contents === 'thé') this.needs.restore('fatigue', drunk * TEA_ENERGY);
         if (last?.contents === 'jus de fruits') this.needs.restore('faim', drunk * JUICE_HUNGER);
+        if (last?.contents) this.body.drink(last.contents, drunk);
         if (last?.contents && ['café', TEA, 'jus de fruits', "jus d'orange"].includes(last.contents)) this.morning('drink');
         // les boissons du frigo (jus d'orange, soda, eau gazeuse, vin)
         const extra = last?.contents ? DRINK_EFFECTS[last.contents] : undefined;
@@ -7391,6 +7484,7 @@ export class Game {
         this.onSkill?.(this.skillPoints);
       },
       weather: this.weather,
+      body: this.body,
       done: () => {
         this.character.nav = this.buildNav();
       },

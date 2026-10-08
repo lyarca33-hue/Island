@@ -42,6 +42,11 @@
 .gauge.mood { --c: var(--hud-ok); }
 .gauge.mood.happy { --c: var(--hud-up); }
 .gauge.mood.low { --c: var(--hud-low); }
+/* température du corps : bleue quand le perso a froid, orangée quand il a chaud */
+.gauge.body { --c: var(--hud-ok); }
+.gauge.body.cold { --c: #7cc4f2; }
+.gauge.body.hot { --c: #f2a24e; }
+.gauge.body.low.cold .gauge-ring { color: #d4ecff; }
 /* une jauge presque vide dit sa valeur, sans attendre le survol */
 .gauge-low {
   position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 999px;
@@ -91,6 +96,7 @@
 .hud-day { display: flex; align-items: center; gap: 6px; color: var(--hud-ink-2); font-size: 12.5px; }
 .hud-day::before { content: ''; width: 3px; height: 3px; border-radius: 50%; background: var(--hud-ink-3); }
 .hud-weather { font-size: 13px; line-height: 1; }
+.hud-outdoor { color: var(--hud-ink-2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 560px) {
   /* téléphone : jauges et horloge sur une ligne, sous la barre du menu */
