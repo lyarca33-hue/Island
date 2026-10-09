@@ -135,7 +135,7 @@ export const ENTREE_SPEC: RoomSpec = {
     ['botte', ENTREE.x0 + 0.15, 0, ENTREE.z1 - 0.5, Q],
     ['botte', ENTREE.x0 + 0.15, 0, ENTREE.z1 - 0.32, Q],
     ['porte-parapluies', ENTREE.x1 - 0.16, 0, ENTREE.z1 - 0.2, 0],
-    ['parapluie', ENTREE.x1 - 0.16, 0.02, ENTREE.z1 - 0.2, 0],
+    ['parapluie', ENTREE.x1 - 0.16, 0.05, ENTREE.z1 - 0.2, 0],
     // une lettre glissée sous la porte
     ['lettre', FRONT_DOOR.x0 + 0.5, 0, ENTREE.z1 - 0.35, 0.4],
     // la boîte aux lettres dehors, au bord du chemin, à gauche de la porte

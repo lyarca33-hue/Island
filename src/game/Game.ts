@@ -2204,13 +2204,18 @@ export class Game {
     ]);
   }
 
-  /** Où se tenir pour poser quelque chose en `spot` (sur la table) : le côté libre le plus proche. */
+  /**
+   * Où se tenir pour poser quelque chose en `spot` (sur la table) : le côté libre le plus proche. Au sol,
+   * d'abord tout près : la main n'y pose pas plus loin (Character.drop), l'objet tomberait à côté de sa place.
+   */
   private standNear(spot: THREE.Vector3, size: number): THREE.Vector3 {
     const at = spot.clone().setY(0);
     const p = this.character.position;
     const nav = this.character.nav;
     let best: THREE.Vector3 | null = null;
-    for (const r of [0.36 + size / 2, 0.5 + size / 2, 0.62 + size / 2]) {
+    const radii = [0.36 + size / 2, 0.5 + size / 2, 0.62 + size / 2];
+    if (spot.y < 0.05) radii.unshift(0.2 + size / 2);
+    for (const r of radii) {
       for (let i = 0; i < 24; i++) {
         const a = (i / 24) * Math.PI * 2;
         const v = at.clone().add(new THREE.Vector3(Math.sin(a) * r, 0, Math.cos(a) * r));
@@ -5075,8 +5080,8 @@ export class Game {
   }
 
   /**
-   * Va au meuble `ref` et montre ce qu'il contient (fenêtre d'inventaire), sans l'ouvrir : on choisit
-   * dans la fenêtre l'objet à sortir, et la porte s'ouvre alors sur lui (take).
+   * Va au meuble `ref` et montre ce qu'il contient (fenêtre d'inventaire), porte ou tiroir ouvert : on
+   * choisit dans la fenêtre l'objet à sortir (take).
    */
   lookInside(ref?: string, running = false): boolean {
     const shelf = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.cold);
@@ -5089,7 +5094,9 @@ export class Game {
       const n = this.storedIn(shelf);
       this.onNotice?.(n.length ? `Dans ${the(shelf.name)} : ${n.map((i) => i.name).join(', ')}.` : `${cap(the(shelf.name))} est vide.`);
     };
-    this.character.approachThen(this.doors.has(shelf) ? this.doorStand(shelf) : this.frontOf(shelf), shelf.object.position, show, running);
+    // un meuble à porte (ou à tiroir) s'ouvre, puis son inventaire se montre ; il se referme quand on s'éloigne
+    if (this.doors.has(shelf)) return this.withDoorOpen(shelf, show, running);
+    this.character.approachThen(this.frontOf(shelf), shelf.object.position, show, running);
     return true;
   }
 
