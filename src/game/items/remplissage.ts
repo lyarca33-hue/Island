@@ -10,6 +10,7 @@
  * Au départ, chaque meuble de rangement de la maison est rempli avec les objets du jeu (START_CONTENTS).
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from '../toon';
 
 /**
@@ -52,8 +53,8 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
       'oignon', 'oignon', 'ail', 'banane', 'banane', 'poire', 'poire',
     ],
   ],
-  // la chambre : la chemise pend déjà dans l'armoire (maison.ts) ; un livre dans chaque table de nuit
-  ['armoire', 0, ['pull', 'serviette']],
+  // la chambre : la chemise sur son cintre et le linge dans l'armoire ; un livre dans chaque table de nuit
+  ['armoire', 0, ['cintre', 'pull', 'serviette']],
   ['table-de-nuit', 0, ['livre-vert']],
   ['table-de-nuit', 1, ['livre-ocre']],
 ];
@@ -65,17 +66,25 @@ const materials = new Map<number, THREE.Material>();
 
 /**
  * Silhouette très simple de l'objet `model` (dans son repère, boîte `box`) : un prisme à six pans s'il
- * est à peu près rond vu de dessus (assiette, tasse, bouteille, pomme), sinon une boîte. Géométries et
+ * est à peu près rond vu de dessus (assiette, tasse, bouteille, pomme), sinon une boîte ; un vêtement
+ * sur cintre ou une pile de linge plié pour les habits (`shape`, ItemDef.stowedAs). Géométries et
  * matériaux sont partagés entre silhouettes pareilles. Elle ne s'use pas et ne se casse pas à part.
  */
-export function buildFiller(model: THREE.Object3D, box: THREE.Box3): THREE.Mesh {
+export function buildFiller(model: THREE.Object3D, box: THREE.Box3, shape?: 'cintre' | 'plie'): THREE.Mesh {
   const size = box.getSize(new THREE.Vector3()).multiplyScalar(0.92).max(new THREE.Vector3(0.01, 0.01, 0.01));
-  const round = Math.abs(size.x - size.z) < 0.15 * Math.max(size.x, size.z);
+  const round = !shape && Math.abs(size.x - size.z) < 0.15 * Math.max(size.x, size.z);
   const cm = (v: number) => Math.round(v * 100);
-  const key = `${round ? 'o' : 'b'}${cm(size.x)}-${cm(size.y)}-${cm(size.z)}`;
+  const key = `${shape ?? (round ? 'o' : 'b')}${cm(size.x)}-${cm(size.y)}-${cm(size.z)}`;
   let geo = geometries.get(key);
   if (!geo) {
-    geo = round ? new THREE.CylinderGeometry(size.x / 2, size.x / 2, size.y, 6) : new THREE.BoxGeometry(size.x, size.y, size.z);
+    geo =
+      shape === 'cintre'
+        ? hangerGeometry(size)
+        : shape === 'plie'
+          ? foldedGeometry(size)
+          : round
+            ? new THREE.CylinderGeometry(size.x / 2, size.x / 2, size.y, 6)
+            : new THREE.BoxGeometry(size.x, size.y, size.z);
     geometries.set(key, geo);
   }
   const hex = mainColor(model);
@@ -91,6 +100,38 @@ export function buildFiller(model: THREE.Object3D, box: THREE.Box3): THREE.Mesh 
   // l'objet reste cliquable par son propre modèle (caché) : la silhouette ne fait que se montrer
   mesh.raycast = () => {};
   return mesh;
+}
+
+/** Boîte `w`×`h`×`d` centrée en (x, y, z) dans la silhouette (centrée sur la boîte de l'objet). */
+function slab(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
+  return new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+}
+
+/** Vêtement suspendu : le crochet, la barre du cintre, les épaules, puis le corps un peu plus étroit. */
+function hangerGeometry(size: THREE.Vector3): THREE.BufferGeometry {
+  const top = size.y / 2;
+  const d = Math.min(size.z, 0.05);
+  const body = size.y - 0.14;
+  return mergeGeometries([
+    slab(0.012, 0.05, 0.012, 0, top - 0.025, 0),
+    slab(size.x, 0.015, 0.015, 0, top - 0.06, 0),
+    slab(size.x * 0.92, 0.08, d, 0, top - 0.1, 0),
+    slab(size.x * 0.8, body, d * 0.85, 0, top - 0.14 - body / 2, 0),
+  ])!;
+}
+
+/**
+ * Linge plié : deux ou trois plis empilés, un peu décalés, posés au fond de la boîte de l'objet (une
+ * serviette étendue, plus haute que large, devient une pile à plat).
+ */
+function foldedGeometry(size: THREE.Vector3): THREE.BufferGeometry {
+  const w = Math.min(size.x, 0.28);
+  const d = Math.min(Math.max(size.z, 0.2), 0.24);
+  const h = Math.min(size.y, 0.12);
+  const n = h > 0.08 ? 3 : 2;
+  const layer = h / n;
+  const parts = Array.from({ length: n }, (_, k) => slab(w - k * 0.01, layer * 0.94, d - k * 0.008, (k % 2 ? 1 : -1) * 0.004, -size.y / 2 + layer * (k + 0.5), (k % 2 ? -1 : 1) * 0.003));
+  return mergeGeometries(parts)!;
 }
 
 const colors = new WeakMap<THREE.Object3D, number>();

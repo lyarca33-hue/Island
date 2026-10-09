@@ -290,9 +290,8 @@ export const CHAMBRE_SPEC: RoomSpec = {
     ['reveil', CHAMBRE.x0 + 0.22, NIGHTSTAND_TOP, BED.z + 1.18, Q],
     // le pull plié au pied du lit
     ['pull', CHAMBRE.x0 + 1.85, 0.63, BED.z, Q],
-    // l'armoire au fond à droite de la fenêtre, la chemise sur son cintre dedans ; la plante dans le coin
+    // l'armoire au fond à droite de la fenêtre (la chemise sur son cintre dedans, remplissage.ts) ; la plante dans le coin
     ['armoire', CHAMBRE.x1 - 0.62, 0, CHAMBRE.z0 + 0.3, 0],
-    ['cintre', CHAMBRE.x1 - 0.62, 1.25, CHAMBRE.z0 + 0.3, 0],
     ['sansevieria', CHAMBRE.x0 + 0.35, 0, CHAMBRE.z0 + 0.32, 0],
   ],
   decor: (room) => lay(room, 'tapis-chambre', CHAMBRE.x0 + 2.4, BED.z, 0, 0.5),
