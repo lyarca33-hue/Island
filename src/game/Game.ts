@@ -1606,7 +1606,8 @@ export class Game {
   /** Lumière d'une lampe (fiche `lamp`), éteinte au départ, qui suit la lampe si on la déplace. */
   private addLampLight(item: WorldItem): void {
     const def = item.def.lamp!;
-    const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 2));
+    // décroissance douce (1) : collée au mur, une décroissance en 1/d² y faisait une tache aveuglante
+    const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 1));
     light.position.y = def.y;
     // sans ombre : une ombre de lampe redessine la scène six fois, pour un effet à peine visible
     // sous le soleil et la lumière d'ambiance
@@ -1629,10 +1630,10 @@ export class Game {
     if (!lamp) return;
     lamp.on = on;
     lamp.light.intensity = on ? item.def.lamp!.intensity : 0;
-    // ampoule allumée au-dessus de 1 : le bloom la fait briller ; abat-jour éclairé par-dessous
-    lamp.bulb?.color.setRGB(on ? 2.6 : 0.23, on ? 2.1 : 0.2, on ? 1.3 : 0.17);
-    lamp.shade?.color.set(on ? 0xfff3d6 : 0xe9dcc0);
-    lamp.glow?.emissive.setHex(on ? 0x5a4426 : 0x000000);
+    // ampoule allumée un peu au-dessus de 1 : une lueur, pas un halo ; abat-jour doucement éclairé
+    lamp.bulb?.color.setRGB(on ? 1.3 : 0.23, on ? 1.05 : 0.2, on ? 0.7 : 0.17);
+    lamp.shade?.color.set(on ? 0xf6e2bc : 0xe9dcc0);
+    lamp.glow?.emissive.setHex(on ? 0x2a1f12 : 0x000000);
   }
 
   /** La porte intérieure ou les rideaux sous ce pixel (avant tout objet), et leur pièce. */
