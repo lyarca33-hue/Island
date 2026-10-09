@@ -134,7 +134,9 @@ export class Character {
    * (`exit`). `from` : où l'on était avant (hors de la chaise), `at` / `y` : place et hauteur assis.
    */
   /** Couché dans un lit : où se relever (à côté du lit) et vers où regarder une fois debout. */
-  private bed: { stand: THREE.Vector3; heading: number } | null = null;
+  private bed: { stand: THREE.Vector3; heading: number; seat?: { from: THREE.Vector3; at: THREE.Vector3; y: number; yaw: number } } | null = null;
+  /** Passage animé d'assis au bord du lit à couché (ou l'inverse), puis `then`. */
+  private lieAnim: { t: number; d: number; fromPos: THREE.Vector3; fromRot: THREE.Quaternion; toPos: THREE.Vector3; toRot: THREE.Quaternion; then: () => void } | null = null;
   private seat: { phase: 'enter' | 'sit' | 'exit'; t: number; from: THREE.Vector3; at: THREE.Vector3; y: number; yaw: number; up?: () => void; talk: number } | null = null;
   /** En marche vers un objet ou un meuble : on se tourne vers `face` puis on fait `then`. */
   private approach: { face: THREE.Vector3; then: () => void } | null = null;
@@ -327,6 +329,11 @@ export class Character {
     return this.carries ? (SIDES_.map((s) => this.carries![s]).find((c) => c.reading) ?? null) : null;
   }
 
+  /** Où le perso va (le bout de son chemin), s'il marche. */
+  get goal(): THREE.Vector3 | null {
+    return this.path[this.path.length - 1] ?? this.target;
+  }
+
   /** Une main est-elle en train de prendre, poser ou ranger ? */
   get busy(): boolean {
     return !!this.carries && (this.carries.right.busy || this.carries.left.busy);
@@ -458,8 +465,8 @@ export class Character {
     return this.root.position.clone().addScaledVector(fwd, 0.36 + Math.max(item.size.x, item.size.z) / 2).add(side).setY(0);
   }
 
-  /** Repose l'objet tenu (le dernier pris, ou `item`) en `spot`, tourné comme le perso ou de `yaw`. */
-  drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false, item: WorldItem | null = this.held): boolean {
+  /** Repose l'objet tenu (le dernier pris, ou `item`) en `spot`, tourné comme le perso ou de `yaw` (ou accroché ainsi : `hung`). */
+  drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false, item: WorldItem | null = this.held, hung?: THREE.Quaternion): boolean {
     const hand = item ? this.handOf(item) : null;
     if (!hand || this.busy) return false;
     if (spot.y < 0.05) {
@@ -473,7 +480,7 @@ export class Character {
     return hand.drop(spot, yaw, () => {
       this.order = this.order.filter((s) => s !== hand.side);
       onDone?.();
-    }, upright);
+    }, upright, hung);
   }
 
   /** En train de déplacer un gros meuble (ou de l'agripper / le lâcher). */
@@ -654,6 +661,19 @@ export class Character {
     }
     if (this.bed) {
       // couché : on respire (clip de repos) sans bouger ; Game réveille le perso s'il veut bouger
+      const a = this.lieAnim;
+      if (a) {
+        a.t = Math.min(a.d, a.t + dt);
+        const k = THREE.MathUtils.smootherstep(a.t / a.d, 0, 1);
+        // le buste bascule pendant que les jambes passent sur le lit (un peu plus haut à mi-chemin)
+        this.root.position.lerpVectors(a.fromPos, a.toPos, k);
+        this.root.position.y += Math.sin(k * Math.PI) * 0.08;
+        this.root.quaternion.slerpQuaternions(a.fromRot, a.toRot, k);
+        if (a.t >= a.d) {
+          this.lieAnim = null;
+          a.then();
+        }
+      }
       this.mixer?.update(dt);
       this.puppet?.update(dt);
       return;
@@ -939,11 +959,55 @@ export class Character {
     return true;
   }
 
+  /**
+   * Assis au bord du lit (sitOn fini), s'y allonge en `seconds` : les jambes passent sur le matelas,
+   * le buste bascule en arrière, les pieds en `feet`, la tête vers `head`. `stand` : où il se relèvera
+   * (riseFromBed le ramène assis au même bord, puis debout).
+   */
+  lieBack(feet: THREE.Vector3, head: THREE.Vector3, stand: THREE.Vector3, seconds: number, then?: () => void): boolean {
+    const s = this.seat;
+    if (s?.phase !== 'sit' || this.bed) return false;
+    const yaw = Math.atan2(-head.x, -head.z);
+    this.bed = { stand: stand.clone().setY(0), heading: Math.atan2(stand.x - feet.x, stand.z - feet.z), seat: { from: s.from.clone(), at: s.at.clone(), y: s.y, yaw: s.yaw } };
+    this.seat = null;
+    this.target = null;
+    this.path = [];
+    this.approach = null;
+    this.gait = 'idle';
+    // les jambes se déplient pendant qu'il bascule
+    this.puppet?.play('idle', seconds * 0.7);
+    const toRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + LIE_TILT, yaw, 0, 'YXZ'));
+    this.lieAnim = { t: 0, d: seconds, fromPos: this.root.position.clone(), fromRot: this.root.quaternion.clone(), toPos: feet.clone(), toRot, then: then ?? (() => {}) };
+    return true;
+  }
+
+  /** Couché après lieBack : se rassoit au bord du lit en `seconds`, puis se lève (puis `then`). */
+  riseFromBed(seconds: number, then?: () => void): boolean {
+    const b = this.bed;
+    if (!b?.seat || this.lieAnim) return b ? (this.getUp(), then?.(), true) : false;
+    const seat = b.seat;
+    this.puppet?.play(SIT.idle, seconds * 0.7);
+    const toRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, seat.yaw, 0, 'XYZ'));
+    this.lieAnim = {
+      t: 0, d: seconds, fromPos: this.root.position.clone(), fromRot: this.root.quaternion.clone(), toPos: seat.at.clone().setY(seat.y), toRot,
+      then: () => {
+        // assis au bord : on se relève comme d'une chaise
+        this.bed = null;
+        this.heading = seat.yaw;
+        this.root.rotation.set(0, seat.yaw, 0, 'XYZ');
+        this.seat = { phase: 'sit', t: 0, from: seat.from, at: seat.at, y: seat.y, yaw: seat.yaw, talk: 0, up: then };
+        this.startExit();
+      },
+    };
+    return true;
+  }
+
   /** Sort du lit (l'écran est dans le noir) : debout à côté, puis reprend la marche demandée. */
   getUp(): boolean {
     const b = this.bed;
     if (!b) return false;
     this.bed = null;
+    this.lieAnim = null;
     const dest = this.path.length ? this.path[this.path.length - 1] : this.target;
     this.root.position.copy(b.stand);
     this.heading = b.heading;

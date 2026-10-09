@@ -101,6 +101,20 @@ export type Intent =
   | { kind: 'glacons'; dans?: string }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
   | { kind: 'laver'; visage: boolean }
+  /** Prendre une douche ; se sécher avec la serviette. */
+  | { kind: 'douche' }
+  | { kind: 'secher' }
+  /** Aller aux toilettes (s'asseoir, se soulager, tirer la chasse) ; tirer la chasse. */
+  | { kind: 'toilettes' }
+  | { kind: 'chasse' }
+  /** Aller dormir dans le lit `ref` ; se réveiller ; faire le lit `ref`. */
+  | { kind: 'dormir'; ref?: string }
+  | { kind: 'reveiller' }
+  | { kind: 'faire_lit'; ref?: string }
+  /** Fermer à clé (`fermer`) ou déverrouiller la porte de la salle de bain. */
+  | { kind: 'verrou'; fermer: boolean }
+  /** Le réveil : le régler à `heure` (h, 7.5 = 7 h 30), le couper, arrêter sa sonnerie, en changer. */
+  | { kind: 'reveil'; heure?: number; couper?: boolean; arreter?: boolean; sonnerie?: string }
   /** Aller dans la pièce `piece` (la cuisine). */
   | { kind: 'piece'; piece: string }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
@@ -811,6 +825,32 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       // les mains doivent être libres
       await freeHands(game, act);
       return act(intent.visage ? 'se_laver' : 'laver_mains');
+    case 'douche':
+      await freeHands(game, act);
+      return act('douche');
+    case 'secher':
+      return act('secher');
+    case 'toilettes':
+      await freeHands(game, act);
+      return act('toilettes');
+    case 'chasse':
+      return act('chasse');
+    case 'dormir':
+      await freeHands(game, act);
+      return act('dormir', intent.ref ? { lit: intent.ref } : {});
+    case 'reveiller':
+      return act('reveiller');
+    case 'faire_lit':
+      await freeHands(game, act);
+      return act('faire_lit', intent.ref ? { lit: intent.ref } : {});
+    case 'verrou':
+      return act('verrou', { fermer: intent.fermer ? 'oui' : 'non' });
+    case 'reveil':
+      if (intent.arreter) return act('arreter_reveil');
+      if (intent.sonnerie !== undefined) await act('sonnerie_reveil', intent.sonnerie ? { sonnerie: intent.sonnerie } : {});
+      if (intent.couper) return act('regler_reveil', { heure: 'non' });
+      if (intent.heure !== undefined) return act('regler_reveil', { heure: String(intent.heure) });
+      return;
     case 'piece':
       return act('aller_piece', { piece: intent.piece });
     case 'lire': {
@@ -896,6 +936,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return;
     }
     case 'lever':
+      if (world(game).perso.includes('couché dans')) return act('reveiller');
       if (!world(game).perso.includes('assis')) return;
       return act('lever');
     case 'arreter_lire':

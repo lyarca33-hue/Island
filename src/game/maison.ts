@@ -84,13 +84,14 @@ const Q = Math.PI / 2;
  * Décor fixe : le modèle Tripo `name` accroché au mur `wall` (à la place `u` le long du mur, son bas
  * à la hauteur `y`), dos au mur, décollé de `out` (m). Caché avec le mur quand il est abaissé.
  */
-function hang(room: Room, wall: WallName, u: number, y: number, name: string, out = 0): THREE.Object3D | null {
+function hang(room: Room, wall: WallName, u: number, y: number, name: string, out = 0, flip = false): THREE.Object3D | null {
   const m = tripoDecor(name);
   if (!m) return null;
-  const back = new THREE.Box3().setFromObject(m).min.z;
-  // l'avant du modèle (+Z) vers l'intérieur de la pièce (X du repère du mur)
-  m.rotation.y = Q;
-  m.position.x = -back + out;
+  const box = new THREE.Box3().setFromObject(m);
+  // l'avant du modèle (+Z) vers l'intérieur de la pièce (X du repère du mur) ; `flip` : retourné,
+  // l'avant contre le mur
+  m.rotation.y = flip ? Q + Math.PI : Q;
+  m.position.x = (flip ? box.max.z : -box.min.z) + out;
   const f = room.wallFrame(wall, u, y);
   f.add(m);
   room.wallGroup(wall).add(f);
@@ -143,7 +144,8 @@ export const ENTREE_SPEC: RoomSpec = {
   decor: (room) => {
     // au mur du garage, de part et d'autre de sa porte : le portemanteau et son manteau, le miroir
     hang(room, 'ouest', HALL.coat, 1.55, 'portemanteau');
-    hang(room, 'ouest', HALL.coat, 0.84, 'manteau-accroche', 0.03);
+    // le manteau accroché par le col : on en voit le dos, le devant (les boutons) contre le mur
+    hang(room, 'ouest', HALL.coat, 0.84, 'manteau-accroche', 0.03, true);
     const mirror = hang(room, 'ouest', HALL.mirror, 1.0, 'miroir-entree');
     // le cadre seul (Tripo n'a pas fait la glace) : une glace claire dedans
     if (mirror) {
@@ -232,13 +234,15 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
   name: 'salle de bain',
   rect: SALLE_DE_BAIN,
   floor: () => tiled(SALLE_DE_BAIN),
-  doors: [{ wall: 'sud', u0: BATH_DOOR.x0, u1: BATH_DOOR.x1, inner: true }],
+  doors: [{ wall: 'sud', u0: BATH_DOOR.x0, u1: BATH_DOOR.x1, inner: true, lock: true }],
   joined: ['sud', 'est'],
   windows: () => [{ wall: 'nord', u0: SALLE_DE_BAIN.x0 + 0.9, u1: SALLE_DE_BAIN.x0 + 1.6, y0: 1.45, y1: WIN_HIGH }],
   items: [
     // les toilettes au fond, sous la fenêtre ; le lavabo contre le mur ouest, après la douche
     ['toilettes', BATH.toilet, 0, SALLE_DE_BAIN.z0 + 0.27, 0],
     ['papier-toilette', BATH.toilet, 0.805, SALLE_DE_BAIN.z0 + 0.09, 0],
+    // le porte-papier au mur, à droite des toilettes : on y accroche le rouleau
+    ['derouleur', BATH.toilet + 0.4, 0.66, SALLE_DE_BAIN.z0 + 0.035, 0],
     ['lavabo', SALLE_DE_BAIN.x0 + 0.37, 0, BATH.sink, Q],
     // sur le rebord du lavabo : le verre à dents et sa brosse, le savon
     ['verre-dents', SALLE_DE_BAIN.x0 + 0.07, 0.94, BATH.sink - 0.2, 0],
@@ -247,17 +251,17 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
     // le porte-serviettes en face, la serviette sur sa barre du haut
     ['porte-serviettes', SALLE_DE_BAIN.x1 - 0.16, 0, BATH.sink, -Q],
     ['serviette', SALLE_DE_BAIN.x1 - 0.16, 0.5, BATH.sink, -Q],
+    // la douche dans le coin du fond (la colonne est accrochée au mur, voir decor)
+    ['douche', SALLE_DE_BAIN.x0 + 0.48, 0, SALLE_DE_BAIN.z0 + 0.48, 0],
     // le gel douche dans le coin de la douche
     ['gel-douche', SALLE_DE_BAIN.x0 + 0.1, 0.04, SALLE_DE_BAIN.z0 + 0.1, Q],
   ],
   decor: (room) => {
-    // la douche dans le coin du fond : le receveur au sol, la colonne au mur
-    lay(room, 'douche-receveur', SALLE_DE_BAIN.x0 + 0.48, SALLE_DE_BAIN.z0 + 0.48);
+    // la colonne de la douche au mur, au-dessus du receveur (un objet : on y entre)
     hang(room, 'ouest', SALLE_DE_BAIN.z0 + 0.48, 0.95, 'douche-colonne');
     lay(room, 'tapis-bain', SALLE_DE_BAIN.x0 + 0.5, SALLE_DE_BAIN.z0 + 1.3, 0, 0.5);
-    // le miroir au-dessus du lavabo, le dérouleur à côté des toilettes
+    // le miroir au-dessus du lavabo
     hang(room, 'ouest', BATH.sink, 1.08, 'miroir-lavabo');
-    hang(room, 'nord', BATH.toilet + 0.4, 0.7, 'derouleur');
   },
 };
 
@@ -284,9 +288,6 @@ export const CHAMBRE_SPEC: RoomSpec = {
     ['table-de-nuit', CHAMBRE.x0 + 0.25, 0, BED.z + 1.08, Q],
     ['lampe-chevet', CHAMBRE.x0 + 0.22, NIGHTSTAND_TOP, BED.z - 1.08, Q],
     ['reveil', CHAMBRE.x0 + 0.22, NIGHTSTAND_TOP, BED.z + 1.18, Q],
-    // deux coussins devant les oreillers (pas sur le canapé : on ne s'y assoit pas s'il y a quelque chose dessus)
-    ['coussin', CHAMBRE.x0 + 0.5, 0.64, BED.z - 0.32, Q],
-    ['coussin', CHAMBRE.x0 + 0.5, 0.64, BED.z + 0.32, Q],
     // le pull plié au pied du lit
     ['pull', CHAMBRE.x0 + 1.85, 0.63, BED.z, Q],
     // l'armoire au fond à droite de la fenêtre, la chemise sur son cintre dedans ; la plante dans le coin

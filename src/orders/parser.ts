@@ -35,7 +35,11 @@ export function normalize(text: string): string {
 const VERBS: Record<string, string[]> = {
   prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer', 'sors', 'sort', 'sortir'],
   poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer', 'mets', 'met', 'mettre', 'remets', 'remettre'],
-  ranger: ['range', 'ranger', 'rangez'],
+  ranger: ['range', 'ranger', 'rangez', 'accroche', 'accrocher', 'raccroche', 'raccrocher', 'suspends'],
+  verrouiller: ['verrouille', 'verrouiller', 'enferme', 'enfermer'],
+  dormir: ['dors', 'dormir', 'endors', 'endormir', 'couche', 'coucher', 'recouche', 'recoucher'],
+  reveiller: ['reveille', 'reveiller'],
+  deverrouiller: ['deverrouille', 'deverrouiller'],
   aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher', 'entre', 'entrer'],
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
@@ -110,7 +114,7 @@ const OPENS = new Set(['frigo', 'placard', 'appareil', 'poubelle']);
 /** Meubles où l'on range (et où l'on peut regarder ce qu'il y a). */
 const STORES = new Set(['frigo', 'placard', 'rangement', 'égouttoir']);
 /** Où se range un objet qui ne va ni au frais ni dans la bibliothèque. */
-const STORED_IN: Record<string, string> = { pull: 'armoire', tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'crochets', maniques: 'crochets', couteau: 'barre à couteaux',
+const STORED_IN: Record<string, string> = { pull: 'armoire', tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'crochets', maniques: 'crochets', couteau: 'barre à couteaux', 'papier toilette': 'porte-papier',
   // les provisions : l'épicerie au garde-manger, le frais au frigo, les surgelés au congélateur
   ...Object.fromEntries([...PANTRY_THINGS.map((n) => [n, 'garde-manger']), ...FRESH_THINGS.map((n) => [n, 'frigo']), ...FROZEN_FOOD.map((n) => [n, 'congélateur'])]) };
 /** Boissons du frigo (se boivent à la bouteille ou se versent dans un verre). */
@@ -155,6 +159,8 @@ const ALIASES: Record<string, string[]> = {
   douche: ['douche', 'douches'],
   toilettes: ['toilettes', 'toilette', 'wc', 'cuvette', 'chiottes'],
   serviette: ['serviette', 'serviettes'],
+  'papier toilette': ['papier', 'pq'],
+  'porte papier': ['derouleur', 'distributeur', 'pq'],
   frigo: ['frigo', 'frigos', 'frigidaire', 'refrigerateur'],
   'bouteille d eau': ['bouteille', 'bouteilles'],
   pomme: ['pomme', 'pommes', 'fruit', 'fruits'],
@@ -415,6 +421,13 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
       out.push({ kind: 'argent' });
       continue;
     }
+    // le réveil : « règle le réveil à 7 h 30 », « réveille-moi à 6 h », « coupe le réveil »,
+    // « arrête la sonnerie », « mets la sonnerie mélodie »
+    const alarm = parseAlarm(w);
+    if (alarm) {
+      out.push(alarm);
+      continue;
+    }
     // « va prendre la tasse » : aller + autre verbe → seulement l'autre verbe
     // « va te laver » : le pronom entre les deux
     if (VERB_OF.get(w[0]) === 'aller' && ['te', 't'].includes(w[1]) && VERB_OF.has(w[2])) w = [w[0], ...w.slice(2)];
@@ -430,6 +443,29 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
   return out;
 }
 
+/** Un ordre pour le réveil, sinon null. */
+function parseAlarm(w: string[]): Intent | null {
+  const text = w.join(' ');
+  const about = /\b(reveil|reveils|sonnerie|alarme)\b/.test(text);
+  const hm = /\b(\d{1,2}) ?(?:h|heures?)(?: ?(\d{1,2})| et (demie|demi|quart))?\b/.exec(text) ?? /\b(\d{1,2})h(\d{2})\b/.exec(text);
+  const heure = hm ? (Number(hm[1]) + (hm[2] ? Number(hm[2]) / 60 : hm[3] === 'quart' ? 0.25 : hm[3] ? 0.5 : 0)) % 24 : undefined;
+  // « réveille-moi à 7 h »
+  if (!about) return VERB_OF.get(w[0]) === 'reveiller' && heure !== undefined ? { kind: 'reveil', heure } : null;
+  const v = w[0];
+  const tone = /\b(cloche|bip|bips|melodie|musique)\b/.exec(text)?.[1];
+  const sonnerie = tone ? ({ bips: 'bip', melodie: 'mélodie', musique: 'mélodie' } as Record<string, string>)[tone] ?? tone : undefined;
+  // « change la sonnerie », « mets la sonnerie cloche »
+  if (/\bsonnerie\b/.test(text) && (tone || /^(change|changer|choisis|choisir)$/.test(v))) return { kind: 'reveil', sonnerie: sonnerie ?? '', heure };
+  if (heure !== undefined) return { kind: 'reveil', heure, sonnerie };
+  // « arrête la sonnerie », « arrête le réveil », « stop »
+  if (VERB_OF.get(v) === 'arreter' || /^(fais|fait) taire$/.test(w.slice(0, 2).join(' '))) return { kind: 'reveil', arreter: true };
+  // « coupe le réveil », « désactive l'alarme », « éteins le réveil »
+  if (['coupe', 'couper', 'desactive', 'desactiver', 'eteins', 'eteindre', 'enleve', 'enlever', 'supprime', 'supprimer'].includes(v)) return { kind: 'reveil', couper: true };
+  // « règle le réveil » sans heure : 7 h
+  if (['regle', 'regler', 'mets', 'mettre', 'programme', 'programmer', 'active', 'activer'].includes(v)) return { kind: 'reveil', heure: 7 };
+  return null;
+}
+
 function parseClause(verb: string, rest: string[], original: string, world: { enMain: string[]; objets: WorldObject[] }, word = ''): Intent[] | null {
   const { found, all } = findObjects(rest, world.objets);
   const appliance = (nom: string) => world.objets.find((o) => o.nom === nom);
@@ -438,6 +474,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
   if (news !== undefined) return news;
   switch (verb) {
     case 'prendre': {
+      // « prends une douche »
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
       // « sors la poubelle », « sors le sac poubelle » : au conteneur dehors
       if (word.startsWith('sor') && (rest.some((x) => x.startsWith('poubelle')) || found.some((o) => o.nom === 'sac poubelle'))) return [{ kind: 'sortir_poubelle' }];
       // ceux qui traînent avant ceux qui sont rangés, puis les plus proches
@@ -528,6 +566,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'ranger', refs: [(things.find(isLoose) ?? things[0]).ref] }];
     }
     case 'aller': {
+      // « va aux toilettes », « va aux WC », « va faire pipi »
+      if (rest.some((x) => ['toilettes', 'toilette', 'wc', 'pipi'].includes(x)) && !rest.includes('ta')) return [{ kind: 'toilettes' }];
+      // « va sous la douche »
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
+      // « va dormir », « va te coucher », « va au lit »
+      if (rest.some((x) => ['dormir', 'coucher', 'lit', 'dodo'].includes(x))) return [{ kind: 'dormir', ref: found.find((o) => o.sorte === 'lit')?.ref }];
       // « va dans la cuisine »
       const room = roomIn(rest);
       if (room && !found.length) return [{ kind: 'piece', piece: room }];
@@ -535,8 +579,12 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return target ? [{ kind: 'aller', ref: target.ref }] : null;
     }
     case 'cafe':
+      // « fais pipi », « fais tes besoins »
+      if (rest.includes('pipi') || rest.includes('besoins')) return [{ kind: 'toilettes' }];
       // « fais ta toilette »
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
+      // « fais ton lit », « fais le lit »
+      if (rest.includes('lit')) return [{ kind: 'faire_lit', ref: found.find((o) => o.sorte === 'lit')?.ref }];
       // « fais les courses »
       if (rest.includes('courses')) return [{ kind: 'courses' }];
       // « fais sauter la crêpe », « fais goûter »
@@ -666,6 +714,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return machineWash(original) || rest.includes('vaisselle') ? [{ kind: 'charger_lv' }] : null;
     case 'tirer':
     case 'pousser': {
+      // « tire la chasse (d'eau) »
+      if (rest.includes('chasse')) return [{ kind: 'chasse' }];
       // « rentre dans la cuisine »
       if (roomIn(rest) && !found.length) return [{ kind: 'piece', piece: roomIn(rest)! }];
       // « tire la chaise », « pousse la chaise sous la table »
@@ -677,6 +727,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return !found.length || found.every((o) => o.nom === 'assiette') ? [{ kind: 'empiler' }] : null;
     case 'essuyer': {
       const { tool, rest: r } = withTool(rest, world.objets);
+      // « sèche-toi », « essuie-toi avec la serviette » : après la douche
+      if (rest.includes('serviette') || (word.startsWith('sech') && rest.some((x) => x === 'toi' || x === 'te') && !r.some((x) => x === 'mains' || x === 'main'))) return [{ kind: 'secher' }];
       // « essuie-toi les mains (avec le torchon) », « essuie-toi »
       if (r.some((x) => x === 'mains' || x === 'main') || (rest.some((x) => x === 'toi' || x === 'te') && !found.length)) return [{ kind: 'essuyer_mains' }];
       // « essuie la vaisselle (avec le torchon) », « sèche le bol », « essuie les verres »
@@ -794,7 +846,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       }
       return null;
     case 'allonger': {
-      // pas de lit dans la cuisine ; « allonge-toi sur la chaise » : on s'y assoit
+      // « allonge-toi (sur le lit) » : on se couche
+      if (!found.length || found.some((o) => o.sorte === 'lit')) return [{ kind: 'dormir', ref: found.find((o) => o.sorte === 'lit')?.ref }];
+      // « allonge-toi sur la chaise » : on s'y assoit
       const seat = found.find((o) => o.sorte === 'siège');
       return seat ? [{ kind: 'asseoir', ref: seat.ref }] : null;
     }
@@ -864,6 +918,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (tv) return [{ kind: 'eteindre', ref: tv.ref }];
       // « arrête le lave-vaisselle » ; « ferme le four » : la porte
       const closes = ['ferme', 'fermer', 'referme', 'refermer'].includes(word);
+      // « ferme la porte à clé », « ferme à clé »
+      if (closes && (rest.includes('cle') || rest.includes('verrou'))) return [{ kind: 'verrou', fermer: true }];
       const app = found.find((o) => o.sorte === 'appareil');
       if (app && !closes) return [{ kind: 'eteindre', ref: app.ref }];
       // « ferme le frigo », « ferme le tiroir »
@@ -871,6 +927,16 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « arrête de lire », « ferme le livre », « stop »
       return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;
     }
+    // « dors », « couche-toi », « va te coucher » (aller) ; « réveille-toi »
+    case 'dormir':
+      return [{ kind: 'dormir', ref: found.find((o) => o.sorte === 'lit')?.ref }];
+    case 'reveiller':
+      return [{ kind: 'reveiller' }];
+    // « verrouille la porte », « enferme-toi » ; « déverrouille la porte »
+    case 'verrouiller':
+      return [{ kind: 'verrou', fermer: true }];
+    case 'deverrouiller':
+      return [{ kind: 'verrou', fermer: false }];
     case 'jeter': {
       // « jette la bouteille », « jette ça » (ce qu'on tient)
       const thing = found.filter((o) => o.portable);

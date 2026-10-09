@@ -1,7 +1,7 @@
 /**
  * Sons du jeu, fabriqués à la volée (Web Audio, sans fichier) : le grésillement d'une poêle,
  * l'eau qui bout, le bip du four et du micro-ondes, la vaisselle qui tinte, le verre qui casse ;
- * et l'ambiance : les pas, les oiseaux le jour, les grillons la nuit, la pluie. Coupables dans le menu (Affichage), réglage gardé dans le navigateur.
+ * la chasse d'eau ; et l'ambiance : les pas, les oiseaux le jour, les grillons la nuit, la pluie. Coupables dans le menu (Affichage), réglage gardé dans le navigateur.
  *
  * Le navigateur ne laisse jouer un son qu'après un geste du joueur : le contexte audio naît au
  * premier clic ou à la première touche.
@@ -9,7 +9,7 @@
 
 const KEY = 'island-sons';
 
-export type SoundName = 'bip' | 'ding' | 'tinte' | 'casse' | 'verse' | 'pas' | 'pas-herbe';
+export type SoundName = 'bip' | 'ding' | 'tinte' | 'casse' | 'verse' | 'pas' | 'pas-herbe' | 'chasse' | 'sonnerie-cloche' | 'sonnerie-bip' | 'sonnerie-melodie';
 
 /** Ambiance continue, de 0 à 1 (distance et murs déjà comptés), donnée à chaque image. */
 export interface Ambience {
@@ -215,7 +215,50 @@ export class KitchenSound {
     } else if (name === 'pas-herbe') {
       // dans l'herbe : un froissement doux
       this.burst(t, 0.12, 2400 + Math.random() * 800, 0.035 * volume);
+    } else if (name === 'sonnerie-cloche') {
+      // la sonnette du réveil mécanique : le marteau qui frappe vite les deux cloches (1 s)
+      for (let i = 0; i < 22; i++) {
+        const f = i % 2 ? 2350 : 2650;
+        this.tone('triangle', f, t + i * 0.045, 0.06, 0.12 * volume);
+        this.tone('sine', f * 2.7, t + i * 0.045, 0.03, 0.03 * volume);
+      }
+    } else if (name === 'sonnerie-bip') {
+      // le réveil électronique : quatre bips serrés (1 s)
+      for (let i = 0; i < 4; i++) this.tone('square', 2000, t + i * 0.13, 0.08, 0.07 * volume);
+    } else if (name === 'sonnerie-melodie') {
+      // une petite mélodie qui monte (1,2 s)
+      const notes = [784, 988, 1175, 1568, 1175, 1568];
+      notes.forEach((f, i) => {
+        this.tone('sine', f, t + i * 0.18, 0.22, 0.14 * volume);
+        this.tone('sine', f * 2, t + i * 0.18, 0.12, 0.03 * volume);
+      });
+    } else if (name === 'chasse') {
+      // la chasse d'eau : l'eau qui se rue (un souffle qui monte puis retombe), puis le réservoir qui gargouille
+      this.sweep(t, 2.6, 350, 1300, 0.3 * volume);
+      for (let i = 0; i < 6; i++) this.blipAt(t + 1.6 + Math.random() * 1.6, 150 + Math.random() * 200, 0.08, 0.05 * volume);
     }
+  }
+
+  /** Un souffle d'eau qui enfle puis retombe, son filtre glissant de `from` à `to` (chasse d'eau). */
+  private sweep(at: number, len: number, from: number, to: number, peak: number): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 0.8;
+    filter.frequency.setValueAtTime(from, at);
+    filter.frequency.exponentialRampToValueAtTime(to, at + len * 0.3);
+    filter.frequency.exponentialRampToValueAtTime(from * 0.8, at + len);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(peak, at + 0.25);
+    gain.gain.setValueAtTime(peak, at + len * 0.4);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    src.connect(filter).connect(gain).connect(this.master!);
+    src.start(at);
+    src.stop(at + len + 0.05);
   }
 
   private tone(type: OscillatorType, freq: number, at: number, len: number, peak: number): void {

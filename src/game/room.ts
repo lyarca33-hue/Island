@@ -145,6 +145,8 @@ export interface Doorway {
   flip?: boolean;
   /** Porte de garage basculante : elle monte et se range sous le plafond quand le perso approche. */
   garage?: boolean;
+  /** Porte intérieure qui se ferme à clé de l'intérieur de la pièce (salle de bain) : un verrou au-dessus de la poignée. */
+  lock?: boolean;
 }
 
 /** Rangée de meubles dos au mur, dans l'ordre de x (nord, sud) ou de z (est, ouest) croissant à partir de `from` ; un nombre laisse un écart (m). */
@@ -277,6 +279,8 @@ interface Wall {
  */
 interface Leaf {
   door: THREE.Group;
+  /** Repère du battant dans le mur : dans le mur haut (porte d'entrée), ou à part (porte intérieure). */
+  frame: THREE.Object3D;
   ghost: THREE.Group;
   center: THREE.Vector3;
   open: number;
@@ -286,6 +290,9 @@ interface Leaf {
   inner: boolean;
   shut: boolean;
   armed: boolean;
+  /** Verrou (voyant rouge fermé à clé, blanc sinon, des deux côtés), s'il y en a un ; fermée à clé : elle ne s'ouvre plus. */
+  lock: { voyants: THREE.Mesh[]; turn: THREE.Object3D } | null;
+  locked: boolean;
 }
 
 /** Porte de garage basculante : pivot en haut de l'ouverture, son ombre, ouverture (0 à 1). */
@@ -475,6 +482,43 @@ export class Room {
     l.armed = open;
   }
 
+  /** Numéro de la porte qui a un verrou, ou -1. */
+  doorIndexWithLock(): number {
+    return this.leaves.findIndex((l) => l.lock);
+  }
+
+  /** La porte intérieure `i` a-t-elle un verrou ? Est-elle fermée à clé ? */
+  doorLock(i: number): { has: boolean; locked: boolean } {
+    return { has: !!this.leaves[i].lock, locked: this.leaves[i].locked };
+  }
+
+  /** Ferme à clé (`locked` : elle se ferme d'abord) ou déverrouille la porte `i` ; fermée, elle le reste. */
+  setLocked(i: number, locked: boolean): void {
+    const l = this.leaves[i];
+    if (!l.lock) return;
+    l.locked = locked;
+    if (locked) this.setDoor(i, false);
+    for (const v of l.lock.voyants) (v.material as THREE.MeshToonMaterial).color.setHex(locked ? 0xc8352b : 0xf4f1ea);
+    l.lock.turn.rotation.x = locked ? Math.PI / 2 : 0;
+  }
+
+  /**
+   * Le perso part de la pièce (sa destination `goal` est dehors) près d'une porte fermée à clé : il
+   * la déverrouille en passant. Vrai si une porte vient d'être déverrouillée.
+   */
+  unlockToLeave(player: THREE.Vector3, goal: THREE.Vector3 | null): boolean {
+    if (!goal || this.contains(goal)) return false;
+    let done = false;
+    this.leaves.forEach((l, i) => {
+      if (!l.locked || Math.hypot(player.x - l.center.x, player.z - l.center.z) > 1.0) return;
+      this.setLocked(i, false);
+      // elle reste fermée : elle s'ouvre pour le laisser passer et se referme derrière lui
+      l.armed = true;
+      done = true;
+    });
+    return done;
+  }
+
   /** Les rideaux `i` sont-ils tirés ? */
   curtainsDrawn(i: number): boolean {
     return this.curtains[i].drawn;
@@ -551,7 +595,39 @@ export class Room {
       box(0.04, 0.03, 0.12, knob, -0.045, 1.0, s * (leafW - 0.1)),
     );
     if (inner) door.add(box(0.01, 0.75, leafW - 0.24, panelMat, -0.025, 1.45, s * leafW / 2), box(0.01, 0.75, leafW - 0.24, panelMat, -0.025, 0.55, s * leafW / 2));
-    f.add(door);
+    // le verrou au-dessus de la poignée (un groupe : le battant du kit ne le cache pas) : côté pièce, le
+    // bouton qu'on tourne ; des deux côtés, le voyant
+    let lock: Leaf['lock'] = null;
+    if (d.lock) {
+      const g = new THREE.Group();
+      g.name = 'verrou';
+      g.position.set(0, 1.16, s * (leafW - 0.1));
+      const plate = toon(0xc8ced4);
+      const voyants: THREE.Mesh[] = [];
+      let turn: THREE.Object3D = g;
+      for (const side of [1, -1]) {
+        const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.008, 20), plate);
+        rose.rotation.z = Math.PI / 2;
+        rose.position.x = side * 0.024;
+        const voyant = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.004, 16), toon(0xf4f1ea));
+        voyant.rotation.z = Math.PI / 2;
+        voyant.position.x = side * 0.03;
+        voyants.push(voyant);
+        g.add(rose, voyant);
+        // côté pièce (+X) : le bouton à tourner, debout ouvert, couché fermé à clé
+        if (side === 1) {
+          turn = box(0.012, 0.036, 0.008, plate, side * 0.036, 0, 0);
+          g.add(turn);
+        }
+      }
+      door.add(g);
+      lock = { voyants, turn };
+    }
+    // une porte intérieure a son propre repère, hors du mur haut : fermée, elle reste visible quand
+    // le mur est abaissé en coupe (on voit qu'elle est fermée, et son verrou)
+    const lf = inner ? this.wallFrame(d.wall, uc) : f;
+    lf.add(door);
+    if (inner) this.group.add(lf);
     // ombre du battant, gardée même quand le mur est abaissé en coupe ; un peu plus large que le
     // battant : pas de filet de soleil autour quand la porte est fermée
     const gf = this.wallFrame(d.wall, uc);
@@ -570,7 +646,7 @@ export class Room {
     }
     // ouverte : la porte d'entrée tourne de 100° vers le dehors, une porte intérieure de 90° vers la pièce
     const swing = (inner ? s : -s) * THREE.MathUtils.degToRad(inner ? 90 : 100);
-    this.leaves.push({ door, ghost, center: f.position.clone(), open: inner ? 1 : 0, swing, wall: d.wall, inner, shut: false, armed: true });
+    this.leaves.push({ door, frame: lf, ghost, center: f.position.clone(), open: inner ? 1 : 0, swing, wall: d.wall, inner, shut: false, armed: true, lock, locked: false });
   }
 
   /**
@@ -1046,10 +1122,12 @@ export class Room {
       const near = Math.hypot(player.x - l.center.x, player.z - l.center.z) < DOOR_NEAR;
       if (!near) l.armed = true;
       // porte intérieure ouverte : elle le reste ; fermée : elle s'ouvre pour laisser passer
-      const want = l.inner && !l.shut ? true : near && l.armed;
+      const want = l.locked ? false : l.inner && !l.shut ? true : near && l.armed;
       l.open = THREE.MathUtils.clamp(l.open + (want ? 1 : -1) * DOOR_SPEED * dt, 0, 1);
       l.door.rotation.y = THREE.MathUtils.smootherstep(l.open, 0, 1) * l.swing;
       l.ghost.rotation.y = l.door.rotation.y;
+      // mur abaissé en coupe : la porte intérieure ouverte (à plat contre le mur) part avec lui, fermée elle reste
+      if (l.inner) l.frame.visible = !this.wall(l.wall).cut || l.open < 0.98;
     }
     for (const l of this.lifts) {
       const near = Math.hypot(player.x - l.center.x, player.z - l.center.z) < GARAGE_NEAR;

@@ -94,13 +94,15 @@ export const ROOM_RIGS: Record<string, Rig> = {
     def: {},
   },
   // —— salle de bain
-  // modélisé relevé ; fermé (0), il est rabattu d'un quart de tour vers l'avant sur sa charnière
+  // modélisé relevé ; fermé (0), il est rabattu d'un quart de tour vers l'avant sur sa charnière,
+  // au dos de l'abattant (z -0,08) : il se couche à plat sur la lunette (dessus à 0,425 m)
   toilettes: {
     look: {
       model: 'toilettes',
-      parts: { couvercle: { from: 'abattant', pivot: [0, 0.43, -0.046], motion: { kind: 'turn', axis: 'x', rest: Math.PI / 2, angle: -Math.PI / 2 } } },
+      parts: { couvercle: { from: 'abattant', pivot: [0, 0.435, -0.08], motion: { kind: 'turn', axis: 'x', rest: Math.PI / 2, angle: -Math.PI / 2 } } },
     },
-    def: { toilet: true },
+    // on s'assoit sur la lunette, couvercle levé
+    def: { toilet: true, seat: 0.43 },
   },
   // —— entrée
   // modélisé baissé (pointe en bas) ; il se lève d'un demi-tour sur le coude du L quand il y a du courrier

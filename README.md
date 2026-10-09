@@ -73,17 +73,27 @@ Autour de la cuisine, les **autres pièces sont meublées avec leurs modèles Tr
 pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pièce>.glb`) :
 - le **salon** : le meuble télé et la télé au fond, le canapé face à elle avec ses deux coussins, la
   table basse sur le tapis, le fauteuil et le lampadaire, la bibliothèque et quelques livres ;
-- la **chambre** : le lit tête au mur, une table de nuit de chaque côté (lampe de chevet, réveil qui
-  donne l'heure), l'armoire, la plante et le tapis ;
-- la **salle de bain** : la douche dans le coin, les toilettes, le lavabo (le robinet coule, on s'y
-  lave les mains) sous son miroir, le porte-serviettes ;
+- la **chambre** : le lit tête au mur et sa couette souple (un clic ou « va te coucher » : le perso
+  rabat la couette, s'assoit au bord, s'allonge et la couette le recouvre ; il dort, le temps file et
+  la fatigue remonte, jusqu'à être reposé ou réveillé, C ou un clic au sol ; il repousse la couette
+  en se levant, et le lit reste défait jusqu'à « fais ton lit » : il tire la couette et la lisse),
+  une table de nuit de chaque côté (lampe de chevet, réveil qui donne l'heure et se règle : un clic, ou « règle le réveil à 7 h 30 », « coupe le réveil » ; il sonne chaque jour à son heure en tremblant, cloche, bip ou mélodie au choix, « mets la sonnerie mélodie », et réveille le perso qui dort ; « arrête la sonnerie »), l'armoire, la plante
+  et le tapis ;
+- la **salle de bain** : la douche dans le coin (un clic ou « prends une douche » : le perso se
+  place sous le pommeau, l'eau coule et la vapeur monte, il se frotte ; l'hygiène remonte à fond et
+  il en sort mouillé, à sécher avec la serviette, sinon il laisse des gouttes), les toilettes (un clic ou « va aux toilettes » : le
+  perso lève le couvercle, s'assoit, la vessie se vide, il se relève, tire la chasse et le couvercle
+  se rabat ; les mains sont alors à laver), le lavabo (le robinet coule, on s'y lave les mains) sous
+  son miroir, le porte-serviettes, le porte-papier (on y accroche le rouleau) ; la porte se ferme à
+  clé de l'intérieur (clic droit sur la porte, ou « ferme la porte à clé ») : le voyant passe au
+  rouge, et le perso la déverrouille en sortant ;
 - l'**entrée** : le portemanteau et son manteau, le miroir, les chaussures, le porte-parapluies, une
   lettre sous la porte, la boîte aux lettres dehors ;
 - le **garage** : l'établi et sa caisse à outils, l'étagère, des cartons, le vélo, la bêche et le râteau.
 
-Tapis, douche, miroirs et portemanteau sont du décor fixe (`decor`) ; le reste se prend ou se pousse.
-Dormir, la télé, la douche et les toilettes, retirés avec l'ancienne maison, ne sont pas encore
-rebranchés : la fatigue, l'hygiène et la vessie restent en pause.
+Tapis, colonne de douche, miroirs et portemanteau sont du décor fixe (`decor`) ; le reste se prend ou se pousse.
+La télé, retirée avec l'ancienne maison, n'est pas encore rebranchée. La vessie baisse : en dessous de 18, le perso est
+prévenu ; à zéro, c'est l'accident.
 
 ### Les ordres
 

@@ -59,6 +59,13 @@ export interface TripoLook {
   plinth?: number;
   /** Allonge ce qui est sous la hauteur y (repère du modèle) de `by` mètres : les pieds de la table basse. */
   stretch?: [y: number, by: number];
+  /** Morceaux du modèle retirés (boîtes min, max dans son repère) : la bonde et la tirette du lavabo, mal placées. */
+  cut?: Array<[V3, V3]>;
+  /**
+   * Trous bouchés après `cut` : un carré horizontal à la hauteur y, sur x0..x1 et z0..z1, de la
+   * couleur du modèle juste à côté (là où était la tirette, le rebord du lavabo).
+   */
+  fill?: Array<{ y: number; x: [number, number]; z: [number, number] }>;
 }
 
 /** Les fiches habillées et leur modèle. */
@@ -115,7 +122,17 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   sansevieria: { model: 'sansevieria' },
   pull: { model: 'pull-plie' },
   cintre: { model: 'vetement-cintre' },
-  lavabo: { model: 'lavabo' },
+  // la bonde du modèle flotte au-dessus de la vasque, sa tirette dépasse du rebord : retirées
+  // (le jeu montre son propre bouchon quand l'évier est bouché)
+  lavabo: {
+    model: 'lavabo',
+    cut: [
+      [[-0.06, 0.72, 0.13], [0.06, 0.795, 0.245]],
+      [[-0.05, 0.804, 0.25], [0.05, 0.9, 0.36]],
+    ],
+    fill: [{ y: 0.806, x: [-0.045, 0.045], z: [0.258, 0.352] }],
+  },
+  douche: { model: 'douche-receveur' },
   'porte-serviettes': { model: 'porte-serviettes' },
   serviette: { model: 'serviette-etendue' },
   'verre-dents': { model: 'verre-dents' },
@@ -123,6 +140,7 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   'savon-pain': { model: 'savon-pain' },
   'gel-douche': { model: 'flacon-douche' },
   'papier-toilette': { model: 'papier-toilette' },
+  derouleur: { model: 'derouleur' },
   'porte-parapluies': { model: 'porte-parapluies' },
   parapluie: { model: 'parapluie' },
   chaussure: { model: 'chaussure' },
@@ -222,12 +240,14 @@ function bake(id: string, look: TripoLook, model: Model) {
     .multiply(new THREE.Matrix4().makeScale(...(look.scale ?? [1, 1, 1])))
     .multiply(new THREE.Matrix4().makeTranslation(0, look.clip ? -s0 : 0, 0));
   const place = (g: THREE.BufferGeometry) => {
-    const out = look.clip ? clipY(g, s0, s1) : g.clone();
+    let out = look.clip ? clipY(g, s0, s1) : g.clone();
+    if (look.cut) out = cutBoxes(out, look.cut);
     if (look.stretch) stretchY(out, ...look.stretch);
     return out.applyMatrix4(m);
   };
   const moving = new Set(Object.values(look.parts ?? {}).map((p) => p.from));
   const fixed = [...model.parts].filter(([name]) => !moving.has(name)).map(([, g]) => place(g));
+  for (const f of look.fill ?? []) fixed.push(patch(merge([...model.parts].filter(([name]) => !moving.has(name)).map(([, g]) => g)), f).applyMatrix4(m));
   const parts = new Map<string, THREE.BufferGeometry>();
   const pivots = new Map<string, THREE.Vector3 | null>();
   for (const [name, p] of Object.entries(look.parts ?? {})) {
@@ -348,6 +368,48 @@ function merge(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
       k += g.getAttribute(name).count * size;
     }
     out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  return out;
+}
+
+/** Carré horizontal (`fill` de TripoLook), sa texture prise au point du modèle le plus proche, juste à côté. */
+function patch(model: THREE.BufferGeometry, f: { y: number; x: [number, number]; z: [number, number] }): THREE.BufferGeometry {
+  const [x0, x1] = f.x, [z0, z1] = f.z;
+  const p = model.getAttribute('position'), n = model.getAttribute('normal'), uv = model.getAttribute('uv');
+  // le dessus du rebord (face tournée vers le haut) à côté du trou
+  const at = new THREE.Vector3(x1 + 0.05, f.y, (z0 + z1) / 2);
+  let best = 0, d = Infinity;
+  for (let i = 0; i < p.count; i++) {
+    if (n && n.getY(i) < 0.9) continue;
+    const dd = at.distanceToSquared(new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)));
+    if (dd < d) [d, best] = [dd, i];
+  }
+  const out = new THREE.BufferGeometry();
+  const quad = [[x0, z0], [x0, z1], [x1, z1], [x0, z0], [x1, z1], [x1, z0]];
+  out.setAttribute('position', new THREE.BufferAttribute(new Float32Array(quad.flatMap(([x, z]) => [x, f.y, z])), 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(quad.flatMap(() => [0, 1, 0])), 3));
+  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(quad.flatMap(() => [uv.getX(best), uv.getY(best)])), 2));
+  return out;
+}
+
+/** Retire d'une géométrie sans index les triangles dont le centre est dans l'une des boîtes. */
+export function cutBoxes(g: THREE.BufferGeometry, boxes: Array<[V3, V3]>): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  const inside = (x: number, y: number, z: number) => boxes.some(([a, b]) => x > a[0] && x < b[0] && y > a[1] && y < b[1] && z > a[2] && z < b[2]);
+  const keep: number[] = [];
+  for (let i = 0; i < p.count; i += 3) {
+    const c = [0, 1, 2].map((k) => (p.getComponent(i, k) + p.getComponent(i + 1, k) + p.getComponent(i + 2, k)) / 3);
+    if (!inside(c[0], c[1], c[2])) keep.push(i, i + 1, i + 2);
+  }
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'uv']) {
+    const a = g.getAttribute(name);
+    if (!a) continue;
+    const arr = new Float32Array(keep.length * a.itemSize);
+    keep.forEach((v, j) => {
+      for (let c = 0; c < a.itemSize; c++) arr[j * a.itemSize + c] = a.getComponent(v, c);
+    });
+    out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize));
   }
   return out;
 }

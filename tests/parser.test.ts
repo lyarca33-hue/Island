@@ -92,7 +92,52 @@ describe('ordres de la cuisine : magasin, marché, appareils', () => {
   });
 
   it('les gestes des pièces retirées partent à l’IA (elle dit ce qui manque)', () => {
-    for (const t of ['prends une douche', 'va dormir', 'va aux toilettes', 'lance une lessive', 'va pêcher', 'arrose le potager', 'zappe']) expect(parse(t)).toBeNull();
+    for (const t of ['lance une lessive', 'va pêcher', 'arrose le potager', 'zappe']) expect(parse(t)).toBeNull();
+  });
+
+  it('les toilettes : y aller, tirer la chasse', () => {
+    for (const t of ['va aux toilettes', 'va aux WC', 'fais pipi']) expect(parse(t)).toEqual([{ kind: 'toilettes' }]);
+    expect(parse('tire la chasse')).toEqual([{ kind: 'chasse' }]);
+    expect(parse('fais ta toilette')).toEqual([{ kind: 'laver', visage: true }]);
+  });
+
+  it('le papier toilette s’accroche au porte-papier', () => {
+    const wc = [...objets, obj('papier-toilette', 'papier toilette', { portable: true, distance: 1 }), obj('derouleur', 'porte-papier', { sorte: 'rangement', distance: 1.2 })];
+    for (const t of ['accroche le pq au porte pq', 'range le papier toilette', 'accroche le rouleau de papier sur le dérouleur']) expect(parseOrder(t, { enMain: [], objets: wc })).toEqual([{ kind: 'ranger_place', ref: 'papier-toilette' }]);
+  });
+
+  it('le lit : dormir, se réveiller, le faire', () => {
+    const chambre = [...objets, obj('lit', 'lit', { sorte: 'lit', distance: 2 })];
+    const p = (t: string) => parseOrder(t, { enMain: [], objets: chambre });
+    const kinds = (t: string) => p(t)?.map((i) => i.kind);
+    for (const t of ['va dormir', 'va te coucher', 'couche-toi', 'dors', 'allonge-toi sur le lit', 'va au lit']) expect(kinds(t)).toEqual(['dormir']);
+    expect(p('allonge-toi sur le lit')).toEqual([{ kind: 'dormir', ref: 'lit' }]);
+    expect(p('réveille-toi')).toEqual([{ kind: 'reveiller' }]);
+    for (const t of ['fais ton lit', 'fais le lit']) expect(p(t)).toEqual([{ kind: 'faire_lit', ref: 'lit' }]);
+  });
+
+  it('la porte de la salle de bain : à clé, ou pas', () => {
+    for (const t of ['ferme la porte à clé', 'verrouille la porte', 'enferme-toi']) expect(parse(t)).toEqual([{ kind: 'verrou', fermer: true }]);
+    expect(parse('déverrouille la porte')).toEqual([{ kind: 'verrou', fermer: false }]);
+  });
+
+  it('le réveil : le régler, le couper, sa sonnerie', () => {
+    expect(parse('règle le réveil à 7 h 30')).toEqual([{ kind: 'reveil', heure: 7.5 }]);
+    expect(parse('mets le réveil à 6h')).toEqual([{ kind: 'reveil', heure: 6 }]);
+    expect(parse('règle le réveil à 6h45')).toEqual([{ kind: 'reveil', heure: 6.75 }]);
+    expect(parse('réveille-moi à 8 heures et demie')).toEqual([{ kind: 'reveil', heure: 8.5 }]);
+    expect(parse('règle le réveil')).toEqual([{ kind: 'reveil', heure: 7 }]);
+    for (const t of ['coupe le réveil', 'désactive l’alarme']) expect(parse(t)).toEqual([{ kind: 'reveil', couper: true }]);
+    for (const t of ['arrête la sonnerie', 'arrête le réveil']) expect(parse(t)).toEqual([{ kind: 'reveil', arreter: true }]);
+    expect(parse('mets la sonnerie mélodie')).toEqual([{ kind: 'reveil', sonnerie: 'mélodie' }]);
+    expect(parse('change la sonnerie du réveil')).toEqual([{ kind: 'reveil', sonnerie: '' }]);
+    expect(parse('réveille-toi')).toEqual([{ kind: 'reveiller' }]);
+  });
+
+  it('la douche : la prendre, se sécher', () => {
+    for (const t of ['prends une douche', 'va sous la douche']) expect(parse(t)).toEqual([{ kind: 'douche' }]);
+    expect(parse('sèche-toi')).toEqual([{ kind: 'secher' }]);
+    expect(parse('essuie-toi avec la serviette')).toEqual([{ kind: 'secher' }]);
   });
 
   it('le magasin et le marché', () => {
