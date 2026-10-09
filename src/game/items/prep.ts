@@ -48,16 +48,19 @@ export const PREP_LIQUIDS: Record<string, THREE.ColorRepresentation> = {
   'pâte à crêpes': 0xf1deb0,
   'préparation': 0xe9dcc0,
   'pâte à gâteau': 0xe8cf94,
+  'pâte à pain perdu': 0xf0d27a,
 };
 
 /**
  * Pâtes du saladier : ce qu'il faut y mettre (au moins), puis mélanger ; la pâte versée dans la
  * poêle devient `cooks` (une crêpe par louche : `per` du saladier plein).
  */
-export const BATTERS: Array<{ name: string; needs: string[]; cooks: string; per: number }> = [
+export const BATTERS: Array<{ name: string; needs: string[]; cooks: string; per: number; soaks?: string[] }> = [
   // le sucre en fait une pâte à gâteau, qui se verse tout entière dans le moule (Game.pourBatter)
   { name: 'pâte à gâteau', needs: ['œuf', 'farine', 'sucre'], cooks: 'gateau', per: 1 },
   { name: 'pâte à crêpes', needs: ['œuf', 'lait', 'farine'], cooks: 'crepe', per: 0.2 },
+  // sans farine : on la verse sur des tranches de pain posées dans la poêle (`soaks`), qui s'en imbibent
+  { name: 'pâte à pain perdu', needs: ['œuf', 'lait', 'sucre'], cooks: 'pain-perdu', per: 0.34, soaks: ['tranches de pain', 'pain grillé'] },
   { name: 'œufs battus', needs: ['œuf'], cooks: 'omelette', per: 1 },
 ];
 
@@ -71,13 +74,13 @@ export const SPICES: Record<string, string> = { sel: 'du sel', poivre: 'du poivr
 /** Ce qui se range où : le pot à ustensiles, l'étagère à épices, le placard. */
 export const UTENSIL_POT = ['fouet', 'spatule', 'cuillère en bois', 'louche'];
 export const PREP_CUPBOARD = ['saladier', 'râpe'];
-export const PREP_FRESH = ['œuf', 'lait', 'beurre', 'fromage', 'fromage râpé', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'crêpe'];
+export const PREP_FRESH = ['œuf', 'lait', 'beurre', 'fromage', 'fromage râpé', 'pain perdu', 'croûtons', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'crêpe'];
 
 /** Cuisent à la poêle (casser un œuf, verser une pâte). */
-export const PREP_PAN_FOOD = ['œuf au plat', 'omelette', 'crêpe'];
+export const PREP_PAN_FOOD = ['œuf au plat', 'omelette', 'crêpe', 'pain perdu', 'tranches de pain'];
 
 export const PREP_FEMININE = ['spatule', 'cuillère en bois', 'louche', 'râpe', 'omelette', 'crêpe', 'pâte à crêpes', 'étagère à épices', 'huile d\'olive', 'crêpe à la confiture', 'crêpe au miel', 'crêpe au chocolat', 'crêpe au beurre', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'préparation'];
-export const PREP_PLURAL = ['herbes de Provence', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'œufs battus', 'œufs'];
+export const PREP_PLURAL = ['croûtons', 'herbes de Provence', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'œufs battus', 'œufs'];
 
 /** Stock voulu (liste de courses). */
 export const PREP_STOCK: Record<string, number> = { 'œuf': 4, lait: 1, beurre: 1, fromage: 1, sel: 1, poivre: 1, paprika: 1, 'herbes de Provence': 1, "huile d'olive": 1 };
@@ -307,6 +310,35 @@ export const PREP_ITEMS: ItemDef[] = [
     breakWord: 'déchirée',
     build: () => group(cooked(mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.004, 24), 0xf3e3b0, 0, 0.002, 0))),
   },
+  {
+    id: 'pain-perdu',
+    name: 'pain perdu',
+    portable: true,
+    grip: 'pinch',
+    gripPoint: [0, 0.01, 0.05],
+    mouth: [0, 0.015, -0.05],
+    food: { hunger: 32, bites: 4, color: 0xd9a04a },
+    cook: { seconds: 8, burn: 16, colors: [0xf0d27a, 0xd9a04a, 0x3a2a20] },
+    fragility: 10,
+    durability: 10,
+    breakWord: 'écrasé',
+    // deux tranches dorées l'une sur l'autre (habillé par son modèle Tripo, interior.ts)
+    build: () => group(cooked(mesh(new THREE.BoxGeometry(0.09, 0.03, 0.11), 0xf0d27a, 0, 0.015, 0))),
+  },
+  // le pain grillé coupé en dés sur la planche : sur la soupe ou la salade
+  {
+    id: 'croutons',
+    name: 'croûtons',
+    portable: true,
+    grip: 'pinch',
+    gripPoint: [0, 0.01, 0.03],
+    mouth: [0, 0.015, -0.03],
+    food: { hunger: 10, bites: 3, color: 0xb07a3a },
+    fragility: 10,
+    durability: 15,
+    breakWord: 'émietté',
+    build: () => group(mesh(new THREE.BoxGeometry(0.07, 0.04, 0.07), 0xb07a3a, 0, 0.02, 0)),
+  },
   // ——— ce que donnent les gestes ———
   tartines('tartines-confiture', 'tartines de confiture', 0xa3233a, 32),
   tartines('tartines-miel', 'tartines au miel', 0xe0a630, 32),
@@ -434,6 +466,7 @@ export const STOVE_RECIPES: StoveRecipe[] = [
   { name: 'omelette', needs: ['œuf', 'œuf'], how: 'Casse 2 œufs dans le saladier, fouette, verse dans la poêle chaude, remue à la spatule, puis sers.', task: 'omelette' },
   { name: 'crêpe', needs: ['œuf', 'lait', 'farine'], how: 'Saladier : un œuf, du lait, de la farine, fouette ; une louche de pâte dans la poêle chaude, fais-la sauter, puis tartine-la.', task: 'crepe' },
   { name: 'œuf au plat', needs: ['œuf'], how: 'Casse un œuf directement dans la poêle sur le feu, attends qu’il soit cuit.', task: 'oeuf_plat' },
+  { name: 'pain perdu', needs: ['œuf', 'lait', 'sucre', 'tranches de pain'], how: 'Saladier : un œuf, du lait et du sucre, fouette. Pose des tranches de pain dans la poêle chaude, verse la pâte dessus, retourne-les une fois.' },
   { name: 'gâteau', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure'], how: 'Saladier : 2 œufs, farine, sucre et levure, fouette ; verse dans le moule, enfourne. Sors-le avec les maniques, laisse-le refroidir, puis coupe-le en parts sur la planche.' },
   { name: 'gâteau au chocolat', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure', 'tablette de chocolat'], how: 'Comme le gâteau, avec la tablette de chocolat dans le saladier.' },
   { name: 'gâteau au yaourt', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure', 'yaourt'], how: 'Comme le gâteau, avec un pot de yaourt dans le saladier.' },

@@ -4,7 +4,8 @@
  * `tools/build_interior_assets.py`.
  *
  * Aliments habillés par les modèles texturés faits avec Tripo (pack `aliments`, voir
- * tools/build_aliments_assets.mjs) ou, à défaut, par l'« Ultimate Food Pack » (CC0, pack
+ * tools/build_aliments_assets.mjs ; plats cuisinés et vaisselle : pack `plats`,
+ * tools/build_plats_assets.mjs) ou, à défaut, par l'« Ultimate Food Pack » (CC0, pack
  * `nourriture`) ; les deux sont chargés avant la maison (packs/assets.ts). Le modèle garde ses
  * proportions et prend la place des pièces qu'il remplace ; sa pièce principale s'appelle `cuit`
  * quand l'aliment cuit, pour que sa couleur suive la cuisson (cooking.ts).
@@ -41,12 +42,20 @@ export const INTERIOR_LOOKS: Record<string, string> = {
  * pièce qui cuit (un modèle Tripo n'a qu'une pièce : c'est elle) ; `colors` remplace des couleurs de
  * FOOD_PALETTE.
  */
-type FoodLook = ({ pack: 'aliments'; model: ModelName<'aliments'> } | { pack?: 'nourriture'; model: ModelName<'nourriture'> }) & {
+type FoodLook = ({ pack: 'aliments'; model: ModelName<'aliments'> } | { pack: 'plats'; model: ModelName<'plats'> } | { pack?: 'nourriture'; model: ModelName<'nourriture'> }) & {
   turn?: [number, number, number];
   fit?: 'inside' | 'long' | 'stretch';
   cuit?: string;
   colors?: Record<string, number>;
+  /** Peint déjà cuit (plats Tripo) : plus pâle cru, sa texture une fois cuit (cooking.ts). */
+  cooked?: boolean;
 };
+
+/**
+ * Un plat, un ustensile ou un emballage habillé par son modèle Tripo du pack `plats`
+ * (tools/build_plats_assets.mjs) : à la longueur de l'objet du jeu (les plats du jeu sont plus plats que les modèles).
+ */
+const plat = (model: ModelName<'plats'>, more: { fit?: FoodLook['fit']; turn?: FoodLook['turn'] } = {}): FoodLook => ({ pack: 'plats', model, cooked: true, fit: 'long', ...more });
 
 /** Un aliment habillé par son modèle Tripo (même nom que la fiche, sauf `model`). */
 const tripo = (model: ModelName<'aliments'>, more: { fit?: FoodLook['fit']; turn?: FoodLook['turn'] } = {}): FoodLook => ({ pack: 'aliments', model, ...more });
@@ -78,9 +87,21 @@ export const FOOD_LOOKS: Record<string, FoodLook> = {
   jambon: tripo('jambon', { fit: 'stretch' }),
   champignons: tripo('champignon'),
   creme: tripo('creme'),
-  // l'œuf au plat et la pizza n'ont pas (encore) de modèle Tripo
-  'oeuf-plat': { model: 'Egg_Fried', cuit: 'White' },
-  pizza: { model: 'Pizza', cuit: 'Yellow' },
+  // les plats cuisinés et la vaisselle faits avec Tripo (pack `plats`, nommés comme la fiche, sauf mention)
+  ...Object.fromEntries(
+    ([
+      'oeuf-plat', 'omelette', 'pizza', 'gateau', 'pates', 'feuilles-salade', 'sandwich', 'yaourt-fraises', 'salade-fruits', 'poelee-legumes', 'hot-dog',
+      'steak-frites', 'poulet-frites', 'poisson-citron', 'tartine-tomate', 'croque-monsieur', 'bruschetta', 'gratin-pates', 'poulet-roti', 'poire-chocolat',
+      'crumble', 'pain-perdu', 'croutons', 'moule', 'plat-four', 'passoire', 'pierre-pizza', 'theiere', 'sachets-the', 'maniques', 'sac-poubelle',
+    ] as const).map((id) => [id, plat(id)]),
+  ),
+  'pates-beurre': plat('pates'),
+  'salade-verte': plat('feuilles-salade'),
+  'sandwich-jambon': plat('sandwich'),
+  'sandwich-steak': plat('hamburger'),
+  // la brique et le sachet : à la boîte du jeu
+  'jus-orange': plat('jus-orange', { fit: 'stretch' }),
+  'legumes-surgeles': plat('legumes-surgeles', { fit: 'stretch' }),
 };
 
 /** Les modèles chargés : pour chacun, ses pièces (géométrie partagée, couleur). */
@@ -179,7 +200,7 @@ function dressFood(def: ItemDef, model: THREE.Object3D, look: FoodLook): THREE.O
     (m.material as THREE.Material).dispose();
   }
   const turned = new THREE.Group();
-  turned.add(look.pack === 'aliments' ? packModel('aliments', look.model, {}, true) : packModel('nourriture', look.model, {}, true));
+  turned.add(look.pack === 'aliments' ? packModel('aliments', look.model, {}, true) : look.pack === 'plats' ? packModel('plats', look.model, {}, true) : packModel('nourriture', look.model, {}, true));
   if (look.turn) turned.rotation.set(...look.turn);
   turned.updateMatrixWorld(true);
   const source = new THREE.Box3().setFromObject(turned);
@@ -202,11 +223,11 @@ function dressFood(def: ItemDef, model: THREE.Object3D, look: FoodLook): THREE.O
   dressed.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const m = o.material as THREE.MeshToonMaterial;
-    if (look.pack === 'aliments') {
-      // peint : la texture donne la couleur crue, la cuisson la teinte par-dessus (cooking.ts)
+    if (look.pack === 'aliments' || look.pack === 'plats') {
+      // peint : la texture donne la couleur crue (ou cuite), la cuisson la teinte par-dessus (cooking.ts)
       if (def.cook) {
         o.name = 'cuit';
-        m.userData.cookTint = true;
+        m.userData.cookTint = look.cooked ? 'cuit' : true;
       }
       return;
     }

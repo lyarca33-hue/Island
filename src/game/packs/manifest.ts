@@ -1,7 +1,7 @@
 /**
  * Boîte (largeur x, hauteur y, profondeur z, en m) de chaque modèle des packs (Quaternius, et les
- * aliments Tripo), posé au sol et centré. Fichier écrit par tools/build_pack_assets.mjs et
- * tools/build_aliments_assets.mjs : ne pas modifier à la main.
+ * aliments et plats Tripo), posé au sol et centré. Fichier écrit par tools/build_pack_assets.mjs,
+ * tools/build_aliments_assets.mjs et tools/build_plats_assets.mjs : ne pas modifier à la main.
  */
 export const PACK_SIZES = {
   nourriture: {
@@ -64,6 +64,42 @@ export const PACK_SIZES = {
     "tomate": [0.07, 0.052, 0.07],
     "vinaigre": [0.156, 0.25, 0.157],
     "yaourt": [0.07, 0.056, 0.07],
+  },
+  plats: {
+    "bruschetta": [0.16, 0.035, 0.147],
+    "croque-monsieur": [0.108, 0.055, 0.116],
+    "croutons": [0.09, 0.078, 0.075],
+    "crumble": [0.198, 0.058, 0.199],
+    "feuilles-salade": [0.115, 0.058, 0.133],
+    "gateau": [0.219, 0.092, 0.219],
+    "gratin-pates": [0.185, 0.052, 0.234],
+    "hamburger": [0.109, 0.102, 0.107],
+    "hot-dog": [0.076, 0.048, 0.18],
+    "jus-orange": [0.102, 0.199, 0.153],
+    "legumes-surgeles": [0.22, 0.092, 0.204],
+    "maniques": [0.239, 0.101, 0.184],
+    "moule": [0.228, 0.046, 0.224],
+    "oeuf-plat": [0.104, 0.039, 0.118],
+    "omelette": [0.079, 0.072, 0.149],
+    "pain-perdu": [0.107, 0.068, 0.13],
+    "passoire": [0.221, 0.109, 0.25],
+    "pates": [0.098, 0.052, 0.109],
+    "pierre-pizza": [0.297, 0.052, 0.295],
+    "pizza": [0.276, 0.044, 0.278],
+    "plat-four": [0.221, 0.072, 0.312],
+    "poelee-legumes": [0.132, 0.088, 0.138],
+    "poire-chocolat": [0.08, 0.12, 0.079],
+    "poisson-citron": [0.061, 0.037, 0.158],
+    "poulet-frites": [0.135, 0.073, 0.18],
+    "poulet-roti": [0.199, 0.103, 0.277],
+    "sac-poubelle": [0.244, 0.499, 0.398],
+    "sachets-the": [0.105, 0.12, 0.1],
+    "salade-fruits": [0.104, 0.059, 0.129],
+    "sandwich": [0.119, 0.07, 0.13],
+    "steak-frites": [0.207, 0.055, 0.22],
+    "tartine-tomate": [0.11, 0.043, 0.086],
+    "theiere": [0.153, 0.127, 0.22],
+    "yaourt-fraises": [0.119, 0.091, 0.118],
   },
 } as const satisfies Record<string, Record<string, readonly [number, number, number]>>;
 

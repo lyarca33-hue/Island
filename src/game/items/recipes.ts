@@ -59,7 +59,7 @@ export const RECIPES: Recipe[] = [
     needs: ['tranches de pain', 'tranches de tomate'],
     bonus: 4,
     on: 'planche',
-    words: ['tartine', 'tartines', 'bruschetta'],
+    words: ['tartine', 'tartines', 'tartine tomate'],
   },
   {
     dish: 'sandwich-jambon',
@@ -67,7 +67,7 @@ export const RECIPES: Recipe[] = [
     extras: ['feuilles de salade', 'tranches de tomate'],
     bonus: 5,
     on: 'planche',
-    words: ['sandwich jambon', 'jambon beurre', 'croque'],
+    words: ['sandwich jambon', 'jambon beurre'],
   },
   {
     dish: 'hot-dog',
@@ -130,12 +130,59 @@ export const RECIPES: Recipe[] = [
     on: 'assiette',
     words: ['poelee', 'legumes sautes', 'poelee de legumes'],
   },
+  // ——— le lot du carnet (recettes-tour-octobre.md) : un modèle Tripo pour chacun ———
+  {
+    dish: 'croque-monsieur',
+    needs: ['pain grillé', 'jambon', 'fromage râpé'],
+    bonus: 8,
+    on: 'planche',
+    words: ['croque monsieur', 'croque', 'croques'],
+  },
+  {
+    dish: 'bruschetta',
+    needs: ['pain grillé', 'tranches de tomate'],
+    extras: ['ail'],
+    bonus: 6,
+    on: 'planche',
+    words: ['bruschetta', 'bruschettas'],
+  },
+  {
+    dish: 'gratin-pates',
+    needs: ['pâtes', 'fromage râpé'],
+    extras: ['jambon'],
+    bonus: 10,
+    on: 'assiette',
+    words: ['gratin de pates', 'gratin pates', 'gratin', 'macaronis', 'macaroni'],
+  },
+  {
+    dish: 'poulet-roti',
+    needs: ['poulet', 'pomme de terre', 'oignon'],
+    extras: ['rondelles de carotte'],
+    bonus: 10,
+    on: 'assiette',
+    words: ['poulet roti', 'poulet aux legumes'],
+  },
+  {
+    dish: 'poire-chocolat',
+    needs: ['poire', 'tablette de chocolat'],
+    bonus: 5,
+    on: 'assiette',
+    words: ['poire au chocolat', 'poire chocolat', 'poire pochee', 'belle helene'],
+  },
+  {
+    dish: 'crumble',
+    needs: ['quartiers de pomme', 'biscuits'],
+    extras: ['poire', 'beurre'],
+    bonus: 8,
+    on: 'assiette',
+    words: ['crumble', 'crumbles', 'tarte aux pommes'],
+  },
 ];
 
 export const RECIPE_BY_DISH = new Map(RECIPES.map((r) => [r.dish, r]));
 
 /** Noms des plats au féminin (accord des messages). */
-export const DISH_FEMININE = ['salade composée', 'tartine à la tomate', 'salade verte', 'salade de fruits', 'poêlée de légumes'];
+export const DISH_FEMININE = ['salade composée', 'tartine à la tomate', 'salade verte', 'salade de fruits', 'poêlée de légumes', 'bruschetta', 'poire au chocolat'];
 
 const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
 
@@ -145,6 +192,12 @@ function mesh(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, x = 0
   m.castShadow = true;
   m.receiveShadow = true;
   return m;
+}
+
+function group(...parts: THREE.Object3D[]): THREE.Group {
+  const g = new THREE.Group();
+  g.add(...parts);
+  return g;
 }
 
 /** Un plat : se prend entre les doigts comme les morceaux coupés, se mange en `bites` bouchées. */
@@ -304,7 +357,7 @@ export const DISHES: ItemDef[] = [
     disk(g, 0.024, 0.019, 0.013, 0.013, 0xd8352a, 0xf07a5f);
     return g;
   }),
-  dish('sandwich-steak', 'sandwich au steak', { hunger: 66, bites: 6, color: 0x8a5a3c }, () => {
+  dish('sandwich-steak', 'hamburger', { hunger: 66, bites: 6, color: 0x8a5a3c }, () => {
     // tranche, steak, tranche
     const g = new THREE.Group();
     slice(g, 0);
@@ -313,6 +366,29 @@ export const DISHES: ItemDef[] = [
     slice(g, 0.033, 0.12);
     return g;
   }),
+  // les plats du lot du carnet : habillés par leur modèle Tripo (pack `plats`, interior.ts) ; ici, leur boîte
+  dish('croque-monsieur', 'croque-monsieur', { hunger: 62, bites: 5, color: 0xd9a45c }, () => {
+    const g = new THREE.Group();
+    slice(g, 0);
+    g.add(mesh(new THREE.BoxGeometry(0.08, 0.008, 0.07), 0xe8a0a0, 0, 0.016, 0));
+    slice(g, 0.02, 0.05);
+    return g;
+  }),
+  dish('bruschetta', 'bruschetta', { hunger: 40, bites: 4, color: 0xd8352a }, () => {
+    const g = new THREE.Group();
+    slice(g, 0);
+    disk(g, 0.022, 0, 0.013, 0, 0xd8352a, 0xf07a5f);
+    return g;
+  }),
+  dish('gratin-pates', 'gratin de pâtes', { hunger: 70, bites: 6, color: 0xe8a33a }, () =>
+    // le plat à gratin, les pâtes dorées dessus
+    group(mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.045, 20).scale(0.85, 1, 1), 0xb0603a, 0, 0.0225, 0))),
+  dish('poulet-roti', 'poulet rôti', { hunger: 90, bites: 8, color: 0xc8803a }, () =>
+    group(mesh(new THREE.SphereGeometry(0.07, 14, 10).scale(0.75, 0.5, 1), 0xc8803a, 0, 0.035, 0))),
+  dish('poire-chocolat', 'poire au chocolat', { hunger: 25, bites: 3, color: 0x6b3a22 }, () =>
+    group(mesh(new THREE.SphereGeometry(0.035, 14, 10), 0xc4cf5a, 0, 0.035, 0), mesh(new THREE.SphereGeometry(0.022, 12, 8), 0x6b3a22, 0, 0.075, 0))),
+  dish('crumble', 'crumble', { hunger: 40, bites: 6, color: 0xb07a3a }, () =>
+    group(mesh(new THREE.CylinderGeometry(0.09, 0.085, 0.04, 20), 0xb07a3a, 0, 0.02, 0))),
   dish('steak-pommes-de-terre', 'steak aux pommes de terre', { hunger: 68, bites: 6, color: 0xc89a5a }, () => {
     const g = new THREE.Group();
     const steak = mesh(new THREE.CylinderGeometry(0.04, 0.042, 0.016, 16), 0x7b4a2c, -0.025, 0.008, 0);

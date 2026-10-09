@@ -7531,7 +7531,7 @@ export class Game {
         mix.batter = batter.name;
         this.practice(XP_GESTURE);
         this.showMix(bowl);
-        this.onNotice?.(batter.name === 'œufs battus' ? 'Les œufs sont battus : verse-les dans la poêle pour faire une omelette.' : batter.name === CAKE_BATTER ? `La pâte à gâteau est prête${parts.has('levure') ? '' : ' (sans levure, il ne lèvera pas)'} : verse-la dans le moule à gâteau, puis au four.` : 'La pâte à crêpes est prête : verses-en dans la poêle chaude, une crêpe à la fois.');
+        this.onNotice?.(batter.name === 'œufs battus' ? 'Les œufs sont battus : verse-les dans la poêle pour faire une omelette.' : batter.soaks ? `La ${batter.name} est prête : pose des tranches de pain dans la poêle chaude, puis verse-la dessus.` : batter.name === CAKE_BATTER ? `La pâte à gâteau est prête${parts.has('levure') ? '' : ' (sans levure, il ne lèvera pas)'} : verse-la dans le moule à gâteau, puis au four.` : 'La pâte à crêpes est prête : verses-en dans la poêle chaude, une crêpe à la fois.');
       }, running);
     }
     return false;
@@ -7545,14 +7545,19 @@ export class Game {
     if (bowl && mix && batter?.name === CAKE_BATTER) return this.pourCake(bowl, mix.parts, ref, running);
     const cooks = batter && ITEM_BY_ID.get(batter.cooks)!.name;
     const pan = cooks ? this.panFor(ref, (p) => !!p.def.cookware!.holds.includes(cooks) && !this.character.carried.includes(p)) : undefined;
+    // le pain perdu : la pâte imbibe les tranches de pain posées dans la poêle
+    const soaked = pan && batter?.soaks ? this.inPan(pan).filter((i) => batter.soaks!.includes(i.name)) : [];
+    const other = pan ? this.inPan(pan).filter((i) => !soaked.includes(i)) : [];
     if (!bowl) this.onNotice?.('Prends le saladier pour verser la pâte.');
     else if (!batter || !cooks) this.onNotice?.(mix?.parts.length ? 'Mélange d’abord au fouet.' : 'Le saladier est vide.');
     else if (!pan?.def.cookware?.holds.includes(cooks)) this.onNotice?.('Il n’y a pas de poêle où verser.');
-    else if (this.inPan(pan).length) this.onNotice?.(`Il y a déjà ${this.inPan(pan).map((i) => i.name).join(' et ')} dans ${the(pan.name)}.`);
+    else if (other.length) this.onNotice?.(`Il y a déjà ${other.map((i) => i.name).join(' et ')} dans ${the(pan.name)}.`);
+    else if (batter.soaks && !soaked.length) this.onNotice?.(`Pose d’abord des tranches de pain dans ${the(pan.name)}.`);
     else {
       return this.gesture(bowl, pan, 'tilt', this.above(pan, 0.12), () => {
         const at = this.panSpot(pan, true);
         if (!at || !this.mixes.has(bowl)) return;
+        for (const bread of soaked) if (this.items.includes(bread)) this.removeItem(bread);
         this.spawnAt(batter.cooks, at, pan.object.rotation.y);
         bowl.setLevel(Math.max(0, bowl.level - batter.per));
         if (bowl.level <= 0.02) {
@@ -7561,7 +7566,7 @@ export class Game {
           bowl.setDirty(true);
         }
         const hot = this.stoveUnder(pan);
-        this.onNotice?.(`${cap(cooks === 'crêpe' ? 'une crêpe' : 'l’omelette')} cuit dans ${the(pan.name)}${hot ? '' : ' (allume le feu dessous)'}${cooks === 'crêpe' ? ' : fais-la sauter pour la retourner.' : '.'}`);
+        this.onNotice?.(`${cap(cooks === 'crêpe' ? 'une crêpe' : batter.soaks ? the(cooks) : 'l’omelette')} cuit dans ${the(pan.name)}${hot ? '' : ' (allume le feu dessous)'}${cooks === 'crêpe' ? ' : fais-la sauter pour la retourner.' : '.'}`);
       }, running);
     }
     return false;

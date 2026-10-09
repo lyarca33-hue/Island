@@ -118,6 +118,23 @@ function parts(id: string, name: string, colors: [number, number, number]): Item
   };
 }
 
+/** Un plat ou un ustensile de cuisine : une boîte `size` (largeur, hauteur, profondeur), habillée par son modèle. */
+function cookware(id: string, name: string, size: [number, number, number], color: number, breakWord: string, fragility: number): ItemDef {
+  const [w, h, d] = size;
+  return {
+    id,
+    name,
+    portable: true,
+    grip: 'palm',
+    gripPoint: [0, h * 0.6, 0],
+    dish: true,
+    fragility,
+    durability: 150,
+    breakWord,
+    build: () => group(mesh(new THREE.BoxGeometry(w, h, d), color, 0, h / 2, 0)),
+  };
+}
+
 const PLAIN: [number, number, number] = [0xf1deb0, 0xd9a24e, 0x3a2a20];
 const CHOCOLATE: [number, number, number] = [0x8a5a3a, 0x4a2a1a, 0x1e1410];
 const YOGURT: [number, number, number] = [0xf6ecd0, 0xe2b866, 0x3a2a20];
@@ -139,6 +156,10 @@ export const PATISSERIE_ITEMS: ItemDef[] = [
       return group(...tin(), stain);
     },
   },
+  // la vaisselle du four et de l'évier (modèles Tripo du pack `plats`, interior.ts) : se lave, se range
+  cookware('plat-four', 'plat à four', [0.31, 0.065, 0.22], 0xc0703a, 'fêlé', 4),
+  cookware('passoire', 'passoire', [0.25, 0.11, 0.25], 0xb9bec4, 'cabossé', 10),
+  cookware('pierre-pizza', 'pierre à pizza', [0.3, 0.02, 0.3], 0xb8a88a, 'fendu', 3),
   cake('gateau', 'gâteau', PLAIN, 0xffffff),
   cake('gateau-chocolat', 'gâteau au chocolat', CHOCOLATE),
   cake('gateau-yaourt', 'gâteau au yaourt', YOGURT, 0xffffff),
@@ -149,8 +170,8 @@ export const PATISSERIE_ITEMS: ItemDef[] = [
 
 /** Ce qui va au four et au frigo. */
 export const PATISSERIE_OVEN = ['gâteau', 'gâteau au chocolat', 'gâteau au yaourt', 'parts de gâteau', 'parts de gâteau au chocolat', 'parts de gâteau au yaourt'];
-/** Le moule se range au placard. */
-export const PATISSERIE_CUPBOARD = ['moule à gâteau'];
+/** Le moule et la pierre à pizza se rangent au placard (la passoire et le plat à four sous le plan de travail). */
+export const PATISSERIE_CUPBOARD = ['moule à gâteau', 'pierre à pizza'];
 
-export const PATISSERIE_FEMININE = ['pâte à gâteau', 'parts de gâteau', 'parts de gâteau au chocolat', 'parts de gâteau au yaourt'];
+export const PATISSERIE_FEMININE = ['passoire', 'pierre à pizza', 'pâte à gâteau', 'parts de gâteau', 'parts de gâteau au chocolat', 'parts de gâteau au yaourt'];
 export const PATISSERIE_PLURAL = ['parts de gâteau', 'parts de gâteau au chocolat', 'parts de gâteau au yaourt'];

@@ -158,3 +158,17 @@ node tools/build_aliments_assets.mjs --src "<Bureau>/Assets/aliment/texture" --o
 
 Un nouvel aliment : ajouter son fichier à `ALIMENTS` (nom, taille, rotation), relancer, puis sa
 ligne dans `FOOD_LOOKS` et, s'il n'existe pas encore, sa fiche (`src/game/items/pantry.ts`).
+
+## `build_plats_assets.mjs` : plats et vaisselle Tripo
+
+Même chose que les aliments pour le lot posé à la racine de `Assets` (plats cuisinés, vaisselle,
+emballages) : `public/packs/plats.glb`, un nœud par modèle nommé comme la fiche qu'il habille
+(« steak-frites », « passoire »). Les modèles debout sont couchés à plat (`rot`, ou `flat` : l'axe le
+plus mince passe à la verticale).
+
+```bash
+node tools/build_plats_assets.mjs --src "<Bureau>/Assets" --out public/packs/plats.glb [--preview <dossier>]
+```
+
+Un nouveau modèle : sa ligne dans `PLATS` (nom, taille, rotation), relancer, puis sa ligne dans
+`FOOD_LOOKS` (`src/game/items/interior.ts`).
