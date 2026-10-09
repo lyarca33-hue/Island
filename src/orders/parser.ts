@@ -4,7 +4,7 @@
  * « assieds-toi sur la chaise », « lève-toi », « fais cuire le steak », « éteins le feu »,
  * « sers le sandwich dans l'assiette », « mange à table », « fais la vaisselle », « cuis la pomme
  * de terre au four », « jette la bouteille », « lance le lave-vaisselle », et dans les autres pièces
- * « va au salon », « regarde la télé », « mets la météo », « éteins la lumière », « prends une
+ * « va au salon », « regarde la télé », « mets la météo », « allume la lampe », « prends une
  * douche », « baisse la lunette », « range le pull », « va te coucher », et dehors « lance une
  * lessive », « étends le linge », « va pêcher », « allume le feu de camp », « arrose le potager »,
  * « achète 2 tomates », « vends les poissons ». Rend null dès
@@ -93,8 +93,8 @@ function roomIn(rest: string[]): string | undefined {
   const text = ` ${rest.join(' ')} `;
   return ROOM_WORDS.find(([ws]) => ws.some((w) => text.includes(` ${w} `)))?.[1];
 }
-/** La lumière de la pièce (à l'interrupteur), pas une lampe qu'on allume d'un clic. */
-const LIGHT_WORDS = new Set(['lumiere', 'lumieres', 'plafonnier', 'suspension', 'lampadaire', 'lustre']);
+/** « La lumière » : pas de plafonnier ni d'interrupteur, c'est une lampe (de chevet, lampadaire) qu'on allume. */
+const LIGHT_WORDS = new Set(['lumiere', 'lumieres']);
 /** Les pots de l'étagère à épices, par mot dit. */
 const SPICE_WORDS: Record<string, string> = { sel: 'sel', sale: 'sel', saler: 'sel', poivre: 'poivre', poivrer: 'poivre', paprika: 'paprika', herbes: 'herbes de Provence', herbe: 'herbes de Provence', huile: "huile d'olive" };
 /** Sauces et condiments qui assaisonnent comme les épices, par mot dit. */
@@ -783,8 +783,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'lever':
       return [{ kind: 'lever' }];
     case 'baisser':
-      // « baisse la lumière » : l'éteindre
-      if (rest.some((x) => LIGHT_WORDS.has(x))) return [{ kind: 'lumiere', on: false, piece: roomIn(rest) }];
+      // « baisse la lumière » : éteindre la lampe
+      if (rest.some((x) => LIGHT_WORDS.has(x))) {
+        const lamp = found.find((o) => o.sorte === 'lampe') ?? world.objets.find((o) => o.sorte === 'lampe');
+        return lamp ? [{ kind: 'eteindre', ref: lamp.ref }] : null;
+      }
       return null;
     case 'allonger': {
       // pas de lit dans la cuisine ; « allonge-toi sur la chaise » : on s'y assoit
@@ -828,10 +831,10 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     }
     case 'allumer':
     case 'eteindre': {
-      // « allume la lumière (du salon) », « éteins le lampadaire », « éteins dans la cuisine »
-      if (rest.some((x) => LIGHT_WORDS.has(x)) || (roomIn(rest) && !found.length)) {
-        const piece = roomIn(rest) ?? (rest.includes('lampadaire') ? 'salon' : undefined);
-        return [{ kind: 'lumiere', on: verb === 'allumer', piece }];
+      // « allume la lumière » : une lampe, celle nommée ou la première de la maison
+      if (rest.some((x) => LIGHT_WORDS.has(x))) {
+        const lamp = found.find((o) => o.sorte === 'lampe') ?? world.objets.find((o) => o.sorte === 'lampe');
+        return lamp ? [{ kind: verb, ref: lamp.ref }] : null;
       }
       // « allume la télé », « éteins la télé »
       const tv = found.find((o) => o.nom === 'télé');

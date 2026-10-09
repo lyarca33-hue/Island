@@ -103,8 +103,6 @@ export type Intent =
   | { kind: 'laver'; visage: boolean }
   /** Aller dans la pièce `piece` (la cuisine). */
   | { kind: 'piece'; piece: string }
-  /** Allumer (`on`) ou éteindre la lumière de la pièce `piece` (sinon celle où est le perso). */
-  | { kind: 'lumiere'; on: boolean; piece?: string }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
@@ -815,8 +813,6 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act(intent.visage ? 'se_laver' : 'laver_mains');
     case 'piece':
       return act('aller_piece', { piece: intent.piece });
-    case 'lumiere':
-      return act('lumiere', { etat: intent.on ? 'allumer' : 'eteindre', ...(intent.piece ? { piece: intent.piece } : {}) });
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;

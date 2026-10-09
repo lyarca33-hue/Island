@@ -414,12 +414,6 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.walkToRoom(a.piece),
   },
   {
-    name: 'lumiere',
-    description: 'Aller à l’interrupteur et allumer (`etat` = allumer) ou éteindre (`etat` = eteindre) la lumière de la pièce `piece` (facultatif : sinon celle où est le perso).',
-    params: { etat: 'allumer ou eteindre' },
-    run: (g, a) => g.switchLightsIn(a.etat !== 'eteindre', a.piece),
-  },
-  {
     name: 'asseoir',
     description: 'Aller s’asseoir sur un siège (chaise posée debout par terre, rien dessus). Les objets tenus d’une main restent en main. Le perso se lève tout seul pour toute autre action qui le fait bouger.',
     params: { siege: 'ref du siège' },

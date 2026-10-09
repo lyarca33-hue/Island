@@ -1,18 +1,17 @@
 /**
  * Les pièces de la maison. Chaque pièce vient d'une fiche (RoomSpec) : son rectangle, son sol,
- * ses portes et passages, ses fenêtres, ses lampes, son interrupteur, ses meubles rangés contre
+ * ses portes et passages, ses fenêtres, ses meubles rangés contre
  * les murs et son décor. Les fiches sont listées dans rooms.ts ; la cuisine est ici (KITCHEN).
  * Deux pièces voisines ont chacune leur mur, dos à dos, percé au même endroit pour le passage ;
  * leurs toits se rejoignent au-dessus (pas de débord ni de pignon côté mitoyen).
  *
- * Lumière jour et nuit, réglée par l'horloge du jeu : les lampes s'allument au crépuscule
- * et s'éteignent au matin, les vitres passent du ciel clair au bleu nuit. L'interrupteur de la
- * pièce allume ou éteint à la main ; l'horloge reprend la main au prochain lever ou coucher.
- * Le jour, une lumière entre par chaque fenêtre (projecteur dedans, ombre du croisillon au sol) ;
- * la nuit, un peu de clair de lune. Un vrai toit couvre la pièce quand le perso est dehors.
+ * Lumière jour et nuit, réglée par l'horloge du jeu : les vitres passent du ciel clair au bleu
+ * nuit ; le jour, une lumière douce entre par chaque fenêtre (projecteur dedans, sans ombre), la
+ * nuit un peu de clair de lune. Un vrai toit couvre la pièce quand le perso est dehors.
  * Un toit et des murs invisibles, qui ne font que de l'ombre, gardent le soleil et la lune dehors
- * (sauf par les fenêtres, même quand un mur est abaissé en coupe) : dedans, ce sont les lampes
- * qui éclairent et projettent les ombres.
+ * (sauf par les fenêtres, même quand un mur est abaissé en coupe) : le soleil seul fait les ombres.
+ * La nuit, une seule lumière d'ambiance suit la pièce du perso (Game.updateNightLight) ; ni
+ * plafonnier ni interrupteur.
  *
  * Murs « en coupe » comme dans les Sims : quand le perso est dans une pièce, les murs tournés
  * vers la caméra s'abaissent à hauteur de plinthe dans toutes les pièces ; ils se relèvent quand
@@ -79,35 +78,23 @@ const FRAME = 0xf6f3ec;
 export const WOOD = 0x8a6440;
 export const DARK_WOOD = 0x5d4129;
 
-/** Suspensions : hauteur de l'ampoule, couleur et force de la lumière allumée, portée (m). */
-const LAMP_Y = 1.95;
-const LAMP_COLOR = 0xffc98a;
-const LAMP_I = 9;
-const LAMP_RANGE = 7;
-/** Lampadaire : hauteur de l'ampoule. */
-const FLOOR_LAMP_Y = 1.5;
-/** Les lampes s'allument sur cette durée (h) avant le coucher, s'éteignent après le lever. */
+/** La lumière de nuit monte sur cette durée (h) avant le coucher, s'éteint après le lever. */
 const LAMP_FADE = 1.5;
-/** Lumière par les fenêtres : couleur et force en plein jour, au lever/coucher, et clair de lune. */
+/** Lumière par les fenêtres : couleur et force en plein jour, au lever/coucher, et clair de lune ; portée (m). */
 const WIN_DAY = new THREE.Color(0xfff1d8);
 const WIN_WARM = new THREE.Color(0xffb878);
 const WIN_MOON = new THREE.Color(0x9fb4ff);
-const WIN_I = 12;
-const WIN_MOON_I = 3;
+const WIN_I = 7;
+const WIN_MOON_I = 2;
+const WIN_RANGE = 5;
 /** Toit : pente (rad), débord autour des murs (m). */
 const ROOF_PITCH = THREE.MathUtils.degToRad(30);
 const ROOF_OVER = 0.3;
-/** Taille de la carte d'ombre des lampes (par face du cube). */
-const LAMP_SHADOW = 512;
-/** Vitesse du fondu quand on appuie sur l'interrupteur (part de lumière par seconde). */
-const SWITCH_FADE = 4;
-/** Hauteur des interrupteurs. */
-const SWITCH_Y = 1.1;
 /** Vitres : ciel de jour, ciel de nuit (couleur, opacité). */
 const PANE_DAY = { color: new THREE.Color(0xbfe3f2), opacity: 0.35 };
 const PANE_NIGHT = { color: new THREE.Color(0x1c2748), opacity: 0.75 };
 
-/** Part de lumière des lampes à l'heure `h` : 1 la nuit, 0 en plein jour, fondu autour du lever et du coucher. */
+/** Part de la lumière de nuit à l'heure `h` : 1 la nuit, 0 en plein jour, fondu autour du lever et du coucher. */
 export function lampLevel(h: number): number {
   const morning = 1 - THREE.MathUtils.smoothstep(h, SUNRISE, SUNRISE + LAMP_FADE);
   const evening = THREE.MathUtils.smoothstep(h, SUNSET - LAMP_FADE, SUNSET);
@@ -184,10 +171,6 @@ export interface RoomSpec {
   joined?: WallName[];
   /** Fenêtres (selon la place des meubles). */
   windows: (anchor: Anchors) => Opening[];
-  /** Lampes : position au sol, suspension au plafond ou lampadaire. */
-  lamps: (anchor: Anchors) => Array<{ x: number; z: number; kind: 'suspension' | 'lampadaire'; shade?: THREE.ColorRepresentation }>;
-  /** Interrupteur : sur quel mur, à quelle place le long du mur. */
-  lightSwitch: { wall: WallName; u: number };
   /** Meubles rangés contre les murs. */
   runs: Run[];
   /** Posés sur un autre meuble au départ : [objet, meuble dessous]. */
@@ -239,24 +222,6 @@ export function box(w: number, h: number, d: number, mat: THREE.Material, x: num
   m.castShadow = shadow;
   m.receiveShadow = true;
   return m;
-}
-
-let cookie: THREE.CanvasTexture | null = null;
-
-/** Forme de la lumière d'une fenêtre au sol : quatre carreaux clairs, croisillon sombre, bords doux. */
-function windowCookie(): THREE.CanvasTexture {
-  if (cookie) return cookie;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 256;
-  const g = cv.getContext('2d')!;
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, 256, 256);
-  g.filter = 'blur(6px)';
-  g.fillStyle = '#fff';
-  for (const [x, y] of [[40, 50], [134, 50], [40, 134], [134, 134]]) g.fillRect(x, y, 82, 72);
-  cookie = new THREE.CanvasTexture(cv);
-  cookie.colorSpace = THREE.SRGBColorSpace;
-  return cookie;
 }
 
 /** Texture de carreaux : `n` × `n` carreaux de deux tons, joints clairs. */
@@ -360,19 +325,8 @@ export class Room {
   private capMat = toon(CAP);
   /** Murs pleins visibles, pour les clics (un clic sur un mur vise le sol à son pied). */
   private solid: THREE.Object3D[] = [];
-  /** Lumières des lampes, et leurs ampoules (qui brillent allumées). */
-  private lamps: THREE.PointLight[] = [];
-  /** Lumières qui entrent par les fenêtres. */
+  /** Lumières qui entrent par les fenêtres (sans ombre : le soleil fait déjà la sienne par la fenêtre). */
   private winLights: THREE.SpotLight[] = [];
-  /** Lumières éteintes qui complètent le compte d'ombres de la pièce (voir padShadows). */
-  private spares: Array<THREE.PointLight | THREE.SpotLight> = [];
-  /** Les lumières de la pièce font-elles des ombres (dernière pièce où était le perso) ? */
-  private shadowsOn = true;
-  /**
-   * Lumières de la pièce dont la carte d'ombre sert en ce moment (allumées, avec ombre) : Game les
-   * recalcule à son rythme (shadow.autoUpdate reste false).
-   */
-  readonly liveShadows: Array<THREE.PointLight | THREE.SpotLight> = [];
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
   /** Ce que le kit Tripo remplace (dress) : le sol, les pans du toit, les fenêtres faites par programme. */
@@ -382,16 +336,6 @@ export class Room {
   /** Pignons (mur, hauteur, demi-largeur), et dessus des murs sous un pignon : cachés quand le toit se voit. */
   private gables = new Map<WallName, { height: number; half: number }>();
   private gableCaps: THREE.Mesh[] = [];
-  private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
-  /** Part de lumière des lampes en ce moment (0 à 1). */
-  private lampK = 0;
-  /** Allumé ou éteint à l'interrupteur (null : l'horloge décide), et ce que l'horloge voulait alors. */
-  private manual: { on: boolean; auto: boolean } | null = null;
-  /** Heure solaire (voir GameClock.solarHour). */
-  private hour = 0;
-  /** L'interrupteur (plaque et bascule), et sa bascule qui montre s'il est allumé. */
-  readonly lightSwitch = new THREE.Group();
-  private rocker = new THREE.Group();
   /** Ombre seule : invisible à l'écran, mais arrête la lumière (toit, murs gardés en coupe). */
   readonly shadowMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
   /** Ciel couvert (0 à 1, la météo) : moins de soleil par les fenêtres. */
@@ -430,24 +374,12 @@ export class Room {
 
     spec.decor?.(this, anchor);
 
-    for (const l of spec.lamps(anchor)) this.addLamp(l.x, l.z, l.kind, l.shade ?? 0x2f5d50);
     // lumière du dehors par les fenêtres, et le toit vu du dehors
     for (const o of windows) {
       const light = this.addWindowLight(this.wall(o.wall), o);
       if (o.curtain !== undefined) this.addCurtain(o, light);
     }
     this.buildRoof();
-
-    // interrupteur : plaque blanche, bascule (haut enfoncé = allumé)
-    const sw = this.lightSwitch;
-    sw.name = 'interrupteur';
-    sw.add(box(0.012, 0.11, 0.08, toon(0xf4f1ea), 0.006, 0, 0, false));
-    this.rocker.add(box(0.014, 0.05, 0.035, toon(0xffffff), 0.007, 0, 0, false));
-    this.rocker.position.x = 0.012;
-    sw.add(this.rocker);
-    const swAt = this.wallFrame(spec.lightSwitch.wall, spec.lightSwitch.u, SWITCH_Y);
-    swAt.add(sw);
-    this.wallGroup(spec.lightSwitch.wall).add(swAt);
     this.mergeGhosts();
   }
 
@@ -502,27 +434,15 @@ export class Room {
     return g;
   }
 
-  /** Les lampes sont-elles allumées (ou en train de s'allumer) ? */
-  get lightsOn(): boolean {
-    return this.manual ? this.manual.on : lampLevel(this.hour) > 0.5;
-  }
-
-  /** Allume ou éteint à l'interrupteur, jusqu'au prochain lever ou coucher du soleil. */
-  setLights(on: boolean): void {
-    this.manual = { on, auto: lampLevel(this.hour) > 0.5 };
-  }
-
-  /** Où se tenir pour appuyer sur l'interrupteur, et le point à regarder. */
-  switchSpot(): { stand: THREE.Vector3; face: THREE.Vector3 } {
-    const f = this.wallFrame(this.spec.lightSwitch.wall, this.spec.lightSwitch.u, SWITCH_Y);
-    const [nx, nz] = WALLS[this.spec.lightSwitch.wall].n;
-    return { stand: f.position.clone().setY(0).add(new THREE.Vector3(nx, 0, nz).multiplyScalar(0.45)), face: f.position.clone() };
-  }
-
-  /** Distance de l'interrupteur sur le rayon, s'il est visible et touché. */
-  switchHit(ray: THREE.Raycaster): number | null {
-    if (!this.visibleChain(this.lightSwitch)) return null;
-    return ray.intersectObject(this.lightSwitch, true)[0]?.distance ?? null;
+  /** Où se tenir en entrant dans la pièce (juste passé sa première porte), et le point à regarder (son milieu). */
+  entrySpot(): { stand: THREE.Vector3; face: THREE.Vector3 } {
+    const { x0, x1, z0, z1 } = this.rect;
+    const face = new THREE.Vector3((x0 + x1) / 2, 0, (z0 + z1) / 2);
+    const d = this.spec.doors[0];
+    if (!d) return { stand: face.clone(), face };
+    const f = this.wallFrame(d.wall, (d.u0 + d.u1) / 2);
+    const [nx, nz] = WALLS[d.wall].n;
+    return { stand: f.position.clone().setY(0).add(new THREE.Vector3(nx, 0, nz).multiplyScalar(0.7)), face };
   }
 
   /** Porte intérieure ou rideaux visés par le rayon (visibles), leur numéro et leur distance. */
@@ -580,53 +500,6 @@ export class Room {
     const f = this.wallFrame(c.wall, c.u, 1.2);
     const [nx, nz] = WALLS[c.wall].n;
     return { stand: f.position.clone().setY(0).add(new THREE.Vector3(nx, 0, nz).multiplyScalar(0.7)), face: f.position.clone() };
-  }
-
-  /** Lampe (suspension au plafond, ou lampadaire posé au sol) et sa lumière, éteinte au départ. */
-  private addLamp(x: number, z: number, kind: 'suspension' | 'lampadaire', shadeColor: THREE.ColorRepresentation): void {
-    const lamp = new THREE.Group();
-    lamp.name = kind;
-    const shadeMat = toon(shadeColor);
-    shadeMat.side = THREE.DoubleSide;
-    const y = kind === 'suspension' ? LAMP_Y : FLOOR_LAMP_Y;
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), this.bulbMat);
-    bulb.position.y = y;
-    if (kind === 'suspension') {
-      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, WALL_H - LAMP_Y - 0.1, 6), toon(0x2a2a2a));
-      cord.position.y = (WALL_H + LAMP_Y + 0.1) / 2;
-      const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.2, 0.16, 20, 1, true), shadeMat);
-      shade.position.y = LAMP_Y + 0.06;
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 12), toon(0xc9a24a));
-      cap.position.y = LAMP_Y + 0.16;
-      lamp.add(cord, shade, cap, bulb);
-    } else {
-      // socle rond, pied fin, abat-jour en tronc de cône au-dessus de l'ampoule
-      const brass = toon(0xc9a24a);
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.03, 24), brass);
-      base.position.y = 0.015;
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, y - 0.03, 8), brass);
-      pole.position.y = (y - 0.03) / 2 + 0.03;
-      const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, 0.28, 24, 1, true), shadeMat);
-      shade.position.y = y + 0.06;
-      lamp.add(base, pole, shade, bulb);
-      lamp.traverse((o) => { if (o instanceof THREE.Mesh && o !== bulb) o.castShadow = true; });
-      this.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.2, 0, -0.2), new THREE.Vector3(0.2, y + 0.2, 0.2)), pos: new THREE.Vector3(x, 0, z), yaw: 0, wall: false });
-    }
-    lamp.position.set(x, 0, z);
-    // la lumière part juste sous l'ampoule, pour éclairer sous l'abat-jour
-    const light = lightAllPasses(new THREE.PointLight(LAMP_COLOR, 0, LAMP_RANGE, 2));
-    light.position.set(x, y - 0.08, z);
-    light.castShadow = true;
-    light.shadow.mapSize.set(LAMP_SHADOW, LAMP_SHADOW);
-    light.shadow.camera.near = 0.05;
-    light.shadow.camera.far = LAMP_RANGE;
-    light.shadow.bias = -0.003;
-    light.shadow.radius = 3;
-    // carte d'ombre calculée au moins une fois, même si la lampe démarre éteinte (sinon rien ne s'affiche)
-    light.shadow.autoUpdate = false;
-    light.shadow.needsUpdate = true;
-    this.lamps.push(light);
-    this.group.add(lamp, light);
   }
 
   /**
@@ -717,9 +590,9 @@ export class Room {
   }
 
   /**
-   * Lumière du dehors par la fenêtre `o` du mur `w` : un projecteur dans la pièce, juste sous le
-   * haut de la fenêtre, projette au sol la forme des carreaux (texture `windowCookie`). Placé
-   * dedans, il n'éclaire pas la façade ni l'herbe.
+   * Lumière du dehors par la fenêtre `o` du mur `w` : un projecteur large et doux dans la pièce,
+   * juste sous le haut de la fenêtre. Placé dedans, il n'éclaire pas la façade ni l'herbe. Il ne
+   * fait pas d'ombre : le soleil entre déjà par la fenêtre avec la sienne.
    */
   private addWindowLight(w: Wall, o: Opening): THREE.SpotLight {
     const alongX = w.n.x === 0;
@@ -727,18 +600,9 @@ export class Room {
     const um = (o.u0 + o.u1) / 2;
     const at = (u: number, along: number, y: number) =>
       alongX ? new THREE.Vector3(u, y, inner + w.n.y * along) : new THREE.Vector3(inner + w.n.x * along, y, u);
-    const light = lightAllPasses(new THREE.SpotLight(WIN_DAY, 0, 7, 0.55, 0.15, 1.2));
+    const light = lightAllPasses(new THREE.SpotLight(WIN_DAY, 0, WIN_RANGE, 0.75, 0.8, 1.2));
     light.position.copy(at(um, 0.3, WALL_H - 0.1));
     light.target.position.copy(at(um, 2.1, 0));
-    light.map = windowCookie();
-    light.castShadow = true;
-    light.shadow.mapSize.set(LAMP_SHADOW, LAMP_SHADOW);
-    light.shadow.camera.near = 0.1;
-    light.shadow.camera.far = 7;
-    light.shadow.bias = -0.001;
-    light.shadow.radius = 4;
-    light.shadow.autoUpdate = false;
-    light.shadow.needsUpdate = true;
     this.winLights.push(light);
     this.group.add(light, light.target);
     return light;
@@ -796,38 +660,6 @@ export class Room {
       // les plis gardent leur épaisseur : on les écarte avec le pan
       for (const f of p.mesh.children) f.scale.z = 1 / w;
     }
-  }
-
-  /**
-   * Complète la pièce jusqu'à `lamps` lampes et `windows` fenêtres à ombre, avec des lumières
-   * éteintes à la carte d'ombre minuscule : toutes les pièces ont ainsi le même nombre de lumières
-   * à ombre, et passer d'une pièce à l'autre ne fait recompiler aucun shader.
-   */
-  padShadows(lamps: number, windows: number): void {
-    const { x0, x1, z0, z1 } = this.rect;
-    const c = new THREE.Vector3((x0 + x1) / 2, WALL_H - 0.2, (z0 + z1) / 2);
-    const setup = (l: THREE.PointLight | THREE.SpotLight) => {
-      lightAllPasses(l);
-      l.position.copy(c);
-      l.castShadow = this.shadowsOn;
-      l.shadow.mapSize.set(16, 16);
-      l.shadow.autoUpdate = false;
-      l.shadow.needsUpdate = true;
-      this.spares.push(l);
-      this.group.add(l);
-    };
-    for (let i = this.lamps.length; i < lamps; i++) setup(new THREE.PointLight(LAMP_COLOR, 0, 0.5, 2));
-    for (let i = this.winLights.length; i < windows; i++) {
-      const l = new THREE.SpotLight(WIN_DAY, 0, 0.5, 0.55, 0.15, 1.2);
-      l.map = this.shadowsOn ? windowCookie() : null;
-      l.target.position.copy(c).setY(0);
-      this.group.add(l.target);
-      setup(l);
-    }
-  }
-
-  get shadowCounts(): { lamps: number; windows: number } {
-    return { lamps: this.lamps.length, windows: this.winLights.length };
   }
 
   /**
@@ -1043,21 +875,8 @@ export class Room {
     }
   }
 
-  /** Lampes et vitres selon l'heure solaire `hour` (0 à 24). */
-  private applyLight(dt: number, hour: number): void {
-    const auto = lampLevel(hour);
-    // l'horloge reprend la main quand elle change d'avis (lever ou coucher du soleil)
-    if (this.manual && (auto > 0.5) !== this.manual.auto) this.manual = null;
-    if (this.manual) this.lampK = THREE.MathUtils.clamp(this.lampK + (this.manual.on ? 1 : -1) * SWITCH_FADE * dt, 0, 1);
-    else this.lampK = Math.abs(auto - this.lampK) < SWITCH_FADE * dt ? auto : this.lampK + Math.sign(auto - this.lampK) * SWITCH_FADE * dt;
-    const k = this.lampK;
-    // lampe éteinte : sa carte d'ombre n'est plus recalculée
-    this.liveShadows.length = 0;
-    if (this.shadowsOn && k > 0.001) this.liveShadows.push(...this.lamps);
-    this.rocker.rotation.z = this.lightsOn ? 0.25 : -0.25;
-    for (const l of this.lamps) l.intensity = LAMP_I * k;
-    // ampoule éteinte grise, allumée au-dessus de 1 : le bloom la fait briller
-    this.bulbMat.color.setRGB(0.23 + 2.4 * k, 0.2 + 1.9 * k, 0.17 + 1.1 * k);
+  /** Vitres et lumière des fenêtres selon l'heure solaire `hour` (0 à 24). */
+  private applyLight(hour: number): void {
     // vitres : nuit dès que le soleil est couché, un peu avant que les lampes soient à fond
     const night = Math.max(1 - THREE.MathUtils.smoothstep(hour, SUNRISE - 0.5, SUNRISE + 1), THREE.MathUtils.smoothstep(hour, SUNSET - 1, SUNSET + 0.5));
     this.glassMat.color.copy(PANE_DAY.color).lerp(PANE_NIGHT.color, night);
@@ -1070,7 +889,6 @@ export class Room {
       // rideaux tirés : il ne passe plus qu'un peu de jour à travers le tissu
       const veil = 1 - CURTAIN_DIM * (this.curtains.find((c) => c.light === l)?.k ?? 0);
       l.intensity = (day * WIN_I * (1 - 0.7 * this.overcast) + night * WIN_MOON_I * (1 - 0.6 * this.overcast)) * veil;
-      if (this.shadowsOn && l.intensity > 0.01) this.liveShadows.push(l);
     }
   }
 
@@ -1193,9 +1011,9 @@ export class Room {
    * À chaque image : murs abaissés quand le perso est dans une pièce (`active`, celle-ci ou une
    * autre) : ceux tournés vers la caméra, et tous ceux qui se trouvent entre la caméra et la pièce
    * du perso ; relevés quand il sort (dehors, le toit et les murs restent pleins). Portes qui s'ouvrent devant le
-   * perso, décor animé (selon l'heure `hour`), lampes et vitres selon l'heure solaire `solar`.
+   * perso, décor animé (selon l'heure `hour`), vitres et fenêtres selon l'heure solaire `solar`.
    */
-  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, solar: number, toCamera: THREE.Vector3, active: Rect | null, shadowRoom: boolean): void {
+  update(dt: number, cameraYaw: number, player: THREE.Vector3, hour: number, solar: number, toCamera: THREE.Vector3, active: Rect | null): void {
     const indoors = active !== null;
     const view = new THREE.Vector2(Math.cos(cameraYaw), Math.sin(cameraYaw));
     // bord de la pièce du perso le plus proche de la caméra (mesuré le long de la vue)
@@ -1204,22 +1022,6 @@ export class Room {
     const inFront = (w: Wall) => w.boxes.some((b) => Math.max(b.min.x * view.x, b.max.x * view.x) + Math.max(b.min.z * view.y, b.max.z * view.y) > edge + 0.01);
     // perso dans une autre pièce : rayons du perso (jambes, buste, tête) vers la caméra
     const rays = !indoors || this.contains(player) ? [] : [0.4, 1.0, 1.6].map((y) => new THREE.Ray(player.clone().setY(y), toCamera));
-    // seules les lampes et les fenêtres d'UNE pièce font des ombres (`shadowRoom` : celle où est le
-    // perso, gardée dehors et dans les passages) : chaque ombre prend une texture au shader, et
-    // beaucoup de cartes graphiques n'en ont que 16 (au-delà, les matériaux ne s'affichent plus du
-    // tout). Le NOMBRE de lumières à ombre ne change donc jamais (la pièce qui les perd et celle qui
-    // les prend changent dans la même image) : sinon three recompile tous les matériaux, une
-    // saccade à chaque sortie.
-    if (shadowRoom !== this.shadowsOn) {
-      this.shadowsOn = shadowRoom;
-      for (const l of [...this.lamps, ...this.winLights, ...this.spares]) {
-        l.castShadow = shadowRoom;
-        l.shadow.needsUpdate = true;
-      }
-      // une fenêtre sans ombre perd aussi sa forme de carreaux : les matériaux des persos (MToon)
-      // ne s'affichent plus si des projecteurs ont une forme sans avoir d'ombre
-      for (const l of [...this.winLights, ...this.spares]) if (l instanceof THREE.SpotLight) l.map = shadowRoom ? windowCookie() : null;
-    }
     const hides = (w: Wall) => rays.some((r) => w.boxes.some((b) => r.intersectsBox(b)));
     for (const w of this.walls) {
       // dans une pièce : les murs côté caméra s'abaissent, et celui qui cache le perso dans la pièce
@@ -1257,8 +1059,7 @@ export class Room {
       }
     }
     for (const t of this.tickers) t(dt, hour);
-    this.hour = solar;
-    this.applyLight(dt, solar);
+    this.applyLight(solar);
   }
 
   /** Point du sol au pied du mur visé par le rayon (côté pièce) et sa distance, s'il touche un mur avant `maxDist`. */
@@ -1306,8 +1107,8 @@ export class Room {
 
 /**
  * La cuisine : le passage vers l'entrée (mur ouest) et vers le salon (mur est, voir maison.ts),
- * une fenêtre au fond au-dessus de l'évier et une sur le mur sud, la suspension au-dessus de la
- * table, l'interrupteur à côté du passage de l'entrée. Le toit continue sur l'entrée et le salon.
+ * une fenêtre au fond au-dessus de l'évier et une sur le mur sud. Le toit continue sur l'entrée et
+ * le salon.
  */
 export const KITCHEN: RoomSpec = {
   name: 'cuisine',
@@ -1322,9 +1123,6 @@ export const KITCHEN: RoomSpec = {
     { wall: 'nord', u0: -2.1, u1: -1.1, y0: WIN_LOW, y1: WIN_HIGH },
     { wall: 'sud', u0: 0.45, u1: 1.55, y0: 0.95, y1: WIN_HIGH },
   ],
-  // la suspension au-dessus de la table
-  lamps: () => [{ x: KITCHEN_TABLE.x, z: KITCHEN_TABLE.z, kind: 'suspension' }],
-  lightSwitch: { wall: 'ouest', u: DOOR.z1 + 0.2 },
   runs: [
     // le long du fond : l'évier sous la fenêtre, le lave-vaisselle et les tiroirs à sa gauche,
     // puis la gazinière entre deux plans de travail, le four et la poubelle

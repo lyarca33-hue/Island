@@ -75,8 +75,7 @@ function tiled(r: Rect): THREE.Material {
   return toon(0xffffff, tex);
 }
 
-const middle = (r: Rect) => ({ x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 });
-const empty = { runs: [], lamps: [] };
+const empty = { runs: [] };
 
 /** Quart de tour : l'avant d'un meuble (+Z) tourné vers +X (rotation de π/2), vers -X (-π/2), vers -Z (π). */
 const Q = Math.PI / 2;
@@ -125,8 +124,6 @@ export const ENTREE_SPEC: RoomSpec = {
   ],
   joined: ['est', 'ouest'],
   windows: () => [{ wall: 'nord', u0: ENTREE.x0 + 0.8, u1: ENTREE.x0 + 1.6, y0: 0.95, y1: WIN_HIGH }],
-  lamps: () => [{ ...middle(ENTREE), kind: 'suspension', shade: 0x9a6a3c }],
-  lightSwitch: { wall: 'sud', u: FRONT_DOOR.x1 + 0.2 },
   items: [
     // les chaussures rangées sous le portemanteau, le bout vers la pièce
     ['chaussure', ENTREE.x0 + 0.15, 0, HALL.coat - 0.25, Q],
@@ -170,8 +167,6 @@ export const GARAGE_SPEC: RoomSpec = {
   ],
   joined: ['est'],
   windows: () => [{ wall: 'ouest', u0: -0.6, u1: 0.4, y0: 1.3, y1: WIN_HIGH }],
-  lamps: () => [{ ...middle(GARAGE), kind: 'suspension', shade: 0x6b7378 }],
-  lightSwitch: { wall: 'est', u: GARAGE_DOOR.z1 + 0.2 },
   items: [
     // au fond : l'établi et sa caisse à outils, l'étagère dans le coin
     ['etabli', GARAGE.x0 + 2.5, 0, GARAGE.z0 + 0.33, 0],
@@ -210,8 +205,6 @@ export const SALON_SPEC: RoomSpec = {
     { wall: 'sud', u0: SALON.x1 - 2.6, u1: SALON.x1 - 1.4, y0: 0.95, y1: WIN_HIGH },
     { wall: 'est', u0: -0.6, u1: 0.6, y0: 0.95, y1: WIN_HIGH },
   ],
-  lamps: () => [{ ...middle(SALON), kind: 'suspension', shade: 0x2f6f73 }],
-  lightSwitch: { wall: 'ouest', u: SALON_PASS.z1 + 0.2 },
   items: [
     // le coin télé : le meuble télé au fond entre les deux portes, le canapé face à lui, la table basse entre les deux
     ['meuble-tele', SALON_TV.x, 0, SALON.z0 + 0.18, 0],
@@ -241,8 +234,6 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
   doors: [{ wall: 'sud', u0: BATH_DOOR.x0, u1: BATH_DOOR.x1, inner: true }],
   joined: ['sud', 'est'],
   windows: () => [{ wall: 'nord', u0: SALLE_DE_BAIN.x0 + 0.9, u1: SALLE_DE_BAIN.x0 + 1.6, y0: 1.45, y1: WIN_HIGH }],
-  lamps: () => [{ ...middle(SALLE_DE_BAIN), kind: 'suspension', shade: 0xe9eef0 }],
-  lightSwitch: { wall: 'sud', u: BATH_DOOR.x1 + 0.2 },
   items: [
     // les toilettes au fond, sous la fenêtre ; le lavabo contre le mur ouest, après la douche
     ['toilettes', BATH.toilet, 0, SALLE_DE_BAIN.z0 + 0.27, 0],
@@ -285,8 +276,6 @@ export const CHAMBRE_SPEC: RoomSpec = {
     { wall: 'nord', u0: CHAMBRE.x0 + 1.5, u1: CHAMBRE.x0 + 2.5, y0: 0.95, y1: WIN_HIGH },
     { wall: 'est', u0: -6.0, u1: -5.0, y0: 0.95, y1: WIN_HIGH },
   ],
-  lamps: () => [{ ...middle(CHAMBRE), kind: 'suspension', shade: 0x7a4f7c }],
-  lightSwitch: { wall: 'sud', u: BED_DOOR.x0 - 0.2 },
   items: [
     // le lit, la tête contre le mur ouest, une table de nuit de chaque côté
     ['lit', CHAMBRE.x0 + 1.03, 0, BED.z, Q],
