@@ -106,6 +106,59 @@ describe('ordres tapés dans toute la maison', () => {
   for (const [ordre, attendu] of cases) it(`« ${ordre} »`, () => expect(parse(ordre)).toEqual(attendu));
 });
 
+describe('le ménage, pièce par pièce', () => {
+  const cases: Array<[string, Intent[]]> = [
+    ['fais le ménage', [{ kind: 'menage' }]],
+    ['fait le menag', [{ kind: 'menage' }]],
+    ['tu peux faire un peu de ménage dans le salon stp', [{ kind: 'menage', piece: 'salon' }]],
+    ['fais le grand ménage', [{ kind: 'menage' }]],
+    ['nettoie la salle de bain', [{ kind: 'menage', piece: 'salle de bain' }]],
+    ['nettoie la sdb', [{ kind: 'menage', piece: 'salle de bain' }]],
+    ['nettoie toute la maison', [{ kind: 'menage' }]],
+    ['nettoie la pièce', [{ kind: 'menage', ici: true }]],
+    ['lave la cuisine', [{ kind: 'menage', piece: 'cuisine' }]],
+    ['balaie', [{ kind: 'balayer' }]],
+    ['balaie la cuisine', [{ kind: 'balayer', piece: 'cuisine' }]],
+    ["passe un coup de balai dans l'entrée", [{ kind: 'balayer', piece: 'entrée' }]],
+    ["passe l'aspirateur", [{ kind: 'aspirateur' }]],
+    ["passe l'aspirateur partout", [{ kind: 'aspirateur' }]],
+    ["passe un coup d'aspi dans la chambre", [{ kind: 'aspirateur', piece: 'chambre' }]],
+    ["passe l'aspirtaeur au salon", [{ kind: 'aspirateur', piece: 'salon' }]],
+    ['aspire le salon', [{ kind: 'aspirateur', piece: 'salon' }]],
+    ['aspire le canapé', [{ kind: 'aspirateur', ref: 'canape' }]],
+    ['passe la serpillière', [{ kind: 'serpillere' }]],
+    ['passe la serpillière dans le salon', [{ kind: 'serpillere', piece: 'salon' }]],
+    ['lave le sol', [{ kind: 'serpillere' }]],
+    ['nettoie le carrelage de la cuisine', [{ kind: 'serpillere', piece: 'cuisine' }]],
+    ['fais les sols', [{ kind: 'serpillere' }]],
+    ['nettoie par terre', [{ kind: 'essuyer_sol' }]],
+    ['fais la poussière', [{ kind: 'poussiere' }]],
+    ['fais la poussière dans la chambre', [{ kind: 'poussiere', piece: 'chambre' }]],
+    ['dépoussière les meubles', [{ kind: 'poussiere' }]],
+    ['dépoussière la bibliothèque', [{ kind: 'poussiere', ref: 'bibliotheque' }]],
+    ['passe le chiffon sur la table basse', [{ kind: 'poussiere', ref: 'table-basse' }]],
+    ['fais les vitres', [{ kind: 'vitres' }]],
+    ['nettoie les carreaux du salon', [{ kind: 'vitres', piece: 'salon' }]],
+    ['nettoie le miroir', [{ kind: 'vitres', piece: 'salle de bain' }]],
+    ['nettoie les toilettes', [{ kind: 'nettoyer', ref: 'toilettes' }]],
+    ['frotte les wc', [{ kind: 'nettoyer', ref: 'toilettes' }]],
+    ['récure la douche', [{ kind: 'nettoyer', ref: 'douche' }]],
+    ['lave la baignoire', [{ kind: 'nettoyer', ref: 'douche' }]],
+    ['astique le lavabo', [{ kind: 'nettoyer', ref: 'lavabo' }]],
+    ['nettoie le canapé', [{ kind: 'nettoyer', ref: 'canape' }]],
+    ['balaie la cuisine puis passe la serpillière', [{ kind: 'balayer', piece: 'cuisine' }, { kind: 'serpillere' }]],
+    ["balaie le salon et passe l'aspirateur dans la chambre", [{ kind: 'balayer', piece: 'salon' }, { kind: 'aspirateur', piece: 'chambre' }]],
+  ];
+  for (const [ordre, attendu] of cases) it(`« ${ordre} »`, () => expect(parse(ordre)).toEqual(attendu));
+  // le reste ne bouge pas
+  it('« fais la vaisselle », « lave la tasse », « nettoie la table » restent ce qu’ils étaient', () => {
+    expect(parse('fais la vaisselle')).toEqual([{ kind: 'vaisselle', refs: [] }]);
+    expect(parse('nettoie la table')).toEqual([{ kind: 'essuyer', ref: 'table' }]);
+    expect(parse('nettoie le plan de travail')).toEqual([{ kind: 'nettoyer', ref: 'plan-de-travail' }]);
+    expect(parse('lave-toi les mains')).toEqual([{ kind: 'laver', visage: false }]);
+  });
+});
+
 describe('ce qui n’est pas compris part à l’IA (plutôt qu’un contresens)', () => {
   const ordres = [
     'ouvre la fenêtre',
@@ -123,6 +176,8 @@ describe('ce qui n’est pas compris part à l’IA (plutôt qu’un contresens)
     'relève le bras',
     'monte le son',
     'change de chaîne',
+    'brosse-toi les dents',
+    'lave tout',
   ];
   for (const ordre of ordres) it(`« ${ordre} »`, () => expect(parse(ordre)).toBeNull());
 });

@@ -72,9 +72,15 @@ export type Intent =
   | { kind: 'empiler' }
   | { kind: 'essuyer_sol' }
   /** L'entretien : balai, serpillière, spray et éponge, gants, poubelle au conteneur, sac neuf, horloge. */
-  | { kind: 'balayer' }
-  | { kind: 'serpillere' }
+  | { kind: 'balayer'; piece?: string }
+  | { kind: 'serpillere'; piece?: string }
   | { kind: 'nettoyer'; ref?: string }
+  /** Le ménage des zones salies : l'aspirateur, la poussière, les vitres (et le miroir), dans la pièce `piece` ou sur le meuble `ref`. */
+  | { kind: 'aspirateur'; piece?: string; ref?: string }
+  | { kind: 'poussiere'; piece?: string; ref?: string }
+  | { kind: 'vitres'; piece?: string; ref?: string }
+  /** Tout le ménage : chaque zone sale de la pièce `piece` (celle du perso si `ici`, sinon toute la maison), avec le bon geste. */
+  | { kind: 'menage'; piece?: string; ici?: boolean }
   | { kind: 'gants'; mettre: boolean }
   | { kind: 'sortir_poubelle' }
   | { kind: 'sac_neuf'; ref?: string }

@@ -76,6 +76,9 @@ const VERBS: Record<string, string[]> = {
   balayer: ['balaie', 'balaye', 'balayer', 'balaies'],
   passer: ['passe', 'passer'],
   enfiler: ['enfile', 'enfiler'],
+  aspirer: ['aspire', 'aspirer', 'aspires'],
+  depoussierer: ['depoussiere', 'depoussierer', 'epoussette', 'epousseter', 'epoussete'],
+  recurer: ['recure', 'recurer', 'recurre', 'frotte', 'frotter', 'astique', 'astiquer', 'brique', 'briquer', 'brosse', 'brosser', 'decrasse', 'decrasser', 'detartre', 'detartrer'],
   // gestes de cuisine
   casser: ['casse', 'casser', 'casses'],
   fouetter: ['fouette', 'fouetter', 'bats', 'bat', 'battre', 'melange', 'melanger', 'melanges'],
@@ -103,7 +106,7 @@ const SLOW_DISHES = new Set(['pates', 'spaghetti', 'spaghettis', 'nouilles', 'ri
 const FRUIT_WORDS = new Set(['pomme', 'poire', 'banane', 'fraise', 'raisin', 'citron', 'fruit', 'peche', 'abricot', 'kiwi', 'mangue', 'ananas']);
 /** Tous les noms connus de l'analyseur, même d'objets absents de la maison. */
 let nounSet: Set<string> | null = null;
-const nouns = () => (nounSet ??= new Set([...Object.keys(ALIASES).filter((k) => !k.includes(' ')), ...Object.values(ALIASES).flat(), ...Object.keys(SPICE_WORDS), ...Object.keys(CONDIMENT_WORDS), ...Object.keys(SPREAD_WORDS), ...SLOW_DISHES, ...WEAR_WORDS, ...FRUIT_WORDS]));
+const nouns = () => (nounSet ??= new Set([...Object.keys(ALIASES).filter((k) => !k.includes(' ')), ...Object.values(ALIASES).flat(), ...Object.keys(SPICE_WORDS), ...Object.keys(CONDIMENT_WORDS), ...Object.keys(SPREAD_WORDS), ...SLOW_DISHES, ...WEAR_WORDS, ...FRUIT_WORDS, ...CHORE_WORDS]));
 /** Mots qu'on ne corrige pas en un nom voisin (« chaîne » n'est pas « chaise »). */
 const NO_FIX = new Set(['chaine', 'chaines', 'meteo', 'volume', 'radio', 'porte', 'portes', 'salle', 'sale', 'sales', 'toit', 'mains', 'main']);
 /** Mots qui n'empêchent pas de comprendre un ordre (ni objet, ni pièce). */
@@ -136,6 +139,19 @@ function roomIn(rest: string[]): string | undefined {
   const text = ` ${rest.join(' ')} `;
   return ROOM_WORDS.find(([ws]) => ws.some((w) => text.includes(` ${w} `)))?.[1];
 }
+/** Le vocabulaire du ménage (une faute de frappe s'y corrige : « aspirtaeur », « menag »). */
+const CHORE_WORDS = ['menage', 'menages', 'aspirateur', 'aspirateurs', 'aspi', 'serpilliere', 'serpiere', 'poussiere', 'poussieres', 'plumeau', 'chiffon', 'lingette', 'vitre', 'vitres', 'carreaux', 'fenetre', 'fenetres', 'miroir', 'glace', 'balai', 'balayette', 'sol', 'sols', 'carrelage', 'parquet', 'plancher', 'moquette', 'tapis', 'baignoire', 'partout', 'maison'];
+/** Ce qui se dit du sol ; des vitres et miroirs ; d'un coup de chiffon. */
+const FLOOR_WORDS = new Set(['sol', 'sols', 'carrelage', 'parquet', 'plancher', 'moquette']);
+const GLASS_WORDS = new Set(['vitre', 'vitres', 'carreaux', 'fenetre', 'fenetres', 'miroir', 'miroirs', 'glace', 'glaces']);
+const DUST_WORDS = new Set(['poussiere', 'poussieres', 'plumeau', 'chiffon', 'lingette']);
+/** « Toute la maison » plutôt qu'une pièce. */
+const EVERYWHERE = new Set(['maison', 'partout', 'tout', 'toute', 'appart', 'appartement']);
+/** Les mots du ménage corrigés d'une faute (mots de 5 lettres ou plus qui ne sont rien d'autre). */
+function fixChoreWords(rest: string[]): string[] {
+  return rest.map((w) => (w.length >= 5 && !CHORE_WORDS.includes(w) && !nouns().has(w) && !nouns().has(singular(w)) && !VERB_OF.has(w) && !STOP.has(w) && !NEUTRAL.has(w) && !ROOM_WORDS.some(([ws]) => ws.includes(w)) ? closestOf(w, CHORE_WORDS) ?? w : w));
+}
+
 /** « La lumière » : pas de plafonnier ni d'interrupteur, c'est une lampe (de chevet, lampadaire) qu'on allume. */
 const LIGHT_WORDS = new Set(['lumiere', 'lumieres']);
 /** La lampe de chaque pièce (« la lumière du salon »). */
@@ -197,7 +213,7 @@ const ALIASES: Record<string, string[]> = {
   'machine a cafe': ['machine', 'cafetiere'],
   evier: ['evier', 'robinet'],
   lavabo: ['lavabo', 'lavabos', 'miroir', 'glace', 'vasque'],
-  douche: ['douche', 'douches'],
+  douche: ['douche', 'douches', 'baignoire'],
   toilettes: ['toilettes', 'toilette', 'wc', 'cuvette', 'chiottes'],
   serviette: ['serviette', 'serviettes'],
   'papier toilette': ['papier', 'pq'],
@@ -627,6 +643,71 @@ function closest(w: string, candidates: Iterable<string>): string | undefined {
   return near.length === 1 || (near.length > 1 && near.every((c) => VERB_OF.get(c) === VERB_OF.get(near[0]))) ? near[0] : undefined;
 }
 
+/** Le seul mot de `candidates` à une faute près de `w` (5 lettres ou plus), sinon undefined. */
+function closestOf(w: string, candidates: string[]): string | undefined {
+  const near = candidates.filter((c) => c.length >= 4 && Math.abs(c.length - w.length) <= 1 && editDistance(w, c) === 1);
+  return near.length === 1 ? near[0] : undefined;
+}
+
+/**
+ * Les ordres de ménage : « fais le ménage (dans la cuisine) », « nettoie la salle de bain »,
+ * « balaie l'entrée », « passe l'aspirateur au salon », « passe la serpillière », « lave le sol »,
+ * « fais la poussière », « dépoussière la bibliothèque », « fais les vitres », « nettoie le miroir »,
+ * « frotte les toilettes », « récure la douche ». undefined si l'ordre ne parle pas de ménage.
+ */
+function choreClause(verb: string, said: string[], found: WorldObject[]): Intent[] | null | undefined {
+  const chores = ['cafe', 'essuyer', 'balayer', 'passer', 'laver', 'aspirer', 'depoussierer', 'recurer'];
+  if (!chores.includes(verb)) return undefined;
+  const rest = fixChoreWords(said);
+  const has = (set: Set<string> | string[]) => rest.some((x) => (Array.isArray(set) ? set.includes(x) : set.has(x)));
+  const piece = roomIn(rest);
+  const where = piece ? { piece } : {};
+  const everywhere = has(EVERYWHERE);
+  // ce qui n'est ni le lieu ni l'outil : la cible (un meuble, un sanitaire)
+  // (« les meubles » : tous, pas le meuble télé)
+  const target = rest.includes('meubles') || (rest.includes('meuble') && !rest.some((x) => x.startsWith('tele'))) ? undefined : found.find((o) => !o.portable && !['balai', 'serpillière', 'spray nettoyant', 'éponge', 'torchon', 'seau'].includes(o.nom));
+  const whole = (): Intent[] => [{ kind: 'menage', ...where, ...(!piece && !everywhere && rest.some((x) => x === 'piece' || x === 'ici') ? { ici: true } : {}) }];
+  // se brosser les dents, se frotter les mains : pas du ménage
+  if (rest.some((x) => ['dents', 'dent', 'cheveux', 'mains', 'main', 'visage', 'toi', 'te', 'moi', 'dos'].includes(x))) return verb === 'recurer' ? null : undefined;
+  // « fais le ménage », « fais un peu de ménage dans le salon », « nettoie le ménage » : tout ce qui est sale
+  if (rest.includes('menage') || rest.includes('menages')) return whole();
+  if (has(GLASS_WORDS) && verb !== 'balayer' && verb !== 'aspirer') return [{ kind: 'vitres', ...(piece ? where : rest.some((x) => x.startsWith('miroir') || x.startsWith('glace')) ? { piece: 'salle de bain' } : {}) }];
+  switch (verb) {
+    case 'cafe':
+      // « fais la poussière », « fais les sols »
+      if (has(DUST_WORDS)) return [{ kind: 'poussiere', ...where }];
+      if (has(FLOOR_WORDS)) return [{ kind: 'serpillere', ...where }];
+      return undefined;
+    case 'balayer':
+      // « balaie », « balaie la cuisine », « balaie les miettes »
+      return [{ kind: 'balayer', ...where }];
+    case 'aspirer':
+      // « aspire le salon », « aspire le canapé », « aspire le tapis »
+      return [{ kind: 'aspirateur', ...where, ...(target ? { ref: target.ref } : {}) }];
+    case 'depoussierer':
+      // « dépoussière les meubles », « époussette la bibliothèque »
+      return [{ kind: 'poussiere', ...where, ...(target ? { ref: target.ref } : {}) }];
+    case 'passer':
+      // « passe l'aspirateur », « passe un coup d'aspi dans la chambre », « passe le balai », « passe la serpillière », « passe le chiffon »
+      if (rest.some((x) => x.startsWith('aspi'))) return [{ kind: 'aspirateur', ...where }];
+      if (rest.some((x) => x.startsWith('balai')) || found.some((o) => o.nom === 'balai')) return [{ kind: 'balayer', ...where }];
+      if (rest.some((x) => x.startsWith('serpi')) || found.some((o) => o.nom === 'serpillière')) return [{ kind: 'serpillere', ...where }];
+      if (has(DUST_WORDS)) return [{ kind: 'poussiere', ...where, ...(target ? { ref: target.ref } : {}) }];
+      return undefined;
+    default: {
+      // « lave le sol », « nettoie le carrelage de la cuisine » : la serpillière (les flaques : l'éponge)
+      if (has(FLOOR_WORDS)) return [{ kind: 'serpillere', ...where }];
+      // « nettoie la salle de bain », « nettoie la maison », « nettoie tout » : le ménage de la pièce
+      const bare = rest.filter((x) => !STOP.has(x) && !NEUTRAL.has(x) && !EVERYWHERE.has(x) && !ROOM_WORDS.some(([ws]) => ws.some((w) => w.split(' ').includes(x))) && x !== 'piece');
+      if (!bare.length && (piece || ((everywhere || rest.includes('piece')) && verb === 'essuyer')) && !found.length) return whole();
+      // « frotte les toilettes », « récure la douche », « lave la baignoire » : la zone sale de ce meuble
+      if (verb === 'recurer') return target ? [{ kind: 'nettoyer', ref: target.ref }] : null;
+      if (verb === 'laver' && (target?.nom === 'toilettes' || target?.nom === 'douche' || (target?.nom === 'lavabo' && !rest.includes('robinet')))) return [{ kind: 'nettoyer', ref: target.ref }];
+      return undefined;
+    }
+  }
+}
+
 /** Un ordre pour le réveil, sinon null. */
 function parseAlarm(w: string[]): Intent | null {
   const text = w.join(' ');
@@ -656,6 +737,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
   const held = world.objets.filter((o) => world.enMain.includes(o.ref));
   const news = newsClause(verb, rest, found, all);
   if (news !== undefined) return news;
+  const chore = choreClause(verb, rest, found);
+  if (chore !== undefined) return chore;
   switch (verb) {
     case 'prendre': {
       // « prends une douche », « prends un bain » (mais « prends le gel douche » : le flacon)
