@@ -11,6 +11,7 @@ import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
+import { moveButton } from './items/buttons';
 import { loadInterior } from './items/interior';
 import { loadKit } from './kit';
 import { Mouvements } from './mouvements';
@@ -4840,6 +4841,9 @@ export class Game {
           // les flammes vacillent, et grandissent à mesure que le feu prend
           if (on && heat.lit === 'flamme') lit.scale.set(1, (0.5 + 0.5 * h.warm[i]) * (0.85 + 0.3 * Math.random()), 1);
         }
+        // le bouton suit : un quart de tour pour un feu, enfoncé pour un bouton marche
+        const button = item.part(`bouton-${i}`);
+        if (button) moveButton(button, on, heat.lit === 'flamme', dt);
         if (h.warm[i] <= 0 || heat.lit !== 'flamme') return;
         const pan = this.onSpot(item, i);
         if (pan) this.heatPan(pan, h.warm[i], dt);
