@@ -162,8 +162,8 @@ const NEAR_HEAT = 1.6;
 const BODY_SAY_EVERY = 40;
 /** Vaisselle : temps à frotter sous l'eau par pièce (s). */
 const DISH_SECONDS = 2.5;
-/** Où le livreur pose les courses : dehors, à côté de la porte d'entrée (mur ouest de la cuisine). */
-const DELIVERY_SPOT = new THREE.Vector3(-4.4, 0, 1.0);
+/** Où le livreur pose les courses : dehors, à côté de la porte d'entrée (au sud de l'entrée). */
+const DELIVERY_SPOT = new THREE.Vector3(-6.9, 0, 3.6);
 
 /** Un repas assis à table, dans l'assiette, rassasie un peu plus que debout, l'aliment à la main. */
 const TABLE_MEAL = 1.25;
