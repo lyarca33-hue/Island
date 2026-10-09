@@ -1,0 +1,163 @@
+/**
+ * Les pièces vides autour de la cuisine, en attendant leurs meubles Tripo. Deux rangées, toits à
+ * deux pentes dans le même sens que celui de la cuisine :
+ * - devant (même profondeur que la cuisine, un seul toit d'un bout à l'autre) : le garage, l'entrée
+ *   (la porte de la maison, au sud), la cuisine, le salon (passage par le mur est de la cuisine) ;
+ * - derrière le salon : la salle de bain et la chambre, chacune avec sa porte sur le salon.
+ * Deux pièces voisines ont chacune leur mur, dos à dos (2 × WALL_T entre les deux intérieurs).
+ */
+import * as THREE from 'three';
+import { DOOR, ROOM, SALON_PASS, tiles, toon, WALL_T, WIN_HIGH, type Rect, type RoomSpec } from './room';
+
+/** Écart entre les intérieurs de deux pièces voisines : leurs deux murs. */
+const GAP = 2 * WALL_T;
+
+export const ENTREE: Rect = { x0: ROOM.x0 - GAP - 2.4, x1: ROOM.x0 - GAP, z0: ROOM.z0, z1: ROOM.z1 };
+export const GARAGE: Rect = { x0: ENTREE.x0 - GAP - 5, x1: ENTREE.x0 - GAP, z0: ROOM.z0, z1: ROOM.z1 };
+export const SALON: Rect = { x0: ROOM.x1 + GAP, x1: ROOM.x1 + GAP + 6.64, z0: ROOM.z0, z1: ROOM.z1 };
+export const SALLE_DE_BAIN: Rect = { x0: SALON.x0, x1: SALON.x0 + 2.4, z0: SALON.z0 - GAP - 4.4, z1: SALON.z0 - GAP };
+export const CHAMBRE: Rect = { x0: SALLE_DE_BAIN.x1 + GAP, x1: SALON.x1, z0: SALLE_DE_BAIN.z0, z1: SALLE_DE_BAIN.z1 };
+
+/** Porte de la maison, au sud de l'entrée (de x0 à x1). */
+export const FRONT_DOOR = { x0: ENTREE.x0 + 0.7, x1: ENTREE.x0 + 1.6 };
+/** Porte entre l'entrée et le garage (le long de z). */
+const GARAGE_DOOR = { z0: -0.6, z1: 0.3 };
+/** Grande porte du garage, au sud : la porte basculante du kit (240 cm). */
+const CAR_DOOR = { x0: GARAGE.x0 + 1.3, x1: GARAGE.x0 + 3.72 };
+/** Portes du salon vers la salle de bain et la chambre (le long de x). */
+const BATH_DOOR = { x0: SALLE_DE_BAIN.x0 + 0.75, x1: SALLE_DE_BAIN.x0 + 1.55 };
+const BED_DOOR = { x0: CHAMBRE.x1 - 1.3, x1: CHAMBRE.x1 - 0.45 };
+
+/** Parquet : lames de bois de tons voisins, posées en quinconce. */
+function parquet(r: Rect): THREE.Material {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 256;
+  const g = cv.getContext('2d')!;
+  const tones = ['#b9875a', '#c4935f', '#ad7b4f', '#bf8c5c', '#b58256'];
+  const rows = 8, h = 256 / rows;
+  for (let j = 0; j < rows; j++) {
+    const off = (j % 2) * 128;
+    for (let i = -1; i < 2; i++) {
+      g.fillStyle = tones[(j * 3 + i + 5) % tones.length];
+      g.fillRect(off + i * 128, j * h, 128, h);
+    }
+    // joints entre lames, et bout des lames
+    g.fillStyle = 'rgba(70,40,20,0.55)';
+    g.fillRect(0, j * h + h - 2, 256, 2);
+    g.fillRect(off, j * h, 2, h);
+    g.fillRect((off + 128) % 256, j * h, 2, h);
+    // fines veines
+    g.fillStyle = 'rgba(90,55,30,0.18)';
+    for (let k = 0; k < 6; k++) g.fillRect((k * 47 + j * 29) % 256, j * h + 6 + (k % 3) * 8, 40, 1);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  // une répétition couvre 1,6 m : lames de 20 cm de large
+  tex.repeat.set((r.x1 - r.x0) / 1.6, (r.z1 - r.z0) / 1.6);
+  return toon(0xffffff, tex);
+}
+
+/** Dalle de béton du garage : grandes plaques grises, joints à peine marqués. */
+function concrete(r: Rect): THREE.Material {
+  const tex = tiles(256, 2, '#a7a39b', '#a19d95', '#8d8981', 2);
+  tex.repeat.set((r.x1 - r.x0) / 2.4, (r.z1 - r.z0) / 2.4);
+  return toon(0xffffff, tex);
+}
+
+/** Carrelage clair, carreaux de 40 cm (sous le carreau du kit Tripo, qui le remplace). */
+function tiled(r: Rect): THREE.Material {
+  const tex = tiles(256, 2, '#efe4cf', '#d9c7a6', '#c2b293', 4);
+  tex.repeat.set((r.x1 - r.x0) / 0.8, (r.z1 - r.z0) / 0.8);
+  return toon(0xffffff, tex);
+}
+
+const middle = (r: Rect) => ({ x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 });
+const empty = { runs: [], lamps: [] };
+
+/** L'entrée : la porte de la maison au sud, le passage vers la cuisine, la porte du garage. */
+export const ENTREE_SPEC: RoomSpec = {
+  ...empty,
+  name: 'entrée',
+  rect: ENTREE,
+  floor: () => tiled(ENTREE),
+  doors: [
+    { wall: 'sud', u0: FRONT_DOOR.x0, u1: FRONT_DOOR.x1, leaf: true },
+    { wall: 'est', u0: DOOR.z0, u1: DOOR.z1 },
+    { wall: 'ouest', u0: GARAGE_DOOR.z0, u1: GARAGE_DOOR.z1, inner: true, flip: true },
+  ],
+  joined: ['est', 'ouest'],
+  windows: () => [{ wall: 'nord', u0: ENTREE.x0 + 0.8, u1: ENTREE.x0 + 1.6, y0: 0.95, y1: WIN_HIGH }],
+  lamps: () => [{ ...middle(ENTREE), kind: 'suspension', shade: 0x9a6a3c }],
+  lightSwitch: { wall: 'sud', u: FRONT_DOOR.x1 + 0.2 },
+};
+
+/** Le garage : dalle de béton, porte basculante au sud (elle s'ouvre devant le perso), porte vers l'entrée. */
+export const GARAGE_SPEC: RoomSpec = {
+  ...empty,
+  name: 'garage',
+  rect: GARAGE,
+  floor: () => concrete(GARAGE),
+  kitFloor: false,
+  doors: [
+    { wall: 'sud', u0: CAR_DOOR.x0, u1: CAR_DOOR.x1, garage: true },
+    { wall: 'est', u0: GARAGE_DOOR.z0, u1: GARAGE_DOOR.z1 },
+  ],
+  joined: ['est'],
+  windows: () => [{ wall: 'ouest', u0: -0.6, u1: 0.4, y0: 1.3, y1: WIN_HIGH }],
+  lamps: () => [{ ...middle(GARAGE), kind: 'suspension', shade: 0x6b7378 }],
+  lightSwitch: { wall: 'est', u: GARAGE_DOOR.z1 + 0.2 },
+};
+
+/** Le salon : parquet, passage depuis la cuisine, portes de la salle de bain et de la chambre au fond. */
+export const SALON_SPEC: RoomSpec = {
+  ...empty,
+  name: 'salon',
+  rect: SALON,
+  floor: () => parquet(SALON),
+  kitFloor: false,
+  doors: [
+    { wall: 'ouest', u0: SALON_PASS.z0, u1: SALON_PASS.z1 },
+    { wall: 'nord', u0: BATH_DOOR.x0, u1: BATH_DOOR.x1 },
+    { wall: 'nord', u0: BED_DOOR.x0, u1: BED_DOOR.x1 },
+  ],
+  joined: ['ouest', 'nord'],
+  windows: () => [
+    { wall: 'sud', u0: SALON.x0 + 1.4, u1: SALON.x0 + 2.6, y0: 0.95, y1: WIN_HIGH },
+    { wall: 'sud', u0: SALON.x1 - 2.6, u1: SALON.x1 - 1.4, y0: 0.95, y1: WIN_HIGH },
+    { wall: 'est', u0: -0.6, u1: 0.6, y0: 0.95, y1: WIN_HIGH },
+  ],
+  lamps: () => [{ ...middle(SALON), kind: 'suspension', shade: 0x2f6f73 }],
+  lightSwitch: { wall: 'ouest', u: SALON_PASS.z1 + 0.2 },
+};
+
+/** La salle de bain : carrelage, petite fenêtre haute au fond, porte sur le salon. */
+export const SALLE_DE_BAIN_SPEC: RoomSpec = {
+  ...empty,
+  name: 'salle de bain',
+  rect: SALLE_DE_BAIN,
+  floor: () => tiled(SALLE_DE_BAIN),
+  doors: [{ wall: 'sud', u0: BATH_DOOR.x0, u1: BATH_DOOR.x1, inner: true }],
+  joined: ['sud', 'est'],
+  windows: () => [{ wall: 'nord', u0: SALLE_DE_BAIN.x0 + 0.9, u1: SALLE_DE_BAIN.x0 + 1.6, y0: 1.45, y1: WIN_HIGH }],
+  lamps: () => [{ ...middle(SALLE_DE_BAIN), kind: 'suspension', shade: 0xe9eef0 }],
+  lightSwitch: { wall: 'sud', u: BATH_DOOR.x1 + 0.2 },
+};
+
+/** La chambre : parquet, fenêtres au fond et à l'est, porte sur le salon. */
+export const CHAMBRE_SPEC: RoomSpec = {
+  ...empty,
+  name: 'chambre',
+  rect: CHAMBRE,
+  floor: () => parquet(CHAMBRE),
+  kitFloor: false,
+  doors: [{ wall: 'sud', u0: BED_DOOR.x0, u1: BED_DOOR.x1, inner: true, flip: true }],
+  joined: ['sud', 'ouest'],
+  windows: () => [
+    { wall: 'nord', u0: CHAMBRE.x0 + 1.5, u1: CHAMBRE.x0 + 2.5, y0: 0.95, y1: WIN_HIGH },
+    { wall: 'est', u0: -6.0, u1: -5.0, y0: 0.95, y1: WIN_HIGH },
+  ],
+  lamps: () => [{ ...middle(CHAMBRE), kind: 'suspension', shade: 0x7a4f7c }],
+  lightSwitch: { wall: 'sud', u: BED_DOOR.x0 - 0.2 },
+};
