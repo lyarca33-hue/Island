@@ -419,8 +419,20 @@ const POT_H = 0.11;
 const HANDLE_L = 0.17;
 /** Épaisseur du fond des ustensiles : les ingrédients reposent dessus. */
 const PAN_FLOOR = 0.008;
+/** Barre à casseroles au mur : longueur, hauteur et avancée de la barre (m), et ses crochets (x, ce qui y pend). */
+const RAIL_W = 0.7;
+const RAIL_Y = 0.6;
+const RAIL_Z = 0.05;
+const RAIL_HOOKS: Array<[number, 'poêle' | 'casserole']> = [[-0.22, 'poêle'], [0, 'casserole'], [0.22, 'poêle']];
+/** Barre à ustensiles (spatule, louche…) : hauteur et avancée de la barre, écart et places des crochets. */
+const UTENSIL_RAIL_Y = 0.4;
+const UTENSIL_RAIL_Z = 0.03;
+const UTENSIL_GAP = 0.08;
+const UTENSIL_HOOKS = [-1.5, -0.5, 0.5, 1.5].map((k) => k * UTENSIL_GAP);
 /** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier (un placard bas Tripo). */
 const WORKTOP_W = 0.73;
+/** Ce qui se range sous le plan de travail, à côté de la gazinière : de quoi cuisiner. */
+const COOKWARE_CUPBOARD = ['poêle', 'casserole', 'planche à découper', 'saladier', 'moule à gâteau', 'fouet', 'spatule', 'cuillère en bois', 'louche', 'maniques', 'râpe'];
 const WORKTOP_D = 0.55;
 /** Planche à découper : longueur, épaisseur, largeur (m). */
 const BOARD_W = 0.36;
@@ -864,6 +876,10 @@ export const ITEMS: ItemDef[] = [
     // bois et stratifié : solide
     fragility: 7,
     durability: 300,
+    // dessous, à côté de la gazinière : le placard des poêles, casseroles et ustensiles de cuisson
+    door: THREE.MathUtils.degToRad(100),
+    holds: COOKWARE_CUPBOARD,
+    slots: [0.06, -0.14].flatMap((z) => [0.06, 0.42].flatMap((y) => [-0.2, 0, 0.2].map((x): [number, number, number] => [x, y, z]))),
     build: () => {
       const H = COUNTER_H, top = 0.04;
       const wood = 0x8a6440, counter = 0xd9d3c5, line = 0x5d4129, knob = 0xc9c2b0;
@@ -1020,6 +1036,58 @@ export const ITEMS: ItemDef[] = [
       // manche en bois, un peu relevé, vers l'avant (+Z)
       const handle = mesh(new THREE.BoxGeometry(0.024, 0.016, HANDLE_L).rotateX(-0.12), 0x5b3b22, 0, PAN_H - 0.005, PAN_R + 0.015 + HANDLE_L / 2);
       return group(floor, wall, handle);
+    },
+  },
+  {
+    id: 'barre-casseroles',
+    name: 'barre à casseroles',
+    portable: false,
+    movable: false,
+    durability: 300,
+    fragility: 10,
+    holds: ['poêle', 'casserole'],
+    // pendues par le bout du manche, le fond vers la pièce : chaque place est l'endroit du crochet
+    // moins le manche (couché vers +Z, il pointe vers le haut une fois pendu)
+    slots: RAIL_HOOKS.map(([x, kind]): [number, number, number] => {
+      const [tipY, tipZ] = kind === 'poêle' ? [PAN_H - 0.005, PAN_R + 0.015 + HANDLE_L] : [POT_H - 0.02, POT_R + HANDLE_L];
+      return [x, RAIL_Y - tipZ, RAIL_Z + tipY];
+    }),
+    slotHolds: RAIL_HOOKS.map(([, kind]) => [kind]),
+    slotTilt: [-Math.PI / 2, 0, 0],
+    build: () => {
+      const steel = 0x8f969d, dark = 0x3a3d41;
+      const g = group(
+        mesh(new THREE.CylinderGeometry(0.009, 0.009, RAIL_W, 10).rotateZ(Math.PI / 2), steel, 0, RAIL_Y, RAIL_Z),
+        // pattes au mur, aux deux bouts
+        mesh(new THREE.BoxGeometry(0.02, 0.05, RAIL_Z + 0.01), dark, -RAIL_W / 2 + 0.03, RAIL_Y, (RAIL_Z + 0.01) / 2),
+        mesh(new THREE.BoxGeometry(0.02, 0.05, RAIL_Z + 0.01), dark, RAIL_W / 2 - 0.03, RAIL_Y, (RAIL_Z + 0.01) / 2),
+      );
+      // un crochet en S à chaque place
+      for (const [x] of RAIL_HOOKS) g.add(mesh(new THREE.TorusGeometry(0.014, 0.003, 6, 12, Math.PI * 1.5).rotateY(Math.PI / 2), steel, x, RAIL_Y - 0.018, RAIL_Z));
+      return g;
+    },
+  },
+  {
+    id: 'barre-ustensiles',
+    name: 'barre à ustensiles',
+    portable: false,
+    movable: false,
+    durability: 300,
+    fragility: 10,
+    holds: ['spatule', 'cuillère en bois', 'louche', 'fouet'],
+    // pendus tête en bas par le bout du manche (un demi-tour dans le plan du mur : la louche garde son creux vers la pièce)
+    slots: UTENSIL_HOOKS.map((x): [number, number, number] => [x, UTENSIL_RAIL_Y - 0.022, UTENSIL_RAIL_Z]),
+    slotTilt: [Math.PI, Math.PI, 0],
+    build: () => {
+      const steel = 0x8f969d, dark = 0x3a3d41;
+      const w = UTENSIL_HOOKS.length * UTENSIL_GAP + 0.06;
+      const g = group(
+        mesh(new THREE.CylinderGeometry(0.007, 0.007, w, 10).rotateZ(Math.PI / 2), steel, 0, UTENSIL_RAIL_Y, UTENSIL_RAIL_Z),
+        mesh(new THREE.BoxGeometry(0.016, 0.04, UTENSIL_RAIL_Z + 0.01), dark, -w / 2 + 0.02, UTENSIL_RAIL_Y, (UTENSIL_RAIL_Z + 0.01) / 2),
+        mesh(new THREE.BoxGeometry(0.016, 0.04, UTENSIL_RAIL_Z + 0.01), dark, w / 2 - 0.02, UTENSIL_RAIL_Y, (UTENSIL_RAIL_Z + 0.01) / 2),
+      );
+      for (const x of UTENSIL_HOOKS) g.add(mesh(new THREE.TorusGeometry(0.011, 0.0025, 6, 12, Math.PI * 1.5).rotateY(Math.PI / 2), steel, x, UTENSIL_RAIL_Y - 0.014, UTENSIL_RAIL_Z));
+      return g;
     },
   },
   {

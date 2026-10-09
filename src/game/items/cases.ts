@@ -10,6 +10,7 @@ export const GRIDS: Record<string, [number, number]> = {
   frigo: [8, 6],
   congelateur: [4, 3],
   placard: [6, 4],
+  'plan-de-travail': [6, 4],
   'placard-haut': [6, 4],
   tiroir: [8, 3],
   'garde-manger': [8, 6],

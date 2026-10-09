@@ -9,7 +9,6 @@ describe('meubles remplis au départ', () => {
     for (const [holder, , ids] of START_CONTENTS) {
       const shelf = ITEM_BY_ID.get(holder);
       expect(shelf?.slots, holder).toBeTruthy();
-      expect(!!(shelf!.door || shelf!.drawer), `${holder} se ferme`).toBe(true);
       expect(ids.length, holder).toBeLessThanOrEqual(shelf!.slots!.length);
       for (const id of ids) {
         const def = ITEM_BY_ID.get(id);
@@ -60,6 +59,9 @@ describe('inventaire à cases', () => {
   it('le contenu de départ tient dans la grille de chaque meuble', () => {
     for (const [holder, , ids] of START_CONTENTS) {
       const grid = GRIDS[holder];
+      // un meuble qui se ferme a sa grille ; une barre au mur, ouverte, n'en a pas besoin
+      const def = ITEM_BY_ID.get(holder)!;
+      if (!def.door && !def.drawer) continue;
       expect(grid, holder).toBeTruthy();
       const sizes = ids.map((id) => cellsOf(new THREE.Box3().setFromObject(ITEM_BY_ID.get(id)!.build()).getSize(new THREE.Vector3())));
       expect(pack(grid[0], grid[1], sizes), holder).not.toBeNull();

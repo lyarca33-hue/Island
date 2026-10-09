@@ -760,7 +760,7 @@ export class Game {
       if (!where) continue;
       for (const id of ids) {
         const it = add(id);
-        const free = this.freeSlots(where, it).filter((i) => this.insideSlot(where, i));
+        const free = this.freeSlots(where, it).filter((i) => !this.doors.has(where) || this.insideSlot(where, i));
         if (!free.length) {
           this.items.splice(this.items.indexOf(it), 1);
           this.scene.remove(it.object);
@@ -5284,6 +5284,11 @@ export class Game {
     else {
       // puis ce que tient l'autre main, si ça se range aussi ici
       const next = () => {
+        // au mur (barre à casseroles, à couteaux) : il pend, comme sa place le veut
+        if (shelf.def.slotTilt) {
+          item.object.position.copy(pos);
+          item.object.quaternion.copy(rot);
+        }
         const other = both && this.character.heldItems.find((i) => this.fits(shelf, i) && this.freeSlots(shelf, i).length > 0);
         if (other) this.storeNext(shelf, other);
       };
@@ -5532,6 +5537,12 @@ export class Game {
       if (can.throw) add(`Lancer : ${c.held!.name}`, () => this.throwItem());
       if (held.length && this.items.some((i) => i.def.bin)) add(`Jeter : ${c.held!.name}`, () => this.throwAway());
       if (held.length) add('Ranger', () => this.storeAway());
+      // poêle, casserole : à sa barre au mur
+      const hang = held.find((h) => this.items.some((s) => s.def.slotTilt && this.fits(s, h) && this.freeSlots(s, h).length));
+      if (hang) {
+        const rail = this.items.find((s) => s.def.slotTilt && this.fits(s, hang) && this.freeSlots(s, hang).length)!;
+        add(`Accrocher ${the(hang.name)}`, () => this.storeIn(rail, false, hang));
+      }
       const tray = held.find((h) => h.name === 'bac à glaçons');
       const cup = held.find((h) => h !== tray && h.def.fill && !h.def.cookware && !h.def.mouth);
       if (tray && cup && !this.iced.has(cup)) add(`Glaçons dans ${the(cup.name)}`, () => this.addIce(this.ref(cup)));
@@ -5572,7 +5583,7 @@ export class Game {
       else add(`Ouvrir ${part}`, () => this.openDoor(ref));
     }
     // ranger ce qu'on tient
-    if (item.def.slots && held.some((h) => this.fits(item, h))) add('Ranger ici ce que je tiens', () => this.storeIn(item, false));
+    if (item.def.slots && held.some((h) => this.fits(item, h))) add(item.def.slotTilt ? 'Accrocher ici' : 'Ranger ici ce que je tiens', () => this.storeIn(item, false));
     // ranger l'objet à sa place (sale : dans l'évier)
     if (item.def.portable && !c.carried.includes(item) && !this.atHome(item) && (item.dirty || this.homes.has(item) || this.homeOf(item))) add('Ranger', () => this.tidy(ref));
     if (item.def.slots && (!program(item.def) || this.doors.has(item))) out.push({ label: 'Inventaire', icon: 'inventory', run: () => this.lookInside(ref) });
