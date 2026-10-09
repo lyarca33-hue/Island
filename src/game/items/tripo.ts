@@ -15,7 +15,7 @@
  * les murs, chemins) est celle du modèle.
  */
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { createToonMaterial } from '../toon';
 import { poseMotion, ROOM_RIGS, type Motion } from './rigs';
@@ -168,7 +168,7 @@ function loadPack(pack: string, out: Map<string, Model>): Promise<void> {
           const m = o.material as THREE.MeshStandardMaterial;
           // le modèle est une coque : ses faces se voient aussi de dedans, porte ouverte
           material ??= Object.assign(createToonMaterial({ color: 0xffffff, map: m.map, rimStrength: 0, soft: true }), { side: THREE.DoubleSide });
-          parts.set(o === node || o.parent === gltf.scene ? node.name : o.name, plain(o.geometry).applyMatrix4(o.matrixWorld));
+          parts.set(o === node || o.parent === gltf.scene ? node.name : nodeName(gltf, o), plain(o.geometry).applyMatrix4(o.matrixWorld));
         });
         // l'usure (durability.ts) change la texture : pas sur un modèle peint
         if (material) {
@@ -178,6 +178,16 @@ function loadPack(pack: string, out: Map<string, Model>): Promise<void> {
       }
     })
     .catch((e) => console.warn(`modèles Tripo (${pack}) non chargés`, e));
+}
+
+/**
+ * Nom d'un nœud tel qu'écrit dans le fichier. Le chargeur rend uniques les noms répétés d'un même
+ * fichier (la deuxième « porte » devient « porte_1 ») : sans le vrai nom, la porte du modèle ne serait
+ * pas reconnue, resterait collée au meuble et la porte faite par programme s'ajouterait par-dessus.
+ */
+function nodeName(gltf: GLTF, o: THREE.Object3D): string {
+  const i = gltf.parser.associations.get(o)?.nodes;
+  return (i !== undefined && (gltf.parser.json.nodes[i]?.name as string | undefined)) || o.name;
 }
 
 /**
