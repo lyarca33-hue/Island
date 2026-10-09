@@ -12,6 +12,7 @@ import type { FirebaseApp } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
 import type { Firestore } from 'firebase/firestore';
 import type { GameSave } from './save';
+import { CARTE_SUFFIX } from './carte';
 
 export interface FirebaseSettings {
   apiKey: string;
@@ -21,7 +22,10 @@ export interface FirebaseSettings {
 }
 
 const SETTINGS_KEY = 'island-firebase';
-const SYNC_KEY = 'island-cloud-sync';
+const SYNC_KEY = `island-cloud-sync${CARTE_SUFFIX}`;
+/** Champs du document : une partie par carte (carte.ts), dans le même document. */
+const PARTIE = CARTE_SUFFIX ? 'partieCuisine' : 'partie';
+const SAVED_AT = CARTE_SUFFIX ? 'savedAtCuisine' : 'savedAt';
 /** Envoi au cloud au plus toutes les tant de secondes (et quand on quitte l'onglet). */
 const PUSH_SECONDS = 60;
 
@@ -209,7 +213,7 @@ export class Cloud {
     try {
       const snap = await fb.storeMod.getDoc(fb.storeMod.doc(fb.db, 'parties', user.uid));
       if (this.uid !== user.uid) return;
-      const raw = snap.exists() ? (snap.data().partie as string | undefined) : undefined;
+      const raw = snap.exists() ? (snap.data()[PARTIE] as string | undefined) : undefined;
       const remote = raw ? (JSON.parse(raw) as GameSave) : null;
       const mark = this.syncMark();
       const known = mark?.uid === user.uid ? mark.savedAt : 0;
@@ -267,7 +271,7 @@ export class Cloud {
     this.lastPush = Date.now();
     try {
       const fb = await this.fb;
-      await fb.storeMod.setDoc(fb.storeMod.doc(fb.db, 'parties', this.uid), { partie: JSON.stringify(s), savedAt: s.savedAt, maj: fb.storeMod.serverTimestamp() });
+      await fb.storeMod.setDoc(fb.storeMod.doc(fb.db, 'parties', this.uid), { [PARTIE]: JSON.stringify(s), [SAVED_AT]: s.savedAt, maj: fb.storeMod.serverTimestamp() }, { merge: true });
       this.setSyncMark(s.savedAt);
       this.set({ pushedAt: s.savedAt, error: null });
     } catch (e) {

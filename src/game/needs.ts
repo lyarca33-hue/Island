@@ -62,11 +62,25 @@ export class Needs {
   factors: Partial<Record<NeedKey, number>> = {};
   /** La santé peut remonter (faux quand le corps a trop froid ou trop chaud). */
   canHeal = true;
+  /** Besoins en pause (cuisine seule, sans lit ni salle de bain : voir carte.ts) : restent pleins. */
+  readonly paused = new Set<NeedKey>();
+
+  /** Met des besoins en pause : ils restent à 100 jusqu'à nouvel ordre. */
+  pause(keys: NeedKey[]): void {
+    for (const k of keys) this.paused.add(k);
+    this.hold();
+  }
+
+  private hold(): void {
+    for (const k of this.paused) this.values[k] = 100;
+  }
 
   /** Fait passer `hours` heures de jeu ; `gait` : ce que fait le perso pendant ce temps. */
   tick(hours: number, gait: 'idle' | 'walk' | 'run' | 'sit' | 'sleep', night: boolean): void {
     if (hours <= 0) return;
+    this.hold();
     for (const n of NEEDS) {
+      if (this.paused.has(n.key)) continue;
       if (gait === 'sleep') {
         this.values[n.key] = n.key === 'fatigue' ? Math.min(100, this.values[n.key] + SLEEP_REST * hours) : Math.max(0, this.values[n.key] - n.perHour * SLEEP_SLOW * hours);
         continue;
@@ -97,10 +111,12 @@ export class Needs {
   restore(key: NeedKey, amount: number): void {
     this.values[key] = Math.min(100, Math.max(0, this.values[key] + amount));
     if (key === 'soif' && amount > 0) this.values.vessie = Math.max(0, this.values.vessie - amount * DRINK_TO_BLADDER);
+    this.hold();
   }
 
   /** Règle une jauge directement (tests, console : game.needs.set('faim', 10)). */
   set(key: NeedKey, value: number): void {
     this.values[key] = Math.min(100, Math.max(0, value));
+    this.hold();
   }
 }

@@ -26,6 +26,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from './toon';
 import { lightAllPasses } from './postfx';
+import { kitParts, PlasterSheet, type Kit } from './kit';
 import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
 
@@ -58,6 +59,10 @@ const CURTAIN_DIM = 0.97;
 /** Bas et haut des fenêtres (celle du fond, au-dessus de l'évier, passe au-dessus du robinet). */
 const WIN_LOW = 1.3;
 export const WIN_HIGH = 2.1;
+/** Kit Tripo (dress) : taille d'un carreau du kit posé (quatre carreaux de 40 cm), enfoncement de l'enduit dans le mur, épaisseur du toit (part du pan du kit). */
+const KIT_FLOOR = 0.8;
+const PLASTER_IN = 0.012;
+const KIT_ROOF_T = 0.8;
 /** Hauteur du plan de travail : le haut des meubles bas, le bas de la crédence. */
 const COUNTER_H = 0.9;
 
@@ -286,6 +291,9 @@ interface Wall {
   cut: boolean;
   /** Boîtes des morceaux du mur haut : pour savoir s'il cache le perso dehors. */
   boxes: THREE.Box3[];
+  /** Du début à la fin du mur (le long de x ou de z), et le milieu de son épaisseur. */
+  span: [number, number];
+  mid: number;
 }
 
 /**
@@ -348,6 +356,10 @@ export class Room {
   readonly liveShadows: Array<THREE.PointLight | THREE.SpotLight> = [];
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
+  /** Ce que le kit Tripo remplace (dress) : le sol, les pans du toit, les fenêtres faites par programme. */
+  private floor: THREE.Mesh;
+  private roofPans: Array<{ mesh: THREE.Mesh; side: number; lx: number; slope: number }> = [];
+  private windowParts: Array<{ o: Opening; w: Wall; meshes: THREE.Mesh[] }> = [];
   private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
   /** Part de lumière des lampes en ce moment (0 à 1). */
   private lampK = 0;
@@ -372,7 +384,7 @@ export class Room {
     const { x0, x1, z0, z1 } = this.rect;
 
     // sol, sous la pièce
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), spec.floor());
+    const floor = (this.floor = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), spec.floor()));
     floor.position.set((x0 + x1) / 2, 0.004, (z0 + z1) / 2);
     floor.receiveShadow = true;
     floor.name = `sol-${spec.name}`;
@@ -808,6 +820,7 @@ export class Room {
       const pan = box(lx, 0.06, slope, toon(0xffffff, tex), xc, ridgeY - (run * tan) / 2, zc + side * run / 2, false);
       pan.rotation.x = side * ROOF_PITCH;
       this.roof.add(pan);
+      this.roofPans.push({ mesh: pan, side, lx, slope });
     }
     this.roof.add(box(lx + 0.04, 0.08, 0.12, toon(0x7e3a28), xc, ridgeY + 0.03, zc, false));
     // pignons, en crépi comme les murs, à l'aplomb des murs est et ouest
@@ -827,6 +840,122 @@ export class Room {
     this.roof.visible = false;
     this.roof.name = 'toit';
     this.group.add(this.roof);
+  }
+
+  /**
+   * Habille la pièce avec le kit Tripo (kit.ts) : carrelage du sol, enduit sur les deux faces des
+   * murs (hauts et abaissés), pans de toit en tuiles, battant de la porte d'entrée et fenêtres en
+   * bois. Les pièces faites par programme restent dessous ou cachées : les ombres, les clics et le
+   * contournement des murs ne changent pas.
+   */
+  dress(kit: Kit): void {
+    const { x0, x1, z0, z1 } = this.rect;
+    // sol : carreaux de 40 cm, comme le carrelage fait par programme, à peine en relief
+    const nx = Math.max(1, Math.round((x1 - x0) / KIT_FLOOR)), nz = Math.max(1, Math.round((z1 - z0) / KIT_FLOOR));
+    const sx = (x1 - x0) / nx, sz = (z1 - z0) / nz;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion();
+    for (const part of kitParts(kit.sol)) {
+      const tiles = new THREE.InstancedMesh(part.geometry, part.material, nx * nz);
+      // le carreau du kit fait 1 m de côté et 3 cm d'épaisseur : ramené à la grille, et à 1 cm
+      for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) {
+        m.compose(new THREE.Vector3(x0 + (i + 0.5) * sx, -0.005, z0 + (k + 0.5) * sz), q, new THREE.Vector3(sx, 1 / 3, sz));
+        tiles.setMatrixAt(i * nz + k, m);
+      }
+      tiles.castShadow = false;
+      tiles.receiveShadow = true;
+      tiles.name = `carrelage-${this.spec.name}`;
+      this.group.add(tiles);
+    }
+    this.floor.visible = false;
+
+    // murs : l'enduit sur chaque face des morceaux pleins, haut et bas (en coupe)
+    for (const w of this.walls) {
+      const [a, b] = w.span;
+      const sheet = new PlasterSheet(kit.mur, b - a, WALL_H);
+      const alongX = w.n.x === 0;
+      const along = alongX ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+      for (const group of [w.full, w.low]) {
+        for (const piece of [...group.children]) {
+          if (!(piece instanceof THREE.Mesh) || piece.material !== this.wallMat) continue;
+          const g = piece.geometry as THREE.BoxGeometry;
+          const len = alongX ? g.parameters.width : g.parameters.depth;
+          const uc = alongX ? piece.position.x : piece.position.z;
+          const u0 = uc - len / 2, u1 = uc + len / 2;
+          const y0 = piece.position.y - g.parameters.height / 2, y1 = piece.position.y + g.parameters.height / 2;
+          for (const s of [1, -1]) {
+            // face tournée vers la pièce (s = 1) ou vers le dehors ; le relief sort de la face
+            const out = new THREE.Vector3(w.n.x, 0, w.n.y).multiplyScalar(s);
+            // repère direct : si (le long du mur, haut, dehors) est retourné, on prend le mur à l'envers
+            const flip = along.clone().cross(new THREE.Vector3(0, 1, 0)).dot(out) < 0;
+            const geo = flip ? sheet.piece(b - u1, b - u0, y0, y1) : sheet.piece(u0 - a, u1 - a, y0, y1);
+            if (!geo) continue;
+            const x = flip ? along.clone().negate() : along;
+            const face = w.mid + (alongX ? out.z : out.x) * (WALL_T / 2 - PLASTER_IN);
+            const origin = alongX ? new THREE.Vector3(flip ? b : a, 0, face) : new THREE.Vector3(face, 0, flip ? b : a);
+            const relief = new THREE.Mesh(geo, this.wallMat);
+            relief.matrixAutoUpdate = false;
+            relief.matrix.makeBasis(x, new THREE.Vector3(0, 1, 0), out).setPosition(origin);
+            relief.castShadow = false;
+            relief.receiveShadow = true;
+            group.add(relief);
+          }
+        }
+      }
+    }
+
+    // toit : un pan de tuiles entier de chaque côté, à la place du pan peint
+    for (const p of this.roofPans) {
+      const wrap = new THREE.Group();
+      wrap.position.copy(p.mesh.position);
+      wrap.rotation.copy(p.mesh.rotation);
+      const pan = new THREE.Group();
+      for (const part of kitParts(kit.toit)) pan.add(new THREE.Mesh(part.geometry, part.material));
+      // faîtage du pan du kit à -z : tourné pour le pan nord (son z local monte vers le faîtage)
+      pan.rotation.y = p.side < 0 ? Math.PI : 0;
+      pan.scale.set(p.lx, KIT_ROOF_T, p.slope);
+      pan.position.y = -0.03;
+      wrap.add(pan);
+      this.roof.add(wrap);
+      p.mesh.visible = false;
+    }
+    this.roof.updateMatrixWorld(true);
+
+    // porte d'entrée : le battant en chêne du kit (poignée côté ouverture), à la place des panneaux
+    for (const l of this.leaves) {
+      if (l.inner) continue;
+      const boxes = l.door.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
+      const leaf = boxes[0].geometry as THREE.BoxGeometry;
+      const leafW = leaf.parameters.depth, s = Math.sign(boxes[0].position.z) || 1;
+      const door = new THREE.Group();
+      for (const part of kitParts(kit.porte)) {
+        const mesh = new THREE.Mesh(part.geometry, part.material);
+        mesh.castShadow = true;
+        door.add(mesh);
+      }
+      // le battant du kit fait 88 × 205 cm, 5 cm d'épaisseur : à la taille de l'ouverture, 4 cm
+      door.scale.set(leafW / 0.88, (DOOR_H - 0.02) / 2.05, 0.8);
+      door.rotation.y = -s * Math.PI / 2;
+      door.position.set(0, 0.01, s * leafW / 2);
+      for (const bx of boxes) bx.visible = false;
+      l.door.add(door);
+    }
+
+    // fenêtres : la fenêtre en bois du kit (cadre, croisillon, appui côté pièce), la vitre reste
+    for (const { o, w, meshes } of this.windowParts) {
+      const lu = o.u1 - o.u0, ly = o.y1 - o.y0, um = (o.u0 + o.u1) / 2;
+      const win = new THREE.Group();
+      for (const part of kitParts(kit.fenetre)) {
+        const mesh = new THREE.Mesh(part.geometry, part.material);
+        mesh.castShadow = false;
+        win.add(mesh);
+      }
+      // la fenêtre du kit fait 86 × 115 cm et 14 cm de profondeur (le mur et l'appui qui dépasse)
+      win.scale.set(lu / 0.86, ly / 1.15, 1);
+      win.rotation.y = Math.atan2(w.n.x, w.n.y);
+      win.position.set(w.n.x === 0 ? um : w.mid, o.y0, w.n.x === 0 ? w.mid : um);
+      for (const mesh of meshes) mesh.visible = false;
+      w.full.add(win);
+    }
   }
 
   /** Lampes et vitres selon l'heure solaire `hour` (0 à 24). */
@@ -931,7 +1060,7 @@ export class Room {
     full.updateMatrixWorld(true);
     const boxes: THREE.Box3[] = [];
     full.traverse((o) => { if (o instanceof THREE.Mesh) boxes.push(new THREE.Box3().setFromObject(o)); });
-    this.walls.push({ name, n: new THREE.Vector2(nx, nz), at: alongX ? new THREE.Vector2(0, inner) : new THREE.Vector2(inner, 0), full, low, cut: false, boxes });
+    this.walls.push({ name, n: new THREE.Vector2(nx, nz), at: alongX ? new THREE.Vector2(0, inner) : new THREE.Vector2(inner, 0), full, low, cut: false, boxes, span: [a, b], mid: c });
     full.traverse((o) => { if (o instanceof THREE.Mesh) this.solid.push(o); });
   }
 
@@ -943,10 +1072,13 @@ export class Room {
     const c = inner - sgn * WALL_T / 2;
     const frame = toon(FRAME);
     const glass = this.glassMat;
+    const meshes: THREE.Mesh[] = [];
+    if (!o.sash) this.windowParts.push({ o, w, meshes });
     const add = (u: number, y: number, lu: number, ly: number, t: number, mat: THREE.Material, off = 0) => {
       const m = alongX ? box(lu, ly, t, mat, u, y, c + off) : box(t, ly, lu, mat, c + off, y, u);
       m.castShadow = false;
       w.full.add(m);
+      if (mat === frame) meshes.push(m);
       // le cadre et le croisillon dessinent leur ombre au sol, même mur abaissé
       if (mat === frame) {
         const ghost = new THREE.Mesh(m.geometry, this.shadowMat);

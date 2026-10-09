@@ -14,6 +14,7 @@ import type { WorldItem } from './items/carry';
 import { ITEM_BY_ID } from './items/catalog';
 import type { NeedKey } from './needs';
 import { BODY_STATES } from './temperature';
+import { CARTE_SUFFIX } from './carte';
 
 /** Un objet de la maison. Les champs absents gardent leur valeur de départ. */
 export interface ItemSave {
@@ -207,7 +208,8 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
 
 // --- dans le navigateur -------------------------------------------------------------------
 
-const LOCAL_KEY = 'island-partie';
+/** Une partie par carte (carte.ts) : la cuisine seule ne reprend pas la maison complète. */
+const LOCAL_KEY = `island-partie${CARTE_SUFFIX}`;
 
 /** La partie gardée dans ce navigateur, ou null. */
 export function loadLocal(): GameSave | null {
