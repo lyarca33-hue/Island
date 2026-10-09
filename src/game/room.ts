@@ -50,8 +50,10 @@ export const DOOR_H = 2.08;
 const WALL_CUPBOARD_Y = 1.3;
 /** Table de la cuisine, devant la fenêtre du sud. */
 const KITCHEN_TABLE = { x: 1, z: 1.7 };
-/** Porte d'entrée de la maison (mur ouest de la cuisine) : de z0 à z1. */
+/** Passage de la cuisine à l'entrée (mur ouest de la cuisine) : de z0 à z1. */
 export const DOOR = { z0: 1.35, z1: 2.25 };
+/** Passage de la cuisine au salon (mur est de la cuisine) : de z0 à z1. */
+export const SALON_PASS = { z0: -1.5, z1: -0.3 };
 /** Distance (m) à laquelle une porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
 const DOOR_NEAR = 1.4;
 const DOOR_SPEED = 1.8;
@@ -170,6 +172,8 @@ export interface RoomSpec {
   rect: Rect;
   /** Texture du sol. */
   floor: () => THREE.Material;
+  /** Carreau du kit Tripo posé sur le sol (par défaut) ; false garde le sol `floor` (parquet, béton). */
+  kitFloor?: boolean;
   doors: Doorway[];
   /** Murs collés à une autre pièce : le toit n'y déborde pas et n'y a pas de pignon. */
   joined?: WallName[];
@@ -858,7 +862,7 @@ export class Room {
     const nx = Math.max(1, Math.round((x1 - x0) / KIT_FLOOR)), nz = Math.max(1, Math.round((z1 - z0) / KIT_FLOOR));
     const sx = (x1 - x0) / nx, sz = (z1 - z0) / nz;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion();
-    for (const part of kitParts(kit.sol)) {
+    for (const part of this.spec.kitFloor === false ? [] : kitParts(kit.sol)) {
       const tiles = new THREE.InstancedMesh(part.geometry, part.material, nx * nz);
       // le carreau du kit fait 1 m de côté et 3 cm d'épaisseur : ramené à la grille, et à 1 cm
       for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) {
@@ -870,7 +874,7 @@ export class Room {
       tiles.name = `carrelage-${this.spec.name}`;
       this.group.add(tiles);
     }
-    this.floor.visible = false;
+    if (this.spec.kitFloor !== false) this.floor.visible = false;
 
     // murs : l'enduit sur chaque face des morceaux pleins, haut et bas (en coupe), et des pignons
     for (const w of this.walls) {
@@ -944,9 +948,8 @@ export class Room {
     }
     this.roof.updateMatrixWorld(true);
 
-    // porte d'entrée : le battant en chêne du kit (poignée côté ouverture), à la place des panneaux
+    // portes : le battant en chêne du kit (poignée côté ouverture), à la place des panneaux
     for (const l of this.leaves) {
-      if (l.inner) continue;
       const boxes = l.door.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
       const leaf = boxes[0].geometry as THREE.BoxGeometry;
       const leafW = leaf.parameters.depth, s = Math.sign(boxes[0].position.z) || 1;
@@ -1239,16 +1242,19 @@ export class Room {
 }
 
 /**
- * La cuisine, vide en attendant ses meubles Tripo : la porte d'entrée de la maison (mur ouest),
- * une fenêtre au fond (au-dessus de la future place de l'évier) et une sur le mur sud, la
- * suspension au milieu du plafond, l'interrupteur à côté de la porte. Le toit déborde des quatre côtés.
+ * La cuisine : le passage vers l'entrée (mur ouest) et vers le salon (mur est, voir maison.ts),
+ * une fenêtre au fond au-dessus de l'évier et une sur le mur sud, la suspension au-dessus de la
+ * table, l'interrupteur à côté du passage de l'entrée. Le toit continue sur l'entrée et le salon.
  */
 export const KITCHEN: RoomSpec = {
   name: 'cuisine',
   rect: ROOM,
   floor: () => tiledFloor(ROOM),
-  doors: [{ wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1, leaf: true }],
-  joined: [],
+  doors: [
+    { wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1 },
+    { wall: 'est', u0: SALON_PASS.z0, u1: SALON_PASS.z1 },
+  ],
+  joined: ['ouest', 'est'],
   windows: () => [
     { wall: 'nord', u0: -2.1, u1: -1.1, y0: WIN_LOW, y1: WIN_HIGH },
     { wall: 'sud', u0: 0.45, u1: 1.55, y0: 0.95, y1: WIN_HIGH },
