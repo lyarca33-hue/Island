@@ -57,6 +57,9 @@ export const SALON_PASS = { z0: -1.5, z1: -0.3 };
 /** Distance (m) à laquelle une porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
 const DOOR_NEAR = 1.4;
 const DOOR_SPEED = 1.8;
+/** Porte de garage : distance où elle s'ouvre devant le perso, vitesse (ouverture par seconde). */
+const GARAGE_NEAR = 2.2;
+const GARAGE_SPEED = 0.8;
 /** Rideaux : vitesse (part tirée par seconde), part de la lumière de la fenêtre qu'ils arrêtent. */
 const CURTAIN_SPEED = 1.5;
 const CURTAIN_DIM = 0.97;
@@ -153,6 +156,8 @@ export interface Doorway {
   inner?: boolean;
   /** Charnière à l'autre bout de l'ouverture. */
   flip?: boolean;
+  /** Porte de garage basculante : elle monte et se range sous le plafond quand le perso approche. */
+  garage?: boolean;
 }
 
 /** Rangée de meubles dos au mur, dans l'ordre de x (nord, sud) ou de z (est, ouest) croissant à partir de `from` ; un nombre laisse un écart (m). */
@@ -318,6 +323,15 @@ interface Leaf {
   armed: boolean;
 }
 
+/** Porte de garage basculante : pivot en haut de l'ouverture, son ombre, ouverture (0 à 1). */
+interface Lift {
+  pivot: THREE.Group;
+  ghost: THREE.Group;
+  center: THREE.Vector3;
+  width: number;
+  open: number;
+}
+
 /** Rideaux d'une fenêtre : deux pans (et leur ombre), la lumière de la fenêtre, part tirée (0 ouverts, 1 tirés). */
 interface Curtain {
   group: THREE.Group;
@@ -338,6 +352,7 @@ export class Room {
   readonly obstacles: Array<{ box: THREE.Box3; pos: THREE.Vector3; yaw: number; wall: boolean }> = [];
   private walls: Wall[] = [];
   private leaves: Leaf[] = [];
+  private lifts: Lift[] = [];
   private curtains: Curtain[] = [];
   /** Animations du décor (aiguilles de l'horloge…), à chaque image avec l'heure du jeu. */
   private tickers: Array<(dt: number, hour: number) => void> = [];
@@ -633,6 +648,10 @@ export class Room {
     const sill = this.wallFrame(d.wall, uc);
     sill.add(box(WALL_T, 0.012, 2 * half, toon(DARK_WOOD), -WALL_T / 2, 0.006, 0, false));
     this.group.add(sill);
+    if (d.garage) {
+      this.addLift(d);
+      return;
+    }
     if (!d.leaf && !d.inner) return;
     const inner = !!d.inner;
     const leafMat = toon(inner ? 0xf4f1ea : 0x6f8f74);
@@ -675,6 +694,26 @@ export class Room {
     // ouverte : la porte d'entrée tourne de 100° vers le dehors, une porte intérieure de 90° vers la pièce
     const swing = (inner ? s : -s) * THREE.MathUtils.degToRad(inner ? 90 : 100);
     this.leaves.push({ door, ghost, center: f.position.clone(), open: inner ? 1 : 0, swing, wall: d.wall, inner, shut: false, armed: true });
+  }
+
+  /**
+   * Porte de garage basculante dans l'ouverture `d` : un panneau qui pend sous un pivot en haut de
+   * l'ouverture, au milieu du mur ; ouverte, elle tourne d'un quart de tour vers la pièce et se range à
+   * plat sous le plafond. Le panneau fait par programme est remplacé par le modèle Tripo (dress).
+   */
+  private addLift(d: Doorway): void {
+    const uc = (d.u0 + d.u1) / 2, width = d.u1 - d.u0 - 0.02;
+    const pivot = this.wallFrame(d.wall, uc, DOOR_H);
+    pivot.position.add(new THREE.Vector3(-WALL_T / 2, 0, 0).applyEuler(pivot.rotation));
+    pivot.name = 'porte-garage';
+    pivot.add(box(0.05, DOOR_H - 0.01, width, toon(0xe8e4dc), 0, -(DOOR_H - 0.01) / 2, 0));
+    const ghost = pivot.clone(false);
+    const shade = box(0.09, DOOR_H + 0.04, width + 0.08, this.shadowMat, 0, -(DOOR_H + 0.04) / 2 + 0.02, 0);
+    shade.receiveShadow = false;
+    ghost.add(shade);
+    this.wall(d.wall).full.add(pivot);
+    this.group.add(ghost);
+    this.lifts.push({ pivot, ghost, center: pivot.position.clone(), width, open: 0 });
   }
 
   /**
@@ -967,6 +1006,24 @@ export class Room {
       l.door.add(door);
     }
 
+    // porte de garage : le modèle Tripo, face avant dehors, à la taille de l'ouverture
+    for (const l of this.lifts) {
+      const door = new THREE.Group();
+      for (const part of kitParts(kit.garage)) {
+        const mesh = new THREE.Mesh(part.geometry, part.material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        door.add(mesh);
+      }
+      // le modèle fait 240 × 210 cm (x le long de la porte, face avant +z) : sa face avant passe au
+      // -X du repère du mur (dehors), sa largeur le long du mur
+      door.rotation.y = -Math.PI / 2;
+      door.scale.set(l.width / 2.4, (DOOR_H - 0.01) / 2.1, 0.8);
+      door.position.y = -(DOOR_H - 0.01);
+      for (const c of l.pivot.children) c.visible = false;
+      l.pivot.add(door);
+    }
+
     // fenêtres : la fenêtre en bois du kit (cadre, croisillon, appui côté pièce), la vitre reste
     for (const { o, w, meshes } of this.windowParts) {
       const lu = o.u1 - o.u0, ly = o.y1 - o.y0, um = (o.u0 + o.u1) / 2;
@@ -1185,6 +1242,11 @@ export class Room {
       l.open = THREE.MathUtils.clamp(l.open + (want ? 1 : -1) * DOOR_SPEED * dt, 0, 1);
       l.door.rotation.y = THREE.MathUtils.smootherstep(l.open, 0, 1) * l.swing;
       l.ghost.rotation.y = l.door.rotation.y;
+    }
+    for (const l of this.lifts) {
+      const near = Math.hypot(player.x - l.center.x, player.z - l.center.z) < GARAGE_NEAR;
+      l.open = THREE.MathUtils.clamp(l.open + (near ? 1 : -1) * GARAGE_SPEED * dt, 0, 1);
+      l.pivot.rotation.z = l.ghost.rotation.z = THREE.MathUtils.smootherstep(l.open, 0, 1) * (Math.PI / 2);
     }
     for (const c of this.curtains) {
       const k = THREE.MathUtils.clamp(c.k + (c.drawn ? 1 : -1) * CURTAIN_SPEED * dt, 0, 1);

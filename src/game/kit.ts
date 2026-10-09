@@ -11,6 +11,8 @@
  * - porte : battant de 88 × 205 cm, poignée à +x, bas à y = 0 ;
  * - fenetre : fenêtre de 86 × 115 cm (cadre, croisillon, appui), bas à y = 0 ;
  * - tuile : tuile canal bombée vers le haut, longueur le long de z (-0,5 à 0,5), largeur x de ±0,355, bas à y = 0.
+ * Et à part (public/kit/porte-garage.glb, le modèle corrigé tel quel) :
+ * - garage : porte basculante de 240 × 210 cm, 6 cm d'épaisseur, x de ±1,2, face avant vers +z, bas à y = 0.
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -18,8 +20,9 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { createToonMaterial } from './toon';
 
 export const KIT_URL = `${import.meta.env.BASE_URL}kit/maison.glb`;
+const GARAGE_URL = `${import.meta.env.BASE_URL}kit/porte-garage.glb`;
 
-export type KitPiece = 'mur' | 'sol' | 'toit' | 'porte' | 'fenetre' | 'tuile';
+export type KitPiece = 'mur' | 'sol' | 'toit' | 'porte' | 'fenetre' | 'tuile' | 'garage';
 
 /** Une pièce du kit : ses maillages, matériaux devenus du cel shading. */
 export type Kit = Record<KitPiece, THREE.Object3D>;
@@ -28,13 +31,13 @@ let loading: Promise<Kit> | null = null;
 
 /** Charge le kit une seule fois. */
 export function loadKit(): Promise<Kit> {
-  loading ??= new GLTFLoader()
-    .setMeshoptDecoder(MeshoptDecoder)
-    .loadAsync(KIT_URL)
-    .then((gltf) => {
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  loading ??= Promise.all([loader.loadAsync(KIT_URL), loader.loadAsync(GARAGE_URL)])
+    .then(([gltf, garage]) => {
       const mats = new Map<THREE.Material, THREE.Material>();
       const kit = {} as Kit;
-      for (const node of [...gltf.scene.children]) {
+      garage.scene.children[0].name = 'garage';
+      for (const node of [...gltf.scene.children, garage.scene.children[0]]) {
         node.position.set(0, 0, 0);
         node.updateMatrixWorld(true);
         node.traverse((o) => {

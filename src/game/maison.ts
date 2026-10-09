@@ -22,8 +22,8 @@ export const CHAMBRE: Rect = { x0: SALLE_DE_BAIN.x1 + GAP, x1: SALON.x1, z0: SAL
 export const FRONT_DOOR = { x0: ENTREE.x0 + 0.7, x1: ENTREE.x0 + 1.6 };
 /** Porte entre l'entrée et le garage (le long de z). */
 const GARAGE_DOOR = { z0: -0.6, z1: 0.3 };
-/** Grande porte du garage, au sud (ouverte, en attendant sa porte basculante). */
-const CAR_DOOR = { x0: GARAGE.x0 + 1.2, x1: GARAGE.x0 + 3.8 };
+/** Grande porte du garage, au sud : la porte basculante du kit (240 cm). */
+const CAR_DOOR = { x0: GARAGE.x0 + 1.3, x1: GARAGE.x0 + 3.72 };
 /** Portes du salon vers la salle de bain et la chambre (le long de x). */
 const BATH_DOOR = { x0: SALLE_DE_BAIN.x0 + 0.75, x1: SALLE_DE_BAIN.x0 + 1.55 };
 const BED_DOOR = { x0: CHAMBRE.x1 - 1.3, x1: CHAMBRE.x1 - 0.45 };
@@ -93,7 +93,7 @@ export const ENTREE_SPEC: RoomSpec = {
   lightSwitch: { wall: 'sud', u: FRONT_DOOR.x1 + 0.2 },
 };
 
-/** Le garage : dalle de béton, grande porte au sud, porte vers l'entrée. */
+/** Le garage : dalle de béton, porte basculante au sud (elle s'ouvre devant le perso), porte vers l'entrée. */
 export const GARAGE_SPEC: RoomSpec = {
   ...empty,
   name: 'garage',
@@ -101,7 +101,7 @@ export const GARAGE_SPEC: RoomSpec = {
   floor: () => concrete(GARAGE),
   kitFloor: false,
   doors: [
-    { wall: 'sud', u0: CAR_DOOR.x0, u1: CAR_DOOR.x1 },
+    { wall: 'sud', u0: CAR_DOOR.x0, u1: CAR_DOOR.x1, garage: true },
     { wall: 'est', u0: GARAGE_DOOR.z0, u1: GARAGE_DOOR.z1 },
   ],
   joined: ['est'],
