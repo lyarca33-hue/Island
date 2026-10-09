@@ -4863,10 +4863,10 @@ export class Game {
     else if (item.def.bin && held.length) return this.throwInto(item, c.held!, running);
     // gazinière : y poser l'ustensile tenu, mettre l'ingrédient dans l'ustensile qui est dessus, sinon allumer ou éteindre
     else if (item.def.heat && !item.def.pour) return this.useStove(item, running);
-    // frigo : on y range ce qu'on tient ; mains vides, on l'ouvre (clic sur le côté : on le pousse)
+    // frigo : on y range ce qu'on tient ; mains vides, on l'ouvre
     else if (door && held.length) return this.storeIn(item, running);
     // porte ouverte (ou pas encore refermée) : tout clic sur le frigo la ferme, même là où la porte
-    // n'est plus (l'intérieur, le côté) ; sinon ce clic agrippait le frigo pour le pousser
+    // n'est plus (l'intérieur, le côté)
     else if (door && (door.target === 1 || door.open > 0)) return this.closeDoor(this.ref(item));
     else if (door && !opts.body) {
       return this.withDoorOpen(item, () => {}, running);
@@ -4881,8 +4881,8 @@ export class Game {
     else if (program(item.def)) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
     else if (item.def.bin && !item.def.outdoor && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
-    // mains vides : un gros meuble s'agrippe pour le déplacer
-    else if (item.def.movable && !held.length) return this.grabFurniture(item, running);
+    // mains vides : un clic sur un gros meuble ne fait rien (on le déplace par le menu, « Déplacer »)
+    else if (item.def.movable && !held.length) return false;
     // évier : la vaisselle sale en main se lave ; la tasse (propre) se remplit d'eau ; sinon on se lave les mains
     else if (item.def.wash?.dishes && held.some((h) => h.def.dish && h.dirty)) return this.washDishesAt(item, running);
     else if (item.def.wash && !held.some((h) => item.def.pour?.fills.includes(h.name))) return this.washAt(item, false, running);

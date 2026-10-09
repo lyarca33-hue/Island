@@ -248,7 +248,7 @@ clic droit sur le perso pour sauter (un demi-mètre : on peut retomber sur un me
 perso s'y hisse, s'y promène, et retombe en passant le bord.
 
 Déplacer un gros meuble (fiche `movable` : table, bibliothèque, machine à café) : mains vides,
-clic sur le meuble. Le perso se place contre le côté le plus proche et pose les mains dessus ;
+clic droit sur le meuble, « Déplacer » (un simple clic ne le prend plus). Le perso se place contre le côté le plus proche et pose les mains dessus ;
 Z Q S D le poussent ou le tirent (ce qui est posé ou rangé dedans suit), il bute sur les autres
 meubles. R et F le font pivoter sur lui-même (R vers la droite, F vers la gauche) : le perso
 tourne autour en gardant les mains dessus, et ce qui est posé dessus ou rangé dedans tourne avec.
