@@ -11,7 +11,6 @@ import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { type Argent, type ArgentSave, type Commande, readCommande } from './argent';
 import type { WorldItem } from './items/carry';
-import { ITEM_BY_ID } from './items/catalog';
 import type { NeedKey } from './needs';
 import { BODY_STATES } from './temperature';
 
@@ -51,11 +50,17 @@ export interface GameSave {
   body?: { temp: number; soaked: number; inner: number; state: string };
   items: ItemSave[];
   /**
-   * Les genres d'objets que le jeu connaissait à la sauvegarde. Un objet de la maison dont le
-   * genre n'y est pas est arrivé avec une mise à jour : on le garde au chargement au lieu de le
-   * croire mangé ou cassé. Absent des anciennes sauvegardes.
+   * Ancienne liste des genres d'objets que le jeu connaissait : plus lue (elle prenait les meubles
+   * ajoutés à la maison après la sauvegarde, d'un genre déjà connu, pour des objets cassés).
    */
   known?: string[];
+  /**
+   * La maison de départ de la version qui a sauvé : combien d'objets de chaque genre. Au
+   * chargement, un objet de départ que la sauvegarde n'a plus (mangé, cassé, jeté) est retiré ;
+   * ce qu'une mise à jour a ajouté à la maison depuis reste à sa place. Absent des anciennes
+   * sauvegardes : rien n'est retiré.
+   */
+  placed?: Record<string, number>;
   /** Le perso du créateur, pour le retrouver sur un autre appareil. */
   recipe?: Recipe;
   /** Le porte-monnaie et les objets cassés à racheter. Absent des anciennes sauvegardes : l'argent de départ. */
@@ -67,6 +72,8 @@ export interface GameSave {
 /** Ce que le jeu ouvre à la sauvegarde (Game.saveAccess) : ses objets et de quoi les refaire. */
 export interface SaveAccess {
   items: WorldItem[];
+  /** La maison de départ : combien d'objets de chaque genre (avant de reprendre la partie). */
+  placed: Record<string, number>;
   held: WorldItem[];
   add(id: string): WorldItem | null;
   remove(item: WorldItem): void;
@@ -145,7 +152,7 @@ export function captureGame(a: SaveAccess): GameSave {
     weather,
     body: { temp: round(a.body.temp), soaked: round(a.body.soaked), inner: round(a.body.inner), state: a.body.state },
     items,
-    known: [...ITEM_BY_ID.keys()],
+    placed: { ...a.placed },
     argent: a.argent.save(),
     ...(a.delivery() ? { commande: structuredClone(a.delivery()!) } : {}),
   };
@@ -154,8 +161,8 @@ export function captureGame(a: SaveAccess): GameSave {
 /**
  * Remet la partie sauvée dans un jeu tout neuf (juste construit). Chaque objet sauvé reprend un
  * objet du même genre déjà là, dans l'ordre ; ceux qui manquent sont créés (plats cuisinés, sacs
- * livrés…), ceux en trop retirés (mangés, cassés, jetés), sauf les genres arrivés depuis la
- * sauvegarde (voir GameSave.known), qui restent à leur place de départ.
+ * livrés…), ceux de la maison de départ qui manquent à la sauvegarde retirés (mangés, cassés,
+ * jetés) ; ce qu'une mise à jour a ajouté à la maison depuis reste à sa place (GameSave.placed).
  */
 export function applyGame(a: SaveAccess, s: GameSave): void {
   const pool = new Map<string, WorldItem[]>();
@@ -187,9 +194,14 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
     a.refresh(it);
     if (saved.x) a.setExtras(it, saved.x);
   }
-  // genres que la sauvegarde connaissait ; sans la liste (ancienne sauvegarde), ceux qu'elle contient
-  const known = new Set(s.known ?? s.items.map((saved) => saved.id));
-  for (const [id, left] of pool) if (known.has(id)) for (const it of left) a.remove(it);
+  // objets de départ en trop : autant que la maison de départ de la sauvegarde en a perdu ; les
+  // autres (meubles arrivés avec une mise à jour) restent. Sans la liste (ancienne sauvegarde) : tous restent.
+  const kept = new Map<string, number>();
+  for (const saved of s.items) kept.set(saved.id, (kept.get(saved.id) ?? 0) + 1);
+  for (const [id, left] of pool) {
+    const lost = Math.max(0, (s.placed?.[id] ?? 0) - (kept.get(id) ?? 0));
+    for (const it of left.slice(0, lost)) a.remove(it);
+  }
 
   a.clock.minutes = s.clock.minutes;
   a.clock.speed = s.clock.speed;

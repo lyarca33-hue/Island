@@ -18,9 +18,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { createToonMaterial } from '../toon';
-import type { Motion } from './rigs';
+import { poseMotion, ROOM_RIGS, type Motion } from './rigs';
 
+/** Les fichiers de modèles, un par pièce (public/models/<pièce>.glb). */
+export const TRIPO_PACKS = ['cuisine', 'salon', 'chambre', 'salle-de-bain', 'entree', 'garage'];
 export const TRIPO_URL = `${import.meta.env.BASE_URL}models/cuisine.glb`;
+const packUrl = (pack: string) => `${import.meta.env.BASE_URL}models/${pack}.glb`;
 
 type V3 = [number, number, number];
 
@@ -95,6 +98,43 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   chaise: { model: 'chaise-cuisine' },
   // la table basse de Tripo, montée à hauteur de table : seuls les pieds s'allongent, le plateau garde son épaisseur
   table: { model: 'table-basse', turn: Math.PI / 2, stretch: [0.3, 0.37] },
+
+  // —— les autres pièces (pieces.ts) ; leurs pièces mobiles sont réglées dans rigs.ts
+  ...Object.fromEntries(Object.entries(ROOM_RIGS).filter(([id]) => id !== 'rideau').map(([id, rig]) => [id, rig.look])),
+  canape: { model: 'canape' },
+  fauteuil: { model: 'fauteuil' },
+  'table-basse': { model: 'table-basse-salon' },
+  'meuble-tele': { model: 'console' },
+  // un peu réduite : sur le meuble télé, l'écran arrive à hauteur des yeux du canapé
+  television: { model: 'television', scale: [0.8, 0.8, 0.8], parts: { ecran: { from: 'ecran' } } },
+  bibliotheque: { model: 'bibliotheque' },
+  coussin: { model: 'coussin' },
+  telecommande: { model: 'telecommande' },
+  reveil: { model: 'reveil' },
+  sansevieria: { model: 'sansevieria' },
+  pull: { model: 'pull-plie' },
+  cintre: { model: 'vetement-cintre' },
+  lavabo: { model: 'lavabo' },
+  'porte-serviettes': { model: 'porte-serviettes' },
+  serviette: { model: 'serviette-etendue' },
+  'verre-dents': { model: 'verre-dents' },
+  'brosse-dents': { model: 'brosse-dents' },
+  'savon-pain': { model: 'savon-pain' },
+  'gel-douche': { model: 'flacon-douche' },
+  'papier-toilette': { model: 'papier-toilette' },
+  'porte-parapluies': { model: 'porte-parapluies' },
+  parapluie: { model: 'parapluie' },
+  chaussure: { model: 'chaussure' },
+  chausson: { model: 'chausson' },
+  botte: { model: 'botte-pluie' },
+  // la lettre du jeu est en long selon Z
+  lettre: { model: 'lettre', turn: Math.PI / 2 },
+  etabli: { model: 'etabli' },
+  'etagere-garage': { model: 'etagere-garage' },
+  carton: { model: 'carton' },
+  velo: { model: 'velo' },
+  beche: { model: 'beche' },
+  rateau: { model: 'rateau' },
 };
 
 /** Les modèles chargés : chaque pièce (nœud) avec sa géométrie dans le repère du modèle. */
@@ -105,13 +145,20 @@ interface Model {
 let models: Map<string, Model> | null = null;
 let loading: Promise<void> | null = null;
 
-/** Charge le fichier une seule fois ; s'il manque (tests, hors ligne), les objets restent faits par programme. */
+/** Charge les fichiers une seule fois ; s'il en manque (tests, hors ligne), ces objets restent faits par programme. */
 export function loadTripo(): Promise<void> {
-  loading ??= new GLTFLoader()
+  const out = new Map<string, Model>();
+  loading ??= Promise.all(TRIPO_PACKS.map((pack) => loadPack(pack, out))).then(() => {
+    models = out;
+  });
+  return loading;
+}
+
+function loadPack(pack: string, out: Map<string, Model>): Promise<void> {
+  return new GLTFLoader()
     .setMeshoptDecoder(MeshoptDecoder)
-    .loadAsync(TRIPO_URL)
+    .loadAsync(packUrl(pack))
     .then((gltf) => {
-      const out = new Map<string, Model>();
       for (const node of gltf.scene.children) {
         node.updateMatrixWorld(true);
         const parts = new Map<string, THREE.BufferGeometry>();
@@ -129,10 +176,21 @@ export function loadTripo(): Promise<void> {
           out.set(node.name, { parts, material });
         }
       }
-      models = out;
     })
-    .catch((e) => console.warn('modèles Tripo de la cuisine non chargés', e));
-  return loading;
+    .catch((e) => console.warn(`modèles Tripo (${pack}) non chargés`, e));
+}
+
+/**
+ * Le modèle `name` en entier (toutes ses pièces), pour le décor fixe d'une pièce : tapis, miroir,
+ * patères. Repère du modèle : posé au sol, l'avant vers +Z. Null s'il n'est pas chargé.
+ */
+export function tripoDecor(name: string): THREE.Group | null {
+  const src = models?.get(name);
+  if (!src) return null;
+  const g = new THREE.Group();
+  g.name = `decor-${name}`;
+  for (const geo of src.parts.values()) g.add(meshOf(geo, src.material));
+  return g;
 }
 
 /** Vrai si la fiche est habillée par un modèle Tripo (et qu'il est chargé). */
@@ -238,7 +296,11 @@ export function dressTripo(id: string, model: THREE.Object3D): THREE.Object3D {
     const d = look.parts?.[name]?.drop;
     if (d !== undefined) part.userData.drop = d;
     const motion = look.parts?.[name]?.motion;
-    if (motion) part.userData.motion = motion;
+    if (motion) {
+      part.userData.motion = motion;
+      // au repos (fermé, baissé) : l'abattant des toilettes, modélisé relevé, est rabattu
+      poseMotion(part, motion, 0);
+    }
   }
   // l'intérieur fait par programme (étagères, paniers) devient une pièce fixe comme les autres : regroupée (merge.ts)
   const inner: THREE.Object3D[] = [];

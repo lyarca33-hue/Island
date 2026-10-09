@@ -67,7 +67,23 @@ le mur de la porte, le frigo-congélateur et le garde-manger ; deux placards hau
 de travail ; la table et deux chaises devant la fenêtre du sud. Les meubles sont rangés par rangées
 dos au mur (`runs` dans la fiche `KITCHEN`). Portes, tiroirs, boutons et levier sont ceux des
 modèles, branchés sur les interactions du jeu. La vaisselle et les ustensiles reviendront au prochain
-lot. Sans chambre ni salle de bain, la fatigue, l'hygiène et la vessie sont en pause.
+lot.
+
+Autour de la cuisine, les **autres pièces sont meublées avec leurs modèles Tripo** (`src/game/maison.ts`
+pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pièce>.glb`) :
+- le **salon** : le meuble télé et la télé au fond, le canapé face à elle avec ses deux coussins, la
+  table basse sur le tapis, le fauteuil et le lampadaire, la bibliothèque et quelques livres ;
+- la **chambre** : le lit tête au mur, une table de nuit de chaque côté (lampe de chevet, réveil qui
+  donne l'heure), l'armoire, la plante et le tapis ;
+- la **salle de bain** : la douche dans le coin, les toilettes, le lavabo (le robinet coule, on s'y
+  lave les mains) sous son miroir, le porte-serviettes ;
+- l'**entrée** : le portemanteau et son manteau, le miroir, les chaussures, le porte-parapluies, une
+  lettre sous la porte, la boîte aux lettres dehors ;
+- le **garage** : l'établi et sa caisse à outils, l'étagère, des cartons, le vélo, la bêche et le râteau.
+
+Tapis, douche, miroirs et portemanteau sont du décor fixe (`decor`) ; le reste se prend ou se pousse.
+Dormir, la télé, la douche et les toilettes, retirés avec l'ancienne maison, ne sont pas encore
+rebranchés : la fatigue, l'hygiène et la vessie restent en pause.
 
 ### Les ordres
 
@@ -147,7 +163,8 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/packs/assets.ts` | Chargement des packs de Quaternius (aliments), modèles mis à la taille |
 | `src/game/room.ts` | La cuisine : carrelage, murs en coupe, porte, fenêtres, toit ; meubles rangés contre les murs |
 | `src/game/kit.ts` | Le kit Tripo de la maison : enduit des murs, sol, toit, porte, fenêtre |
-| `src/game/items/tripo.ts` | Meubles et appareils de la cuisine faits avec Tripo : modèle, pièces mobiles posées sur leur charnière |
+| `src/game/items/tripo.ts` | Meubles et objets de la maison faits avec Tripo : modèle, pièces mobiles posées sur leur charnière |
+| `src/game/items/pieces.ts` | Fiches des meubles et objets du salon, de la chambre, de la salle de bain, de l'entrée et du garage |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |

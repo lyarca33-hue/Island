@@ -36,8 +36,8 @@
 - Aliments (`public/packs/nourriture.glb`, converti par `tools/build_pack_assets.mjs`) :
   [Ultimate Food Pack](https://quaternius.com/packs/ultimatefood.html) de [Quaternius](https://quaternius.com),
   **CC0** (pomme, tomate, steak, pizza, œuf…, recolorés).
-- Kit de la maison (`public/kit/maison.glb`) et meubles, appareils et ustensiles de la cuisine
-  (`public/models/cuisine.glb`) : modèles générés avec [Tripo](https://www.tripo3d.ai) (licence d'usage
+- Kit de la maison (`public/kit/maison.glb`) et meubles et objets des pièces
+  (`public/models/cuisine.glb`, `salon.glb`, `chambre.glb`, `salle-de-bain.glb`, `entree.glb`, `garage.glb`) : modèles générés avec [Tripo](https://www.tripo3d.ai) (licence d'usage
   commercial), retouchés et regroupés par `tools/build_kit_assets.mjs` et `tools/build_cuisine_assets.mjs`.
 - [three-vrm](https://github.com/pixiv/three-vrm) (MIT) : lecture des VRM, shader MToon, expressions, ressorts.
 - three.js (MIT), React (MIT), Vite (MIT).
