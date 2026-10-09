@@ -37,7 +37,7 @@ const cooked = <T extends THREE.Mesh>(m: T): T => {
 };
 
 /** Couleur du bouillon dans la casserole (soupe de légumes, soupe en brique). */
-export const SOUP_BROTH: Record<string, THREE.ColorRepresentation> = { 'soupe de légumes': 0xd9893a, soupe: 0xe0a03c };
+export const SOUP_BROTH: Record<string, THREE.ColorRepresentation> = { 'soupe de légumes': 0xd9893a, 'soupe de poireaux': 0xd8d9a0, soupe: 0xe0a03c };
 
 /** Paquets qu'on verse dans l'eau qui bout : nom → id de ce qui cuit, combien de fois on s'en sert, et le mot du geste. */
 export const PACKETS: Record<string, { cooks: string; servings: number; what: string }> = {
@@ -46,12 +46,14 @@ export const PACKETS: Record<string, { cooks: string; servings: number; what: st
 };
 
 /** Légumes (coupés, ou qui cuisent tels quels) qui vont dans la soupe. */
-export const SOUP_VEG = ['rondelles de carotte', 'tranches de tomate', 'courgette', 'poivron', 'champignons', 'oignon'];
+export const SOUP_VEG = ['rondelles de carotte', 'tranches de tomate', 'courgette', 'poivron', 'champignons', 'oignon', 'poireau', 'pomme de terre'];
+/** Un poireau dans la soupe en fait une soupe de poireaux (avec les pommes de terre, la vraie). */
+export const LEEK_SOUP = { veg: 'poireau', from: 'soupe-legumes', to: 'soupe-poireaux' };
 
 /** Ce qui s'égoutte avant d'être servi (cuit dans l'eau, on ne garde pas l'eau). */
 export const DRAINS = ['pâtes', 'riz'];
 /** Ce qui se sert à la louche, dans un bol, avec son bouillon. */
-export const SOUPS = ['soupe de légumes', 'soupe'];
+export const SOUPS = ['soupe de légumes', 'soupe de poireaux', 'soupe'];
 
 /** Ce qu'on met sur les pâtes ou le riz cuits : nom du plat → nom de ce qu'on ajoute → id du plat obtenu. */
 export const TOPPED: Record<string, Record<string, string>> = {
@@ -63,7 +65,7 @@ export const SAUCE_SERVINGS = 3;
 
 /** Se rangent au garde-manger. */
 export const FECULENT_PANTRY = ['paquet de pâtes', 'paquet de riz', 'brique de soupe'];
-export const FECULENT_FEMININE = ['pâtes', 'pâtes au beurre', 'pâtes à la tomate', 'soupe de légumes', 'soupe', 'brique de soupe'];
+export const FECULENT_FEMININE = ['soupe de poireaux', 'pâtes', 'pâtes au beurre', 'pâtes à la tomate', 'soupe de légumes', 'soupe', 'brique de soupe'];
 export const FECULENT_PLURAL = ['pâtes', 'pâtes au beurre', 'pâtes à la tomate'];
 /** Stock voulu (liste de courses). */
 export const FECULENT_STOCK: Record<string, number> = { 'paquet de pâtes': 1, 'paquet de riz': 1, 'brique de soupe': 1 };
@@ -74,6 +76,7 @@ export const FECULENT_RECIPES: Array<{ name: string; needs: string[]; how: strin
   { name: 'pâtes à la tomate', needs: ['paquet de pâtes', 'sauce tomate'], how: 'Comme les pâtes au beurre, mais verse la sauce tomate sur les pâtes égouttées.' },
   { name: 'riz', needs: ['paquet de riz'], how: 'Eau qui bout dans la casserole, verse le riz, attends qu’il soit cuit, égoutte à l’évier, sers. Beurre ou sauce tomate par-dessus si tu veux.' },
   { name: 'soupe de légumes', needs: ['carotte', 'tomate'], how: 'Coupe les légumes sur la planche, mets-les dans la casserole pleine d’eau, fais cuire sur le feu, puis sers à la louche dans un bol. Se mange à la cuillère.' },
+  { name: 'soupe de poireaux', needs: ['poireau', 'pomme de terre'], how: 'Casserole pleine d’eau, mets-y le poireau et une pomme de terre (et ce que tu veux en plus), fais cuire sur le feu, puis sers à la louche dans un bol.' },
   { name: 'soupe', needs: ['brique de soupe'], how: 'Verse la brique dans la casserole, réchauffe-la sur le feu, sers à la louche dans un bol.' },
 ];
 
@@ -178,5 +181,6 @@ export const FECULENT_ITEMS: ItemDef[] = [
   starch('riz-beurre', 'riz au beurre', 40, 0xfffcf2, RICE_COOK, () => butterOn(riceHeap())),
   starch('riz-tomate', 'riz à la tomate', 45, 0xd0503a, RICE_COOK, () => sauceOn(riceHeap())),
   soup('soupe-legumes', 'soupe de légumes', 30, { seconds: 38, burn: 30, colors: [0xd9a05a, 0xd9893a, 0x3a2a20] }, [0xe8792a, 0xc0302a, 0x4f8a3a]),
+  soup('soupe-poireaux', 'soupe de poireaux', 38, { seconds: 40, burn: 30, colors: [0xe6e3b0, 0xd8d9a0, 0x3a2a20] }, [0x4f8a3a, 0xe8eccf, 0xe6cf8a]),
   soup('soupe-brique', 'soupe', 25, { seconds: 12, burn: 30, colors: [0xd9b46a, 0xe0a03c, 0x3a2a20] }, [], 'froid'),
 ];
