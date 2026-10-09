@@ -143,7 +143,8 @@ export const PIECES_ITEMS: ItemDef[] = [
     movable: false,
     fragility: 7,
     pour: { at: [0, BASIN_FLOOR, BASIN_Z], fills: ['tasse', 'verre', 'carafe', "bouteille d'eau"], liquid: 'eau', seconds: 2, color: 0x9fcde6, drain: true },
-    wash: { hands: [0, 0.88, 0.04] },
+    // les mains dans la vasque, sous le bec : l'eau tombe dessus
+    wash: { hands: [0, 0.79, 0.01] },
     build: () => {
       const g = block([0.78, 1.04, 0.74], 0xd8d6d0);
       // l'eau qui monte dans la vasque bouchée, le bouchon, le filet du robinet (Game.tickSinks)
@@ -156,7 +157,8 @@ export const PIECES_ITEMS: ItemDef[] = [
       plug.name = 'bouchon';
       plug.visible = false;
       plug.position.set(0, BASIN_FLOOR + 0.006, BASIN_Z);
-      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 1, 8), createToonMaterial({ color: 0x9fd3ef, rimStrength: 0 }));
+      // un filet assez gros et clair pour se voir de loin, sur la porcelaine grise
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 1, 10), new THREE.MeshBasicMaterial({ color: 0xc4ecff, transparent: true, opacity: 0.9 }));
       jet.name = 'jet';
       jet.visible = false;
       jet.position.set(...TAP);
