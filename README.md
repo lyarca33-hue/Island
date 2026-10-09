@@ -337,8 +337,10 @@ casserole posées dessus au départ ; steaks et pommes de terre crus dans le fri
 Cuisine (`src/game/items/kitchen.ts`), alignée de l'autre côté de la machine à café : placard
 (le micro-ondes posé dessus), four, lave-vaisselle, meuble à tiroir et poubelle. Leurs dessus font
 plan de travail (on y pose ce qu'on tient).
-- Clic sur une porte (ou le tiroir, ou le couvercle de la poubelle) mains vides : elle s'ouvre ;
-  un deuxième clic la ferme. Objet en main, clic sur le meuble : le perso ouvre et range (placard :
+- Clic mains vides sur un meuble qui a un inventaire (frigo, placard, tiroir, armoire, barres au
+  mur, bibliothèque…) : son inventaire à cases s'ouvre ; un clic sur un objet de la grille ouvre la
+  porte et le sort. Porte restée ouverte : un clic la ferme. Le couvercle de la poubelle s'ouvre au
+  clic. Objet en main, clic sur le meuble : le perso ouvre et range (placard :
   tasse, assiette, bouteille, pomme ; tiroir : couverts, lettre ; four et micro-ondes : steak, pomme de terre, pain, sandwich ;
   lave-vaisselle : tasse, assiette, couverts). Ce qui est dans le tiroir sort et rentre avec lui.
 - Four, micro-ondes, lave-vaisselle : clic sur le côté (pas la porte) mains vides, le perso ferme
