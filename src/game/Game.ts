@@ -1649,6 +1649,11 @@ export class Game {
   private showering: { shower: WorldItem; t: number } | null = null;
   private wet = 0;
   private dripT = 0;
+  /** Serviettes : chaque maillage du tissu et ses positions au repos (le tissu ondule, tickTowels). */
+  private cloth = new Map<WorldItem, Array<{ geo: THREE.BufferGeometry; rest: Float32Array; top: number; h: number }>>();
+  /** En train de se sécher : la serviette frotte (le tissu bouge plus fort). */
+  private rubbing = 0;
+  private clothT = 0;
   /** Assis aux toilettes, et depuis combien de temps ; couvercles (0 fermé, 1 ouvert) ; chasses d'eau en cours (s qui restent). */
   private toiletVisit: { toilet: WorldItem; t: number } | null = null;
   private lids = new Map<WorldItem, { open: number; target: number }>();
@@ -4055,19 +4060,74 @@ export class Game {
       if (!c.freeHand(towel)) return this.notice(`Les mains sont prises (${c.heldItems.map((h) => h.name).join(' et ')}). E pour poser.`);
       return c.pickUp(towel, running, this.shelfOf(towel)?.forward, () => this.dryOff(this.ref(towel), running));
     }
-    const at = (y: number) => () => c.position.clone().addScaledVector(c.forward, 0.2).setY(y);
+    // la serviette frotte de gauche à droite : le buste, puis la tête (un côté, l'autre)
+    const at = (y: number, side = 0) => () => {
+      const right = new THREE.Vector3(-c.forward.z, 0, c.forward.x);
+      const rub = Math.sin(this.clothT * 9);
+      return c.position.clone().addScaledVector(c.forward, 0.2).addScaledVector(right, side * 0.09 + rub * 0.08).setY(y + 0.03 * Math.cos(this.clothT * 18));
+    };
     const wasWet = this.wet > 0 || this.body.soaked > 0.15;
-    return hand.cut(at(1.15), () => {
-      if (!hand.cut(at(1.5), () => {
-        this.wet = 0;
-        this.body.dry();
+    const done = () => {
+      this.rubbing = 0;
+      this.wet = 0;
+      this.body.dry();
+    };
+    const steps: Array<[number, number]> = [[1.15, 0], [1.25, 0], [1.5, -1], [1.5, 1]];
+    const next = (i: number): void => {
+      if (i === steps.length) {
+        done();
         if (wasWet) this.wearItem(towel, 1);
         this.onNotice?.(wasWet ? 'Tu es sec. Remets la serviette sur le porte-serviettes.' : 'Tu es déjà sec, mais ça fait du bien.');
-      })) {
-        this.wet = 0;
-        this.body.dry();
+        return;
       }
-    });
+      if (!hand.cut(at(...steps[i]), () => next(i + 1))) done();
+    };
+    this.rubbing = 1;
+    if (!hand.cut(at(...steps[0]), () => next(1))) return done(), false;
+    return true;
+  }
+
+  /**
+   * Le tissu des serviettes ondule : pendue, elle bouge à peine ; tenue, elle se balance quand le
+   * perso marche ; en se séchant, elle frotte et se froisse. Le bas bouge, le haut (pli, main) reste.
+   */
+  private tickTowels(dt: number): void {
+    this.clothT += dt;
+    const c = this.character;
+    for (const towel of this.items) {
+      if (!towel.def.bathTowel) continue;
+      let parts = this.cloth.get(towel);
+      if (!parts) {
+        parts = [];
+        towel.object.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh || m.name || !m.visible || (m.geometry.getAttribute('position')?.count ?? 0) < 60) return;
+          // le maillage peut être partagé avec d'autres serviettes : une copie à soi
+          m.geometry = m.geometry.clone();
+          const pos = m.geometry.getAttribute('position');
+          m.geometry.computeBoundingBox();
+          const b = m.geometry.boundingBox!;
+          parts!.push({ geo: m.geometry, rest: Float32Array.from(pos.array as Float32Array), top: b.max.y, h: Math.max(0.05, b.max.y - b.min.y) });
+        });
+        this.cloth.set(towel, parts);
+      }
+      const held = c.carried.includes(towel);
+      const amp = held ? (this.rubbing ? 0.035 : c.moveGait !== 'idle' ? 0.03 : 0.012) : 0.006;
+      const speed = held && this.rubbing ? 9 : held ? 3.2 : 1.4;
+      const t = this.clothT * speed;
+      for (const part of parts) {
+        const pos = part.geo.getAttribute('position') as THREE.BufferAttribute;
+        const a = pos.array as Float32Array, r = part.rest;
+        for (let i = 0; i < a.length; i += 3) {
+          const y = r[i + 1];
+          // 0 en haut (là où elle est tenue ou pliée sur la barre), 1 en bas
+          const k = Math.min(1, Math.max(0, (part.top - y) / part.h)) ** 1.5;
+          a[i] = r[i] + amp * k * Math.sin(t + y * 7 + r[i + 2] * 5);
+          a[i + 2] = r[i + 2] + amp * k * Math.cos(t * 0.8 + y * 6 + r[i] * 4);
+        }
+        pos.needsUpdate = true;
+      }
+    }
   }
 
   /**
@@ -5984,6 +6044,7 @@ export class Game {
     this.tickSinks(dt);
     this.tickToilet(dt);
     this.tickShower(dt);
+    this.tickTowels(dt);
     this.tickBathroom(dt);
     this.tickIce(dt);
     this.tickTea(dt);
