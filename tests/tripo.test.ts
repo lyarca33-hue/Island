@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ITEM_BY_ID } from '../src/game/items/catalog';
-import { clipY, TRIPO_LOOKS } from '../src/game/items/tripo';
+import { clipY, stretchY, TRIPO_LOOKS } from '../src/game/items/tripo';
 
 /** Aire totale des triangles d'une géométrie sans index. */
 function area(g: THREE.BufferGeometry): number {
@@ -44,5 +44,12 @@ describe('modèles Tripo de la cuisine', () => {
     expect(area(bas) + area(haut)).toBeCloseTo(area(g), 6);
     // les coordonnées de texture suivent la coupe
     expect(bas.getAttribute('uv').count).toBe(bas.getAttribute('position').count);
+  });
+
+  it('monte la table basse à hauteur de table sans épaissir le plateau', () => {
+    const g = stretchY(new THREE.BoxGeometry(1, 0.37, 1).translate(0, 0.185, 0), 0.3, 0.37);
+    g.computeBoundingBox();
+    expect(g.boundingBox!.min.y).toBeCloseTo(0, 6);
+    expect(g.boundingBox!.max.y).toBeCloseTo(0.74, 6);
   });
 });

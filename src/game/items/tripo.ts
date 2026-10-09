@@ -51,6 +51,8 @@ export interface TripoLook {
   at?: V3;
   /** Socle sous le modèle (m) : le four, plus bas que le plan de travail, monté dessus. */
   plinth?: number;
+  /** Allonge ce qui est sous la hauteur y (repère du modèle) de `by` mètres : les pieds de la table basse. */
+  stretch?: [y: number, by: number];
 }
 
 /** Les fiches habillées et leur modèle. */
@@ -88,6 +90,8 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   'grille-pain': { model: 'grille-pain', turn: Math.PI / 2, parts: { levier: { from: 'levier', drop: 0.04 } } },
   poubelle: { model: 'poubelle' },
   chaise: { model: 'chaise-cuisine' },
+  // la table basse de Tripo, montée à hauteur de table : seuls les pieds s'allongent, le plateau garde son épaisseur
+  table: { model: 'table-basse', turn: Math.PI / 2, stretch: [0.3, 0.37] },
 };
 
 /** Les modèles chargés : chaque pièce (nœud) avec sa géométrie dans le repère du modèle. */
@@ -146,7 +150,11 @@ function bake(id: string, look: TripoLook, model: Model) {
     .multiply(new THREE.Matrix4().makeRotationY(look.turn ?? 0))
     .multiply(new THREE.Matrix4().makeScale(...(look.scale ?? [1, 1, 1])))
     .multiply(new THREE.Matrix4().makeTranslation(0, look.clip ? -s0 : 0, 0));
-  const place = (g: THREE.BufferGeometry) => (look.clip ? clipY(g, s0, s1) : g.clone()).applyMatrix4(m);
+  const place = (g: THREE.BufferGeometry) => {
+    const out = look.clip ? clipY(g, s0, s1) : g.clone();
+    if (look.stretch) stretchY(out, ...look.stretch);
+    return out.applyMatrix4(m);
+  };
   const moving = new Set(Object.values(look.parts ?? {}).map((p) => p.from));
   const fixed = [...model.parts].filter(([name]) => !moving.has(name)).map(([, g]) => place(g));
   const parts = new Map<string, THREE.BufferGeometry>();
@@ -265,6 +273,17 @@ function merge(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
     out.setAttribute(name, new THREE.BufferAttribute(arr, size));
   }
   return out;
+}
+
+/** Allonge une géométrie en hauteur sous y : ce qui est dessous s'étire de `by`, ce qui est dessus monte d'autant. */
+export function stretchY(g: THREE.BufferGeometry, y: number, by: number): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const v = p.getY(i);
+    p.setY(i, v < y ? (v * (y + by)) / y : v + by);
+  }
+  p.needsUpdate = true;
+  return g;
 }
 
 /**
