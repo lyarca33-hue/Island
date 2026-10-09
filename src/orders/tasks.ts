@@ -95,6 +95,8 @@ export type Intent =
   | { kind: 'regarder'; ref: string }
   /** Ranger à sa place l'objet `ref` (pris d'abord si besoin), sinon ce qu'on tient. */
   | { kind: 'ranger_place'; ref?: string }
+  /** Ranger une pièce (celle du perso si omise) : chaque objet à sa place, la vaisselle sale à l'évier. */
+  | { kind: 'ranger_piece'; piece?: string }
   /** Ouvrir le meuble `ref` et laisser la porte ouverte. */
   | { kind: 'laisser_ouvert'; ref: string }
   /** Mettre des glaçons (bac pris au congélateur si besoin) dans la tasse `dans` (sinon la tasse). */
@@ -175,6 +177,7 @@ export function intentLabel(i: Intent): string {
   if (i.kind === 'vaisselle') return `faire la vaisselle${i.refs.length ? ` ${i.refs.join(', ')}` : ''}`;
   if (i.kind === 'repas') return `manger à table${i.ref ? ` ${i.ref}` : ''}`;
   if (i.kind === 'preparer') return `préparer${i.plat ? ` ${i.plat}` : ' un plat'}`;
+  if (i.kind === 'ranger_piece') return `ranger ${i.piece ? `la pièce ${i.piece}` : 'la pièce'}`;
   if (i.kind === 'acheter') return `acheter ${i.lignes.map((l) => `${l.n} ${l.id}`).join(', ')}`;
   return `${i.kind.replace('_', ' ')}${what ? ` ${what}` : ''}${sur}`;
 }
@@ -809,6 +812,28 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
     case 'ranger_place':
       if (intent.ref) await take(game, act, intent.ref);
       return act('ranger_place');
+    case 'ranger_piece': {
+      const piece = intent.piece ?? game.roomName;
+      if (!piece) throw new Failed('Quelle pièce ranger ?');
+      // ce qu'on tient d'abord, puis un objet après l'autre (chacun une fois : s'il n'a pas de place, on passe)
+      if (held(game).length) await act('ranger_place').catch(() => {});
+      const tried = new Set<string>();
+      for (let i = 0; i < 60; i++) {
+        const ref = game.toTidy(piece).find((r) => !tried.has(r));
+        if (!ref) break;
+        tried.add(ref);
+        try {
+          await take(game, act, ref);
+          await act('ranger_place');
+        } catch (e) {
+          if ((e as Error).message === 'Interrompu.') throw e;
+          // pas de place pour lui : on le repose et on continue
+          if (held(game).length) await act('poser').catch(() => {});
+        }
+      }
+      if (!tried.size) game.onNotice?.(`Rien à ranger : ${piece}.`);
+      return;
+    }
     case 'laisser_ouvert':
       return act('laisser_ouvert', { objet: intent.ref });
     case 'glacons': {

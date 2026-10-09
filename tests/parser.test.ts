@@ -151,4 +151,12 @@ describe('ordres de la cuisine : magasin, marché, appareils', () => {
     expect(parse('combien il me reste ?')).toEqual([{ kind: 'argent' }]);
     expect(parse('combien d’argent j’ai ?')).toEqual([{ kind: 'argent' }]);
   });
+
+  it('ranger une pièce', () => {
+    expect(parse('range la cuisine')).toEqual([{ kind: 'ranger_piece', piece: 'cuisine' }]);
+    expect(parse('range ta chambre')).toEqual([{ kind: 'ranger_piece', piece: 'chambre' }]);
+    expect(parse('range la salle de bain')).toEqual([{ kind: 'ranger_piece', piece: 'salle de bain' }]);
+    expect(parse('range la pièce')).toEqual([{ kind: 'ranger_piece', piece: undefined }]);
+    expect(parse('range les livres')).toEqual([{ kind: 'ranger', refs: [] }]);
+  });
 });

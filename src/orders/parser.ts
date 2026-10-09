@@ -91,6 +91,11 @@ const VERBS: Record<string, string[]> = {
 /** Les pièces de la maison (nom de leur RoomSpec), par mots dits. */
 const ROOM_WORDS: Array<[string[], string]> = [
   [['cuisine'], 'cuisine'],
+  [['salon'], 'salon'],
+  [['chambre'], 'chambre'],
+  [['salle de bain', 'salle de bains', 'sdb'], 'salle de bain'],
+  [['entree'], 'entrée'],
+  [['garage'], 'garage'],
 ];
 /** La pièce nommée dans l'ordre, s'il y en a une. */
 function roomIn(rest: string[]): string | undefined {
@@ -529,6 +534,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'ranger': {
       // « range les courses » : le sac, vidé à sa place
       if (rest.includes('courses') || found.some((o) => o.nom === 'sac de courses')) return [{ kind: 'ranger_courses' }];
+      // « range la cuisine », « range ta chambre », « range la pièce » : tout ce qui traîne, à sa place
+      const room = roomIn(rest);
+      if ((room || rest.includes('piece')) && !found.some((o) => o.portable)) return [{ kind: 'ranger_piece', piece: room }];
       // « range-le » : ce qu'on tient
       if (rest.length && rest.every((x) => ['le', 'la', 'les', 'l', 'ca'].includes(x))) return [{ kind: 'ranger', refs: [], onlyHeld: true }];
       // « range la chaise (sous la table) »

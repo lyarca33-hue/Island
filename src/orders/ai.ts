@@ -144,6 +144,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "couper_assiette"} : assis devant l'assiette servie, couper le plat en bouchées avec le couteau de table
 - {"tache": "regarder", "objet": "<ref>"} : ouvrir un meuble (frigo, congélateur, placard, tiroir) et regarder ce qu'il contient
 - {"tache": "ranger_place", "objet": "<ref>"} : ranger un objet à sa place sans nommer le meuble (« objet » facultatif : ce qu'on tient) : aliments au frigo, glaçons et lasagne au congélateur, vaisselle au placard, couverts au tiroir
+- {"tache": "ranger_piece", "piece": "cuisine"} : ranger une pièce (cuisine, salon, chambre, salle de bain, entrée, garage ; « piece » vide = celle où est le perso) : chaque objet qui traîne retourne à sa place, la vaisselle sale va dans l'évier
 - {"tache": "laisser_ouvert", "objet": "<ref>"} : ouvrir un meuble et laisser sa porte ouverte (elle ne se referme plus seule)
 - {"tache": "glacons", "dans": "<ref>"} : mettre des glaçons (bac au congélateur) dans une tasse (« dans » facultatif)
 - La lasagne du congélateur est congelée : il faut la « mettre » au micro-ondes (ou au four) et l'« allumer » avant de la manger
@@ -171,7 +172,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "faire_lit", "objet": "<ref du lit>"} : faire le lit défait (tirer la couette, la lisser)
 - {"tache": "verrou", "fermer": true} : fermer à clé la porte de la salle de bain, de l'intérieur (« fermer » faux : la déverrouiller) ; le perso la déverrouille tout seul en sortant
 - {"tache": "reveil", "heure": 7.5} : régler le réveil de la chambre à 7 h 30 (à la demi-heure près) ; {"tache": "reveil", "couper": true} le coupe ; {"tache": "reveil", "arreter": true} arrête sa sonnerie ; {"tache": "reveil", "sonnerie": "cloche"} change la sonnerie (cloche, bip, mélodie ; "" : la suivante). Réglé, il sonne chaque jour et réveille le perso qui dort
-- {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (pour l'instant, seulement la cuisine)
+- {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (cuisine, salon, chambre, salle de bain, entrée, garage)
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
 - {"tache": "preparer", "plat": "<id du plat>"} : préparer un plat d'une recette ; le perso coupe et fait cuire ce qu'il faut, réunit les ingrédients sur la planche à découper et les assemble. Plats : "salade-composee" (tomate et concombre coupés, carotte en plus), "tartine-tomate" (pain et tomate coupés), "sandwich-steak" (pain coupé et steak cuit, tomate ou concombre en plus), "steak-pommes-de-terre" (steak et pomme de terre cuits). Le plat se mange comme le sandwich, ou se sert dans l'assiette pour un repas à table
@@ -273,6 +274,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'couper_assiette': return { kind: 'couper_assiette' };
     case 'regarder': return s('objet') ? { kind: 'regarder', ref: s('objet') } : null;
     case 'ranger_place': return { kind: 'ranger_place', ref: s('objet') || undefined };
+    case 'ranger_piece': return { kind: 'ranger_piece', piece: s('piece') || undefined };
     case 'laisser_ouvert': return s('objet') ? { kind: 'laisser_ouvert', ref: s('objet') } : null;
     case 'glacons': return { kind: 'glacons', dans: s('dans') || undefined };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
