@@ -84,6 +84,17 @@ describe('reprise de la partie', () => {
     expect(removed).toEqual(['chaise']);
   });
 
+  it("ce qu'une mise à jour a retiré de la maison de départ disparaît aussi de la partie", () => {
+    // sauvée quand l'armoire avait sa serviette et sa chemise ; la maison n'a plus que la serviette de la salle de bain
+    const { access, removed } = house(['serviette']);
+    const added: string[] = [];
+    access.add = (id: string) => (added.push(id), thing(id));
+    applyGame(access, save(['serviette', 'serviette', 'cintre'], { placed: { serviette: 2, cintre: 1 } }));
+    expect(added).toEqual([]);
+    expect(removed).toEqual([]);
+    expect(access.items.map((i) => i.def.id)).toEqual(['serviette']);
+  });
+
   it("sans maison de départ (ancienne sauvegarde), rien n'est retiré", () => {
     const { access, removed } = house(['frigo', 'chaise']);
     applyGame(access, save(['chaise'], { known: ['frigo', 'chaise'] }));

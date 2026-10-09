@@ -55,8 +55,7 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
   ],
   // le garage : le râteau et la bêche pendus à leur rangement
   ['rangement-outils', 0, ['rateau', 'beche']],
-  // la chambre : la chemise sur son cintre et le linge dans l'armoire ; un livre dans chaque table de nuit
-  ['armoire', 0, ['cintre', 'pull', 'serviette']],
+  // la chambre : un livre dans chaque table de nuit (l'armoire n'a que ses habits en silhouette, pieces.ts)
   ['table-de-nuit', 0, ['livre-vert']],
   ['table-de-nuit', 1, ['livre-ocre']],
 ];
