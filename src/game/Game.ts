@@ -5452,8 +5452,13 @@ export class Game {
     });
   }
 
-  /** Clic gauche sur un objet : le prendre (ou ouvrir la porte, appuyer sur le bouton…). */
+  /** Clic gauche sur un objet : le prendre (ou ouvrir la porte, appuyer sur le bouton, allumer la lampe…). */
   private clickItem(hit: NonNullable<ReturnType<Game['hitAt']>>, shift: boolean): void {
+    // lampe : un clic l'allume ou l'éteint (on la prend par « Prendre », au clic droit, ou en la traînant)
+    if (this.lamps.has(hit.item) && !this.character.carried.includes(hit.item) && !this.moving) {
+      this.switchLamp(this.ref(hit.item), undefined, shift);
+      return;
+    }
     // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser
     this.tryPickUp(hit.item, shift, { body: !!(hit.item.def.door || hit.item.def.drawer) && !hit.door, button: hit.button });
   }
