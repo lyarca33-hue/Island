@@ -756,6 +756,8 @@ export class Game {
     }
 
     for (const item of this.items) item.setCondition(START_WEAR[item.def.id] ?? 1);
+    // la maison de départ de cette version du jeu : la sauvegarde s'en sert pour reconnaître ce qui a été mangé ou cassé
+    for (const item of this.items) this.placed[item.def.id] = (this.placed[item.def.id] ?? 0) + 1;
     // petites pièces (boutons, repères, chapeaux de brûleur…) sans ombre : quelques texels effacés
     // par le flou de l'ombre, mais un dessin de plus dans chaque carte d'ombre (six par lampe)
     const sphere = new THREE.Sphere();
@@ -7173,10 +7175,14 @@ export class Game {
     applyGame(this.saveAccess(), s);
   }
 
+  /** Combien d'objets de chaque genre la maison a au départ (voir GameSave.placed). */
+  private placed: Record<string, number> = {};
+
   private saveAccess(): SaveAccess {
     const asArray = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null);
     return {
       items: this.items,
+      placed: this.placed,
       held: this.character.carried,
       add: (id) => {
         const def = ITEM_BY_ID.get(id);
