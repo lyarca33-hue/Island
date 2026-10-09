@@ -332,8 +332,11 @@ export class Room {
   private capMat = toon(CAP);
   /** Murs pleins visibles, pour les clics (un clic sur un mur vise le sol à son pied). */
   private solid: THREE.Object3D[] = [];
-  /** Lumières qui entrent par les fenêtres (sans ombre : le soleil fait déjà la sienne par la fenêtre). */
-  private winLights: THREE.SpotLight[] = [];
+  /**
+   * Lumières qui entrent par les fenêtres (sans ombre : le soleil fait déjà la sienne par la fenêtre).
+   * Jamais dessinées elles-mêmes : la pièce du perso les prête aux projecteurs de Game (windowLights).
+   */
+  readonly winLights: THREE.SpotLight[] = [];
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
   /** Ce que le kit Tripo remplace (dress) : le sol, les pans du toit, les fenêtres faites par programme. */
@@ -683,6 +686,9 @@ export class Room {
     const light = lightAllPasses(new THREE.SpotLight(WIN_DAY, 0, WIN_RANGE, 0.75, 0.8, 1.2));
     light.position.copy(at(um, 0.3, WALL_H - 0.1));
     light.target.position.copy(at(um, 2.1, 0));
+    // chaque lumière compte pour chaque pixel de toute la maison : seules celles de la pièce du perso
+    // éclairent, recopiées par Game sur ses projecteurs (updateWindowLights)
+    light.visible = false;
     this.winLights.push(light);
     this.group.add(light, light.target);
     return light;
