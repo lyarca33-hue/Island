@@ -165,20 +165,17 @@ interface SeasonLook {
   grass: [number, number, number];
   /** Part de neige au sol (0 à 1). */
   snow: number;
-  /** Poussières dehors : couleur (au-dessus de 1 pour le bloom) et vitesse de chute (m/s). */
-  motes: [number, number, number];
-  fall: number;
 }
 
 const LOOKS: SeasonLook[] = [
-  // printemps : herbe fraîche, pétales roses qui flottent
-  { grass: [0.92, 1.08, 0.92], snow: 0, motes: [2.3, 1.35, 1.75], fall: 0.12 },
-  // été : herbe dorée, poussières de lumière
-  { grass: [1.12, 1.02, 0.7], snow: 0, motes: [2.2, 1.9, 1.2], fall: 0 },
-  // automne : herbe rousse, feuilles qui tombent
-  { grass: [1.55, 0.78, 0.38], snow: 0, motes: [2.3, 1.05, 0.35], fall: 0.35 },
-  // hiver : neige au sol, flocons
-  { grass: [1.0, 1.0, 1.05], snow: 0.85, motes: [2.1, 2.2, 2.5], fall: 0.7 },
+  // printemps : herbe fraîche
+  { grass: [0.92, 1.08, 0.92], snow: 0 },
+  // été : herbe dorée
+  { grass: [1.12, 1.02, 0.7], snow: 0 },
+  // automne : herbe rousse
+  { grass: [1.55, 0.78, 0.38], snow: 0 },
+  // hiver : neige au sol
+  { grass: [1.0, 1.0, 1.05], snow: 0.85 },
 ];
 
 /** Allure du dehors à la position `yearPos` dans l'année : chaque saison passe à la suivante en un jour ou deux. */
@@ -190,7 +187,7 @@ export function seasonLook(yearPos: number): SeasonLook {
   const t = THREE.MathUtils.smoothstep(f - i, 0.35, 0.65);
   const mix3 = (x: [number, number, number], y: [number, number, number]): [number, number, number] =>
     [x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t];
-  return { grass: mix3(a.grass, b.grass), snow: a.snow + (b.snow - a.snow) * t, motes: mix3(a.motes, b.motes), fall: a.fall + (b.fall - a.fall) * t };
+  return { grass: mix3(a.grass, b.grass), snow: a.snow + (b.snow - a.snow) * t };
 }
 
 /** Ambiance d'une heure de la journée. */
@@ -216,7 +213,7 @@ const NIGHT: Omit<SkyKey, 'h'> = {
   bg: [0.03, 0.05, 0.1], gain: [0.8, 0.9, 1.18], sat: 0.7,
 };
 const DAY: Omit<SkyKey, 'h'> = {
-  key: [1.0, 0.92, 0.78], keyI: 2.2,
+  key: [1.0, 0.92, 0.78], keyI: 1.3,
   sky: [0.75, 0.85, 1.0], ground: [0.25, 0.32, 0.18], hemiI: 0.9,
   bg: [0.17, 0.23, 0.16], gain: [1.05, 1.0, 0.95], sat: 1.12,
 };
@@ -228,12 +225,12 @@ const KEYS: SkyKey[] = [
   // aube : lumière rose orangé, le soleil au ras de l'horizon
   { h: SUNRISE, key: [1.0, 0.55, 0.38], keyI: 0.05, sky: [0.56, 0.5, 0.64], ground: [0.16, 0.15, 0.14], hemiI: 0.6,
     bg: [0.22, 0.18, 0.26], gain: [1.0, 0.92, 0.96], sat: 0.95 },
-  { h: 7.5, key: [1.0, 0.7, 0.48], keyI: 1.4, sky: [0.75, 0.74, 0.84], ground: [0.24, 0.26, 0.18], hemiI: 0.78,
+  { h: 7.5, key: [1.0, 0.7, 0.48], keyI: 0.85, sky: [0.75, 0.74, 0.84], ground: [0.24, 0.26, 0.18], hemiI: 0.78,
     bg: [0.3, 0.28, 0.24], gain: [1.08, 0.98, 0.92], sat: 1.06 },
   { h: 10, ...DAY },
   { h: 15.5, ...DAY },
   // fin d'après-midi dorée puis coucher de soleil
-  { h: 18.5, key: [1.0, 0.66, 0.4], keyI: 1.7, sky: [0.82, 0.72, 0.72], ground: [0.28, 0.24, 0.16], hemiI: 0.78,
+  { h: 18.5, key: [1.0, 0.66, 0.4], keyI: 1.0, sky: [0.82, 0.72, 0.72], ground: [0.28, 0.24, 0.16], hemiI: 0.78,
     bg: [0.3, 0.22, 0.16], gain: [1.12, 0.96, 0.86], sat: 1.15 },
   { h: SUNSET, key: [1.0, 0.45, 0.3], keyI: 0.05, sky: [0.46, 0.38, 0.58], ground: [0.13, 0.11, 0.14], hemiI: 0.62,
     bg: [0.14, 0.1, 0.18], gain: [0.98, 0.9, 1.0], sat: 0.95 },
