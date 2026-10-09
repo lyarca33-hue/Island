@@ -1,7 +1,8 @@
 /**
  * Le vélo du garage : on monte dessus (clic sur le vélo, ou « Monter sur le vélo » au menu), on
- * roule (touches, ou clic au sol ; Maj pour aller vite), on descend (E, clic sur le vélo, ou
- * « Descendre du vélo ») et il reste debout là où on l'a laissé.
+ * roule, on descend (E, clic sur le vélo, ou « Descendre du vélo ») et il reste debout là où on
+ * l'a laissé. Au clavier, comme un guidon : Z / ↑ pour pédaler, S / ↓ pour freiner puis reculer,
+ * Q D / ← → pour tourner, Maj pour aller vite ; un clic au sol y mène le vélo.
  *
  * Le perso joue le clip assis ; par-dessus, sa pose est retouchée à chaque image : le bassin sur
  * la selle, le buste penché vers le guidon juste ce qu'il faut pour que les mains tiennent les
@@ -37,15 +38,19 @@ type V3 = [number, number, number];
 type Bike = NonNullable<ItemDef['bike']>;
 
 /** Vitesse en roulant, et en appuyant sur Maj (m/s). */
-const CRUISE = 3.2;
-const SPRINT = 6;
+const CRUISE = 2.6;
+const SPRINT = 4.5;
 /** Accélération, freinage (m/s²). */
 const ACCEL = 2.2;
 const BRAKE = 4.5;
+/** Sans pédaler ni freiner, on ralentit quand même vite : le vélo ne file pas tout seul (m/s²). */
+const COAST = 2.5;
 /** Virage le plus serré (rayon, m) ; vitesse de rotation la plus grande, et à l'arrêt (rad/s). */
 const TURN_RADIUS = 1.3;
-const TURN_MAX = 2.4;
-const TURN_STILL = 0.8;
+const TURN_MAX = 1.8;
+const TURN_STILL = 0.5;
+/** On s'arrête à cette distance d'un mur (m) : de quoi encore tourner le guidon pour repartir. */
+const WALL_GAP = 0.15;
 /** En reculant, le vélo poussé avec les pieds (m/s). */
 const BACK_SPEED = 0.6;
 /** Temps qu'on recule avant de réessayer d'avancer (s). */
@@ -66,8 +71,8 @@ const STAND_SIDE = 0.5;
  * cheville au-dessus de la pédale et en arrière d'elle (le pied pousse de l'avant), les poignets en
  * arrière des poignées (m).
  */
-const HIP_UP = 0.08;
-const ANKLE_UP = 0.07;
+const HIP_UP = 0.12;
+const ANKLE_UP = 0.09;
 const ANKLE_BACK = 0.06;
 const WRIST_BACK = 0.04;
 /** Buste penché vers le guidon : au plus (rad), et bras tendus à cette part de leur longueur. */
@@ -161,6 +166,11 @@ export class Velo {
     return true;
   }
 
+  /** Touches tenues : `ahead` 1 (↑ pédaler), -1 (↓ freiner, reculer) ou 0 ; `steer` 1 (→), -1 (←) ou 0. */
+  steer(ahead: number, steer: number): void {
+    if (this.ride) this.ride.keys = { ahead, steer };
+  }
+
   /** Freine, puis descend du vélo du côté où il y a la place ; le vélo reste debout là. */
   dismount(): boolean {
     const r = this.ride;
@@ -192,6 +202,8 @@ class BikeRide implements Ride {
   private heading: number;
   private lean = 0;
   private crank = 0;
+  /** Touches tenues (Velo.steer). */
+  keys = { ahead: 0, steer: 0 };
   /** Temps qu'il reste à reculer pour se dégager d'un mur (s). */
   private backing = 0;
   /** Descente demandée : on freine d'abord. */
@@ -244,6 +256,7 @@ class BikeRide implements Ride {
       if (this.t >= MOUNT_TIME) {
         this.phase = 'ride';
         this.t = 0;
+        this.host.notice('Z / ↑ pédaler, S / ↓ freiner, Q D / ← → tourner, E pour descendre.');
       }
       return true;
     }
@@ -252,19 +265,32 @@ class BikeRide implements Ride {
       return true;
     }
     // —— en selle
-    if (this.leaving) want = null;
+    const { ahead, steer } = this.keys;
+    const keyed = !this.leaving && (ahead !== 0 || steer !== 0);
+    if (this.leaving || keyed) want = null;
     let target = want ? (running ? SPRINT : CRUISE) : 0;
     let turn = 0;
     let delta = 0;
-    if (want) {
+    // pas de commande : on roule en roue libre et on ralentit doucement ; ↓ ou une descente : on freine
+    let rate = this.leaving || ahead < 0 ? BRAKE : COAST;
+    if (keyed) {
+      // au clavier, comme un vrai vélo : ↑ pédaler, ↓ freiner puis reculer, ← → tourner
+      if (ahead > 0) target = running ? SPRINT : CRUISE;
+      else if (ahead < 0 && this.speed <= 0.05) target = -BACK_SPEED;
+      const r = Math.min(TURN_MAX, Math.abs(this.speed) / TURN_RADIUS) + TURN_STILL * Math.max(0, 1 - Math.abs(this.speed));
+      turn = -steer * r * dt;
+    } else if (want) {
       delta = wrap(Math.atan2(want.x, want.z) - this.heading);
       // demi-tour : on ralentit pour tourner court
       if (Math.abs(delta) > 1.6) target = Math.min(target, U_TURN);
-      const rate = Math.min(TURN_MAX, this.speed / TURN_RADIUS) + TURN_STILL * Math.max(0, 1 - this.speed);
-      turn = THREE.MathUtils.clamp(delta, -rate * dt, rate * dt);
+      const r = Math.min(TURN_MAX, this.speed / TURN_RADIUS) + TURN_STILL * Math.max(0, 1 - this.speed);
+      turn = THREE.MathUtils.clamp(delta, -r * dt, r * dt);
     }
+    // plus vite dans le même sens : on pédale ; sinon on freine (ou on se laisse ralentir)
+    if (target !== 0 && Math.sign(target) === Math.sign(this.speed || target) && Math.abs(target) > Math.abs(this.speed)) rate = ACCEL;
+    else if (target !== 0) rate = BRAKE;
     const dv = target - this.speed;
-    this.speed += THREE.MathUtils.clamp(dv, -BRAKE * dt, ACCEL * dt);
+    this.speed += THREE.MathUtils.clamp(dv, -rate * dt, rate * dt);
     const heading = this.heading + turn;
     const o = this.bike.object;
     const free = (p: THREE.Vector3, h: number) => !this.host.blocked(this.bike, p, h + Math.PI / 2);
@@ -286,23 +312,23 @@ class BikeRide implements Ride {
         o.position.copy(along(h, travel));
         this.heading = h;
       }
-    } else if (!free(o.position, this.heading) || free(along(heading, travel), heading)) {
+    } else if (!free(o.position, this.heading) || free(along(heading, travel + Math.sign(travel) * WALL_GAP), heading)) {
       // (garé tout contre un mur, on peut en sortir)
       this.backing = 0;
       o.position.copy(along(heading, travel));
       this.heading = heading;
     } else {
-      // contre un mur : on s'arrête net
+      // contre un mur : on s'arrête net (en allant vers un clic, on recule pour se dégager)
       this.speed = 0;
       travel = 0;
       if (free(o.position, heading)) this.heading = heading;
-      else if (Math.abs(delta) > 0.3) this.backing = BACK_TIME;
+      else if (want && Math.abs(delta) > 0.3) this.backing = BACK_TIME;
       else moved = false;
     }
     this.host.wear(this.bike, Math.abs(travel));
     // penché dans le virage (vers la gauche quand le cap augmente)
     const w = dt > 0 ? turn / dt : 0;
-    const lean = THREE.MathUtils.clamp(Math.atan((this.speed * w) / 9.8), -LEAN_MAX, LEAN_MAX);
+    const lean = THREE.MathUtils.clamp(Math.atan((Math.max(0, this.speed) * w) / 9.8), -LEAN_MAX, LEAN_MAX);
     this.lean += (lean - this.lean) * Math.min(1, dt * 6);
     const roll = travel / this.def.wheel;
     // roue libre : en reculant, les pédales ne tournent pas
@@ -314,7 +340,7 @@ class BikeRide implements Ride {
     }
     const pedals = this.part('pedalier');
     if (pedals) pedals.rotation.z = this.crank;
-    if (this.leaving && this.speed < 0.05) {
+    if (this.leaving && Math.abs(this.speed) < 0.05) {
       this.speed = 0;
       this.lean = 0;
       this.place();
@@ -389,15 +415,8 @@ class BikeRide implements Ride {
     };
     const pedals = { left: pedal(0), right: pedal(1) };
     // jambes trop courtes pour la pédale du bas : le bassin descend un peu (dans le modèle)
-    const legLen = (side: Side) =>
-      rig.worldPos(rig.node(`${side}UpperLeg`)!).distanceTo(rig.worldPos(rig.node(`${side}LowerLeg`)!)) +
-      rig.worldPos(rig.node(`${side}LowerLeg`)!).distanceTo(rig.worldPos(rig.node(`${side}Foot`)!));
-    const leg = Math.min(legLen('left'), legLen('right')) * 0.97;
-    const hipDrop = new THREE.Vector3(d.saddle[0], d.saddle[1] + HIP_UP * scale, 0);
-    const low = d.crank[1] - Math.hypot(d.pedals[0][0], d.pedals[0][1]) + ANKLE_UP * scale;
-    const dx = hipDrop.x - (d.crank[0] + ANKLE_BACK * scale);
-    hipDrop.y = Math.min(hipDrop.y, low + Math.sqrt(Math.max(0, leg * leg - dx * dx)));
-    const seatHips = at(hipDrop);
+    // assis sur la selle (jamais dedans) : une jambe trop courte se tend vers la pédale du bas
+    const seatHips = at([d.saddle[0], d.saddle[1] + HIP_UP * scale, 0]);
     // —— le bassin : de debout à la selle, en se soulevant pendant que la jambe passe
     const near: Side = this.side > 0 ? 'left' : 'right';
     const far: Side = near === 'left' ? 'right' : 'left';

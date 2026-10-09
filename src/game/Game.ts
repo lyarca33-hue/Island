@@ -5936,13 +5936,19 @@ export class Game {
   }
 
   /** Direction clavier dans le repère monde (relative à la caméra : « haut » = vers le fond). */
-  private keyboardDir(): THREE.Vector3 {
+  /** Touches de déplacement tenues : avant (1) / arrière (-1), droite (1) / gauche (-1). */
+  private keyAxes(): { f: number; s: number } {
     const k = this.keys;
     let f = 0, s = 0;
     if (k.has('KeyW') || k.has('ArrowUp')) f += 1; // Z en AZERTY = KeyW
     if (k.has('KeyS') || k.has('ArrowDown')) f -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) s += 1;
     if (k.has('KeyA') || k.has('ArrowLeft')) s -= 1; // Q en AZERTY = KeyA
+    return { f, s };
+  }
+
+  private keyboardDir(): THREE.Vector3 {
+    const { f, s } = this.keyAxes();
     if (!f && !s) return new THREE.Vector3();
     // avant = de la caméra vers la cible, projeté au sol ; droite = perpendiculaire
     const fwd = new THREE.Vector3(-Math.cos(this.yaw), 0, -Math.sin(this.yaw));
@@ -5972,6 +5978,9 @@ export class Game {
   /** Un pas de jeu de `dt` secondes : le perso, les objets, les besoins, la caméra, la météo… */
   private step(dt: number): void {
     this.character.setMoveInput(this.keyboardDir(), this.shift);
+    // à vélo, les touches se lisent comme un guidon (velo.ts)
+    const axes = this.keyAxes();
+    this.velo.steer(axes.f, axes.s);
     // R : pivoter le meuble vers la droite, F : vers la gauche
     this.character.setTurnInput((this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
     this.character.update(dt, GROUND_HALF - 14);
