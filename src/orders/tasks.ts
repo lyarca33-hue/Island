@@ -167,7 +167,15 @@ export type Intent =
   | { kind: 'argent' }
   /** Allumer ou éteindre un appareil (la gazinière la plus proche sans `ref`). */
   | { kind: 'allumer'; ref?: string }
-  | { kind: 'eteindre'; ref?: string };
+  | { kind: 'eteindre'; ref?: string }
+  /** Monter sur le vélo du garage (`monter`), ou en descendre. */
+  | { kind: 'velo'; monter: boolean }
+  /** Du pain grillé : le pain coupé en tranches s'il le faut, les tranches au grille-pain, lancé. */
+  | { kind: 'griller' }
+  /** Sauter sur place (Espace). */
+  | { kind: 'sauter_perso' }
+  /** Lancer ce qu'on tient (`ref` : le prendre d'abord). */
+  | { kind: 'lancer'; ref?: string };
 
 /** La tâche en quelques mots (« prendre tasse »), pour le journal des manques. */
 export function intentLabel(i: Intent): string {
@@ -566,6 +574,10 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
         ? foods.find((o) => o.ref === intent.ref)
         : (foods.find((o) => w.enMain.includes(o.ref)) ?? [...foods].sort((a, b) => +!isLoose(a) - +!isLoose(b) || a.distance - b.distance)[0]);
       if (!food) throw new Failed(intent.ref ? `On ne peut pas couper : ${intent.ref}.` : 'Il n’y a rien à couper.');
+      // la planche rangée au placard (ou tenue) se sort d'abord sur le plan de travail
+      const board = w.objets.find((o) => o.sorte === 'planche');
+      const counter = w.objets.find((o) => o.nom === 'plan de travail') ?? w.objets.find((o) => o.nom === 'table');
+      if (board && counter && (board.ou.startsWith('rangé') || board.ou === 'en main' || board.ou.startsWith('au sol'))) await runOne(game, { kind: 'poser', ref: board.ref, sur: counter.ref }, act);
       await take(game, act, food.ref);
       return act('couper', { objet: food.ref });
     }
@@ -878,6 +890,35 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return;
     case 'piece':
       return act('aller_piece', { piece: intent.piece });
+    case 'velo':
+      if (!intent.monter) return act('descendre_velo');
+      await freeHands(game, act);
+      return act('monter_velo');
+    case 'griller': {
+      const toaster = world(game).objets.find((o) => o.nom === 'grille-pain');
+      if (!toaster) throw new Failed('Il n’y a pas de grille-pain.');
+      if (!world(game).objets.some((o) => o.nom === 'tranches de pain')) {
+        const bread = world(game).objets.find((o) => o.nom === 'pain') ?? world(game).objets.find((o) => o.nom === 'baguette');
+        if (!bread) throw new Failed('Il n’y a plus de pain à griller.');
+        await runOne(game, { kind: 'couper', ref: bread.ref }, act);
+        // les tranches apparaissent sur la planche juste après le geste
+        for (let i = 0; i < 50 && !world(game).objets.some((o) => o.nom === 'tranches de pain'); i++) await new Promise((r) => setTimeout(r, 100));
+      }
+      const w = world(game);
+      const slices = w.objets.filter((o) => o.nom === 'tranches de pain');
+      const item = slices.find((o) => w.enMain.includes(o.ref)) ?? slices.find(isLoose) ?? slices[0];
+      if (!item) throw new Failed('Pas de tranches de pain.');
+      await runOne(game, { kind: 'mettre', ref: item.ref, dans: toaster.ref }, act);
+      return act('allumer', { objet: toaster.ref });
+    }
+    case 'sauter_perso':
+      return act('sauter');
+    case 'lancer': {
+      if (intent.ref) await take(game, act, intent.ref);
+      const thing = intent.ref ? world(game).objets.find((o) => o.ref === intent.ref) : held(game)[0];
+      if (!thing || !world(game).enMain.includes(thing.ref)) throw new Failed('Rien en main à lancer.');
+      return act('lancer', { objet: thing.ref });
+    }
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;
