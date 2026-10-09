@@ -2204,13 +2204,18 @@ export class Game {
     ]);
   }
 
-  /** Où se tenir pour poser quelque chose en `spot` (sur la table) : le côté libre le plus proche. */
+  /**
+   * Où se tenir pour poser quelque chose en `spot` (sur la table) : le côté libre le plus proche. Au sol,
+   * d'abord tout près : la main n'y pose pas plus loin (Character.drop), l'objet tomberait à côté de sa place.
+   */
   private standNear(spot: THREE.Vector3, size: number): THREE.Vector3 {
     const at = spot.clone().setY(0);
     const p = this.character.position;
     const nav = this.character.nav;
     let best: THREE.Vector3 | null = null;
-    for (const r of [0.36 + size / 2, 0.5 + size / 2, 0.62 + size / 2]) {
+    const radii = [0.36 + size / 2, 0.5 + size / 2, 0.62 + size / 2];
+    if (spot.y < 0.05) radii.unshift(0.2 + size / 2);
+    for (const r of radii) {
       for (let i = 0; i < 24; i++) {
         const a = (i / 24) * Math.PI * 2;
         const v = at.clone().add(new THREE.Vector3(Math.sin(a) * r, 0, Math.cos(a) * r));
