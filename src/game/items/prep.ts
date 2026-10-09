@@ -64,6 +64,14 @@ export const BATTERS: Array<{ name: string; needs: string[]; cooks: string; per:
   { name: 'œufs battus', needs: ['œuf'], cooks: 'omelette', per: 1 },
 ];
 
+/** Garnitures d'omelette : mises dans le saladier avec les œufs, l'omelette battue devient la leur. */
+export const OMELETTE_FILLINGS: Record<string, string> = { 'fromage râpé': 'omelette-fromage', jambon: 'omelette-jambon', champignons: 'omelette-champignons' };
+/** L'omelette que donnent les œufs battus : la première garniture mise dans le saladier, sinon nature. */
+export function omeletteFor(parts: string[]): string {
+  const filling = parts.find((p) => OMELETTE_FILLINGS[p]);
+  return filling ? OMELETTE_FILLINGS[filling] : 'omelette';
+}
+
 /** Ce qui se tartine (pot ou beurre tenu, avec un couteau) : le mot du nom de la tartine. */
 export const SPREADS: Record<string, string> = { confiture: 'confiture', miel: 'miel', 'pâte à tartiner': 'chocolat', beurre: 'beurre' };
 /** Ce qu'on tartine : nom → préfixe des fiches obtenues (tartines-confiture, crepe-miel…). */
@@ -77,9 +85,9 @@ export const PREP_CUPBOARD = ['saladier', 'râpe'];
 export const PREP_FRESH = ['œuf', 'lait', 'beurre', 'fromage', 'fromage râpé', 'pain perdu', 'croûtons', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'crêpe'];
 
 /** Cuisent à la poêle (casser un œuf, verser une pâte). */
-export const PREP_PAN_FOOD = ['œuf au plat', 'omelette', 'crêpe', 'pain perdu', 'tranches de pain'];
+export const PREP_PAN_FOOD = ['œuf au plat', 'omelette', 'omelette au fromage', 'omelette au jambon', 'omelette aux champignons', 'crêpe', 'pain perdu', 'tranches de pain'];
 
-export const PREP_FEMININE = ['spatule', 'cuillère en bois', 'louche', 'râpe', 'omelette', 'crêpe', 'pâte à crêpes', 'étagère à épices', 'huile d\'olive', 'crêpe à la confiture', 'crêpe au miel', 'crêpe au chocolat', 'crêpe au beurre', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'préparation'];
+export const PREP_FEMININE = ['omelette au fromage', 'omelette au jambon', 'omelette aux champignons', 'spatule', 'cuillère en bois', 'louche', 'râpe', 'omelette', 'crêpe', 'pâte à crêpes', 'étagère à épices', 'huile d\'olive', 'crêpe à la confiture', 'crêpe au miel', 'crêpe au chocolat', 'crêpe au beurre', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'préparation'];
 export const PREP_PLURAL = ['croûtons', 'herbes de Provence', 'tartines de confiture', 'tartines au miel', 'tartines au chocolat', 'tartines beurrées', 'œufs battus', 'œufs'];
 
 /** Stock voulu (liste de courses). */
@@ -151,6 +159,28 @@ function tartines(id: string, name: string, top: THREE.ColorRepresentation, hung
       }
       return g;
     },
+  };
+}
+
+/** Omelette garnie : la même, des morceaux de `bits` dans le pli (habillée par le modèle de l'omelette, interior.ts). */
+function omelette(id: string, name: string, bits: THREE.ColorRepresentation): ItemDef {
+  return {
+    id,
+    name,
+    portable: true,
+    grip: 'pinch',
+    gripPoint: [0, 0.008, 0.05],
+    mouth: [0, 0.01, -0.05],
+    food: { hunger: 38, bites: 5, color: 0xe8b84a },
+    cook: { seconds: 11, burn: 18, colors: [0xf2d36b, 0xe8b84a, 0x3a2a20] },
+    fragility: 10,
+    durability: 10,
+    breakWord: 'écrasée',
+    build: () =>
+      group(
+        cooked(mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.014, 20, 1, false, 0, Math.PI).rotateY(Math.PI / 2), 0xf2d36b, 0, 0.007, 0.02)),
+        ...[-0.04, 0, 0.04].map((x) => box(0.012, 0.006, 0.01, bits, x, 0.016, 0.005)),
+      ),
   };
 }
 
@@ -296,6 +326,9 @@ export const PREP_ITEMS: ItemDef[] = [
     breakWord: 'écrasée',
     build: () => group(cooked(mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.014, 20, 1, false, 0, Math.PI).rotateY(Math.PI / 2), 0xf2d36b, 0, 0.007, 0.02))),
   },
+  omelette('omelette-fromage', 'omelette au fromage', 0xf2c94c),
+  omelette('omelette-jambon', 'omelette au jambon', 0xe8a0a0),
+  omelette('omelette-champignons', 'omelette aux champignons', 0xb08a5a),
   {
     id: 'crepe',
     name: 'crêpe',
@@ -459,14 +492,15 @@ export interface StoveRecipe {
   /** Ingrédients (un nom par unité : deux œufs = « œuf » deux fois). */
   needs: string[];
   how: string;
-  /** La tâche d'ordre qui la fait (orders/tasks.ts) ; sans : on la fait à la main. */
-  task?: 'omelette' | 'crepe' | 'oeuf_plat';
 }
 export const STOVE_RECIPES: StoveRecipe[] = [
-  { name: 'omelette', needs: ['œuf', 'œuf'], how: 'Casse 2 œufs dans le saladier, fouette, verse dans la poêle chaude, remue à la spatule, puis sers.', task: 'omelette' },
-  { name: 'crêpe', needs: ['œuf', 'lait', 'farine'], how: 'Saladier : un œuf, du lait, de la farine, fouette ; une louche de pâte dans la poêle chaude, fais-la sauter, puis tartine-la.', task: 'crepe' },
-  { name: 'œuf au plat', needs: ['œuf'], how: 'Casse un œuf directement dans la poêle sur le feu, attends qu’il soit cuit.', task: 'oeuf_plat' },
+  { name: 'omelette', needs: ['œuf', 'œuf'], how: 'Casse 2 œufs dans le saladier, fouette, verse dans la poêle chaude, remue à la spatule, puis sers.' },
+  { name: 'omelette au fromage', needs: ['œuf', 'œuf', 'fromage'], how: 'Râpe du fromage sur la planche, puis comme l’omelette, avec le fromage râpé dans le saladier avant de fouetter. Marche aussi avec du jambon ou des champignons.' },
+  { name: 'crêpe', needs: ['œuf', 'lait', 'farine'], how: 'Saladier : un œuf, du lait, de la farine, fouette ; une louche de pâte dans la poêle chaude, fais-la sauter, puis tartine-la.' },
+  { name: 'œuf au plat', needs: ['œuf'], how: 'Casse un œuf directement dans la poêle sur le feu, attends qu’il soit cuit.' },
   { name: 'pain perdu', needs: ['œuf', 'lait', 'sucre', 'tranches de pain'], how: 'Saladier : un œuf, du lait et du sucre, fouette. Pose des tranches de pain dans la poêle chaude, verse la pâte dessus, retourne-les une fois.' },
+  { name: 'chocolat chaud', needs: ['tablette de chocolat'], how: 'Remplis une tasse d’eau chaude à la bouilloire (ou de lait, pour un lait au chocolat), puis mets-y un carré de chocolat.' },
+  { name: 'jus et smoothies', needs: ['pomme'], how: 'Mets des fruits dans le mixeur et lance-le : un seul fruit donne son jus (pomme, poire, raisin, orange), la banane ou les fraises un smoothie. Sers-le dans une tasse ou un verre.' },
   { name: 'gâteau', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure'], how: 'Saladier : 2 œufs, farine, sucre et levure, fouette ; verse dans le moule, enfourne. Sors-le avec les maniques, laisse-le refroidir, puis coupe-le en parts sur la planche.' },
   { name: 'gâteau au chocolat', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure', 'tablette de chocolat'], how: 'Comme le gâteau, avec la tablette de chocolat dans le saladier.' },
   { name: 'gâteau au yaourt', needs: ['œuf', 'œuf', 'farine', 'sucre', 'levure', 'yaourt'], how: 'Comme le gâteau, avec un pot de yaourt dans le saladier.' },

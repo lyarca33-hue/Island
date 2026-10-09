@@ -248,6 +248,8 @@ export interface ItemDef {
   stirs?: boolean;
   /** Râpe : râpe le fromage tenu dans l'autre main au-dessus d'un plat. */
   grates?: boolean;
+  /** Passoire : posée dans l'évier, elle garde ce qu'on égoutte au-dessus ; elle ne va pas sur le feu. */
+  strains?: boolean;
   /** Pot de l'étagère à épices : le mot du geste (« du sel ») quand on assaisonne avec. */
   spice?: string;
   /** Saladier : on y casse les œufs, verse lait et farine, puis on mélange (Game.mixes). */

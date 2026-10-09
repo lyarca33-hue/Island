@@ -118,6 +118,9 @@ function parts(id: string, name: string, colors: [number, number, number]): Item
   };
 }
 
+/** Ce que la passoire garde quand on égoutte la casserole au-dessus. */
+export const STRAINED = ['pâtes', 'riz', 'pâtes au beurre', 'pâtes à la tomate', 'riz au beurre', 'riz à la tomate', 'pomme de terre'];
+
 /** Un plat ou un ustensile de cuisine : une boîte `size` (largeur, hauteur, profondeur), habillée par son modèle. */
 function cookware(id: string, name: string, size: [number, number, number], color: number, breakWord: string, fragility: number): ItemDef {
   const [w, h, d] = size;
@@ -158,7 +161,12 @@ export const PATISSERIE_ITEMS: ItemDef[] = [
   },
   // la vaisselle du four et de l'évier (modèles Tripo du pack `plats`, interior.ts) : se lave, se range
   cookware('plat-four', 'plat à four', [0.31, 0.065, 0.22], 0xc0703a, 'fêlé', 4),
-  cookware('passoire', 'passoire', [0.25, 0.11, 0.25], 0xb9bec4, 'cabossé', 10),
+  {
+    // posée dans l'évier, elle garde ce qu'on égoutte (pâtes, riz, pommes de terre) ; on sert ensuite depuis elle
+    ...cookware('passoire', 'passoire', [0.25, 0.11, 0.25], 0xb9bec4, 'cabossé', 10),
+    strains: true,
+    cookware: { holds: STRAINED, places: [[-0.04, 0.02, 0], [0.04, 0.02, 0]] },
+  },
   cookware('pierre-pizza', 'pierre à pizza', [0.3, 0.02, 0.3], 0xb8a88a, 'fendu', 3),
   cake('gateau', 'gâteau', PLAIN, 0xffffff),
   cake('gateau-chocolat', 'gâteau au chocolat', CHOCOLATE),

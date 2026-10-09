@@ -130,6 +130,7 @@ export const PACK_SIZES = {
     "hot-dog": [0.076, 0.048, 0.18],
     "jus-orange": [0.102, 0.199, 0.153],
     "legumes-surgeles": [0.22, 0.092, 0.204],
+    "livre-recettes": [0.206, 0.237, 0.107],
     "maniques": [0.239, 0.101, 0.184],
     "moule": [0.228, 0.046, 0.224],
     "oeuf-plat": [0.104, 0.039, 0.118],

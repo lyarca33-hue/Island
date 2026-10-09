@@ -11,13 +11,17 @@
  *   node tools/build_plats_assets.mjs --src "<Bureau>/Assets" --out public/packs/plats.glb
  *
  * `--preview <dossier>` écrit aussi chaque modèle à part dans ce dossier (pour le regarder).
+ *
+ * Un modèle de plus, sans refaire tout le pack (les autres modèles sont gardés tels quels) :
+ *
+ *   node tools/build_plats_assets.mjs --add <fichier.glb> --nom livre-recettes --cm 24
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { Logger, NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTTextureWebP } from '@gltf-transform/extensions';
 import { cloneDocument, dedup, flatten, join, mergeDocuments, meshopt, prune, simplify, transformMesh, weld } from '@gltf-transform/functions';
-import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
+import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
 /**
@@ -62,16 +66,19 @@ const PLATS = {
   'de+sac+de+congélation': { nom: 'legumes-surgeles', cm: 22, rot: [['z', 90]] },
   'de+sac+en+plastique+blanc': { nom: 'sac-poubelle', cm: 50 },
   'de+théière': { nom: 'theiere', cm: 22, tri: 2000 },
+  // ——— la cuisine ———
+  'livre-recettes': { nom: 'livre-recettes', cm: 24, tri: 2000, atlas: 512 },
 };
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) => (v.startsWith('--') ? [...a, [v.slice(2), all[i + 1]]] : a), []));
-const SRC = args.src;
 const OUT = args.out ?? 'public/packs/plats.glb';
 const PREVIEW = args.preview;
-if (!SRC) throw new Error('--src <dossier des plats Tripo texturés> manquant');
+const ADD = args.add;
+const SRC = ADD ? path.dirname(ADD) : args.src;
+if (!SRC) throw new Error('--src <dossier des plats Tripo texturés> (ou --add <fichier.glb>) manquant');
 
-await Promise.all([MeshoptEncoder.ready, MeshoptSimplifier.ready]);
-const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
+await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready, MeshoptSimplifier.ready]);
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder });
 
 const keyOf = (file) => file.replace(/\.glb$/, '').replace(/^(petit\+)?mod[eè]le\+3d\+(stylisé\+)?/i, '').toLowerCase();
 const tris = (doc) => doc.getRoot().listMeshes().flatMap((m) => m.listPrimitives()).reduce((s, p) => s + p.getIndices().getCount() / 3, 0);
@@ -226,10 +233,11 @@ async function fix(file, o) {
   return { doc: best, size, before, after: tris(best) };
 }
 
-const files = fs.readdirSync(SRC).filter((f) => f.endsWith('.glb')).sort();
+const files = ADD ? [path.basename(ADD)] : fs.readdirSync(SRC).filter((f) => f.endsWith('.glb')).sort();
 const built = [];
 for (const file of files) {
-  const o = PLATS[keyOf(file)];
+  const o = ADD ? { ...PLATS[args.nom], nom: args.nom, ...(args.cm ? { cm: +args.cm } : {}) } : PLATS[keyOf(file)];
+  if (ADD && !o.cm) throw new Error('--cm <plus grande dimension> manquant');
   if (!o) {
     console.log(`(laissé de côté) ${file}`);
     continue;
@@ -237,6 +245,20 @@ for (const file of files) {
   const r = await fix(file, o);
   built.push({ nom: o.nom, ...r });
   console.log(`${o.nom.padEnd(16)} ${String(r.before).padStart(6)} → ${String(r.after).padStart(5)} tri  ${r.size.map((v) => Math.round(v * 100)).join(' × ')} cm`);
+}
+// --add : les modèles déjà dans le pack, gardés (sauf celui qu'on remplace)
+if (ADD) {
+  const old = await io.read(OUT);
+  old.setLogger(new Logger(Logger.Verbosity.WARN));
+  const sizes = new Function(`return ${fs.readFileSync('src/game/packs/manifest.ts', 'utf8').match(/plats: (\{[^}]*\})/)[1]}`)();
+  for (const n of old.getRoot().listScenes()[0].listChildren()) {
+    if (n.getName() === args.nom) continue;
+    const d = cloneDocument(old);
+    const scene = d.getRoot().listScenes()[0];
+    for (const c of scene.listChildren()) if (c.getName() !== n.getName()) { scene.removeChild(c); c.dispose(); }
+    await d.transform(prune());
+    built.push({ nom: n.getName(), doc: d, size: sizes[n.getName()] });
+  }
 }
 built.sort((a, b) => a.nom.localeCompare(b.nom));
 
