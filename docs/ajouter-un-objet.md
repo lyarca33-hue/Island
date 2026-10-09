@@ -108,7 +108,7 @@ Fichier : `src/game/items/catalog.ts`. Repère de l'objet : posé au sol, base �
 | `lip` | Bord où l'on boit (verre sans goulot) : la main l'amène à la bouche. | non |
 | `jug` | Carafe : se verse dans un verre, on n'y boit pas. | non |
 | `slotHolds` | Pour chaque place de `slots`, les noms qu'elle accepte (égouttoir : verres au fond, couverts au panier). | non |
-| `rack` | Égouttoir : la vaisselle mouillée y sèche en `minutes` de jeu ; « Ranger à sa place » y envoie la vaisselle mouillée. | non |
+| `rack` | Égouttoir : la vaisselle mouillée y sèche en `minutes` de jeu ; « Ranger » y envoie la vaisselle mouillée. | non |
 | `towel` | Torchon : essuie la vaisselle mouillée et les mains. | non |
 | `wash.dishes` | Évier : places au fond de la cuve où poser la vaisselle à laver (une par main). | non |
 | `build()` | Construit le modèle 3D. | obligatoire |

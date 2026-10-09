@@ -379,7 +379,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'ranger_place',
-    description: 'Ranger ce qu’on tient à sa place, sans nommer le meuble : aliments et bouteille au frigo, bac à glaçons et lasagne au congélateur, tasse et assiette au placard, couverts et lettre au tiroir, livres à la bibliothèque.',
+    description: 'Ranger ce qu’on tient, sans nommer le meuble : propre, chaque objet retourne à sa place (le meuble où il était rangé, ou là où il était posé ; sinon aliments au frigo, surgelés au congélateur, vaisselle au placard, couverts au tiroir, livres à la bibliothèque) ; la vaisselle sale va dans l’évier.',
     params: {},
     run: (g) => g.storeAway(),
   },

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { ContextMenu as Menu } from '../game/Game';
+import { Icon } from './icons';
 
 /**
  * Menu rond au clic droit : les gestes possibles sur l'objet visé, en cercle autour du point
@@ -47,6 +48,7 @@ export function ContextMenu({ menu, onClose }: { menu: Menu; onClose: () => void
                 entry.run();
               }}
             >
+              {entry.icon && <Icon name={entry.icon} size={15} className="ctx-icon" />}
               {entry.label}
             </button>
           );
