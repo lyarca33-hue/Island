@@ -59,7 +59,7 @@ const CLIMB_SPEED = 0.75;
 const THROW_SPEED = 0.76;
 
 /** Clips pour s'asseoir (Quaternius, voir creator/source.ts). */
-const SIT = { enter: 'Sitting_Enter', idle: 'Sitting_Idle_Loop', talk: 'Sitting_Talking_Loop', exit: 'Sitting_Exit' };
+export const SIT = { enter: 'Sitting_Enter', idle: 'Sitting_Idle_Loop', talk: 'Sitting_Talking_Loop', exit: 'Sitting_Exit' };
 /** Le bassin finit un peu en avant du milieu de l'assise (m). */
 const SIT_HIPS_FORWARD = 0.03;
 /** Hauteur de l'assise dans le clip, en part de la hauteur du bassin assis. */
@@ -75,6 +75,21 @@ const UP = new THREE.Vector3(0, 1, 0);
 const PUSH_SPEED = 0.9;
 /** Vitesse à laquelle on fait pivoter un meuble (radians par seconde). */
 const PUSH_TURN_SPEED = 1.2;
+
+/**
+ * À vélo (velo.ts) : le vélo mène le perso (où il va, comment il se tient) ; le perso ne fait que
+ * lui passer la direction voulue (touches, ou le prochain point du chemin d'un clic au sol).
+ */
+export interface Ride {
+  /** Un pas : `want` est la direction voulue au sol (null : on freine) ; faux si le vélo est bloqué. */
+  update(dt: number, want: THREE.Vector3 | null, running: boolean): boolean;
+  /** Retouche la pose animée (assis en selle, pieds sur les pédales, mains au guidon)… */
+  pose(rig: Rig): void;
+  /** … et la rend après le rendu des os. */
+  restore(): void;
+  /** Vitesse (m/s). */
+  readonly speed: number;
+}
 
 export class Character {
   readonly root = new THREE.Group();
@@ -135,6 +150,8 @@ export class Character {
   private climbNow: { t: number; d: number; from: THREE.Vector3; to: THREE.Vector3; then?: () => void } | null = null;
   /** Hauteur où l'on tient debout en (x, z) : le dessus d'un meuble, sinon le sol (0). */
   ground: ((x: number, z: number) => number) | null = null;
+  /** À vélo (velo.ts). */
+  ride: Ride | null = null;
 
   /** Charge le perso du créateur (recette) ou, à défaut, X Bot. */
   async load(recipe?: Recipe | null): Promise<void> {
@@ -149,15 +166,20 @@ export class Character {
       // les deux mains retouchent la pose : celle qui s'accroupit ou bouge d'abord, l'autre
       // ensuite (son bras suit le buste penché) ; on rend la pose dans l'ordre inverse
       let applied: Carry[] = [];
+      // à vélo, la pose du cycliste passe après les mains (vides)
+      let ride: Ride | null = null;
       this.puppet.hook = {
         apply: (dt) => {
           applied = carries.left.busy && !carries.right.busy ? [carries.left, carries.right] : [carries.right, carries.left];
           for (const c of applied) c.apply(dt);
+          ride = this.ride;
+          ride?.pose(rig);
         },
         after: () => {
           for (const c of applied) c.after();
         },
         restore: () => {
+          ride?.restore();
           for (const c of [...applied].reverse()) c.restore();
         },
       };
@@ -320,6 +342,8 @@ export class Character {
    * Marche jusqu'à `stand` (null : ne bouge pas), se tourne vers `face`, puis appelle `then`.
    */
   approachThen(stand: THREE.Vector3 | null, face: THREE.Vector3, then: () => void, running = false): void {
+    // à vélo, on ne va pas chercher d'objet (on descend d'abord)
+    if (this.ride) return;
     this.setRoute(stand);
     this.running = running;
     this.approach = { face: face.clone(), then };
@@ -565,12 +589,14 @@ export class Character {
   /** Rien en cours : ni marche vers un point, ni approche d'un objet, ni geste des mains. */
   /** Allure en cours : immobile, marche, course. */
   get moveGait(): 'idle' | 'walk' | 'run' {
+    // pédaler fatigue comme marcher, vite comme courir
+    if (this.ride) return this.ride.speed > 4 ? 'run' : this.ride.speed > 0.2 ? 'walk' : 'idle';
     // pousser un meuble fatigue comme marcher ; un geste sur place, comme rester debout
     return this.gait === 'push' ? 'walk' : this.gait === 'gesture' ? 'idle' : this.gait;
   }
 
   get idle(): boolean {
-    return !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && !this.bed && !this.jumpNow && !this.climbNow && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
+    return !this.ride && !this.target && !this.approach && !this.busy && !this.washing && !this.pushLeft && !this.bed && !this.jumpNow && !this.climbNow && this.move.lengthSq() === 0 && (!this.seat || this.seat.phase === 'sit');
   }
 
   update(dt: number, bounds: number): void {
@@ -618,6 +644,11 @@ export class Character {
       }
       this.setGait(moved ? (this.puppet?.clipDuration(KITCHEN.push) ? 'push' : 'walk') : 'idle');
       this.mixer?.update(dt);
+      this.puppet?.update(dt);
+      return;
+    }
+    if (this.ride) {
+      this.updateRide(dt);
       this.puppet?.update(dt);
       return;
     }
@@ -709,11 +740,59 @@ export class Character {
     this.puppet?.update(dt);
   }
 
+  /** À vélo : la direction voulue (touches, sinon vers le prochain point du chemin) mène le vélo. */
+  private updateRide(dt: number): void {
+    let want: THREE.Vector3 | null = null;
+    if (this.move.lengthSq() > 0) want = this.move.clone().setY(0).normalize();
+    else if (this.target) {
+      const to = this.target.clone().sub(this.root.position).setY(0);
+      // à vélo, on vise large : on ne tourne pas sur place
+      if (to.length() < (this.path.length ? 0.7 : 0.45)) {
+        this.target = this.path.shift() ?? null;
+        if (this.target) to.subVectors(this.target, this.root.position).setY(0);
+      }
+      if (this.target) want = to.normalize();
+    }
+    const ok = this.ride!.update(dt, want, this.running);
+    // bloqué vers un point : on renonce au bout de 2 s
+    if (this.target && this.move.lengthSq() === 0) {
+      this.stuckFor = ok ? 0 : this.stuckFor + dt;
+      if (this.stuckFor > 2) {
+        this.stuckFor = 0;
+        this.target = null;
+        this.path = [];
+        this.onStuck?.();
+      }
+    }
+  }
+
+  /** Cap et place du perso (à vélo : penché comme le vélo, de `roll` radians vers sa gauche). */
+  setPlace(pos: THREE.Vector3, heading: number, roll = 0): void {
+    this.root.position.copy(pos);
+    this.heading = heading;
+    this.root.rotation.set(0, heading, -roll, 'YXZ');
+  }
+
+  /** Clip joué par le perso du créateur (à vélo : assis), et durée d'un clip. */
+  playClip(name: string, fade: number): void {
+    this.puppet?.play(name, fade);
+  }
+
+  /** Taille du perso du créateur (m ; 1,6 sans lui). */
+  get height(): number {
+    return this.puppet?.height ?? 1.6;
+  }
+
+  /** Les mains vides et libres, debout, rien en cours : de quoi monter sur un vélo. */
+  get free(): boolean {
+    return !!this.puppet && !this.heldItems.length && !this.bracing && !this.busy && !this.seat && !this.bed && !this.pushing && !this.washing && !this.jumpNow && !this.climbNow && !this.ride;
+  }
+
   // ——— sauter, nager, grimper ———
 
   /** Peut sauter : perso du créateur, debout (au sol ou perché), les mains pas en plein geste. */
   get canJump(): boolean {
-    return !!this.puppet && !this.jumpNow && !this.climbNow && !this.seat && !this.bed && !this.pushing && !this.washing && !this.busy;
+    return !!this.puppet && !this.jumpNow && !this.climbNow && !this.seat && !this.bed && !this.pushing && !this.washing && !this.busy && !this.ride;
   }
 
   /** En l'air, en train de grimper ou perché sur un meuble. */

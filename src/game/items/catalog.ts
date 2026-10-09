@@ -210,6 +210,19 @@ export interface ItemDef {
    */
   bed?: { top: number; length: number; head?: number };
   /**
+   * Vélo (velo.ts), points mesurés sur le modèle (l'avant vers -X, la gauche du cycliste vers +Z) :
+   * le creux de la selle, la poignée gauche du guidon (la droite en miroir), l'axe du pédalier et
+   * chaque pédale (gauche, droite) par rapport à lui, manivelles au repos ; le rayon des roues (m).
+   * Les pièces `roue-avant`, `roue-arriere` et `pedalier` tournent autour de leur axe (Z).
+   */
+  bike?: {
+    saddle: [number, number, number];
+    grip: [number, number, number];
+    crank: [number, number, number];
+    pedals: [[number, number, number], [number, number, number]];
+    wheel: number;
+  };
+  /**
    * Lampe qu'on allume d'un clic (lampe de chevet) : la lumière part à `y` (m) au-dessus du pied ;
    * la pièce `ampoule` brille et la pièce `abat-jour` s'éclaire quand elle est allumée.
    */

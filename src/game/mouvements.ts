@@ -59,7 +59,7 @@ export class Mouvements {
 
   /** Peut-on grimper sur `item` ? (un meuble à hauteur de table, assez grand pour y tenir) */
   private climbable(item: WorldItem): boolean {
-    if (!this.host.obstacle(item) || item.def.shower || item.def.heat) return false;
+    if (!this.host.obstacle(item) || item.def.shower || item.def.heat || item.def.bike) return false;
     const b = item.box, top = item.object.position.y + b.max.y;
     return top >= CLIMB_MIN && top <= CLIMB_MAX && b.max.x - b.min.x >= CLIMB_SIZE && b.max.z - b.min.z >= CLIMB_SIZE;
   }

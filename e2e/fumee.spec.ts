@@ -45,5 +45,29 @@ test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info
   expect(etat.perso).toContain('cuisine');
   await page.screenshot({ path: info.outputPath('1-cuisine.png') });
 
+  // le vélo du garage : on monte dessus, on sort du garage, on descend ; il reste debout là
+  const velo = await page.evaluate(async () => {
+    type V = { x: number; z: number; clone(): V; set(x: number, y: number, z: number): V };
+    type Item = { def: { id: string }; object: { position: V; getObjectByName(n: string): { rotation: { z: number } } | undefined } };
+    const g = (window as unknown as { game: { items: Item[]; velo: { mount(b: Item, r: boolean): boolean; dismount(): boolean; riding: Item | null; ride: { phase: string } | null }; character: { position: V; goTo(p: V, r: boolean): void } } }).game;
+    const wait = async (ok: () => boolean) => {
+      for (let i = 0; i < 600 && !ok(); i++) await new Promise((r) => setTimeout(r, 100));
+      return ok();
+    };
+    const bike = g.items.find((i) => i.def.id === 'velo')!;
+    const start = bike.object.position.clone();
+    if (!g.velo.mount(bike, false)) return 'pas monté';
+    if (!(await wait(() => g.velo.ride?.phase === 'ride'))) return 'jamais en selle';
+    g.character.goTo(start.clone().set(start.x - 1, 0, start.z + 6), false);
+    if (!(await wait(() => bike.object.position.z > start.z + 2))) return 'le vélo n’avance pas';
+    const wheel = bike.object.getObjectByName('roue-arriere')?.rotation.z ?? 0;
+    if (Math.abs(wheel) < 1) return 'les roues ne tournent pas';
+    g.velo.dismount();
+    if (!(await wait(() => !g.velo.riding))) return 'pas descendu';
+    return 'ok';
+  });
+  expect(velo).toBe('ok');
+  await page.screenshot({ path: info.outputPath('2-velo.png') });
+
   expect(erreurs, erreurs.join('\n')).toEqual([]);
 });

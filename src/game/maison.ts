@@ -178,9 +178,10 @@ export const GARAGE_SPEC: RoomSpec = {
     ['carton', GARAGE.x0 + 0.24, 0.32, GARAGE.z0 + 1.2, Q],
     ['carton', GARAGE.x0 + 0.24, 0, GARAGE.z0 + 1.7, Q],
     // la bêche et le râteau debout contre le mur de l'entrée, le vélo garé le long du même mur
+    // (à côté d'eux, un peu en retrait du mur sud : de quoi le sortir en reculant)
     ['rateau', GARAGE.x1 - 0.11, 0, GARAGE.z0 + 0.8, -Q],
     ['beche', GARAGE.x1 - 0.08, 0, GARAGE.z0 + 1.25, -Q],
-    ['velo', GARAGE.x1 - 0.42, 0, 1.6, Q],
+    ['velo', GARAGE.x1 - 0.6, 0, 1.4, Q],
   ],
 };
 

@@ -28,6 +28,8 @@ describe('modèles Tripo de la maison', () => {
       for (const name of Object.keys(look.parts ?? {})) {
         if (name === 'porte' || name === 'porte-2') expect(!!(def.door || def.drawer), `${id} : ${name}`).toBe(true);
         else if (name.startsWith('bouton-')) expect(+name.slice(7), `${id} : ${name}`).toBeLessThan(def.heat!.spots.length);
+        // les roues et le pédalier du vélo tournent quand on roule (velo.ts)
+        else if (def.bike) expect(['roue-avant', 'roue-arriere', 'pedalier'], `${id} : ${name}`).toContain(name);
         // les autres pièces que le jeu montre, allume ou bouge : levier, abat-jour, couette, écran, abattant, drapeau
         else expect(['levier', 'abat-jour', 'couette', 'ecran', 'couvercle', 'drapeau'], `${id} : ${name}`).toContain(name);
       }
