@@ -15,6 +15,7 @@ import { moveButton } from './items/buttons';
 import { loadInterior } from './items/interior';
 import { loadKit } from './kit';
 import { Mouvements } from './mouvements';
+import { Velo } from './velo';
 import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
@@ -199,6 +200,10 @@ const START_WEAR: Record<string, number> = {};
 const WEAR_DRINK = 6;
 const WEAR_READ = 0.15;
 const WEAR_PUSH = 2;
+/** Usure du vélo par mètre parcouru. */
+const WEAR_RIDE = 0.02;
+/** De combien le vélo, en roulant, peut frôler les murs et les meubles (m de chaque côté). */
+const BIKE_SLIM = 0.08;
 /** Usure en prenant un objet, et à chaque café (machine, tasse). */
 const WEAR_GRAB = 0.3;
 const WEAR_BREW = { machine: 1.5, cup: 0.5 };
@@ -415,6 +420,8 @@ export class Game {
   private ground: THREE.Mesh;
   /** Sauter, grimper sur un meuble (mouvements.ts). */
   private mouvements: Mouvements;
+  /** Le vélo : monter, rouler, descendre (velo.ts). */
+  private velo: Velo;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
@@ -618,6 +625,24 @@ export class Game {
       items: () => this.items,
       notice: (t) => this.onNotice?.(t),
       obstacle: (it) => this.isObstacle(it),
+    });
+    this.velo = new Velo({
+      character: this.character,
+      notice: (t) => this.onNotice?.(t),
+      blocked: (bike, pos, yaw) => {
+        // les poignées du guidon et les pédales dépassent : le vélo passe au plus près
+        const rect = footprint(bike.box, pos, yaw, -BIKE_SLIM);
+        const bound = GROUND_HALF - 14;
+        return Math.abs(pos.x) > bound || Math.abs(pos.z) > bound || this.hitsWall(rect)
+          || this.items.some((it) => it !== bike && this.isObstacle(it) && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)));
+      },
+      standable: (p, bike) => !this.buildNav(bike).blocked(p),
+      onRide: (bike) => {
+        // pendant qu'on roule, les chemins ne contournent pas le vélo ; reposé, ils le contournent à sa place
+        this.character.nav = this.buildNav(bike ?? undefined);
+        this.onMenu?.(null);
+      },
+      wear: (bike, meters) => this.wearItem(bike, meters * WEAR_RIDE, false),
     });
     this.scene.add(this.character.root);
 
@@ -985,7 +1010,7 @@ export class Game {
 
   /** Recalcule les chemins quand un obstacle apparaît, disparaît ou bouge (gros objet pris ou posé). */
   private updateNav(): void {
-    if (this.moving) return;
+    if (this.moving || this.velo.riding) return;
     const key = this.items
       .filter((it) => this.isObstacle(it))
       .map((it) => `${it.object.id}:${it.object.position.x.toFixed(2)},${it.object.position.z.toFixed(2)}`)
@@ -1665,6 +1690,7 @@ export class Game {
     const name = `${FEMININE.has(seat.name) ? 'la' : 'le'} ${seat.name}`;
     if (!seat.def.seat) return fail(`On ne s’assoit pas sur ${name}.`);
     if (!c.canSit) return fail('Crée un perso pour pouvoir t’asseoir.');
+    if (this.velo.riding) return fail('Descends d’abord du vélo.');
     if (seat === this.sitting) return true;
     if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
     if (c.carried.includes(seat)) return fail(`Pose d’abord ${name}.`);
@@ -4872,6 +4898,11 @@ export class Game {
     const door = this.doors.get(item);
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    // à vélo : un clic sur le vélo, on descend ; ailleurs, on descend d'abord
+    else if (this.velo.riding) {
+      if (item === this.velo.riding) return this.velo.dismount();
+      this.onNotice?.('Descends d’abord du vélo (E).');
+    }
     else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
     // bouton d'un appareil (un feu de la gazinière, la machine à café) : l'allumer ou l'éteindre
     else if (opts.button !== undefined && item.def.heat) return this.toggleHeat(item, running, opts.button);
@@ -4897,6 +4928,8 @@ export class Game {
     else if (program(item.def)) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
     else if (item.def.bin && !item.def.outdoor && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
+    // mains vides, clic sur le vélo : on monte dessus
+    else if (item.def.bike && !held.length) return this.velo.mount(item, running);
     // mains vides : un clic sur un gros meuble ne fait rien (on le déplace par le menu, « Déplacer »)
     else if (item.def.movable && !held.length) return false;
     // évier : la vaisselle sale en main se lave ; la tasse (propre) se remplit d'eau ; sinon on se lave les mains
@@ -5268,6 +5301,10 @@ export class Game {
       add(`Lâcher : ${this.moving.item.name}`, () => this.release());
       return out;
     }
+    if (this.velo.riding) {
+      this.velo.menu(item, add);
+      return out;
+    }
     if (!item) {
       const can = this.handActions();
       if (can.drink) add('Boire', () => this.drink());
@@ -5423,6 +5460,7 @@ export class Game {
     if (item.def.table && this.crumbs.has(item) && held.some((h) => h.def.wipes)) add(item.def.table === 'repas' ? 'Essuyer la table' : `Essuyer ${the(item.name)}`, () => this.wipeTable(ref));
     if (item === this.sitting) add('Se lever', () => this.standUp());
     this.mouvements.menu(item, add);
+    this.velo.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
     if (item.def.movable && !held.length) add(`Déplacer ${the(item.name)}`, () => this.grabFurniture(item, false));
@@ -5625,6 +5663,10 @@ export class Game {
   private useKey(): void {
     if (this.moving) {
       this.release();
+      return;
+    }
+    if (this.velo.riding) {
+      this.velo.dismount();
       return;
     }
     if (this.washing || this.character.washing) return;

@@ -71,4 +71,20 @@ describe('pièces mobiles des autres pièces', () => {
       }
     }
   });
+
+  it('le vélo : ses roues et son pédalier tournent sur leur axe, les pédales de part et d’autre', () => {
+    const { look, def } = ROOM_RIGS.velo;
+    const bike = def.bike!;
+    expect(look.parts!.pedalier.pivot).toEqual(bike.crank);
+    for (const wheel of ['roue-avant', 'roue-arriere']) expect(look.parts![wheel].pivot![1]).toBeCloseTo(bike.wheel, 1);
+    // manivelles opposées (en x, y), une pédale à gauche (+z), l'autre à droite
+    const [l, r] = bike.pedals;
+    expect(l[0] + r[0]).toBeCloseTo(0);
+    expect(l[1] + r[1]).toBeCloseTo(0);
+    expect(l[2]).toBeGreaterThan(0);
+    expect(r[2]).toBeLessThan(0);
+    // la selle derrière le pédalier et au-dessus, le guidon devant (vers -x)
+    expect(bike.saddle[0]).toBeGreaterThan(bike.crank[0]);
+    expect(bike.grip[0]).toBeLessThan(bike.crank[0]);
+  });
 });

@@ -132,7 +132,6 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   etabli: { model: 'etabli' },
   'etagere-garage': { model: 'etagere-garage' },
   carton: { model: 'carton' },
-  velo: { model: 'velo' },
   beche: { model: 'beche' },
   rateau: { model: 'rateau' },
 };
