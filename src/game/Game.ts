@@ -29,6 +29,7 @@ import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } fro
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { fillerColor, START_CONTENTS } from './items/remplissage';
 import { cellsOf, GRIDS, pack, type Cell } from './items/cases';
+import { forgetIcons, itemIcon } from './items/vignettes';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
 import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
 import { DRAINS, FECULENT_FEMININE, FECULENT_PLURAL, FECULENT_RECIPES, PACKETS, SAUCE_SERVINGS, SOUP_BROTH, SOUP_VEG, SOUPS, TOPPED } from './items/feculents';
@@ -622,6 +623,7 @@ export class Game {
     loadInterior()
       .then(() => {
         for (const it of this.items) it.restyle();
+        forgetIcons();
       })
       .catch((e) => console.warn('pack intérieur non chargé', e));
     this.mouvements = new Mouvements({
@@ -3979,7 +3981,7 @@ export class Game {
     title: string;
     open: boolean;
     grid: [number, number];
-    items: Array<{ ref: string; name: string; state: string; color: string; cell: Cell }>;
+    items: Array<{ ref: string; name: string; state: string; color: string; icon: string | null; cell: Cell }>;
   } | null {
     const shelf = this.byRef(ref);
     if (!shelf?.def.slots) return null;
@@ -3993,6 +3995,7 @@ export class Game {
       // « au frais » va sans dire dans le frigo
       state: this.stateOf(i).split(' · ').filter((w) => w !== 'au frais' && !w.startsWith('gelé')).join(' · '),
       color: `#${fillerColor(i.object).toString(16).padStart(6, '0')}`,
+      icon: itemIcon(i.def),
       cell: cells[k],
     }));
     return { title: cap(shelf.name), open: !door || door.target === 1, grid: [grid[0], Math.max(grid[1], ...cells.map((c) => c.y + c.h))], items };

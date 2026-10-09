@@ -46,12 +46,12 @@ export function InventoryPanel({ game, refId, onClose }: { game: Game; refId: st
             className="inv-item"
             lang="fr"
             title={i.state ? `${i.name} · ${i.state}` : i.name}
-            style={{ gridColumn: `${i.cell.x + 1} / span ${i.cell.w}`, gridRow: `${i.cell.y + 1} / span ${i.cell.h}`, background: i.color, color: inkOn(i.color) }}
+            style={{ gridColumn: `${i.cell.x + 1} / span ${i.cell.w}`, gridRow: `${i.cell.y + 1} / span ${i.cell.h}`, ...(i.icon ? { borderBottom: `3px solid ${i.color}` } : { background: i.color, color: inkOn(i.color) }) }}
             onPointerEnter={() => setHover(i.ref)}
             onPointerLeave={() => setHover((h) => (h === i.ref ? null : h))}
             onClick={() => game.takeOut(i.ref)}
           >
-            {i.name}
+            {i.icon ? <img src={i.icon} alt={i.name} draggable={false} /> : i.name}
           </button>
         ))}
       </div>
