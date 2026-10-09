@@ -48,7 +48,7 @@ import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
 import { lampLevel, placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
-import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, type Quality } from './postfx';
+import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
 const UP = new THREE.Vector3(0, 1, 0);
@@ -6789,6 +6789,7 @@ export class Game {
     const dt = Math.min(0.05, real / steps);
     for (let i = 0; i < steps; i++) this.step(dt);
     this.tidyLamps();
+    skipDarkLights(this.scene);
     this.post.render();
   };
 
