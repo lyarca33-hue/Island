@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { createToonMaterial } from '../toon';
+import type { Motion } from './rigs';
 
 export const TRIPO_URL = `${import.meta.env.BASE_URL}models/cuisine.glb`;
 
@@ -35,6 +36,8 @@ interface PartLook {
   pivot?: V3;
   /** Levier : de combien il descend quand l'appareil tourne (m ; défaut du jeu : 6 cm). */
   drop?: number;
+  /** Mouvement de la pièce, joué par `poseRig` (rigs.ts) : l'abattant des toilettes, le drapeau. */
+  motion?: Motion;
 }
 
 export interface TripoLook {
@@ -234,6 +237,8 @@ export function dressTripo(id: string, model: THREE.Object3D): THREE.Object3D {
     part.add(mesh);
     const d = look.parts?.[name]?.drop;
     if (d !== undefined) part.userData.drop = d;
+    const motion = look.parts?.[name]?.motion;
+    if (motion) part.userData.motion = motion;
   }
   // l'intérieur fait par programme (étagères, paniers) devient une pièce fixe comme les autres : regroupée (merge.ts)
   const inner: THREE.Object3D[] = [];
