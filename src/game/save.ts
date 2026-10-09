@@ -14,7 +14,6 @@ import type { WorldItem } from './items/carry';
 import { ITEM_BY_ID } from './items/catalog';
 import type { NeedKey } from './needs';
 import { BODY_STATES } from './temperature';
-import { CARTE_SUFFIX } from './carte';
 
 /** Un objet de la maison. Les champs absents gardent leur valeur de départ. */
 export interface ItemSave {
@@ -209,7 +208,11 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
 // --- dans le navigateur -------------------------------------------------------------------
 
 /** Une partie par carte (carte.ts) : la cuisine seule ne reprend pas la maison complète. */
-const LOCAL_KEY = `island-partie${CARTE_SUFFIX}`;
+/**
+ * Clé de la partie dans le navigateur. Les parties d'avant le kit Tripo (`island-partie`, puis
+ * `island-partie-cuisine`) gardaient des meubles qui n'existent plus : elles restent là, pas relues.
+ */
+const LOCAL_KEY = 'island-partie-kit';
 
 /** La partie gardée dans ce navigateur, ou null. */
 export function loadLocal(): GameSave | null {

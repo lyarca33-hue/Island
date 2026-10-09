@@ -101,23 +101,10 @@ export type Intent =
   | { kind: 'glacons'; dans?: string }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
   | { kind: 'laver'; visage: boolean }
-  /** Salle de bain : prendre une douche, se sécher (serviette), aller aux toilettes, tirer la chasse, se regarder dans le miroir. */
-  | { kind: 'douche' }
-  | { kind: 'secher' }
-  | { kind: 'toilettes' }
-  | { kind: 'chasse' }
-  | { kind: 'miroir' }
-  /** Lever (`ouvrir`) ou baisser le couvercle des toilettes. */
-  | { kind: 'couvercle'; ouvrir: boolean }
-  /** Aller dans la pièce `piece` (cuisine, salon, chambre, salle de bain). */
+  /** Aller dans la pièce `piece` (la cuisine). */
   | { kind: 'piece'; piece: string }
   /** Allumer (`on`) ou éteindre la lumière de la pièce `piece` (sinon celle où est le perso). */
   | { kind: 'lumiere'; on: boolean; piece?: string }
-  /**
-   * La télé `ref` (sinon la plus proche) : s'asseoir d'abord sur le canapé (`assis`), puis
-   * l'allumer, ou changer de chaîne (`zapper`, vers `chaine` si elle est dite).
-   */
-  | { kind: 'tele'; ref?: string; assis?: boolean; zapper?: boolean; chaine?: string }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
   | { kind: 'lire'; ref?: string }
   | { kind: 'arreter_lire' }
@@ -136,9 +123,6 @@ export type Intent =
   /** Laver à l'évier ces pièces de vaisselle (toute la vaisselle sale si `refs` est vide). */
   | { kind: 'vaisselle'; refs: string[] }
   | { kind: 'lever' }
-  /** Aller dormir dans le lit `ref` (sinon le plus proche) ; se réveiller. */
-  | { kind: 'dormir'; ref?: string }
-  | { kind: 'reveiller' }
   /**
    * Faire cuire l'ingrédient `ref` (sinon celui qu'on tient, sinon le plus proche) : ustensile
    * (rempli d'eau pour la casserole) sur le feu, ingrédient dedans, feu allumé, puis éteint une fois cuit.
@@ -162,20 +146,6 @@ export type Intent =
   | { kind: 'omelette' }
   | { kind: 'crepe' }
   | { kind: 'oeuf_plat' }
-  /**
-   * La lessive : `laver` (le panier à la machine, lavage lancé), `etendre` (le linge mouillé sur
-   * l'étendoir), `secher` (au sèche-linge, séchage lancé), `sortir` (le linge de la machine `ref`,
-   * sinon de celle qui a fini), `ranger` (le linge sec, ramassé ou sorti, rangé dans l'armoire).
-   */
-  | { kind: 'linge'; etape: 'laver' | 'etendre' | 'secher' | 'sortir' | 'ranger'; ref?: string }
-  /** Aller pêcher à l'étang, une canne en main (prise au bord de l'étang s'il le faut). */
-  | { kind: 'peche' }
-  /**
-   * Le jardin : arroser le potager (l'arrosoir rempli au robinet du jardin), y semer ou récolter
-   * (`quoi` : carottes, tomates…), désherber, cueillir une pomme, cueillir un bouquet, sentir les fleurs,
-   * ou jardiner (ce qu'il y a de plus utile à faire au potager, comme un clic dessus).
-   */
-  | { kind: 'jardin'; geste: 'arroser' | 'semer' | 'recolter' | 'desherber' | 'pomme' | 'bouquet' | 'sentir' | 'jardiner'; quoi?: string; tous?: boolean }
   /** Le magasin : l'ouvrir ; acheter ces `lignes` (id de fiche, nombre) ; vendre au marché (`noms`, sinon tout) ; l'argent qui reste. */
   | { kind: 'magasin' }
   | { kind: 'acheter'; lignes: Array<{ id: string; n: number }> }
@@ -193,8 +163,6 @@ export function intentLabel(i: Intent): string {
   if (i.kind === 'vaisselle') return `faire la vaisselle${i.refs.length ? ` ${i.refs.join(', ')}` : ''}`;
   if (i.kind === 'repas') return `manger à table${i.ref ? ` ${i.ref}` : ''}`;
   if (i.kind === 'preparer') return `préparer${i.plat ? ` ${i.plat}` : ' un plat'}`;
-  if (i.kind === 'linge') return `lessive : ${i.etape}`;
-  if (i.kind === 'jardin') return `jardin : ${i.geste}${i.quoi ? ` ${i.quoi}` : ''}`;
   if (i.kind === 'acheter') return `acheter ${i.lignes.map((l) => `${l.n} ${l.id}`).join(', ')}`;
   return `${i.kind.replace('_', ' ')}${what ? ` ${what}` : ''}${sur}`;
 }
@@ -845,42 +813,10 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       // les mains doivent être libres
       await freeHands(game, act);
       return act(intent.visage ? 'se_laver' : 'laver_mains');
-    case 'douche':
-      // les mains doivent être libres
-      await freeHands(game, act);
-      return act('douche');
-    case 'secher': {
-      const towel = world(game).objets.find((o) => o.nom === 'serviette');
-      if (!towel) throw new Failed('Il n’y a pas de serviette.');
-      await take(game, act, towel.ref);
-      await act('secher');
-      // la serviette retourne sur le porte-serviettes
-      return act('ranger_place').then(() => {}, () => {});
-    }
-    case 'toilettes':
-      return act('toilettes');
-    case 'chasse':
-      return act('chasse');
-    case 'miroir':
-      return act('miroir');
-    case 'couvercle':
-      return act('couvercle', { etat: intent.ouvrir ? 'ouvrir' : 'fermer' });
     case 'piece':
       return act('aller_piece', { piece: intent.piece });
     case 'lumiere':
       return act('lumiere', { etat: intent.on ? 'allumer' : 'eteindre', ...(intent.piece ? { piece: intent.piece } : {}) });
-    case 'tele': {
-      const tv = intent.ref ?? world(game).objets.filter((o) => o.nom === 'télé').sort((a, b) => a.distance - b.distance)[0]?.ref;
-      if (!tv) throw new Failed('Il n’y a pas de télé.');
-      // sur le canapé (sinon le siège le plus proche de la télé), à moins d'être déjà assis
-      if (intent.assis && !world(game).perso.includes('assis')) {
-        const w = world(game);
-        const sofa = w.objets.find((o) => o.nom === 'canapé' && o.sorte === 'siège');
-        await runOne(game, { kind: 'asseoir', ref: sofa?.ref }, act);
-      }
-      if (intent.zapper) return act('zapper', { objet: tv, ...(intent.chaine ? { chaine: intent.chaine } : {}) });
-      return act('allumer', { objet: tv });
-    }
     case 'lire': {
       const w = world(game);
       if (w.lit && (!intent.ref || intent.ref === w.lit)) return;
@@ -964,20 +900,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return;
     }
     case 'lever':
-      if (world(game).perso.includes('endormi')) return act('reveiller');
       if (!world(game).perso.includes('assis')) return;
       return act('lever');
-    case 'dormir': {
-      const bed = intent.ref ?? world(game).objets.filter((o) => o.sorte === 'lit').sort((a, b) => a.distance - b.distance)[0]?.ref;
-      if (!bed) throw new Failed('Il n’y a pas de lit.');
-      if (world(game).perso.includes('endormi')) return;
-      // on se couche les mains vides
-      await freeHands(game, act, () => false);
-      return act('dormir', { lit: bed });
-    }
-    case 'reveiller':
-      if (!world(game).perso.includes('endormi')) return;
-      return act('reveiller');
     case 'arreter_lire':
       if (!world(game).lit) return;
       return act('arreter_lire');
@@ -1079,20 +1003,6 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await crackInto(game, act, pan);
       return cookAndServe(game, act, pan, stove, 'œuf au plat');
     }
-    case 'linge':
-      return laundry(game, act, intent.etape, intent.ref);
-    case 'peche': {
-      const pond = nearestNamed(game, 'étang') ?? nearestNamed(game, 'ponton');
-      if (!pond) throw new Failed('Il n’y a pas d’étang.');
-      const rod = world(game).objets.filter((o) => o.nom.startsWith('canne à pêche')).sort((a, b) => +!world(game).enMain.includes(a.ref) - +!world(game).enMain.includes(b.ref) || a.distance - b.distance)[0];
-      if (!rod) throw new Failed('Il n’y a pas de canne à pêche (il y en a au magasin).');
-      // la canne seule en main
-      await freeHands(game, act, (r) => r === rod.ref);
-      await take(game, act, rod.ref);
-      return act('geste', { objet: pond.ref, geste: 'Pêcher' });
-    }
-    case 'jardin':
-      return garden(game, act, intent);
     case 'magasin':
       return act('magasin');
     case 'acheter':
@@ -1115,155 +1025,3 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act('argent');
   }
 }
-
-/** L'état (pour l'infobulle) de l'objet `nom` le plus proche : « linge sec », « vide »… */
-const stateOfNamed = (game: Game, nom: string) => nearestNamed(game, nom)?.ou ?? '';
-
-/** Une main libre au moins (pour sortir le linge, récolter, cueillir), en gardant ce que vérifie `keep`. */
-async function oneHand(game: Game, act: Act, keep: (ref: string) => boolean = () => false): Promise<void> {
-  const w = world(game);
-  if (w.mainsLibres > 0) return;
-  const load = w.mains.find((l) => !l.some(keep));
-  if (!load) throw new Failed('Les mains sont prises.');
-  await dropLoad(act, load);
-}
-
-/** Le linge (`linge mouillé` ou `linge propre`) en main : tenu, posé quelque part, sinon sorti de la machine qui a fini. */
-async function laundryInHand(game: Game, act: Act, nom: string, machine?: string): Promise<string> {
-  const w = world(game);
-  const pile = w.objets.filter((o) => o.nom === nom).sort((a, b) => +!w.enMain.includes(a.ref) - +!w.enMain.includes(b.ref) || a.distance - b.distance)[0];
-  if (pile) {
-    await take(game, act, pile.ref);
-    return pile.ref;
-  }
-  const ready = nom === 'linge propre' ? 'linge sec' : 'linge lavé';
-  const from = machine ?? w.objets.find((o) => (o.nom === 'machine à laver' || o.nom === 'sèche-linge') && o.ou.includes(ready))?.ref;
-  if (!from) throw new Failed(nom === 'linge propre' ? 'Il n’y a pas de linge sec à ranger.' : 'Il n’y a pas de linge mouillé : lance d’abord une lessive.');
-  await oneHand(game, act);
-  await act('geste', { objet: from, geste: 'Sortir le linge' });
-  const out = world(game).objets.find((o) => o.nom === nom && world(game).enMain.includes(o.ref));
-  if (!out) throw new Failed('Le linge n’est pas sorti.');
-  return out.ref;
-}
-
-/** Une étape de la lessive (voir l'intention `linge`). */
-async function laundry(game: Game, act: Act, etape: 'laver' | 'etendre' | 'secher' | 'sortir' | 'ranger', ref?: string): Promise<void> {
-  const washer = nearestNamed(game, 'machine à laver');
-  const dryer = nearestNamed(game, 'sèche-linge');
-  switch (etape) {
-    case 'laver': {
-      if (!washer) throw new Failed('Il n’y a pas de machine à laver.');
-      const ou = washer.ou;
-      if (ou.includes('en cours')) throw new Failed(`La machine tourne déjà (${ou.split(', ').pop()}).`);
-      if (ou.includes('linge lavé')) throw new Failed('La machine a fini : sors le linge pour l’étendre ou le sécher.');
-      if (!ou.includes('prêt à laver')) {
-        if (stateOfNamed(game, 'panier à linge').endsWith(', vide')) throw new Failed('Le panier à linge est vide : rien à laver.');
-        // le panier se porte à deux mains
-        await freeHands(game, act, (r) => world(game).objets.find((o) => o.ref === r)?.nom === 'panier à linge');
-        await act('geste', { objet: washer.ref, geste: 'Mettre le linge sale' });
-      }
-      return act('geste', { objet: washer.ref, geste: 'Lancer un lavage' });
-    }
-    case 'etendre': {
-      const rack = nearestNamed(game, 'étendoir');
-      if (!rack) throw new Failed('Il n’y a pas d’étendoir.');
-      const wet = await laundryInHand(game, act, 'linge mouillé', ref);
-      await freeHands(game, act, (r) => r === wet);
-      return act('geste', { objet: rack.ref, geste: 'Étendre le linge' });
-    }
-    case 'secher': {
-      if (!dryer) throw new Failed('Il n’y a pas de sèche-linge.');
-      if (dryer.ou.includes('en cours')) throw new Failed(`Le sèche-linge tourne déjà (${dryer.ou.split(', ').pop()}).`);
-      if (!dryer.ou.includes('prêt à sécher')) {
-        await laundryInHand(game, act, 'linge mouillé', washer && washer.ou.includes('linge lavé') ? washer.ref : undefined);
-        await act('geste', { objet: dryer.ref, geste: 'Mettre le linge au sèche-linge' });
-      }
-      return act('geste', { objet: dryer.ref, geste: 'Lancer le séchage' });
-    }
-    case 'sortir': {
-      const from = ref ? world(game).objets.find((o) => o.ref === ref) : [dryer, washer].find((m) => m && /linge (lavé|sec)/.test(m.ou));
-      if (!from) throw new Failed('Aucune machine n’a fini : rien à sortir.');
-      await oneHand(game, act);
-      return act('geste', { objet: from.ref, geste: 'Sortir le linge' });
-    }
-    case 'ranger': {
-      const wardrobe = nearestNamed(game, 'armoire');
-      if (!wardrobe) throw new Failed('Il n’y a pas d’armoire.');
-      // le linge sec de l'étendoir se ramasse d'abord
-      const rack = nearestNamed(game, 'étendoir');
-      if (rack?.ou.includes('linge sec') && !world(game).objets.some((o) => o.nom === 'linge propre')) {
-        await oneHand(game, act);
-        await act('geste', { objet: rack.ref, geste: 'Ramasser le linge sec' });
-      }
-      const clean = await laundryInHand(game, act, 'linge propre', ref);
-      await freeHands(game, act, (r) => r === clean);
-      return act('geste', { objet: wardrobe.ref, geste: 'Ranger le linge propre' });
-    }
-  }
-}
-
-/** Les gestes du jardin (voir l'intention `jardin`). */
-async function garden(game: Game, act: Act, intent: Extract<Intent, { kind: 'jardin' }>): Promise<void> {
-  const bed = nearestNamed(game, 'potager');
-  switch (intent.geste) {
-    case 'arroser': {
-      if (!bed) throw new Failed('Il n’y a pas de potager.');
-      const can = nearestNamed(game, 'arrosoir');
-      if (!can) throw new Failed('Il n’y a pas d’arrosoir.');
-      await freeHands(game, act, (r) => r === can.ref);
-      await take(game, act, can.ref);
-      // vide : rempli d'abord au robinet du jardin
-      if (!stateOfNamed(game, 'arrosoir').includes('contient')) {
-        const tap = nearestNamed(game, 'robinet du jardin');
-        if (!tap) throw new Failed('Il n’y a pas de robinet pour remplir l’arrosoir.');
-        await act('geste', { objet: tap.ref, geste: 'Remplir' });
-      }
-      return act('geste', { objet: bed.ref, geste: 'Arroser le potager' });
-    }
-    case 'semer':
-    case 'recolter': {
-      if (!bed) throw new Failed('Il n’y a pas de potager.');
-      const verb = intent.geste === 'semer' ? 'Semer' : 'Récolter';
-      // « Semer des carottes », « Récolter une tomate (3) » : le légume dit, sinon le premier possible
-      const crop = intent.quoi ? normalizeCrop(intent.quoi) : '';
-      const label = () => game.menuOf(bed.ref).map((e) => e.label).find((l) => l.startsWith(verb) && (!crop || normalizeCrop(l).includes(crop)));
-      // on sème tous les carrés vides ; on récolte un légume par main
-      let done = 0;
-      for (let i = 0; i < (!intent.tous ? 1 : verb === 'Semer' ? 6 : 2); i++) {
-        const l = label();
-        if (!l) break;
-        if (verb === 'Récolter') {
-          if (done && !world(game).mainsLibres) break;
-          await oneHand(game, act);
-        }
-        await act('geste', { objet: bed.ref, geste: l });
-        done++;
-      }
-      if (!done) throw new Failed(intent.geste === 'semer' ? 'Il n’y a rien à semer (carrés déjà semés, ou terre gelée).' : 'Il n’y a rien à récolter pour l’instant.');
-      return;
-    }
-    case 'desherber':
-      if (!bed) throw new Failed('Il n’y a pas de potager.');
-      return act('geste', { objet: bed.ref, geste: 'Désherber' });
-    case 'jardiner':
-      if (!bed) throw new Failed('Il n’y a pas de potager.');
-      // comme un clic : arroser, récolter, désherber ou semer, selon ce qui presse
-      return act('prendre', { objet: bed.ref });
-    case 'pomme': {
-      const tree = nearestNamed(game, 'pommier');
-      if (!tree) throw new Failed('Il n’y a pas de pommier.');
-      await oneHand(game, act);
-      return act('geste', { objet: tree.ref, geste: 'Cueillir une pomme' });
-    }
-    case 'bouquet':
-    case 'sentir': {
-      const flowers = nearestNamed(game, 'massif de fleurs');
-      if (!flowers) throw new Failed('Il n’y a pas de fleurs.');
-      if (intent.geste === 'bouquet') await oneHand(game, act);
-      return act('geste', { objet: flowers.ref, geste: intent.geste === 'bouquet' ? 'Cueillir un bouquet' : 'Sentir les fleurs' });
-    }
-  }
-}
-
-/** « Récolter une tomate (3) », « tomates » → « tomate » : le légume, sans accents ni pluriel. */
-const normalizeCrop = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/s\b/g, '');

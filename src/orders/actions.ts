@@ -167,14 +167,14 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'allumer',
-    description: 'Allumer un appareil : la télé, la lampe de chevet, la gazinière (les feux où une poêle ou une casserole est posée), la machine à café, ou mettre en marche le four, le micro-ondes, le lave-vaisselle (ils cuisent ou lavent ce qui est dedans ; l’action finit quand ils sonnent).',
+    description: 'Allumer un appareil : la gazinière (les feux où une poêle ou une casserole est posée), la machine à café, ou mettre en marche le four, le micro-ondes, le lave-vaisselle (ils cuisent ou lavent ce qui est dedans ; l’action finit quand ils sonnent).',
     params: { objet: 'ref de l’appareil' },
     // `ustensile` (facultatif) : seulement le feu sous lui
     run: (g, a) => (g.isLamp(a.objet) ? g.switchLamp(a.objet, true) : g.isAppliance(a.objet) ? g.startAppliance(a.objet) : g.switchOn(a.objet, false, a.ustensile)),
   },
   {
     name: 'eteindre',
-    description: 'Éteindre un appareil (la télé, la lampe de chevet, tous les feux de la gazinière, la machine à café, le four…).',
+    description: 'Éteindre un appareil (tous les feux de la gazinière, la machine à café, le four…).',
     params: { objet: 'ref de l’appareil' },
     run: (g, a) => (g.isLamp(a.objet) ? g.switchLamp(a.objet, false) : g.isAppliance(a.objet) ? g.stopAppliance(a.objet) : g.switchOff(a.objet, false, a.ustensile)),
   },
@@ -408,91 +408,22 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.wash(),
   },
   {
-    name: 'douche',
-    description: 'Prendre une douche (les mains doivent être libres) : l’hygiène remonte à fond. On en sort mouillé : se sécher ensuite avec la serviette.',
-    params: {},
-    run: (g) => g.takeShower(),
-  },
-  {
-    name: 'secher',
-    description: 'Se sécher avec la serviette (prise sur le porte-serviettes si on ne la tient pas). Mouillé et pas séché, le perso laisse des gouttes par terre.',
-    params: {},
-    run: (g) => g.dryOff(),
-  },
-  {
-    name: 'toilettes',
-    description: 'Aller aux toilettes : le perso s’assoit, la vessie se vide, puis il tire la chasse. Penser à se laver les mains ensuite.',
-    params: {},
-    run: (g) => g.useToilet(),
-  },
-  {
-    name: 'chasse',
-    description: 'Tirer la chasse d’eau des toilettes.',
-    params: {},
-    run: (g) => g.flush(),
-  },
-  {
-    name: 'miroir',
-    description: 'Se regarder dans le miroir du lavabo : le perso dit de quoi il a l’air.',
-    params: {},
-    run: (g) => g.lookInMirror(),
-  },
-  {
-    name: 'couvercle',
-    description: 'Lever (`etat` = ouvrir) ou baisser (`etat` = fermer) le couvercle des toilettes.',
-    params: { etat: 'ouvrir ou fermer' },
-    run: (g, a) => g.toiletLid(a.etat !== 'fermer', a.objet),
-  },
-  {
     name: 'aller_piece',
-    description: 'Aller dans une autre pièce de la maison : `piece` = cuisine, salon, chambre, salle de bain ou entrée (le perso s’arrête juste après l’entrée).',
-    params: { piece: 'cuisine, salon, chambre, salle de bain ou entrée' },
+    description: 'Aller dans une pièce de la maison (pour l’instant, seulement la cuisine) : le perso s’arrête juste après l’entrée.',
+    params: { piece: 'cuisine' },
     run: (g, a) => g.walkToRoom(a.piece),
   },
   {
     name: 'lumiere',
-    description: 'Aller à l’interrupteur et allumer (`etat` = allumer) ou éteindre (`etat` = eteindre) la lumière (plafonnier, lampadaire) de la pièce `piece` (facultatif : sinon celle où est le perso).',
+    description: 'Aller à l’interrupteur et allumer (`etat` = allumer) ou éteindre (`etat` = eteindre) la lumière de la pièce `piece` (facultatif : sinon celle où est le perso).',
     params: { etat: 'allumer ou eteindre' },
     run: (g, a) => g.switchLightsIn(a.etat !== 'eteindre', a.piece),
-  },
-  {
-    name: 'zapper',
-    description: 'Changer de chaîne sur la télé `objet` (allumée d’abord s’il le faut) : la suivante, ou `chaine` (dessin animé, météo, aquarium). Assis, le perso a la télécommande ; debout, il va devant la télé.',
-    params: { objet: 'ref de la télé' },
-    run: (g, a) => g.zapTo(a.objet, a.chaine),
   },
   {
     name: 'asseoir',
     description: 'Aller s’asseoir sur un siège (chaise posée debout par terre, rien dessus). Les objets tenus d’une main restent en main. Le perso se lève tout seul pour toute autre action qui le fait bouger.',
     params: { siege: 'ref du siège' },
     run: (g, a) => g.sit(a.siege),
-  },
-  {
-    name: 'dormir',
-    description: 'Aller se coucher dans le lit (`lit` facultatif : sinon le plus proche) et dormir : l’écran passe au noir, le temps file et la fatigue remonte ; le perso se réveille seul une fois reposé. Les mains doivent être vides ; refusé si la fatigue est presque pleine.',
-    params: { lit: 'ref du lit' },
-    run: (g, a) => g.sleepIn(a.lit),
-  },
-  {
-    name: 'sieste',
-    description: 'Faire la sieste allongé sur le canapé (`canape` facultatif : sinon le plus proche) : le temps file, la fatigue remonte, le perso se réveille seul au bout d’une à deux heures. Mains vides ; refusé si la fatigue est presque pleine.',
-    params: { canape: 'ref du canapé' },
-    run: (g, a) => g.nap(a.canape),
-  },
-  {
-    name: 'regler_reveil',
-    description: 'Régler le réveil-matin de la chambre à l’heure `heure` (ex. 7 ou 6.5 pour 6 h 30), ou le couper (`heure` = off). Réglé, il sonne à cette heure (« Driiing ! ») et le perso qui dort dans le lit se lève à ce moment-là au lieu d’attendre d’être reposé.',
-    params: { heure: 'heure du réveil, ou off' },
-    run: (g, a) => {
-      const h = Number(String(a.heure ?? '7').replace(',', '.').replace(/\s*h\s*(\d+)?/, (_m, mm) => (mm ? `.${Math.round((Number(mm) / 60) * 100)}` : '')));
-      return g.setAlarm(a.heure === 'off' ? null : Number.isFinite(h) ? h : 7, a.reveil);
-    },
-  },
-  {
-    name: 'reveiller',
-    description: 'Se réveiller et sortir du lit quand on dort.',
-    params: {},
-    run: (g) => g.wakeUp(),
   },
   {
     name: 'lever',
@@ -597,7 +528,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'vendre',
-    description: 'Vendre au marché l’objet `objet` (légumes du jardin, pommes, poissons, plats faits maison) ; sans `objet`, tout ce que le marché rachète.',
+    description: 'Vendre au marché l’objet `objet` (plats faits maison) ; sans `objet`, tout ce que le marché rachète.',
     params: {},
     run: (g, a) => (a.objet ? g.sellItem(a.objet) : g.sellAll()),
   },

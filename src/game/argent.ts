@@ -9,8 +9,6 @@
 import type { ItemDef } from './items/catalog';
 import { ITEM_BY_ID } from './items/catalog';
 import { STOCK } from './items/pantry';
-import { FISH_BY_ID, OUTDOOR_PRICES, RODS } from './items/plein-air';
-import { ANIMAL_PRICES } from './items/animaux';
 
 /** Argent au début d'une partie (centimes). */
 export const START_MONEY = 20000;
@@ -26,25 +24,24 @@ const PRICES: Record<string, number> = {
   oeuf: 35, lait: 110, beurre: 230, fromage: 350, sel: 80, poivre: 220, paprika: 240, herbes: 260, huile: 690,
   'sacs-poubelle': 290, spray: 340, 'sachets-the': 280, 'paquet-pates': 120, 'paquet-riz': 180, 'brique-soupe': 260,
   // maison
-  'papier-toilette': 60, pastilles: 590, assiette: 450, verre: 250, bol: 350, tasse: 400, cuillere: 150, fourchette: 150, 'couteau-table': 180,
+  pastilles: 590, assiette: 450, verre: 250, bol: 350, tasse: 400, cuillere: 150, fourchette: 150, 'couteau-table': 180,
   couteau: 1990, carafe: 900, theiere: 1800, saladier: 1200, moule: 1100, poele: 2500, casserole: 2200, planche: 900, plateau: 1200,
   fouet: 450, spatule: 350, 'cuillere-bois': 250, louche: 450, rape: 650, 'bac-glacons': 300, eponge: 120, torchon: 400, maniques: 600,
-  serviette: 1200, 'verre-a-dents': 300, 'brosse-a-dents': 250, savon: 220, 'lampe-chevet': 2900, reveil: 1500, chaise: 3500, tabouret: 2500,
-  caisse: 1500, arrosoir: 1400, balai: 1200, seau: 900, serpilliere: 800, gants: 350,
+  savon: 220, chaise: 3500, tabouret: 2500, caisse: 1500, balai: 1200, seau: 900, serpilliere: 800, gants: 350,
 };
 
 /** Toujours en rayon maison, cassé ou pas : ce qui s'use ou se perd. */
-export const HOUSE_ALWAYS = ['papier-toilette', 'pastilles', 'assiette', 'verre', 'bol', 'tasse', 'cuillere', 'fourchette', 'couteau-table', 'trousse-de-secours', 'pansements', 'croquettes', ...RODS.slice(1).map((r) => r.id)];
+export const HOUSE_ALWAYS = ['pastilles', 'assiette', 'verre', 'bol', 'tasse', 'cuillere', 'fourchette', 'couteau-table'];
 
-/** Jamais en vente : ce qu'on ne trouve pas au magasin (courrier, sac du livreur, plantes du jardin, poissons de l'étang…). */
-const NOT_SOLD = new Set(['lettre', 'liste-courses', 'sac-courses', 'sac-poubelle', 'bouquet', 'livre-recettes', ...FISH_BY_ID.keys()]);
+/** Jamais en vente : ce qu'on ne trouve pas au magasin (courrier, sac du livreur…). */
+const NOT_SOLD = new Set(['lettre', 'liste-courses', 'sac-courses', 'sac-poubelle', 'livre-recettes']);
 
-/** Ce que le marché rachète sans étoiles : les légumes du potager et les pommes du pommier. */
+/** Ce que le marché rachète sans étoiles : les légumes et les pommes. */
 export const MARKET_PRODUCE = new Set(['carotte', 'tomate', 'pomme-de-terre', 'concombre', 'pomme']);
 
 /** Prix d'un objet au magasin (centimes). */
 export function priceOf(def: ItemDef): number {
-  const p = PRICES[def.id] ?? OUTDOOR_PRICES[def.id] ?? ANIMAL_PRICES[def.id];
+  const p = PRICES[def.id];
   if (p !== undefined) return p;
   // un plat cuisiné (pas vendu tout fait) : ce que coûterait le même au restaurant du port
   if (def.food) return STOCK[def.name] ? 250 : 900;
@@ -55,9 +52,6 @@ export function priceOf(def: ItemDef): number {
 /** Ce que le marché donne pour un objet (centimes), toujours sous son prix au magasin ; 0 : il n'en veut pas. */
 export function sellPrice(def: ItemDef, stars: number, fresh: 'frais' | 'à manger vite' | 'périmé'): number {
   if (fresh === 'périmé') return 0;
-  // un poisson de l'étang : son prix, selon sa rareté
-  const fish = FISH_BY_ID.get(def.id);
-  if (fish) return fish.price;
   const buy = priceOf(def);
   let k: number;
   if (stars > 0) k = 0.2 + 0.12 * Math.min(5, stars); // 1 étoile : 32 %, 5 étoiles : 80 %

@@ -12,12 +12,8 @@
  *
  * Avec --only, seuls ces packs sont refaits ; le manifeste garde les tailles des autres.
  *
- * Les monstres du « Bestiary - Dungeon Monsters Kit » (licence Quaternius QAL : utilisables dans
- * le jeu, mais pas à redistribuer comme modèles) gardent leur squelette, pour les animations de la
- * Universal Animation Library.
- *
- * Le dossier des packs contient les packs tels que téléchargés (« Survival Pack - Sept 2020/OBJ »,
- * « Fantasy Props MegaKit[Standard]/Exports/glTF »…), voir PACKS ci-dessous.
+ * Le dossier des packs contient les packs tels que téléchargés (« Ultimate Food Pack - Oct 2019/OBJ »),
+ * voir PACKS ci-dessous.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,14 +25,6 @@ import sharp from 'sharp';
 
 /** Les packs : nom du .glb, dossier source, format, échelle (unités du pack → m), modèles gardés (absent : tous). */
 const PACKS = [
-  { id: 'survie', dir: 'Survival Pack - Sept 2020/OBJ', kind: 'obj', scale: 1 },
-  { id: 'peche', dir: 'Cute Fish Pack - Feb 2020/OBJ', kind: 'obj', scale: 1 },
-  { id: 'voitures', simplify: true, dir: 'Realistic Car Pack - Nov 2018/OBJ', kind: 'obj', scale: 1 },
-  { id: 'trains', simplify: true, dir: 'Train Pack - April 2019/OBJ', kind: 'obj', scale: 1 },
-  { id: 'armes', simplify: true, dir: 'Ultimate Gun Pack - July 2019/OBJ', kind: 'obj', scale: 1 },
-  { id: 'fantasy', simplify: true, dir: 'Fantasy Props MegaKit[Standard]/Exports/glTF', kind: 'gltf', textures: 'Fantasy Props MegaKit[Standard]/Textures', scale: 1 },
-  { id: 'scifi', simplify: true, dir: 'Modular SciFi MegaKit[Standard]/glTF', kind: 'gltf', textures: 'Modular SciFi MegaKit[Standard]/Textures', scale: 1 },
-  // les aliments qui habillent ceux du jeu (src/game/items/interior.ts : FOOD_LOOKS)
   { id: 'nourriture', dir: 'Ultimate Food Pack - Oct 2019/OBJ', kind: 'obj', scale: 1, models: [
     'Apple', 'Banana', 'Bread', 'ChickenLeg', 'ChocolateBar', 'Egg_Fried', 'Egg_Whole', 'KetchupBottle', 'Lettuce_Whole',
     'MayoBottle', 'Orange', 'Pepper_Red', 'Pizza', 'Steak', 'Tomato',
@@ -246,37 +234,10 @@ async function buildPack(io, pack) {
 }
 
 await MeshoptEncoder.ready;
-/** Monstres animables (squelette de la Universal Animation Library) : gardés tels quels, textures allégées. */
-const CREATURES = [
-  { id: 'puglin', file: 'Bestiary - Dungeon Monsters Kit[Standard]/Exports/GLB (Godot-Unreal)/Puglin.glb' },
-  { id: 'imp', file: 'Bestiary - Dungeon Monsters Kit[Standard]/Exports/GLB (Godot-Unreal)/Imp.glb' },
-];
-
-async function buildCreature(io, c) {
-  const doc = await io.read(path.join(SRC, c.file));
-  const root = doc.getRoot();
-  // seule la couleur compte en cel shading : ni relief, ni rugosité
-  for (const m of root.listMaterials()) {
-    m.setNormalTexture(null).setOcclusionTexture(null).setMetallicRoughnessTexture(null).setMetallicFactor(0).setRoughnessFactor(1);
-    m.setEmissiveTexture(null).setEmissiveFactor([0, 0, 0]);
-  }
-  doc.createExtension(EXTTextureWebP).setRequired(true);
-  await doc.transform(prune());
-  for (const t of root.listTextures()) {
-    const img = await sharp(Buffer.from(t.getImage())).resize(TEX, TEX, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
-    t.setImage(new Uint8Array(img)).setMimeType('image/webp').setURI(`${t.getName()}.webp`);
-  }
-  await doc.transform(dedup(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
-  const out = path.join(OUT, `${c.id}.glb`);
-  await io.write(out, doc);
-  console.log(`${out} : ${(fs.statSync(out).size / 1024).toFixed(0)} Ko`);
-}
-
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
 const manifest = {};
 const only = args.only?.split(',');
 for (const pack of PACKS) if (!only || only.includes(pack.id)) manifest[pack.id] = await buildPack(io, pack);
-for (const c of CREATURES) if ((!only || only.includes(c.id)) && fs.existsSync(path.join(SRC, c.file))) await buildCreature(io, c);
 // avec --only : les autres packs gardent les tailles déjà écrites
 const MANIFEST = 'src/game/packs/manifest.ts';
 if (only && fs.existsSync(MANIFEST)) {

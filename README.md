@@ -52,58 +52,17 @@ ouvre le créateur, et « Jouer » ramène sur la map.
 
 ### La cuisine
 
-Le perso est dans une cuisine (`src/game/room.ts`) : sol carrelé, quatre murs, une porte
-d'entrée qui s'ouvre toute seule quand il s'en approche (on peut sortir sur l'herbe), une
-fenêtre au-dessus de l'évier et une au-dessus de la table. Les murs tournés vers la caméra
-s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra.
+Le perso est dans une cuisine (`src/game/room.ts`), seule sur un sol d'herbe plat, construite avec
+le kit Tripo (`src/game/kit.ts`, `public/kit/maison.glb`) : sol carrelé, murs en enduit, une porte
+d'entrée en bois qui s'ouvre toute seule quand il s'en approche (on peut sortir sur l'herbe), deux
+fenêtres en bois, un toit en tuiles à deux pans visible de dehors. Les murs tournés vers la caméra
+s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra. La suspension du
+plafond s'allume à l'interrupteur, à côté de la porte.
 
-- Au fond : lave-vaisselle, évier, plan de travail (planche, couteau), gazinière (hotte
-  au-dessus), tiroir à couverts (la bouilloire dessus), frigo, puis la bibliothèque des livres de cuisine.
-- Le long du mur de la porte : machine à café, placard à vaisselle avec le micro-ondes dessus, four,
-  poubelle ; l'horloge au-dessus du coin café donne l'heure du jeu.
-- Au milieu : la table mise (assiette, couverts, tasse), sa chaise, sur un tapis.
-
-Les meubles sont rangés par rangées dos au mur (`RUNS`) : pour en ajouter un, l'ajouter dans la
-liste de son mur, les autres se décalent. Le perso contourne les murs ; un meuble poussé ou un
-objet lancé ne les traverse pas.
-
-### Le jardin
-
-Dehors (`src/game/jardin.ts`), un chemin de pierres part de la porte d'entrée vers le jardin :
-arbres, sapins, buissons, une bordure fleurie au pied du salon, et de quoi faire.
-
-- Le potager : quatre carrés (carottes, tomates, pommes de terre, concombres). Clic : récolter un
-  légume mûr (il arrive en main, c'est le même que celui du frigo), semer un carré vide,
-  désherber, ou arroser si l'on tient l'arrosoir plein. Les légumes poussent avec les heures du
-  jeu, seulement si la terre est humide (elle sèche en un jour) ; les mauvaises herbes les
-  ralentissent. La terre salit les mains.
-- Le robinet du jardin remplit l'arrosoir (et une bouteille, une carafe…), comme l'évier.
-- Le pommier : on y cueille des pommes l'été et l'automne ; il fleurit au printemps.
-- Le massif de fleurs : les sentir (humeur), en cueillir un bouquet qu'on rapporte à la maison.
-- Le banc : on s'y assoit ; au grand air, l'humeur monte doucement.
-
-Tout suit les saisons : feuilles rousses à l'automne, branches nues et sapins enneigés l'hiver,
-où la terre gelée ne pousse plus et les fleurs disparaissent.
-
-### Au-delà du jardin
-
-Les modèles viennent des packs de Quaternius (`public/packs`, voir `src/game/packs/assets.ts`).
-
-- **La pêche** (`src/game/loisirs.ts`, objets dans `src/game/items/plein-air.ts`) : un étang
-  avec son ponton et une barque. Canne en main, un clic sur l'étang ou le ponton : le perso va au
-  bout du ponton et lance. Le flotteur plonge au bout d'un moment ; le poisson (35 espèces, de
-  commune à légendaire) arrive dans la main libre, ou au sol. Plus la canne est bonne (5 cannes,
-  au magasin), plus les poissons rares mordent. Chaque prise remonte l'humeur, davantage pour une
-  espèce jamais pêchée ; les poissons se vendent au marché. Bouger ou lâcher la canne coupe la ligne.
-- **Le camp** : feu de camp (il chauffe et cuit dans une poêle, comme la gazinière), bûches pour
-  s'asseoir, tente, torches qui brillent la nuit, et des objets de survie : trousse de secours et
-  pansements (ils soignent), hache, pelle, sac à dos, boussole, lampe torche, radio, gourde…
-- **Deux monstres** du « Bestiary » (`creatureModel`) : un puglin près du camp et un diablotin à
-  la station. Ils se promènent, regardent le perso qui approche, et dansent quand on les salue.
-- **Le décor** (`src/game/paysage.ts`) : une route avec ses trottoirs, des voitures garées et un
-  taxi qui passe ; un marché et une brocante de l'autre côté ; un atelier ; une voie ferrée au nord
-  où passent trois trains ; une station futuriste avec une armurerie et des aliens sous verre.
-  Les armes, les trains et les voitures sont du décor : on ne les prend pas.
+La cuisine est **vide** : ses anciens meubles et objets ont été retirés, et reviendront un par un
+refaits avec Tripo. Le code des objets (prendre, cuire, laver, ranger…) est gardé pour eux ; les
+meubles se rangeront par rangées dos au mur (`runs` dans la fiche `KITCHEN`). Sans chambre ni salle
+de bain, la fatigue, l'hygiène et la vessie sont en pause.
 
 ### Les ordres
 
@@ -180,12 +139,9 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/toon.ts` | Matériau cel shading (3 paliers nets + liseré de lumière) |
 | `src/game/character.ts` | Perso glTF au squelette Mixamo, animations repos / marche / course |
 | `src/game/ground.ts` | Sol d'herbe (texture peinte par programme) |
-| `src/game/jardin.ts` | Le jardin : arbres, fleurs, potager, pommier, banc, robinet et arrosoir, saisons |
-| `src/game/loisirs.ts` | La pêche, les soins, les torches, les monstres qui se promènent |
-| `src/game/paysage.ts` | Le décor : route, marché, brocante, atelier, voie ferrée et trains, station |
-| `src/game/packs/assets.ts` | Chargement des packs de Quaternius, modèles mis à la taille, monstres |
-| `src/game/items/plein-air.ts` | Fiches des objets du dehors : étang, cannes, poissons, camp, survie, monstres |
-| `src/game/room.ts` | La cuisine : carrelage, murs en coupe, porte, fenêtres, décor ; meubles rangés contre les murs |
+| `src/game/packs/assets.ts` | Chargement des packs de Quaternius (aliments), modèles mis à la taille |
+| `src/game/room.ts` | La cuisine : carrelage, murs en coupe, porte, fenêtres, toit ; meubles rangés contre les murs |
+| `src/game/kit.ts` | Le kit Tripo de la maison : enduit des murs, sol, toit, porte, fenêtre |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
@@ -220,6 +176,9 @@ d'animations : `idle`, `walk`, `run`, `agree` (oui), `headShake` (non), `sad_pos
 `sneak_pose`. Toute animation Mixamo ajoutée à ce fichier sera jouable par tous les persos.
 
 ## Les objets
+
+La cuisine est vide pour l'instant : ce qui suit décrit le système d'objets, qui servira aux
+meubles et aux objets refaits avec Tripo.
 
 Chaque objet a une petite fiche dans `src/game/items/catalog.ts`, pas d'animation à lui :
 
@@ -260,12 +219,10 @@ se briser selon sa fragilité (fiche `fragility`, de 1 très fragile à 10 incas
 livre 8, lettre 10) et la force du choc : il disparaît en éclats de ses couleurs, et une tasse
 pleine laisse une flaque. Sinon il rebondit et se pose (un livre à plat).
 
-Sauter, nager, grimper (`src/game/mouvements.ts`, clips de Quaternius) : Espace ou « Sauter » au
-clic droit sur le perso pour sauter (un demi-mètre : on peut retomber sur un banc ou un lit bas).
-« Nager » au clic droit sur l'étang, les mains vides : le perso plonge depuis la rive, nage au
-clavier ou au clic (Maj : plus vite), et se hisse sur la rive en y arrivant (« Sortir de l’eau »
-au clic droit sur le perso). « Grimper dessus » au clic droit sur un meuble de 35 cm à 1,25 m
-(table, plan de travail, lit) : le perso s'y hisse, s'y promène, et retombe en passant le bord.
+Sauter, grimper (`src/game/mouvements.ts`, clips de Quaternius) : Espace ou « Sauter » au
+clic droit sur le perso pour sauter (un demi-mètre : on peut retomber sur un meuble bas).
+« Grimper dessus » au clic droit sur un meuble de 35 cm à 1,25 m (table, plan de travail) : le
+perso s'y hisse, s'y promène, et retombe en passant le bord.
 
 Déplacer un gros meuble (fiche `movable` : table, bibliothèque, machine à café) : mains vides,
 clic sur le meuble. Le perso se place contre le côté le plus proche et pose les mains dessus ;

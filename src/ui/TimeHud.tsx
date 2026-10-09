@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { hhmm, SEASON_DAYS, SEASONS, TIME_SPEED, YEAR_DAYS } from '../game/clock';
 import type { Game } from '../game/Game';
 import { skillPerks } from '../game/items/freshness';
-import { gardenPerks } from '../game/jardin';
 import { NEEDS } from '../game/needs';
-import { CUISINE_SEULE } from '../game/carte';
 import { WEATHERS, type WeatherKind } from '../game/meteo';
 import { BODY_STATES, degrees, indoorTemp, NORMAL_TEMP } from '../game/temperature';
 import { forecast, type GaugeKey, type GaugeState, GaugeWatch } from './gauges';
@@ -130,10 +128,9 @@ function Gauge({ label, icon, state, level, open, onOpen, minutes, tip }: {
   );
 }
 
-/** Ce qui change entre les compétences cuisine et jardinage. */
+/** Les compétences (pour l'instant la cuisine). */
 const SKILLS = {
   cuisine: { label: 'Cuisine', icon: 'pot', perks: skillPerks, hint: 'Monte en coupant, cuisant et préparant des plats', read: (g: Game) => g.cookingSkill },
-  jardinage: { label: 'Jardinage', icon: 'sprout', perks: gardenPerks, hint: 'Monte en semant, arrosant, désherbant et récoltant', read: (g: Game) => g.gardeningSkill },
 } as const;
 
 /** Une compétence, à côté des besoins : l'anneau montre l'avancée vers le niveau suivant. */
@@ -293,7 +290,7 @@ function BodyGauge({ game, open, onOpen }: { game: Game; open: boolean; onOpen: 
  */
 export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => void }) {
   const read = useGauges(game);
-  const [open, setOpen] = useState<GaugeKey | 'body' | 'skill' | 'garden' | 'mood' | null>(null);
+  const [open, setOpen] = useState<GaugeKey | 'body' | 'skill' | 'mood' | null>(null);
   if (!game || !read) return null;
   const { clock } = game;
   return (
@@ -314,7 +311,6 @@ export function NeedsHud({ game, onClock }: { game: Game | null; onClock: () => 
         ))}
         <BodyGauge game={game} open={open === 'body'} onOpen={(o) => setOpen((cur) => (o ? 'body' : cur === 'body' ? null : cur))} />
         <SkillGauge game={game} kind="cuisine" open={open === 'skill'} onOpen={(o) => setOpen((cur) => (o ? 'skill' : cur === 'skill' ? null : cur))} />
-        {!CUISINE_SEULE && <SkillGauge game={game} kind="jardinage" open={open === 'garden'} onOpen={(o) => setOpen((cur) => (o ? 'garden' : cur === 'garden' ? null : cur))} />}
         <MoodGauge game={game} open={open === 'mood'} onOpen={(o) => setOpen((cur) => (o ? 'mood' : cur === 'mood' ? null : cur))} />
       </div>
       <button className="hud-clock" onClick={onClock} title="Régler l’heure (Menu → Heure)">

@@ -108,7 +108,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "verser", "objet": "<ref>", "dans": "<ref>"} : verser le contenu d'un récipient (bouteille, tasse, casserole) dans un autre récipient, ou de l'eau dans la bouilloire (« objet » facultatif : ce qu'on tient ; « dans » facultatif : le récipient le plus proche)
 - {"tache": "vider_recipient", "objet": "<ref>"} : vider dans l'évier ce que contient un récipient (« objet » facultatif : ce qu'on tient) ; dans la casserole, les pommes de terre restent (égoutter)
 - {"tache": "remplir_bouilloire", "objet": "<ref>"} : remplir d'eau la bouilloire (elle n'a pas de robinet : le perso remplit un récipient à l'évier et le verse dedans). Sans eau, la bouilloire ne fait pas de thé
-- {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier (ou du lavabo : « objet ») ; il coule jusqu'à ce qu'on le ferme
+- {"tache": "robinet", "ouvrir": true} : ouvrir (ou fermer, « ouvrir » faux) le robinet de l'évier ; il coule jusqu'à ce qu'on le ferme
 - {"tache": "bouchon", "mettre": true} : boucher l'évier (ou enlever le bouchon, « mettre » faux). Bouché avec le robinet ouvert, la cuve se remplit puis déborde
 - {"tache": "boire_robinet"} : boire au robinet, dans le creux des mains (pose d'abord ce que le perso tient)
 - {"tache": "charger_lv"} : charger toute la vaisselle sale au lave-vaisselle
@@ -134,12 +134,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "ranger_courses"} : ranger le sac de courses (frigo, congélateur, garde-manger)
 - {"tache": "magasin"} : ouvrir le magasin (épicerie, rayon maison) pour que le joueur choisisse
 - {"tache": "acheter", "objets": [{"id": "tomate", "n": 2}]} : commander et payer au magasin ces objets (« id » : l'id de leur fiche, comme le début de leur ref) ; le livreur les dépose devant la porte une demi-heure plus tard
-- {"tache": "vendre", "noms": ["tomate"], "tous": true} : vendre au marché ce qu'il rachète (légumes du potager, pommes, poissons pêchés, plats faits maison) ; « noms » facultatif (sans : tout vendre), « tous » : tous ceux de ces noms, sinon un seul
+- {"tache": "vendre", "noms": ["tomate"], "tous": true} : vendre au marché ce qu'il rachète (plats faits maison) ; « noms » facultatif (sans : tout vendre), « tous » : tous ceux de ces noms, sinon un seul
 - {"tache": "argent"} : dire combien il reste dans le porte-monnaie
-- {"tache": "linge", "etape": "laver"} : la lessive (machine à laver et sèche-linge dans la salle de bain, étendoir) ; « etape » : "laver" (le panier de linge sale dans la machine, lavage lancé), "etendre" (le linge mouillé sur l'étendoir), "secher" (au sèche-linge, séchage lancé), "sortir" (le linge d'une machine qui a fini ; « objet » facultatif : la machine), "ranger" (le linge sec, ramassé à l'étendoir ou sorti du sèche-linge, rangé dans l'armoire)
-- {"tache": "peche"} : aller pêcher au bout du ponton de l'étang, une canne à pêche en main (prise au bord de l'étang s'il le faut) ; le poisson mord un peu plus tard
-- {"tache": "jardin", "geste": "arroser", "quoi": "carottes"} : le jardin ; « geste » : "arroser" (l'arrosoir rempli au robinet du jardin), "semer", "recolter" (« quoi » facultatif : carottes, tomates, pommes de terre, concombres ; « tous » : tout ce qui est prêt), "desherber", "pomme" (cueillir une pomme au pommier), "bouquet" (cueillir des fleurs), "sentir" (les fleurs), "jardiner" (ce qui presse au potager)
-- Le feu de camp (dehors, au camping) s'allume et s'éteint avec « allumer » / « eteindre » ; on y pose une poêle comme sur la gazinière
 - Provisions : épicerie au garde-manger (farine, sucre, chocolat, confiture, miel, pâte à tartiner, sauce tomate, vinaigre, levure, biscuits, chips, oignon, ail, banane, pommes de terre), frais et boissons au frigo (jambon, saucisses, poulet, poisson, yaourt, crème, salade, orange, fraises, citron, champignons, poivron, courgette, sauces, jus d'orange, soda, eau gazeuse, vin), surgelés au congélateur (frites, pizza, légumes surgelés : à passer au four). Poulet, poisson, saucisses et légumes se cuisent à la poêle
 - La carafe (sur la table) est pleine d'eau : on ne boit pas à la carafe, on la « verse » dans un verre (« objet » : la carafe, « dans » : le verre)
 - Le plateau : « poser » un objet avec « sur »: le plateau, puis prendre le plateau emporte tout ce qui est dessus
@@ -165,16 +161,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "gouter", "objet": "<ref>"} : goûter à la cuillère ce qui cuit ou ce qui est servi ; le perso dit si c'est bon
 - Les aliments vieillissent hors du frigo (« à manger vite », puis « périmé » : mal au ventre) ; un plat cuit refroidit (« froid » : le réchauffer au micro-ondes avec « cuire ») ; un plat préparé a des étoiles (★, meilleures avec la compétence cuisine, un plat assaisonné, chaud, frais). Le livre de recettes (dans la cuisine) se lit avec « lire »
 - Ustensiles : fouet, spatule, cuillère en bois et louche dans le pot à ustensiles ; saladier et râpe au placard ; œufs, lait, beurre, fromage au frigo
-- {"tache": "laver", "visage": true} : se laver à l'évier ou au lavabo (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
-- {"tache": "douche"} : prendre une douche dans la salle de bain (hygiène à fond) ; le perso en sort mouillé
-- {"tache": "secher"} : se sécher avec la serviette (sur le porte-serviettes), puis la remettre à sa place
-- {"tache": "toilettes"} : aller aux toilettes quand la vessie est basse (s'asseoir, se soulager, tirer la chasse)
-- {"tache": "chasse"} : tirer la chasse d'eau
-- {"tache": "miroir"} : se regarder dans le miroir du lavabo
-- {"tache": "couvercle", "ouvrir": true} : lever le couvercle des toilettes (« ouvrir » faux : le baisser)
-- {"tache": "piece", "piece": "salon"} : aller dans une autre pièce de la maison (cuisine, salon, chambre, salle de bain)
-- {"tache": "lumiere", "allumer": true, "piece": "salon"} : allumer la lumière d'une pièce à l'interrupteur (plafonnier, lampadaire du salon) ; « allumer » faux pour l'éteindre ; « piece » facultatif : celle où est le perso
-- {"tache": "tele", "objet": "<ref>", "assis": true, "zapper": true, "chaine": "météo"} : la télé du salon : s'asseoir d'abord sur le canapé (« assis »), puis l'allumer, ou changer de chaîne (« zapper », vers « chaine » s'il est dit : dessin animé, météo, aquarium). Tout est facultatif. Pour l'éteindre : « eteindre » avec la télé
+- {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
+- {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (pour l'instant, seulement la cuisine)
+- {"tache": "lumiere", "allumer": true, "piece": "cuisine"} : allumer la lumière d'une pièce à l'interrupteur (plafonnier) ; « allumer » faux pour l'éteindre ; « piece » facultatif : celle où est le perso
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
 - {"tache": "preparer", "plat": "<id du plat>"} : préparer un plat d'une recette ; le perso coupe et fait cuire ce qu'il faut, réunit les ingrédients sur la planche à découper et les assemble. Plats : "salade-composee" (tomate et concombre coupés, carotte en plus), "tartine-tomate" (pain et tomate coupés), "sandwich-steak" (pain coupé et steak cuit, tomate ou concombre en plus), "steak-pommes-de-terre" (steak et pomme de terre cuits). Le plat se mange comme le sandwich, ou se sert dans l'assiette pour un repas à table
@@ -191,10 +180,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "lire", "objet": "<ref>"} : lire un livre (« objet » facultatif : le livre tenu, sinon le plus proche ; le perso le prend et libère l'autre main si besoin)
 - {"tache": "arreter_lire"} : fermer le livre qu'on lit
 - {"tache": "asseoir", "objet": "<ref>"} : s'asseoir sur un siège (sorte « siège », ex. la chaise ; « objet » facultatif : le plus proche). Assis, le perso peut boire, lire, parler ; il se lève tout seul pour marcher ou prendre un objet
-- {"tache": "lever"} : se lever quand on est assis (ou se réveiller quand on dort)
-- {"tache": "dormir", "objet": "<ref>"} : aller se coucher dans le lit et dormir (« objet » facultatif : le lit le plus proche). L'écran passe au noir, le temps file, la fatigue remonte ; le perso se réveille seul une fois reposé. Pas possible si la fatigue est presque pleine
-- {"tache": "reveiller"} : se réveiller et sortir du lit
-- La lampe de chevet (sorte « lampe ») et la télé s'allument et s'éteignent avec « allumer » / « eteindre » ; l'armoire de la chambre (où se rangent les pulls) s'ouvre comme un placard
+- {"tache": "lever"} : se lever quand on est assis
 - {"tache": "dire", "texte": "<phrase>"} : le personnage dit une phrase, en personnage
 - {"tache": "manque", "action": "<verbe court, ex. danser>", "sorte": "geste", "objet": "<nom>", "raison": "<ce qui manque au jeu, en une phrase>"} : signale au créateur du jeu une action ou un objet que le jeu n'a pas encore (« sorte » : "geste" si l'objet existe mais pas le geste, ex. laver la tasse ; "objet" si l'objet n'est pas dans la pièce, ex. une casserole ; "autre" sinon. « objet » facultatif : l'objet concerné)
 - {"tache": "fini", "message": "<phrase courte pour le joueur>"} : l'ordre est réalisé, ou impossible
@@ -202,7 +188,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 Chaque tâche fait elle-même les étapes nécessaires (prendre l'objet, poser ce qu'on tient, aller jusqu'au meuble) : ne refuse jamais un ordre parce que le personnage ne tient pas encore l'objet.
 Pour prendre plusieurs livres, enchaîne plusieurs « prendre » (6 livres au plus en pile).
 Les objets sont désignés par leur « ref », donnée dans l'état de la pièce. N'invente aucun objet.
-Si l'ordre demande une action que les tâches ne permettent pas (danser, dormir…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
+Si l'ordre demande une action que les tâches ne permettent pas (danser, dormir, se doucher…) ou un objet absent de la pièce : d'abord « manque », puis dis-le en personnage avec « dire », puis « fini ». Fais ce qui est faisable dans l'ordre et signale seulement le reste.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour. Une seule tâche par réponse : tu verras son résultat et l'état de la pièce avant de choisir la suivante.`;
 
@@ -282,15 +268,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'laisser_ouvert': return s('objet') ? { kind: 'laisser_ouvert', ref: s('objet') } : null;
     case 'glacons': return { kind: 'glacons', dans: s('dans') || undefined };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
-    case 'douche': return { kind: 'douche' };
-    case 'secher': return { kind: 'secher' };
-    case 'toilettes': return { kind: 'toilettes' };
-    case 'chasse': return { kind: 'chasse' };
-    case 'miroir': return { kind: 'miroir' };
-    case 'couvercle': return { kind: 'couvercle', ouvrir: o.ouvrir !== false };
     case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
     case 'lumiere': return { kind: 'lumiere', on: o.allumer !== false, piece: s('piece') || undefined };
-    case 'tele': return { kind: 'tele', ref: s('objet') || undefined, assis: o.assis === true, zapper: o.zapper === true || !!s('chaine'), chaine: s('chaine') || undefined };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };
     case 'preparer': return { kind: 'preparer', plat: s('plat') || undefined };
@@ -306,8 +285,6 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'repas': return { kind: 'repas', ref: s('objet') || undefined, dans: s('dans') || undefined };
     case 'vaisselle': return { kind: 'vaisselle', refs: Array.isArray(o.objets) ? o.objets.map(String) : [] };
     case 'lever': return { kind: 'lever' };
-    case 'dormir': return { kind: 'dormir', ref: s('objet') || undefined };
-    case 'reveiller': return { kind: 'reveiller' };
     case 'cuire': return { kind: 'cuire', ref: s('objet') || undefined };
     case 'allumer': return { kind: 'allumer', ref: s('objet') || undefined };
     case 'eteindre': return { kind: 'eteindre', ref: s('objet') || undefined };
@@ -330,17 +307,6 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     }
     case 'vendre': return { kind: 'vendre', noms: Array.isArray(o.noms) && o.noms.length ? o.noms.map(String) : undefined, tous: o.tous === true };
     case 'argent': return { kind: 'argent' };
-    case 'linge': {
-      const etape = s('etape');
-      return etape === 'laver' || etape === 'etendre' || etape === 'secher' || etape === 'sortir' || etape === 'ranger' ? { kind: 'linge', etape, ref: s('objet') || undefined } : null;
-    }
-    case 'peche': return { kind: 'peche' };
-    case 'jardin': {
-      const geste = s('geste');
-      const gestes = ['arroser', 'semer', 'recolter', 'desherber', 'pomme', 'bouquet', 'sentir', 'jardiner'] as const;
-      const g = gestes.find((x) => x === geste);
-      return g ? { kind: 'jardin', geste: g, quoi: s('quoi') || undefined, tous: o.tous === true } : null;
-    }
     case 'dire': return s('texte') ? { kind: 'dire', texte: s('texte') } : null;
     case 'fini': return 'fini';
     case 'manque': return s('action') || s('raison') ? 'manque' : null;

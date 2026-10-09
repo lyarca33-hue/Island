@@ -22,8 +22,8 @@ const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n));
 
 /**
  * Le magasin, ouvert par la liste de courses (ou le porte-monnaie) : l'épicerie (le panier part
- * de ce qui manque sur la liste), le rayon maison (objets cassés, papier toilette, pastilles,
- * vaisselle) et le marché, qui rachète légumes du jardin, pommes et plats faits maison. Une
+ * de ce qui manque sur la liste), le rayon maison (objets cassés, pastilles, vaisselle) et le
+ * marché, qui rachète légumes, pommes et plats faits maison. Une
  * commande payée arrive dans le sac de livraison, devant la porte.
  */
 export function Magasin({ game }: { game: Game | null }) {
@@ -132,7 +132,7 @@ export function Magasin({ game }: { game: Game | null }) {
         )}
         {tab === 'marche' && (
           <>
-            <p className="shop-note">Le marché rachète les légumes du jardin, les pommes, les poissons de l’étang et les plats faits maison : plus il y a d’étoiles (ou plus le poisson est rare), mieux c’est payé.</p>
+            <p className="shop-note">Le marché rachète les légumes, les pommes et les plats faits maison : plus il y a d’étoiles, mieux c’est payé.</p>
             {market.length ? (
               <ul className="shop-list">
                 {market.map((m) => (

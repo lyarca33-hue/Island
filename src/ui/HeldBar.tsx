@@ -96,7 +96,6 @@ export function HeldBar({ game, held, can }: { game: Game | null; held: string |
       </Pill>
     );
   }
-  if (can.sleeping) return <Pill icon="moon" actions={<Act k="C" label="Se réveiller" main onClick={() => g.wakeUp()} />}>Endormi</Pill>;
   if (can.prepare && !can.seated) return <Pill icon="pot" actions={<Act k="G" label="Préparer le plat" main onClick={() => g.prepare()} />}>Ingrédients prêts</Pill>;
   if (can.seated) return <Pill icon="chair" actions={<Act k="C" label="Se lever" main onClick={() => g.standUp()} />}>Assis</Pill>;
   return null;
