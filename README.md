@@ -73,8 +73,12 @@ Autour de la cuisine, les **autres pièces sont meublées avec leurs modèles Tr
 pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pièce>.glb`) :
 - le **salon** : le meuble télé et la télé au fond, le canapé face à elle avec ses deux coussins, la
   table basse sur le tapis, le fauteuil et le lampadaire, la bibliothèque et quelques livres ;
-- la **chambre** : le lit tête au mur, une table de nuit de chaque côté (lampe de chevet, réveil qui
-  donne l'heure), l'armoire, la plante et le tapis ;
+- la **chambre** : le lit tête au mur et sa couette souple (un clic ou « va te coucher » : le perso
+  rabat la couette, s'assoit au bord, s'allonge et la couette le recouvre ; il dort, le temps file et
+  la fatigue remonte, jusqu'à être reposé ou réveillé, C ou un clic au sol ; il repousse la couette
+  en se levant, et le lit reste défait jusqu'à « fais ton lit » : il tire la couette et la lisse),
+  une table de nuit de chaque côté (lampe de chevet, réveil qui donne l'heure), l'armoire, la plante
+  et le tapis ;
 - la **salle de bain** : la douche dans le coin (un clic ou « prends une douche » : le perso se
   place sous le pommeau, l'eau coule et la vapeur monte, il se frotte ; l'hygiène remonte à fond et
   il en sort mouillé, à sécher avec la serviette, sinon il laisse des gouttes), les toilettes (un clic ou « va aux toilettes » : le
@@ -88,8 +92,7 @@ pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pi�
 - le **garage** : l'établi et sa caisse à outils, l'étagère, des cartons, le vélo, la bêche et le râteau.
 
 Tapis, colonne de douche, miroirs et portemanteau sont du décor fixe (`decor`) ; le reste se prend ou se pousse.
-Dormir et la télé, retirés avec l'ancienne maison, ne sont pas encore rebranchés : la fatigue reste
-en pause. La vessie, elle, baisse : en dessous de 18, le perso est
+La télé, retirée avec l'ancienne maison, n'est pas encore rebranchée. La vessie baisse : en dessous de 18, le perso est
 prévenu ; à zéro, c'est l'accident.
 
 ### Les ordres

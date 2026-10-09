@@ -20,6 +20,7 @@ import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/brea
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
+import { Duvet } from './items/duvet';
 import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
@@ -229,6 +230,22 @@ const TOILET_SECONDS = 4;
 const FLUSH_SECONDS = 2.2;
 /** Vessie : on est prévenu en dessous de ce niveau. */
 const BLADDER_WARN = 18;
+/**
+ * Dormir : vitesse du temps endormi, fondu (s) du voile sombre, et son opacité endormi ; pas
+ * sommeil au-dessus de NOT_SLEEPY de fatigue. Se coucher : rabattre la couette (s), s'allonger
+ * depuis le bord du lit (s) ; se lever, faire son lit (s).
+ */
+const SLEEP_SPEED = 2400;
+const SLEEP_FADE = 1.2;
+const SLEEP_DIM = 0.55;
+const NOT_SLEEPY = 95;
+const TURN_DOWN = 1.1;
+const LIE_BACK = 1.6;
+const RISE = 1.4;
+const MAKE_BED = 3.4;
+/** La couette du dormeur : rabattue sous le menton, la bosse de son côté du lit (part de la largeur). */
+const COVER = { fold: 0.22, foldZ: -0.42 };
+const SLEEP_SIDE = 0.19;
 /** Usure d'un appareil (bouton du feu, de la machine) à chaque allumage, et de l'ustensile à chaque plat cuit. */
 const WEAR_KNOB = 0.3;
 const WEAR_COOK = 0.5;
@@ -597,8 +614,6 @@ export class Game {
   constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
     this.recipe = recipe;
-    // pas de lit pour l'instant (la maison se refait avec le kit Tripo) ; douche et toilettes sont là
-    this.needs.pause(['fatigue']);
     // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
@@ -1477,6 +1492,8 @@ export class Game {
     perso += this.roomName ? `, dans la pièce : ${this.roomName}` : ', dehors';
     if (this.body.state !== 'normal') perso += `, ${BODY_STATES[this.body.state].label.toLowerCase()} (${this.body.label}) : ${BODY_STATES[this.body.state].tip.toLowerCase()}`;
     if (this.body.soaked > 0.3) perso += ', trempé par la pluie (se sécher à la serviette)';
+    if (this.sleep) perso += `, couché dans ${this.ref(this.sleep.bed)}${this.sleep.phase === 'asleep' ? ', endormi' : ''}`;
+    for (const [bed, d] of this.duvets) if (d.unmade && this.sleep?.bed !== bed) perso += `, ${this.ref(bed)} défait (à faire)`;
     return {
       perso: this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
@@ -1741,6 +1758,7 @@ export class Game {
 
   /** Se lever (faux si le perso n'est pas assis). */
   standUp(): boolean {
+    if (this.sleep) return this.wakeUp();
     return this.character.standUp();
   }
 
@@ -4119,6 +4137,216 @@ export class Game {
     return true;
   }
 
+  /** Sommeil en cours : le lit, l'étape (rabattre la couette, s'asseoir, s'allonger, dormir, se lever), son temps. */
+  private sleep: { bed: WorldItem; phase: 'open' | 'lie' | 'asleep' | 'up'; t: number; speed: number; side: number; sat?: boolean; then?: () => void } | null = null;
+  /** La couette souple de chaque lit. */
+  private duvets = new Map<WorldItem, Duvet>();
+  /** Voile sombre devant la scène pendant qu'on dort. */
+  private veil: HTMLDivElement | null = null;
+  /** En train de faire son lit. */
+  private bedMaking: { bed: WorldItem; t: number } | null = null;
+
+  /** La couette souple du lit `bed` (faite à la première demande), si le lit a sa pièce `couette`. */
+  private duvetOf(bed: WorldItem): Duvet | null {
+    let d = this.duvets.get(bed);
+    if (d) return d;
+    let mesh: THREE.Mesh | null = null;
+    bed.part('couette')?.traverse((o) => {
+      if (!mesh && o instanceof THREE.Mesh) mesh = o;
+    });
+    if (!mesh) return null;
+    d = new Duvet(mesh);
+    this.duvets.set(bed, d);
+    return d;
+  }
+
+  /**
+   * Où se coucher dans le lit : le côté libre (de préférence celui de la lampe de chevet), où se
+   * tenir à côté, où s'asseoir au bord, les pieds du dormeur sur le matelas et la direction de
+   * l'oreiller ; `side` : le milieu du dormeur en travers du lit (repère du lit).
+   */
+  private bedSide(bed: WorldItem): { stand: THREE.Vector3; seat: THREE.Vector3; out: THREE.Vector3; feet: THREE.Vector3; head: THREE.Vector3; side: number } | null {
+    const o = bed.object;
+    o.updateMatrixWorld(true);
+    const def = bed.def.bed!;
+    const b = bed.box;
+    const toWorld = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).applyMatrix4(o.matrixWorld);
+    const head = new THREE.Vector3(0, 0, -1).applyQuaternion(o.quaternion).setY(0).normalize();
+    const lamp = [...this.lamps.keys()].sort((a, c) => a.object.position.distanceTo(o.position) - c.object.position.distanceTo(o.position))[0];
+    const lampX = lamp ? o.worldToLocal(lamp.object.position.clone()).x : 1;
+    for (const sx of lampX < 0 ? [-1, 1] : [1, -1]) {
+      const edge = sx > 0 ? b.max.x : b.min.x;
+      const stand = toWorld(edge + sx * 0.45, 0, 0.1).setY(0);
+      if (this.character.nav?.blocked(stand)) continue;
+      const side = sx * (b.max.x - b.min.x) * SLEEP_SIDE;
+      // couché de son côté du lit, la tête sur l'oreiller (le haut du crâne à 25 cm de la tête de lit)
+      const feet = toWorld(side, def.top + 0.02, (def.head ?? b.min.z) + 0.25 + 1.52);
+      const seat = toWorld(edge - sx * 0.2, 0, 0.1).setY(0);
+      const out = new THREE.Vector3(sx, 0, 0).applyQuaternion(o.quaternion).normalize();
+      return { stand, seat, out, feet, head, side };
+    }
+    return null;
+  }
+
+  /**
+   * Va se coucher dans le lit `ref` (sinon le plus proche) : le perso rabat la couette, s'assoit au
+   * bord, s'allonge, et la couette le recouvre ; il dort (le temps file, la fatigue remonte) jusqu'à
+   * être reposé ou qu'on le réveille (wakeUp, ou une envie de bouger).
+   */
+  sleepIn(ref?: string, running = false): boolean {
+    const bed = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.bed);
+    const c = this.character;
+    const fail = (msg: string) => {
+      this.onNotice?.(msg);
+      return false;
+    };
+    if (!bed?.def.bed) return fail(ref ? `On ne dort pas dans : ${ref}.` : 'Il n’y a pas de lit.');
+    if (this.sleep) return fail('Le perso est déjà au lit.');
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (c.carried.length) return fail('Pose d’abord ce que tu tiens pour te coucher.');
+    if (!c.canSit) return fail('Crée un perso pour pouvoir te coucher.');
+    if (this.needs.values.fatigue >= NOT_SLEEPY) return fail('Le perso n’a pas sommeil (fatigue presque pleine).');
+    if (c.seated) return c.standUp(() => this.sleepIn(this.ref(bed), running));
+    const spot = this.bedSide(bed);
+    if (!spot) return fail('Pas de place à côté du lit pour s’y coucher.');
+    c.approachThen(spot.stand, bed.object.position.clone().setY(1), () => {
+      // on rabat la couette d'un geste
+      c.gesture('interact');
+      this.duvetOf(bed)?.to({ fold: 1, foldZ: -0.05, body: 0, mess: 0 }, TURN_DOWN);
+      this.sleep = { bed, phase: 'open', t: 0, speed: this.clock.speed, side: spot.side };
+    }, running);
+    return true;
+  }
+
+  /** Se réveille et sort du lit (puis `then`) ; faux si le perso n'est pas au lit. */
+  wakeUp(then?: () => void): boolean {
+    const s = this.sleep;
+    if (!s) return false;
+    if (then) s.then = then;
+    if (s.phase === 'asleep') this.getOutOfBed();
+    return true;
+  }
+
+  /** Repousse la couette (le lit reste défait) et se lève par le bord du lit. */
+  private getOutOfBed(): void {
+    const s = this.sleep!;
+    s.phase = 'up';
+    s.t = 0;
+    this.clock.speed = s.speed;
+    this.duvetOf(s.bed)?.to({ fold: 1, foldZ: -0.05, body: 0, mess: 1 }, RISE);
+    this.character.riseFromBed(RISE, () => {
+      const then = s.then;
+      if (this.sleep === s) this.sleep = null;
+      then?.();
+    });
+  }
+
+  /**
+   * Fait le lit `ref` (sinon le plus proche) : le perso se met à côté, tire la couette vers la tête
+   * du lit et la lisse des deux mains.
+   */
+  makeBed(ref?: string, running = false): boolean {
+    const bed = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.bed);
+    const c = this.character;
+    const fail = (msg: string) => {
+      this.onNotice?.(msg);
+      return false;
+    };
+    if (!bed?.def.bed) return fail(ref ? `${ref} n’est pas un lit.` : 'Il n’y a pas de lit.');
+    const duvet = this.duvetOf(bed);
+    if (!duvet) return fail('Ce lit n’a pas de couette.');
+    if (this.sleep?.bed === bed) return fail('Le perso est encore au lit.');
+    if (!duvet.unmade && duvet.pose.fold < 0.05) return fail('Le lit est déjà fait.');
+    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+    if (c.carried.length) return fail('Pose d’abord ce que tu tiens pour faire le lit.');
+    if (c.seated) return c.standUp(() => this.makeBed(this.ref(bed), running));
+    const spot = this.bedSide(bed);
+    if (!spot) return fail('Pas de place à côté du lit.');
+    const o = bed.object;
+    const top = bed.def.bed!.top + 0.14;
+    const sx = Math.sign(spot.side) || 1;
+    // les deux mains sur la couette, du côté du perso, qui la tirent vers la tête du lit puis la lissent
+    const at = () => {
+      const k = this.bedMaking ? Math.min(1, this.bedMaking.t / MAKE_BED) : 0;
+      const z = 0.3 - 0.75 * Math.sin(Math.min(1, k * 1.6) * Math.PI / 2) + (k > 0.62 ? 0.25 * Math.sin((k - 0.62) * 9) : 0);
+      const x = sx * 0.5;
+      return { right: new THREE.Vector3(x, top, z + 0.16).applyMatrix4(o.matrixWorld), left: new THREE.Vector3(x, top, z - 0.16).applyMatrix4(o.matrixWorld) };
+    };
+    return c.startWash(spot.stand, o.position.clone().setY(1), at, false, () => {
+      this.bedMaking = { bed, t: 0 };
+      duvet.to({ fold: 0, foldZ: -0.05, body: 0, mess: 0 }, MAKE_BED);
+    }, running);
+  }
+
+  /** Couche, sommeil, lever ; le lit qu'on fait ; la couette de chaque lit. */
+  private tickSleep(dt: number): void {
+    for (const d of this.duvets.values()) d.update(dt);
+    const m = this.bedMaking;
+    if (m) {
+      m.t += dt;
+      if (m.t >= MAKE_BED) {
+        this.bedMaking = null;
+        this.character.stopWash(() => this.onNotice?.('Lit fait.'));
+      }
+    }
+    if (!this.veil && typeof document !== 'undefined') {
+      const v = this.veil = document.createElement('div');
+      v.style.cssText = 'position:absolute;inset:0;background:#05070d;opacity:0;pointer-events:none;z-index:1;transition:none';
+      this.container.appendChild(v);
+    }
+    const s = this.sleep;
+    const veil = this.veil;
+    if (!s) {
+      if (veil) veil.style.opacity = '0';
+      return;
+    }
+    s.t += dt;
+    const c = this.character;
+    if (s.phase === 'open') {
+      // une envie de bouger avant d'être couché : on renonce (la couette reste ouverte)
+      if (c.wantsToMove && s.t > 0.2) {
+        this.sleep = null;
+        return;
+      }
+      if (s.t < TURN_DOWN) return;
+      const spot = this.bedSide(s.bed);
+      const ok = spot && c.sitOn(spot.seat, spot.out, 0.5, 0.36, () => {
+        if (this.sleep !== s) return;
+        if (!c.lieBack(spot.feet, spot.head, spot.stand, LIE_BACK, () => {
+          if (this.sleep !== s) return;
+          s.phase = 'asleep';
+          s.t = 0;
+          // on éteint la lampe de chevet en se couchant
+          for (const [item, lamp] of this.lamps) if (lamp.on && item.object.position.distanceTo(s.bed.object.position) < 2.5) this.setLamp(item, false);
+          this.clock.speed = SLEEP_SPEED;
+          this.onNotice?.('Zzz… (C, ou un clic au sol, pour se réveiller)');
+        })) {
+          this.sleep = null;
+          return;
+        }
+        this.duvetOf(s.bed)?.to({ ...COVER, body: 1, side: s.side, mess: 0 }, LIE_BACK * 1.2);
+      });
+      if (ok !== 'ok') {
+        this.sleep = null;
+        this.onNotice?.('Impossible de s’asseoir au bord du lit.');
+        return;
+      }
+      s.phase = 'lie';
+      s.t = 0;
+    } else if (s.phase === 'lie') {
+      // assis, une envie de bouger : il se relève tout seul (sitOn) ; on renonce
+      if (c.seated || c.lying) s.sat = true;
+      else if (s.sat || (c.wantsToMove === false && s.t > 1)) this.sleep = null;
+    } else if (s.phase === 'asleep') {
+      if (veil) veil.style.opacity = String(Math.min(SLEEP_DIM, (s.t / SLEEP_FADE) * SLEEP_DIM));
+      const rested = this.needs.values.fatigue >= 100;
+      if (rested || c.wantsToMove) {
+        if (rested) this.onNotice?.(`Bien reposé : réveillé à ${this.clock.label}.`);
+        this.getOutOfBed();
+      }
+    } else if (veil) veil.style.opacity = String(Math.max(0, SLEEP_DIM * (1 - s.t / SLEEP_FADE)));
+  }
+
   /**
    * Le tissu des serviettes ondule : pendue, elle bouge à peine ; tenue, elle se balance quand le
    * perso marche ; en se séchant, elle frotte et se froisse. Le bas bouge, le haut (pli, main) reste.
@@ -5213,6 +5441,8 @@ export class Game {
     else if (item.def.shower && !held.length) return this.takeShower(this.ref(item), running);
     // serviette de bain : on se sèche
     else if (item.def.bathTowel && (this.wet > 0 || this.body.soaked > 0.15)) return this.dryOff(this.ref(item), running);
+    // lit, mains vides : on se couche (ou on se réveille)
+    else if (item.def.bed && !held.length) return this.sleep ? this.wakeUp() : this.sleepIn(this.ref(item), running);
     // toilettes, mains vides : on y va (couvercle levé, assis, chasse tirée)
     else if (item.def.toilet && !held.length) return this.useToilet(this.ref(item), running);
     // mains vides : un clic sur un gros meuble ne fait rien (on le déplace par le menu, « Déplacer »)
@@ -5429,7 +5659,8 @@ export class Game {
       if (e.code === 'KeyK' && !e.repeat) this.cut();
       if (e.code === 'KeyG' && !e.repeat) this.prepare();
       if (e.code === 'KeyC' && !e.repeat) {
-        if (this.character.seated) this.standUp();
+        if (this.sleep) this.wakeUp();
+        else if (this.character.seated) this.standUp();
         else this.sit();
       }
       if (e.code === 'KeyL' && !e.repeat) {
@@ -5737,6 +5968,12 @@ export class Game {
     const lamp = this.lamps.get(item);
     if (lamp) add(lamp.on ? 'Éteindre la lampe' : 'Allumer la lampe', () => this.switchLamp(ref, !lamp.on));
     // siège
+    if (item.def.bed) {
+      if (this.sleep?.bed === item) add('Se réveiller', () => this.wakeUp());
+      else add('Dormir', () => this.sleepIn(ref));
+      const duvet = this.duvetOf(item);
+      if (duvet && (duvet.unmade || duvet.pose.fold > 0.05) && this.sleep?.bed !== item) add('Faire le lit', () => this.makeBed(ref));
+    }
     if (item.def.shower && !this.showering) add('Prendre une douche', () => this.takeShower(ref));
     if (item.def.bathTowel) add('Se sécher', () => this.dryOff(ref));
     if (item.def.toilet) {
@@ -6081,6 +6318,7 @@ export class Game {
     this.tickToilet(dt);
     this.tickShower(dt);
     this.tickTowels(dt);
+    this.tickSleep(dt);
     this.tickBathroom(dt);
     this.tickIce(dt);
     this.tickTea(dt);

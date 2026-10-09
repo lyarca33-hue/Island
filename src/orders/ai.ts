@@ -166,6 +166,9 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "secher"} : se sécher avec la serviette (sur le porte-serviettes)
 - {"tache": "toilettes"} : aller aux toilettes (lever le couvercle, s'asseoir, se soulager, tirer la chasse) ; se laver les mains ensuite
 - {"tache": "chasse"} : tirer la chasse d'eau
+- {"tache": "dormir", "objet": "<ref du lit>"} : aller se coucher et dormir (rabattre la couette, s'allonger) ; seulement si le perso a sommeil
+- {"tache": "reveiller"} : se réveiller et sortir du lit (le lit reste défait)
+- {"tache": "faire_lit", "objet": "<ref du lit>"} : faire le lit défait (tirer la couette, la lisser)
 - {"tache": "verrou", "fermer": true} : fermer à clé la porte de la salle de bain, de l'intérieur (« fermer » faux : la déverrouiller) ; le perso la déverrouille tout seul en sortant
 - {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (pour l'instant, seulement la cuisine)
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
@@ -276,6 +279,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'secher': return { kind: 'secher' };
     case 'toilettes': return { kind: 'toilettes' };
     case 'chasse': return { kind: 'chasse' };
+    case 'dormir': return { kind: 'dormir', ref: s('objet') || undefined };
+    case 'reveiller': return { kind: 'reveiller' };
+    case 'faire_lit': return { kind: 'faire_lit', ref: s('objet') || undefined };
     case 'verrou': return { kind: 'verrou', fermer: o.fermer !== false };
     case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };

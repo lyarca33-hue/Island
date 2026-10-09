@@ -107,6 +107,10 @@ export type Intent =
   /** Aller aux toilettes (s'asseoir, se soulager, tirer la chasse) ; tirer la chasse. */
   | { kind: 'toilettes' }
   | { kind: 'chasse' }
+  /** Aller dormir dans le lit `ref` ; se réveiller ; faire le lit `ref`. */
+  | { kind: 'dormir'; ref?: string }
+  | { kind: 'reveiller' }
+  | { kind: 'faire_lit'; ref?: string }
   /** Fermer à clé (`fermer`) ou déverrouiller la porte de la salle de bain. */
   | { kind: 'verrou'; fermer: boolean }
   /** Aller dans la pièce `piece` (la cuisine). */
@@ -829,6 +833,14 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act('toilettes');
     case 'chasse':
       return act('chasse');
+    case 'dormir':
+      await freeHands(game, act);
+      return act('dormir', intent.ref ? { lit: intent.ref } : {});
+    case 'reveiller':
+      return act('reveiller');
+    case 'faire_lit':
+      await freeHands(game, act);
+      return act('faire_lit', intent.ref ? { lit: intent.ref } : {});
     case 'verrou':
       return act('verrou', { fermer: intent.fermer ? 'oui' : 'non' });
     case 'piece':
@@ -916,6 +928,7 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return;
     }
     case 'lever':
+      if (world(game).perso.includes('couché dans')) return act('reveiller');
       if (!world(game).perso.includes('assis')) return;
       return act('lever');
     case 'arreter_lire':

@@ -92,7 +92,7 @@ describe('ordres de la cuisine : magasin, marché, appareils', () => {
   });
 
   it('les gestes des pièces retirées partent à l’IA (elle dit ce qui manque)', () => {
-    for (const t of ['va dormir', 'lance une lessive', 'va pêcher', 'arrose le potager', 'zappe']) expect(parse(t)).toBeNull();
+    for (const t of ['lance une lessive', 'va pêcher', 'arrose le potager', 'zappe']) expect(parse(t)).toBeNull();
   });
 
   it('les toilettes : y aller, tirer la chasse', () => {
@@ -104,6 +104,16 @@ describe('ordres de la cuisine : magasin, marché, appareils', () => {
   it('le papier toilette s’accroche au porte-papier', () => {
     const wc = [...objets, obj('papier-toilette', 'papier toilette', { portable: true, distance: 1 }), obj('derouleur', 'porte-papier', { sorte: 'rangement', distance: 1.2 })];
     for (const t of ['accroche le pq au porte pq', 'range le papier toilette', 'accroche le rouleau de papier sur le dérouleur']) expect(parseOrder(t, { enMain: [], objets: wc })).toEqual([{ kind: 'ranger_place', ref: 'papier-toilette' }]);
+  });
+
+  it('le lit : dormir, se réveiller, le faire', () => {
+    const chambre = [...objets, obj('lit', 'lit', { sorte: 'lit', distance: 2 })];
+    const p = (t: string) => parseOrder(t, { enMain: [], objets: chambre });
+    const kinds = (t: string) => p(t)?.map((i) => i.kind);
+    for (const t of ['va dormir', 'va te coucher', 'couche-toi', 'dors', 'allonge-toi sur le lit', 'va au lit']) expect(kinds(t)).toEqual(['dormir']);
+    expect(p('allonge-toi sur le lit')).toEqual([{ kind: 'dormir', ref: 'lit' }]);
+    expect(p('réveille-toi')).toEqual([{ kind: 'reveiller' }]);
+    for (const t of ['fais ton lit', 'fais le lit']) expect(p(t)).toEqual([{ kind: 'faire_lit', ref: 'lit' }]);
   });
 
   it('la porte de la salle de bain : à clé, ou pas', () => {

@@ -432,6 +432,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.flush(),
   },
   {
+    name: 'dormir',
+    description: 'Aller se coucher dans le lit `lit` : le perso rabat la couette, s’assoit au bord, s’allonge et la couette le recouvre. Il dort (le temps file, la fatigue remonte) jusqu’à être reposé. Seulement s’il a sommeil.',
+    params: { lit: 'ref du lit (facultatif)' },
+    run: (g, a) => g.sleepIn(a.lit || undefined),
+  },
+  {
+    name: 'reveiller',
+    description: 'Se réveiller et sortir du lit (la couette repoussée : le lit reste défait).',
+    params: {},
+    run: (g) => g.wakeUp(),
+  },
+  {
+    name: 'faire_lit',
+    description: 'Faire le lit `lit` défait : le perso tire la couette vers la tête du lit et la lisse.',
+    params: { lit: 'ref du lit (facultatif)' },
+    run: (g, a) => g.makeBed(a.lit || undefined),
+  },
+  {
     name: 'verrou',
     description: 'Fermer à clé (`fermer` oui) ou déverrouiller (non) la porte de la salle de bain, de l’intérieur. Fermée à clé, elle ne s’ouvre plus ; le perso la déverrouille en sortant.',
     params: { fermer: 'oui ou non' },

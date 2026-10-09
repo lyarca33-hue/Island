@@ -285,9 +285,6 @@ export const CHAMBRE_SPEC: RoomSpec = {
     ['table-de-nuit', CHAMBRE.x0 + 0.25, 0, BED.z + 1.08, Q],
     ['lampe-chevet', CHAMBRE.x0 + 0.22, NIGHTSTAND_TOP, BED.z - 1.08, Q],
     ['reveil', CHAMBRE.x0 + 0.22, NIGHTSTAND_TOP, BED.z + 1.18, Q],
-    // deux coussins devant les oreillers (pas sur le canapé : on ne s'y assoit pas s'il y a quelque chose dessus)
-    ['coussin', CHAMBRE.x0 + 0.5, 0.64, BED.z - 0.32, Q],
-    ['coussin', CHAMBRE.x0 + 0.5, 0.64, BED.z + 0.32, Q],
     // le pull plié au pied du lit
     ['pull', CHAMBRE.x0 + 1.85, 0.63, BED.z, Q],
     // l'armoire au fond à droite de la fenêtre, la chemise sur son cintre dedans ; la plante dans le coin

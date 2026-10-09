@@ -37,6 +37,8 @@ const VERBS: Record<string, string[]> = {
   poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer', 'mets', 'met', 'mettre', 'remets', 'remettre'],
   ranger: ['range', 'ranger', 'rangez', 'accroche', 'accrocher', 'raccroche', 'raccrocher', 'suspends'],
   verrouiller: ['verrouille', 'verrouiller', 'enferme', 'enfermer'],
+  dormir: ['dors', 'dormir', 'endors', 'endormir', 'couche', 'coucher', 'recouche', 'recoucher'],
+  reveiller: ['reveille', 'reveiller'],
   deverrouiller: ['deverrouille', 'deverrouiller'],
   aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher', 'entre', 'entrer'],
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
@@ -534,6 +536,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (rest.some((x) => ['toilettes', 'toilette', 'wc', 'pipi'].includes(x)) && !rest.includes('ta')) return [{ kind: 'toilettes' }];
       // « va sous la douche »
       if (rest.includes('douche')) return [{ kind: 'douche' }];
+      // « va dormir », « va te coucher », « va au lit »
+      if (rest.some((x) => ['dormir', 'coucher', 'lit', 'dodo'].includes(x))) return [{ kind: 'dormir', ref: found.find((o) => o.sorte === 'lit')?.ref }];
       // « va dans la cuisine »
       const room = roomIn(rest);
       if (room && !found.length) return [{ kind: 'piece', piece: room }];
@@ -545,6 +549,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (rest.includes('pipi') || rest.includes('besoins')) return [{ kind: 'toilettes' }];
       // « fais ta toilette »
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
+      // « fais ton lit », « fais le lit »
+      if (rest.includes('lit')) return [{ kind: 'faire_lit', ref: found.find((o) => o.sorte === 'lit')?.ref }];
       // « fais les courses »
       if (rest.includes('courses')) return [{ kind: 'courses' }];
       // « fais sauter la crêpe », « fais goûter »
@@ -806,7 +812,9 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       }
       return null;
     case 'allonger': {
-      // pas de lit dans la cuisine ; « allonge-toi sur la chaise » : on s'y assoit
+      // « allonge-toi (sur le lit) » : on se couche
+      if (!found.length || found.some((o) => o.sorte === 'lit')) return [{ kind: 'dormir', ref: found.find((o) => o.sorte === 'lit')?.ref }];
+      // « allonge-toi sur la chaise » : on s'y assoit
       const seat = found.find((o) => o.sorte === 'siège');
       return seat ? [{ kind: 'asseoir', ref: seat.ref }] : null;
     }
@@ -885,6 +893,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « arrête de lire », « ferme le livre », « stop »
       return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;
     }
+    // « dors », « couche-toi », « va te coucher » (aller) ; « réveille-toi »
+    case 'dormir':
+      return [{ kind: 'dormir', ref: found.find((o) => o.sorte === 'lit')?.ref }];
+    case 'reveiller':
+      return [{ kind: 'reveiller' }];
     // « verrouille la porte », « enferme-toi » ; « déverrouille la porte »
     case 'verrouiller':
       return [{ kind: 'verrou', fermer: true }];
