@@ -1,6 +1,7 @@
 /**
  * Pièces mobiles des modèles Tripo du salon, de la salle de bain, de la chambre, de l'entrée et du
- * garage, prêtes à brancher quand ces meubles arrivent dans la maison : pour chaque modèle, ses pièces
+ * garage (la porte basculante, elle, est animée par room.ts), prêtes à brancher quand ces meubles
+ * arrivent dans la maison : pour chaque modèle, ses pièces
  * (nœud du modèle, axe) au format de `TRIPO_LOOKS`, le mouvement de chacune, et les réglages de
  * fiche mesurés sur le modèle (hauteur de la lumière d'une lampe, dessus du matelas…).
  *
@@ -112,10 +113,5 @@ export const ROOM_RIGS: Record<string, Rig> = {
   'caisse-outils': {
     look: { model: 'caisse-outils', parts: { porte: { from: 'couvercle', pivot: [0, 0.175, -0.125], motion: { kind: 'turn', axis: 'x', angle: deg(-100) } } } },
     def: { door: deg(-100), doorAxis: 'x' },
-  },
-  // d'un bloc : la porte entière bascule vers l'intérieur (-z) sur son bord du haut, et finit à plat sous le plafond
-  'porte-garage': {
-    look: { model: 'porte-garage', parts: { porte: { from: 'porte-garage', pivot: [0, 2.1, -0.03], motion: { kind: 'turn', axis: 'x', angle: deg(90) } } } },
-    def: { door: deg(90), doorAxis: 'x' },
   },
 };

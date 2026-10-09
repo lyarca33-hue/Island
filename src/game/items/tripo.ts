@@ -266,8 +266,6 @@ function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
 /** Fusion de géométries sans index aux mêmes attributs. */
 function merge(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
-  // modèle tout entier mobile (la porte du garage) : pas de corps fixe
-  if (!list.length) return out;
   for (const name of ['position', 'normal', 'uv']) {
     if (!list.every((g) => g.getAttribute(name))) continue;
     const size = list[0].getAttribute(name).itemSize;
