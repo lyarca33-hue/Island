@@ -419,6 +419,11 @@ const POT_H = 0.11;
 const HANDLE_L = 0.17;
 /** Épaisseur du fond des ustensiles : les ingrédients reposent dessus. */
 const PAN_FLOOR = 0.008;
+/** Barre à casseroles au mur : longueur, hauteur et avancée de la barre (m), et ses crochets (x, ce qui y pend). */
+const RAIL_W = 0.7;
+const RAIL_Y = 0.6;
+const RAIL_Z = 0.05;
+const RAIL_HOOKS: Array<[number, 'poêle' | 'casserole']> = [[-0.22, 'poêle'], [0, 'casserole'], [0.22, 'poêle']];
 /** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier (un placard bas Tripo). */
 const WORKTOP_W = 0.73;
 /** Ce qui se range sous le plan de travail, à côté de la gazinière : de quoi cuisiner. */
@@ -1026,6 +1031,35 @@ export const ITEMS: ItemDef[] = [
       // manche en bois, un peu relevé, vers l'avant (+Z)
       const handle = mesh(new THREE.BoxGeometry(0.024, 0.016, HANDLE_L).rotateX(-0.12), 0x5b3b22, 0, PAN_H - 0.005, PAN_R + 0.015 + HANDLE_L / 2);
       return group(floor, wall, handle);
+    },
+  },
+  {
+    id: 'barre-casseroles',
+    name: 'barre à casseroles',
+    portable: false,
+    movable: false,
+    durability: 300,
+    fragility: 10,
+    holds: ['poêle', 'casserole'],
+    // pendues par le bout du manche, le fond vers la pièce : chaque place est l'endroit du crochet
+    // moins le manche (couché vers +Z, il pointe vers le haut une fois pendu)
+    slots: RAIL_HOOKS.map(([x, kind]): [number, number, number] => {
+      const [tipY, tipZ] = kind === 'poêle' ? [PAN_H - 0.005, PAN_R + 0.015 + HANDLE_L] : [POT_H - 0.02, POT_R + HANDLE_L];
+      return [x, RAIL_Y - tipZ, RAIL_Z + tipY];
+    }),
+    slotHolds: RAIL_HOOKS.map(([, kind]) => [kind]),
+    slotTilt: [-Math.PI / 2, 0, 0],
+    build: () => {
+      const steel = 0x8f969d, dark = 0x3a3d41;
+      const g = group(
+        mesh(new THREE.CylinderGeometry(0.009, 0.009, RAIL_W, 10).rotateZ(Math.PI / 2), steel, 0, RAIL_Y, RAIL_Z),
+        // pattes au mur, aux deux bouts
+        mesh(new THREE.BoxGeometry(0.02, 0.05, RAIL_Z + 0.01), dark, -RAIL_W / 2 + 0.03, RAIL_Y, (RAIL_Z + 0.01) / 2),
+        mesh(new THREE.BoxGeometry(0.02, 0.05, RAIL_Z + 0.01), dark, RAIL_W / 2 - 0.03, RAIL_Y, (RAIL_Z + 0.01) / 2),
+      );
+      // un crochet en S à chaque place
+      for (const [x] of RAIL_HOOKS) g.add(mesh(new THREE.TorusGeometry(0.014, 0.003, 6, 12, Math.PI * 1.5).rotateY(Math.PI / 2), steel, x, RAIL_Y - 0.018, RAIL_Z));
+      return g;
     },
   },
   {

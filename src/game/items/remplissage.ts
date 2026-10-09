@@ -24,7 +24,9 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
   // sous l'évier : l'entretien, le moule et la râpe
   ['placard', 0, ['pastilles', 'sacs-poubelle', 'spray', 'gants', 'moule', 'rape']],
   // sous le plan de travail, à côté de la gazinière : de quoi cuisiner
-  ['plan-de-travail', 0, ['poele', 'casserole', 'planche', 'spatule', 'louche', 'fouet', 'cuillere-bois']],
+  ['plan-de-travail', 0, ['planche', 'spatule', 'louche', 'fouet', 'cuillere-bois']],
+  // la poêle et la casserole pendent à leur barre, au-dessus de la gazinière
+  ['barre-casseroles', 0, ['poele', 'casserole']],
   ['tiroir', 0, ['fourchette', 'fourchette', 'couteau-table', 'couteau-table', 'cuillere', 'cuillere', 'torchon']],
   // le lave-vaisselle a fini son lavage : propre, prêt à vider
   ['lave-vaisselle', 0, ['assiette', 'assiette', 'verre', 'verre', 'bol', 'fourchette', 'cuillere']],
