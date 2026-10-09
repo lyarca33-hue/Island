@@ -1,6 +1,6 @@
 /**
- * Test de fumée : le jeu se charge dans un vrai navigateur, sur la cuisine vide (en attendant ses
- * meubles Tripo), sans aucune erreur dans la console. L'état passe par
+ * Test de fumée : le jeu se charge dans un vrai navigateur, sur la cuisine meublée avec les
+ * modèles Tripo, sans aucune erreur dans la console. L'état passe par
  * window.game (game.describe(), game.rooms…).
  *
  * Sans carte graphique (CI), le rendu tombe à une image par seconde environ : game.catchUp fait
@@ -14,7 +14,7 @@ interface Jeu {
   describe(): { perso: string; objets: unknown[] };
 }
 
-test('le jeu se lance : la cuisine vide, sans erreur', async ({ page }, info) => {
+test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info) => {
   const erreurs: string[] = [];
   page.on('pageerror', (e) => erreurs.push(`exception : ${e.message}`));
   page.on('console', (m) => {
@@ -30,14 +30,16 @@ test('le jeu se lance : la cuisine vide, sans erreur', async ({ page }, info) =>
     (window as unknown as { game: Jeu }).game.catchUp = 40;
   });
 
-  // une seule pièce, la cuisine, sans aucun objet
+  // une seule pièce, la cuisine, avec ses meubles et appareils habillés par les modèles Tripo
   const etat = await page.evaluate(() => {
     const g = (window as unknown as { game: Jeu }).game;
     const d = g.describe();
-    return { pieces: g.rooms.length, objets: d.objets.length, perso: d.perso };
+    const tripo = performance.getEntriesByType('resource').some((e) => e.name.endsWith('models/cuisine.glb'));
+    return { pieces: g.rooms.length, objets: d.objets.length, perso: d.perso, tripo };
   });
   expect(etat.pieces).toBe(1);
-  expect(etat.objets).toBe(0);
+  expect(etat.objets).toBeGreaterThanOrEqual(20);
+  expect(etat.tripo).toBe(true);
   expect(etat.perso).toContain('cuisine');
   await page.screenshot({ path: info.outputPath('1-cuisine.png') });
 

@@ -46,6 +46,10 @@ export const WALL_T = 0.12;
 const CUT_H = 0.2;
 /** Hauteur d'une porte ou d'un passage. */
 export const DOOR_H = 2.08;
+/** Bas des placards hauts de la cuisine (80 cm de haut : leur haut au ras des fenêtres). */
+const WALL_CUPBOARD_Y = 1.3;
+/** Table de la cuisine, devant la fenêtre du sud. */
+const KITCHEN_TABLE = { x: 1, z: 1.7 };
 /** Porte d'entrée de la maison (mur ouest de la cuisine) : de z0 à z1. */
 export const DOOR = { z0: 1.35, z1: 2.25 };
 /** Distance (m) à laquelle une porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
@@ -1249,9 +1253,35 @@ export const KITCHEN: RoomSpec = {
     { wall: 'nord', u0: -2.1, u1: -1.1, y0: WIN_LOW, y1: WIN_HIGH },
     { wall: 'sud', u0: 0.45, u1: 1.55, y0: 0.95, y1: WIN_HIGH },
   ],
-  lamps: () => [{ x: 0, z: 0, kind: 'suspension' }],
+  // la suspension au-dessus de la table
+  lamps: () => [{ x: KITCHEN_TABLE.x, z: KITCHEN_TABLE.z, kind: 'suspension' }],
   lightSwitch: { wall: 'ouest', u: DOOR.z1 + 0.2 },
-  runs: [],
-  onTop: [],
-  items: [],
+  runs: [
+    // le long du fond : l'évier sous la fenêtre, le lave-vaisselle et les tiroirs à sa gauche,
+    // puis la gazinière entre deux plans de travail, le four et la poubelle
+    { wall: 'nord', from: ROOM.x0, items: ['tiroir', 'lave-vaisselle', 'evier', 'placard', 'gaziniere', 'plan-de-travail', 'four', 0.04, 'poubelle'] },
+    // contre le mur de la porte, en retrait du coin (le tiroir et la porte du lave-vaisselle s'y ouvrent) :
+    // le frigo, puis le garde-manger (un peu d'écart : sa porte, ouverte, ne touche pas le frigo)
+    { wall: 'ouest', from: ROOM.z0 + 1.5, items: ['congelateur', 0.1, 'garde-manger'] },
+  ],
+  onTop: [
+    ['frigo', 'congelateur'],
+    // le coin café sur les tiroirs, la bouilloire à côté de l'évier, le micro-ondes près de la gazinière
+    ['machine-a-cafe', 'tiroir', 0, -0.12],
+    ['bouilloire', 'placard', -0.15, -0.12],
+    ['micro-ondes', 'plan-de-travail', 0.1, -0.06],
+    // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier
+    ['grille-pain', 'lave-vaisselle', -0.15, -0.14],
+    ['egouttoir', 'lave-vaisselle', 0.145, 0],
+    ['mixeur', 'four', 0, -0.08],
+  ],
+  items: [
+    // les placards hauts, au mur au-dessus des plans de travail (le haut au ras de la fenêtre)
+    ['placard-haut', ROOM.x0 + 0.56, WALL_CUPBOARD_Y, ROOM.z0 + 0.185, 0],
+    ['placard-haut', 0.77, WALL_CUPBOARD_Y, ROOM.z0 + 0.185, 0],
+    // le coin repas devant la fenêtre du sud : la table, une chaise de chaque côté
+    ['table', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z, 0],
+    ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z - 0.5, 0],
+    ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z + 0.5, Math.PI],
+  ],
 };

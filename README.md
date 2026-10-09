@@ -59,10 +59,15 @@ fenêtres en bois, un toit en tuiles à deux pans visible de dehors. Les murs to
 s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra. La suspension du
 plafond s'allume à l'interrupteur, à côté de la porte.
 
-La cuisine est **vide** : ses anciens meubles et objets ont été retirés, et reviendront un par un
-refaits avec Tripo. Le code des objets (prendre, cuire, laver, ranger…) est gardé pour eux ; les
-meubles se rangeront par rangées dos au mur (`runs` dans la fiche `KITCHEN`). Sans chambre ni salle
-de bain, la fatigue, l'hygiène et la vessie sont en pause.
+La cuisine est **meublée avec les modèles Tripo** (`src/game/items/tripo.ts`,
+`public/models/cuisine.glb`) : le long du fond, les tiroirs, le lave-vaisselle, l'évier sous la
+fenêtre, un placard, la gazinière, un plan de travail, le four sur son socle et la poubelle ; contre
+le mur de la porte, le frigo-congélateur et le garde-manger ; deux placards hauts au mur ; la machine
+à café, la bouilloire, le grille-pain, l'égouttoir, le micro-ondes et le mixeur posés sur les plans
+de travail ; la table et deux chaises devant la fenêtre du sud. Les meubles sont rangés par rangées
+dos au mur (`runs` dans la fiche `KITCHEN`). Portes, tiroirs, boutons et levier sont ceux des
+modèles, branchés sur les interactions du jeu. La vaisselle et les ustensiles reviendront au prochain
+lot. Sans chambre ni salle de bain, la fatigue, l'hygiène et la vessie sont en pause.
 
 ### Les ordres
 
@@ -142,6 +147,7 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/packs/assets.ts` | Chargement des packs de Quaternius (aliments), modèles mis à la taille |
 | `src/game/room.ts` | La cuisine : carrelage, murs en coupe, porte, fenêtres, toit ; meubles rangés contre les murs |
 | `src/game/kit.ts` | Le kit Tripo de la maison : enduit des murs, sol, toit, porte, fenêtre |
+| `src/game/items/tripo.ts` | Meubles et appareils de la cuisine faits avec Tripo : modèle, pièces mobiles posées sur leur charnière |
 | `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
@@ -177,8 +183,8 @@ d'animations : `idle`, `walk`, `run`, `agree` (oui), `headShake` (non), `sad_pos
 
 ## Les objets
 
-La cuisine est vide pour l'instant : ce qui suit décrit le système d'objets, qui servira aux
-meubles et aux objets refaits avec Tripo.
+Les meubles et appareils de la cuisine sont habillés par les modèles Tripo (`tripo.ts`) ; la
+vaisselle et les ustensiles reviendront au prochain lot.
 
 Chaque objet a une petite fiche dans `src/game/items/catalog.ts`, pas d'animation à lui :
 

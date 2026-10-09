@@ -20,6 +20,25 @@ export function toonGradient(): THREE.DataTexture {
   return gradient;
 }
 
+let softGradient: THREE.DataTexture | null = null;
+
+/**
+ * Rampe douce (ombre claire, fondue) : pour les modèles Tripo, dont la texture porte déjà ses
+ * ombres et dont la surface bosselée ferait des taches avec des paliers nets.
+ */
+export function softToonGradient(): THREE.DataTexture {
+  if (softGradient) return softGradient;
+  const steps = [135, 185, 225, 255];
+  const data = new Uint8Array(steps.length * 4);
+  steps.forEach((v, i) => data.set([v, v, v, 255], i * 4));
+  softGradient = new THREE.DataTexture(data, steps.length, 1, THREE.RGBAFormat);
+  softGradient.minFilter = THREE.LinearFilter;
+  softGradient.magFilter = THREE.LinearFilter;
+  softGradient.generateMipmaps = false;
+  softGradient.needsUpdate = true;
+  return softGradient;
+}
+
 export interface ToonOptions {
   color: THREE.ColorRepresentation;
   /** Couleur du liseré (rim light). */
@@ -27,10 +46,12 @@ export interface ToonOptions {
   /** Force du liseré (0 = aucun). */
   rimStrength?: number;
   map?: THREE.Texture | null;
+  /** Ombrage fondu (softToonGradient) au lieu des paliers nets. */
+  soft?: boolean;
 }
 
 export function createToonMaterial(o: ToonOptions): THREE.MeshToonMaterial {
-  const m = new THREE.MeshToonMaterial({ color: o.color, map: o.map ?? null, gradientMap: toonGradient() });
+  const m = new THREE.MeshToonMaterial({ color: o.color, map: o.map ?? null, gradientMap: o.soft ? softToonGradient() : toonGradient() });
   const rim = new THREE.Color(o.rim ?? 0xfff1d6);
   const strength = o.rimStrength ?? 0.3;
   if (strength > 0) {

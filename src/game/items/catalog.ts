@@ -271,6 +271,13 @@ function mesh(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, x = 0
   return m;
 }
 
+/** Intérieur d'un meuble (clayettes) : gardé sous le modèle Tripo, qui n'est qu'une coque (tripo.ts). */
+function inside(...parts: THREE.Object3D[]): THREE.Group {
+  const g = group(...parts);
+  g.name = 'dedans';
+  return g;
+}
+
 function group(...parts: THREE.Object3D[]): THREE.Group {
   const g = new THREE.Group();
   g.add(...parts);
@@ -341,42 +348,55 @@ function book(id: string, color: THREE.ColorRepresentation): ItemDef {
   };
 }
 
-/** Hauteur du plan de travail sous la machine à café (m). */
-const COUNTER_H = 0.9;
+/** Hauteur du plan de travail (m), celle des meubles bas Tripo (tripo.ts). */
+const COUNTER_H = 0.83;
 const CUP_R = 0.042;
-/** Évier : largeur et profondeur du meuble, cuve (ouverture, profondeur, centre en z), bout du robinet. */
-const SINK_W = 0.8;
-const SINK_D = 0.5;
-const BASIN_W = 0.48;
-const BASIN_D = 0.32;
-const BASIN_H = 0.18;
-const BASIN_Z = 0.065;
-const TAP_Z = 0.03;
-const TAP_Y = COUNTER_H + 0.25;
+/** Machine à café (posée sur le plan de travail) : dessus de la grille où se pose la tasse (m). */
+const COFFEE_TRAY = 0.045;
+/**
+ * Évier (mesures du modèle Tripo) : largeur et profondeur du meuble, cuve (ouverture, profondeur,
+ * centre en z), bout du robinet.
+ */
+const SINK_W = 0.95;
+const SINK_D = 0.6;
+const BASIN_W = 0.66;
+const BASIN_D = 0.34;
+const BASIN_H = 0.17;
+const BASIN_Z = 0.025;
+const TAP_Z = 0.04;
+const TAP_Y = COUNTER_H + 0.23;
 const CUP_H = 0.1;
 
-/** Frigo : largeur, profondeur (sans la porte), hauteur, épaisseur des parois et de la porte (m). */
-const FRIDGE_W = 0.6;
-const FRIDGE_D = 0.6;
-const FRIDGE_H = 1.55;
+/**
+ * Frigo, posé sur le congélateur (le haut du frigo-congélateur Tripo) : largeur, profondeur (sans
+ * la porte), hauteur, épaisseur des parois et de la porte (m).
+ */
+const FRIDGE_W = 0.68;
+const FRIDGE_D = 0.46;
+const FRIDGE_H = 1.175;
 const FRIDGE_T = 0.03;
 const FRIDGE_DOOR_T = 0.05;
+/** Centre de la caisse en z (la porte se ferme devant, la poignée dépasse), dans le repère du frigo. */
+const FRIDGE_Z = -0.11;
 /** Dessus des clayettes (le bas du frigo compris) ; places de gauche à droite, près de la porte. */
-const FRIDGE_SHELVES = [FRIDGE_T + 0.03, 0.55, 0.98, 1.25];
-const FRIDGE_ROW = (z: number, shelves: number[]) => shelves.flatMap((y) => [-0.19, -0.065, 0.065, 0.19].map((x): [number, number, number] => [x, y, z]));
+const FRIDGE_SHELVES = [FRIDGE_T + 0.01, 0.34, 0.63, 0.9];
+const FRIDGE_ROW = (z: number, shelves: number[]) => shelves.flatMap((y) => [-0.22, -0.075, 0.075, 0.22].map((x): [number, number, number] => [x, y, z]));
 /**
  * Devant sur les trois premières clayettes (places 0 à 11), puis au fond, puis la clayette du haut,
  * puis une rangée au milieu des deux clayettes du haut (32 à 39 : les œufs, le beurre…).
  */
-const FRIDGE_SLOTS = [...FRIDGE_ROW(0.13, FRIDGE_SHELVES.slice(0, 3)), ...FRIDGE_ROW(-0.1, FRIDGE_SHELVES.slice(0, 3)), ...FRIDGE_ROW(0.13, [1.25]), ...FRIDGE_ROW(-0.1, [1.25]), ...FRIDGE_ROW(0.015, [0.98, 1.25])];
+const FRIDGE_SLOTS = [...FRIDGE_ROW(0.04, FRIDGE_SHELVES.slice(0, 3)), ...FRIDGE_ROW(-0.19, FRIDGE_SHELVES.slice(0, 3)), ...FRIDGE_ROW(0.04, [0.9]), ...FRIDGE_ROW(-0.19, [0.9]), ...FRIDGE_ROW(-0.075, [0.63, 0.9])];
 
-/** Gazinière : largeur, profondeur ; feux (avant gauche, avant droit, arrière gauche, arrière droit), dessus des grilles. */
-const STOVE_W = 0.6;
-const STOVE_D = 0.58;
-const GRATE_H = 0.03;
-const STOVE_SPOTS: Array<[number, number, number]> = [[-0.14, 0.1], [0.14, 0.1], [-0.14, -0.13], [0.14, -0.13]].map(([x, z]): [number, number, number] => [x, COUNTER_H + GRATE_H, z]);
-/** Boutons des feux, de gauche à droite : arrière gauche, avant gauche, avant droit, arrière droit. */
-const STOVE_KNOBS = [-0.07, 0.07, -0.21, 0.21];
+/**
+ * Gazinière (mesures du modèle Tripo, ramené à la profondeur des meubles bas) : largeur, profondeur ;
+ * feux (avant gauche, avant droit, arrière gauche, arrière droit), dessus des grilles.
+ */
+const STOVE_W = 0.81;
+const STOVE_D = 0.6;
+const GRATE_H = 0.02;
+const STOVE_SPOTS: Array<[number, number, number]> = [[-0.22, 0.04], [0.22, 0.04], [-0.22, -0.136], [0.22, -0.136]].map(([x, z]): [number, number, number] => [x, COUNTER_H + GRATE_H, z]);
+/** Boutons des feux n° 0 à 3 sur la façade (x) : avant gauche, avant droit, arrière gauche, arrière droit. */
+const STOVE_KNOBS = [-0.21, 0.22, -0.32, 0.32];
 /** Poêle et casserole : rayon, hauteur du bord, longueur du manche (m). */
 const PAN_R = 0.1;
 const PAN_H = 0.04;
@@ -385,9 +405,9 @@ const POT_H = 0.11;
 const HANDLE_L = 0.17;
 /** Épaisseur du fond des ustensiles : les ingrédients reposent dessus. */
 const PAN_FLOOR = 0.008;
-/** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier. */
-const WORKTOP_W = 0.9;
-const WORKTOP_D = 0.5;
+/** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier (un placard bas Tripo). */
+const WORKTOP_W = 0.73;
+const WORKTOP_D = 0.55;
 /** Planche à découper : longueur, épaisseur, largeur (m). */
 const BOARD_W = 0.36;
 const BOARD_T = 0.02;
@@ -419,10 +439,10 @@ const CARAFE_R = 0.048;
 const CARAFE_BODY = 0.17;
 const CARAFE_NECK = 0.028;
 const CARAFE_H = 0.24;
-/** Chaise en bois : assise (hauteur, largeur, profondeur), haut du dossier, section des pieds (m). */
-const SEAT_H = 0.45;
-const SEAT_W = 0.42;
-const SEAT_D = 0.4;
+/** Chaise en bois (mesures du modèle Tripo) : assise (hauteur, largeur, profondeur), haut du dossier, section des pieds (m). */
+const SEAT_H = 0.5;
+const SEAT_W = 0.46;
+const SEAT_D = 0.44;
 const CHAIR_H = 0.9;
 const LEG = 0.036;
 
@@ -582,34 +602,29 @@ export const ITEMS: ItemDef[] = [
     id: 'machine-a-cafe',
     name: 'machine à café',
     portable: false,
-    movable: true,
+    // posée sur le plan de travail : elle suit le meuble dessous
+    movable: false,
     durability: 250,
     // la tasse se pose sur la grille, sous le bec, l'anse vers l'avant
-    pour: { at: [0, COUNTER_H + 0.016, 0.1], fills: ['tasse'], liquid: 'café', seconds: 2.6, color: 0x4a2c1a },
-    // comme un feu de la gazinière : le bouton rouge l'allume, il chauffe, puis le café coule ;
+    pour: { at: [0, COFFEE_TRAY, 0.075], fills: ['tasse'], liquid: 'café', seconds: 2.6, color: 0x4a2c1a },
+    // comme un feu de la gazinière : le bouton l'allume, il chauffe, puis le café coule ;
     // le voyant reste allumé, et elle se met en veille si on l'oublie
-    heat: { spots: [[0, COUNTER_H + 0.016, 0.1]], lit: 'voyant', warmup: 3, autoOff: 45 },
+    heat: { spots: [[0, COFFEE_TRAY, 0.075]], lit: 'voyant', warmup: 3, autoOff: 45 },
     build: () => {
-      const H = COUNTER_H;
       const body = 0x2e3135, metal = 0xb9bfc6;
       const g = group(
-        // petit meuble de cuisine
-        mesh(new THREE.BoxGeometry(0.6, H - 0.03, 0.4), 0x8a6440, 0, (H - 0.03) / 2, 0),
-        mesh(new THREE.BoxGeometry(0.62, 0.03, 0.42), 0xd9d3c5, 0, H - 0.015, 0),
-        mesh(new THREE.BoxGeometry(0.5, 0.006, 0.01), 0x5d4129, 0, H - 0.12, 0.2),
-        // machine : colonne, tête avec le bec, grille d'égouttage, réservoir d'eau
-        mesh(new THREE.BoxGeometry(0.24, 0.36, 0.16), body, 0, H + 0.18, -0.1),
-        mesh(new THREE.BoxGeometry(0.24, 0.08, 0.32), body, 0, H + 0.32, -0.02),
-        mesh(new THREE.CylinderGeometry(0.014, 0.01, 0.03, 12), metal, 0, H + 0.265, 0.1),
-        mesh(new THREE.BoxGeometry(0.2, 0.016, 0.16), metal, 0, H + 0.008, 0.08),
-        mesh(new THREE.BoxGeometry(0.07, 0.3, 0.12), 0x7fb2c9, 0.155, H + 0.16, -0.1),
+        // colonne, tête avec le bec, grille d'égouttage, réservoir d'eau
+        mesh(new THREE.BoxGeometry(0.26, 0.35, 0.12), body, 0, 0.175, -0.08),
+        mesh(new THREE.BoxGeometry(0.26, 0.11, 0.26), body, 0, 0.295, 0),
+        mesh(new THREE.CylinderGeometry(0.014, 0.01, 0.03, 12), metal, 0, 0.225, 0.075),
+        mesh(new THREE.BoxGeometry(0.24, COFFEE_TRAY, 0.24), metal, 0, COFFEE_TRAY / 2, 0.01),
       );
       // bouton marche / arrêt, et son voyant (allumé quand la machine chauffe)
-      const button = group(mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.01, 14).rotateX(Math.PI / 2), 0xd0463a, 0.07, H + 0.32, 0.142));
+      const button = group(mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.01, 14).rotateX(Math.PI / 2), 0xd0463a, -0.056, 0.29, 0.135));
       button.name = 'bouton-0';
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.007, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb347 }));
       lamp.name = 'voyant';
-      lamp.position.set(-0.07, H + 0.32, 0.142);
+      lamp.position.set(-0.008, 0.29, 0.14);
       const lit = group(lamp);
       lit.name = 'voyant-0';
       lit.visible = false;
@@ -618,7 +633,7 @@ export const ITEMS: ItemDef[] = [
       const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 6), toon(0x3b2213));
       jet.name = 'jet';
       jet.visible = false;
-      jet.position.set(0, H + 0.25, 0.1);
+      jet.position.set(0, 0.21, 0.075);
       g.add(jet);
       return g;
     },
@@ -699,43 +714,45 @@ export const ITEMS: ItemDef[] = [
     holds: ["bouteille d'eau", 'pomme', 'sandwich', 'pain', 'carotte', 'tomate', 'concombre', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', 'steak', ...FRESH_THINGS, ...PREP_FRESH],
     slots: FRIDGE_SLOTS,
     build: () => {
-      const W = FRIDGE_W, D = FRIDGE_D, H = FRIDGE_H, t = FRIDGE_T;
-      const shell = 0xe9e6de, inside = 0xf3f5f4, glass = 0xc9dfe6;
+      const W = FRIDGE_W, D = FRIDGE_D, H = FRIDGE_H, t = FRIDGE_T, zc = FRIDGE_Z;
+      const shell = 0xe9e6de, inner = 0xf3f5f4, glass = 0xc9dfe6;
       const g = group(
         // caisse ouverte à l'avant : côtés, fond, dessus, bas
-        mesh(new THREE.BoxGeometry(t, H, D), shell, -W / 2 + t / 2, H / 2, 0),
-        mesh(new THREE.BoxGeometry(t, H, D), shell, W / 2 - t / 2, H / 2, 0),
-        mesh(new THREE.BoxGeometry(W, H, t), shell, 0, H / 2, -D / 2 + t / 2),
-        mesh(new THREE.BoxGeometry(W, t, D), shell, 0, H - t / 2, 0),
-        mesh(new THREE.BoxGeometry(W, t, D), shell, 0, t / 2, 0),
-        // intérieur plus clair, socle sombre
-        mesh(new THREE.BoxGeometry(W - 2 * t, H - 2 * t, 0.004), inside, 0, H / 2, -D / 2 + t + 0.002),
-        mesh(new THREE.BoxGeometry(W + 0.004, 0.05, 0.04), 0x8d9093, 0, 0.025, D / 2 - 0.02),
+        mesh(new THREE.BoxGeometry(t, H, D), shell, -W / 2 + t / 2, H / 2, zc),
+        mesh(new THREE.BoxGeometry(t, H, D), shell, W / 2 - t / 2, H / 2, zc),
+        mesh(new THREE.BoxGeometry(W, H, t), shell, 0, H / 2, zc - D / 2 + t / 2),
+        mesh(new THREE.BoxGeometry(W, t, D), shell, 0, H - t / 2, zc),
+        // intérieur plus clair
+        mesh(new THREE.BoxGeometry(W - 2 * t, H - 2 * t, 0.004), inner, 0, H / 2, zc - D / 2 + t + 0.002),
       );
-      for (const y of FRIDGE_SHELVES.slice(1)) g.add(mesh(new THREE.BoxGeometry(W - 2 * t, 0.012, D - t - 0.02), glass, 0, y - 0.006, 0.0));
+      // le bas du frigo (au-dessus du congélateur) et les clayettes en verre
+      g.add(inside(
+        mesh(new THREE.BoxGeometry(W - 0.04, FRIDGE_SHELVES[0], D), inner, 0, FRIDGE_SHELVES[0] / 2, zc),
+        ...FRIDGE_SHELVES.slice(1).map((y) => mesh(new THREE.BoxGeometry(W - 2 * t - 0.02, 0.012, D - t - 0.02), glass, 0, y - 0.006, zc)),
+      ));
       // porte : la charnière à droite (+X), à l'avant ; elle s'ouvre vers l'avant
       const door = new THREE.Group();
       door.name = 'porte';
-      door.position.set(W / 2, 0, D / 2);
+      door.position.set(W / 2, 0, zc + D / 2);
       door.add(
         mesh(new THREE.BoxGeometry(W, H - 0.06, FRIDGE_DOOR_T), shell, -W / 2, 0.06 + (H - 0.06) / 2, FRIDGE_DOOR_T / 2),
         // joint et bacs de porte, vus quand elle est ouverte
         mesh(new THREE.BoxGeometry(W - 0.06, H - 0.16, 0.006), 0xd5d8d6, -W / 2, 0.06 + (H - 0.06) / 2, -0.003),
         // poignée côté gauche, à hauteur de main
-        mesh(new THREE.BoxGeometry(0.025, 0.36, 0.03), 0x9ea4aa, -W + 0.05, 1.02, FRIDGE_DOOR_T + 0.025),
-        mesh(new THREE.BoxGeometry(0.025, 0.025, 0.03), 0x9ea4aa, -W + 0.05, 1.19, FRIDGE_DOOR_T + 0.01),
-        mesh(new THREE.BoxGeometry(0.025, 0.025, 0.03), 0x9ea4aa, -W + 0.05, 0.85, FRIDGE_DOOR_T + 0.01),
+        mesh(new THREE.BoxGeometry(0.025, 0.36, 0.03), 0x9ea4aa, -W + 0.05, 0.6, FRIDGE_DOOR_T + 0.025),
+        mesh(new THREE.BoxGeometry(0.025, 0.025, 0.03), 0x9ea4aa, -W + 0.05, 0.77, FRIDGE_DOOR_T + 0.01),
+        mesh(new THREE.BoxGeometry(0.025, 0.025, 0.03), 0x9ea4aa, -W + 0.05, 0.43, FRIDGE_DOOR_T + 0.01),
       );
       g.add(door);
       // la lampe du frigo, sous le dessus : allumée quand la porte s'ouvre (Game.tickDoors)
       const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.05), new THREE.MeshBasicMaterial({ color: 0xe8e2d0 }));
       lamp.name = 'lampe';
-      lamp.position.set(0, H - t - 0.012, -D / 2 + 0.12);
+      lamp.position.set(0, H - t - 0.06, zc - D / 2 + 0.12);
       lamp.visible = false;
       // sur tous les calques comme les autres lumières (sinon recompilation de chaque matériau à chaque image)
       const glow = lightAllPasses(new THREE.PointLight(0xfff3d6, 0, 0.45, 2));
       glow.name = 'lampe-lumiere';
-      glow.position.set(0, H - t - 0.1, -0.05);
+      glow.position.set(0, H - t - 0.15, zc);
       g.add(lamp, glow);
       return g;
     },

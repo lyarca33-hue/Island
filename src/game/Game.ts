@@ -3270,6 +3270,9 @@ export class Game {
       if (part && drawer) part.position.z = k * drawer;
       else if (part && item.def.doorAxis === 'x') part.rotation.x = k * item.def.door!;
       else if (part) part.rotation.y = k * item.def.door!;
+      // deux battants (placard haut) : le second, charnière de l'autre côté, s'ouvre en miroir
+      const twin = item.part('porte-2');
+      if (twin) twin.rotation.y = -k * item.def.door!;
       if (inside.length) {
         const step = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion).multiplyScalar((k - before) * drawer!);
         for (const it of inside) it.object.position.add(step);
@@ -3368,7 +3371,7 @@ export class Game {
         this.appliances.set(item, { t: 0, start: new Map(inside.map((it) => [it, it.cooking])) });
         this.wearItem(item, WEAR_RUN);
         const lever = item.part('levier');
-        if (lever) lever.position.y = -0.06;
+        if (lever) lever.position.y = -(lever.userData.drop ?? 0.06);
         const bare = item.def.washes && !this.tabletIn.has(item);
         this.onNotice?.(`${cap(the(item.name))} ${item.def.heats ? 'chauffe' : 'tourne'}…${bare ? ' Mais sans pastille !' : ''}`);
       }, running);
@@ -5713,7 +5716,7 @@ export class Game {
     let door = false;
     let button: number | undefined;
     for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
-      if (o.name === 'porte') door = true;
+      if (o.name === 'porte' || o.name === 'porte-2') door = true;
       const knob = /^bouton-(\d+)$/.exec(o.name);
       if (knob) button = +knob[1];
       const item = this.items.find((i) => i.object === o);
