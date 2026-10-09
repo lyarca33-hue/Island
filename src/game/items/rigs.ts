@@ -128,7 +128,7 @@ export const ROOM_RIGS: Record<string, Rig> = {
     },
     def: {
       bike: {
-        saddle: [0.36, 1.04, 0],
+        saddle: [0.36, 0.89, 0],
         grip: [-0.23, 1.08, 0.29],
         crank: [0.087, 0.302, 0],
         // la manivelle gauche pend, la droite (hors du carter de chaîne) est en haut
