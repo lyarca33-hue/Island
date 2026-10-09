@@ -5075,8 +5075,8 @@ export class Game {
   }
 
   /**
-   * Va au meuble `ref` et montre ce qu'il contient (fenêtre d'inventaire), sans l'ouvrir : on choisit
-   * dans la fenêtre l'objet à sortir, et la porte s'ouvre alors sur lui (take).
+   * Va au meuble `ref` et montre ce qu'il contient (fenêtre d'inventaire), porte ou tiroir ouvert : on
+   * choisit dans la fenêtre l'objet à sortir (take).
    */
   lookInside(ref?: string, running = false): boolean {
     const shelf = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.cold);
@@ -5089,7 +5089,9 @@ export class Game {
       const n = this.storedIn(shelf);
       this.onNotice?.(n.length ? `Dans ${the(shelf.name)} : ${n.map((i) => i.name).join(', ')}.` : `${cap(the(shelf.name))} est vide.`);
     };
-    this.character.approachThen(this.doors.has(shelf) ? this.doorStand(shelf) : this.frontOf(shelf), shelf.object.position, show, running);
+    // un meuble à porte (ou à tiroir) s'ouvre, puis son inventaire se montre ; il se referme quand on s'éloigne
+    if (this.doors.has(shelf)) return this.withDoorOpen(shelf, show, running);
+    this.character.approachThen(this.frontOf(shelf), shelf.object.position, show, running);
     return true;
   }
 

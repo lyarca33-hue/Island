@@ -338,8 +338,8 @@ Cuisine (`src/game/items/kitchen.ts`), alignée de l'autre côté de la machine 
 (le micro-ondes posé dessus), four, lave-vaisselle, meuble à tiroir et poubelle. Leurs dessus font
 plan de travail (on y pose ce qu'on tient).
 - Clic mains vides sur un meuble qui a un inventaire (frigo, placard, tiroir, armoire, barres au
-  mur, bibliothèque…) : son inventaire à cases s'ouvre ; un clic sur un objet de la grille ouvre la
-  porte et le sort. Porte restée ouverte : un clic la ferme. Le couvercle de la poubelle s'ouvre au
+  mur, bibliothèque…) : le perso ouvre sa porte (ou son tiroir) et son inventaire à cases s'ouvre ; un
+  clic sur un objet de la grille le sort. La porte se referme quand on s'éloigne ; porte ouverte, un clic la ferme. Le couvercle de la poubelle s'ouvre au
   clic. Objet en main, clic sur le meuble : le perso ouvre et range (placard :
   tasse, assiette, bouteille, pomme ; tiroir : couverts, lettre ; four et micro-ondes : steak, pomme de terre, pain, sandwich ;
   lave-vaisselle : tasse, assiette, couverts). Ce qui est dans le tiroir sort et rentre avec lui.
