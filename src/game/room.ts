@@ -26,7 +26,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from './toon';
 import { lightAllPasses } from './postfx';
-import { kitParts, PlasterSheet, type Kit } from './kit';
+import { kitParts, PlasterSheet, tileRoof, type Kit } from './kit';
 import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
 
@@ -57,12 +57,11 @@ const CURTAIN_DIM = 0.97;
 /** Bas et haut des fenêtres (celle du fond, au-dessus de l'évier, passe au-dessus du robinet). */
 const WIN_LOW = 1.3;
 export const WIN_HIGH = 2.1;
-/** Kit Tripo (dress) : taille d'un carreau du kit posé (quatre carreaux de 40 cm), enfoncement de l'enduit dans le mur, épaisseur du toit (part du pan du kit). */
+/** Kit Tripo (dress) : taille d'un carreau du kit posé (quatre carreaux de 40 cm), enfoncement de l'enduit dans le mur. */
 const KIT_FLOOR = 0.8;
 const PLASTER_IN = 0.012;
 /** Ce que l'enduit dépasse au plus de la face du mur (relief de 2 cm, enfoncé de PLASTER_IN). */
 const PLASTER_OUT = 0.008;
-const KIT_ROOF_T = 0.8;
 
 const PLASTER = 0xefe5cf;
 const CAP = 0x7c6a58;
@@ -924,20 +923,20 @@ export class Room {
       }
     }
 
-    // toit : un pan de tuiles entier de chaque côté, à la place du pan peint
+    // toit : les tuiles du kit posées une à une sur chaque pan peint
     for (const p of this.roofPans) {
       const wrap = new THREE.Group();
       wrap.position.copy(p.mesh.position);
       wrap.rotation.copy(p.mesh.rotation);
       const pan = new THREE.Group();
-      for (const part of kitParts(kit.toit)) pan.add(new THREE.Mesh(part.geometry, part.material));
+      // la tuile canal du kit, posée une à une sur tout le pan
+      for (const tiles of tileRoof(kit.tuile, p.lx, p.slope)) pan.add(tiles);
       // faîtage du pan du kit à -z : tourné pour le pan nord (son z local monte vers le faîtage)
       pan.rotation.y = p.side < 0 ? Math.PI : 0;
-      pan.scale.set(p.lx, KIT_ROOF_T, p.slope);
-      pan.position.y = -0.03;
+      // posées sur le pan peint, gardé dessous : on ne voit pas le jour entre les tuiles
+      pan.position.y = 0.03;
       wrap.add(pan);
       this.roof.add(wrap);
-      p.mesh.visible = false;
     }
     this.roof.updateMatrixWorld(true);
 
