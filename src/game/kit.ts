@@ -79,14 +79,33 @@ const TILE_LIFT = 0.02;
 /** Largeur et hauteur de la tuile du kit (son repère, voir build_kit_assets.mjs). */
 const KIT_TILE_W = 0.71;
 const KIT_TILE_H = 0.369;
+/** Variation de chaque tuile : teinte (plus ou moins cuite), petit décalage et petite rotation, au hasard. */
+const TILE_SHADE = 0.14;
+const TILE_DARK = 0.06;
+const TILE_JITTER = 0.012;
+const TILE_TURN = THREE.MathUtils.degToRad(2.5);
+
+/** Hasard reproductible (mulberry32) : le même toit à chaque chargement. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 /**
  * Un pan de toit de `lx` × `slope` m couvert de tuiles canal posées une à une, comme un vrai toit :
  * des rangs de tuiles creuses (bombées vers le bas) qui descendent la pente, et entre deux rangs une
  * tuile bombée qui les recouvre. Chaque tuile chevauche celle de dessous, de l'égout au faîtage.
+ * Chaque tuile a sa teinte, un peu plus claire ou plus sombre, et bouge à peine (`seed` : un tirage par pan).
  * Repère du pan : x le long du toit, z du faîtage (-) à l'égout (+), centré, dessus du pan à y = 0.
  */
-export function tileRoof(tuile: THREE.Object3D, lx: number, slope: number): THREE.InstancedMesh[] {
+export function tileRoof(tuile: THREE.Object3D, lx: number, slope: number, seed = 1): THREE.InstancedMesh[] {
+  const rand = seeded(seed);
+  const jitter = (a: number) => (rand() * 2 - 1) * a;
   const n = Math.max(1, Math.round(lx / TILE_PAIR)), pair = lx / n;
   const rows = Math.max(1, Math.ceil((slope - TILE_L) / TILE_STEP) + 1);
   const step = rows > 1 ? (slope - TILE_L) / (rows - 1) : 0;
@@ -99,12 +118,19 @@ export function tileRoof(tuile: THREE.Object3D, lx: number, slope: number): THRE
   const scale = new THREE.Matrix4().makeScale(sx, sy, TILE_L);
   const under = new THREE.Matrix4().makeTranslation(0, h, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI));
   const mats: THREE.Matrix4[] = [];
+  const colors: THREE.Color[] = [];
+  const turn = new THREE.Matrix4();
   for (let j = 0; j < rows; j++) {
     const z = slope / 2 - TILE_L / 2 - j * step;
     const at = (x: number, y: number, flip: boolean) => {
-      const m = new THREE.Matrix4().makeTranslation(x, y + TILE_LIFT / 2, z).multiply(tilt);
+      // posée un peu de travers, un peu plus haut ou plus bas dans le rang
+      const m = new THREE.Matrix4().makeTranslation(x + jitter(TILE_JITTER), y + TILE_LIFT / 2, z + jitter(TILE_JITTER));
+      m.multiply(turn.makeRotationY(jitter(TILE_TURN))).multiply(tilt);
       if (flip) m.multiply(under);
       mats.push(m.multiply(scale));
+      // plus ou moins cuite : plus claire ou plus brune, et de temps en temps une bien plus sombre
+      const v = 1 + jitter(TILE_SHADE) - (rand() < TILE_DARK ? 0.25 : 0);
+      colors.push(new THREE.Color(v, v * (1 + jitter(0.06)), v * (1 + jitter(0.1))));
     };
     for (let i = 0; i < n; i++) at(-lx / 2 + (i + 0.5) * pair, 0, true);
     for (let i = 0; i <= n; i++) at(-lx / 2 + i * pair, coverY, false);
@@ -112,6 +138,7 @@ export function tileRoof(tuile: THREE.Object3D, lx: number, slope: number): THRE
   return kitParts(tuile).map(({ geometry, material }) => {
     const mesh = new THREE.InstancedMesh(geometry, material, mats.length);
     mats.forEach((m, k) => mesh.setMatrixAt(k, m));
+    colors.forEach((c, k) => mesh.setColorAt(k, c));
     mesh.computeBoundingSphere();
     return mesh;
   });

@@ -976,8 +976,9 @@ export class Room {
       wrap.position.copy(p.mesh.position);
       wrap.rotation.copy(p.mesh.rotation);
       const pan = new THREE.Group();
-      // la tuile canal du kit, posée une à une sur tout le pan
-      for (const tiles of tileRoof(kit.tuile, p.lx, p.slope)) pan.add(tiles);
+      // la tuile canal du kit, posée une à une sur tout le pan (un tirage de variations par pan)
+      const seed = Math.round(p.mesh.position.x * 101 + p.mesh.position.z * 31 + p.side * 7919);
+      for (const tiles of tileRoof(kit.tuile, p.lx, p.slope, seed)) pan.add(tiles);
       // faîtage du pan du kit à -z : tourné pour le pan nord (son z local monte vers le faîtage)
       pan.rotation.y = p.side < 0 ? Math.PI : 0;
       // posées sur le pan peint, gardé dessous : on ne voit pas le jour entre les tuiles
