@@ -158,3 +158,32 @@ node tools/build_aliments_assets.mjs --src "<Bureau>/Assets/aliment/texture" --o
 
 Un nouvel aliment : ajouter son fichier à `ALIMENTS` (nom, taille, rotation), relancer, puis sa
 ligne dans `FOOD_LOOKS` et, s'il n'existe pas encore, sa fiche (`src/game/items/pantry.ts`).
+
+Ce script réécrit le pack sans les états des aliments : relancer ensuite `build_aliments_etats.mjs`.
+
+## `build_aliments_etats.mjs` et `aliments_etats/` : cuit, brûlé, périmé, coupé
+
+Ajoute au pack `aliments` les états des aliments, tous tirés des aliments du pack (rien de nouveau
+sur Tripo) :
+
+- `steak-cuit`, `steak-brule`… (10 aliments qui cuisent) et `pomme-perime`… (24) : même géométrie
+  que l'aliment, leur texture repeinte. Le jeu passe de l'une à l'autre pendant la cuisson et prend
+  la texture périmée quand l'aliment se gâte (`src/game/items/foodstates.ts`).
+- `rondelles-carotte`, `tranches-tomate`, `quartiers-pomme`, `tranches-pain`, `pain-grille`… : le
+  modèle découpé, la face coupée peinte ; ils habillent les morceaux coupés du jeu (`FOOD_LOOKS`).
+
+Les textures et les découpes sont faites par les scripts Python de `aliments_etats/` (numpy, Pillow,
+scipy, trimesh) : `bake.py` retrouve la position 3D de chaque pixel de la texture (pour des taches et
+des zones saisies qui suivent la forme, sans couture), `cook.py` (réglages par aliment en tête du
+fichier), `perime.py`, `cut.py`.
+
+```bash
+npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
+python3 -m pip install numpy pillow scipy trimesh
+node tools/build_aliments_etats.mjs extract --work /tmp/etats
+(cd /tmp/etats && for s in cook perime cut; do PYTHONPATH=$OLDPWD/tools/aliments_etats python3 $OLDPWD/tools/aliments_etats/$s.py; done)
+node tools/build_aliments_etats.mjs add --work /tmp/etats
+```
+
+`add` remplace les états déjà dans le pack (nœuds marqués `extras.etat`) et écrit leurs boîtes dans
+`src/game/packs/manifest.ts`.

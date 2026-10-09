@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import type { ItemDef } from './catalog';
 import type { WorldItem } from './carry';
 import { showWear } from './durability';
+import { hasFoodMaps, showCooked } from './foodstates';
 
 export type Doneness = 'cru' | 'cuit' | 'brûlé';
 
@@ -49,14 +50,17 @@ export function showDoneness(item: WorldItem): void {
     const k = THREE.MathUtils.clamp((t - waterCap(item.def)) / (cook.burn * 0.5), 0, 1);
     c0.set(cooked).lerp(c1.set(burnt), k);
   }
-  // un aliment peint (modèle Tripo) : la texture est sa couleur crue, teintée de ce qui la sépare de la cuisson
+  // un aliment peint qui a ses textures cuit et brûlé (foodstates.ts) : on passe de l'une à l'autre
+  const k = t < cook.seconds ? t / cook.seconds : 1 + THREE.MathUtils.clamp((t - waterCap(item.def)) / (cook.burn * 0.5), 0, 1);
+  // un aliment peint (modèle Tripo) sans ces textures : la texture est sa couleur crue, teintée de ce qui la sépare de la cuisson
   const tint = c1.set(raw);
   tint.setRGB(ratio(c0.r, tint.r), ratio(c0.g, tint.g), ratio(c0.b, tint.b));
   item.object.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || mesh.name !== 'cuit') return;
     const m = mesh.material as THREE.MeshToonMaterial;
-    if (m.userData.cookTint) m.color.copy(tint);
+    if (hasFoodMaps(m)) showCooked(m, k);
+    else if (m.userData.cookTint) m.color.copy(tint);
     // showWear part de cette couleur de base (l'usure ternit par-dessus)
     else (m.userData.baseColor ??= new THREE.Color()).copy(c0);
   });
