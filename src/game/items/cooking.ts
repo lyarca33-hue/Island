@@ -36,6 +36,7 @@ export const DONENESS_HUNGER: Record<Doneness, number> = { cru: 0, cuit: 1, 'br�
 
 const c0 = new THREE.Color();
 const c1 = new THREE.Color();
+const ratio = (now: number, raw: number) => Math.min(1, now / Math.max(raw, 0.05));
 
 /** Couleur des pièces `cuit` : cru → cuit pendant la cuisson, puis cuit → brûlé sur la fin. */
 export function showDoneness(item: WorldItem): void {
@@ -48,12 +49,16 @@ export function showDoneness(item: WorldItem): void {
     const k = THREE.MathUtils.clamp((t - waterCap(item.def)) / (cook.burn * 0.5), 0, 1);
     c0.set(cooked).lerp(c1.set(burnt), k);
   }
+  // un aliment peint (modèle Tripo) : la texture est sa couleur crue, teintée de ce qui la sépare de la cuisson
+  const tint = c1.set(raw);
+  tint.setRGB(ratio(c0.r, tint.r), ratio(c0.g, tint.g), ratio(c0.b, tint.b));
   item.object.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || mesh.name !== 'cuit') return;
     const m = mesh.material as THREE.MeshToonMaterial;
+    if (m.userData.cookTint) m.color.copy(tint);
     // showWear part de cette couleur de base (l'usure ternit par-dessus)
-    (m.userData.baseColor ??= new THREE.Color()).copy(c0);
+    else (m.userData.baseColor ??= new THREE.Color()).copy(c0);
   });
   showWear(item.object, item.condition);
 }

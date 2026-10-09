@@ -1146,6 +1146,9 @@ export const KITCHEN: RoomSpec = {
     ['grille-pain', 'lave-vaisselle', -0.15, -0.14],
     ['egouttoir', 'lave-vaisselle', 0.145, 0],
     ['mixeur', 'four', 0, -0.08],
+    // le pain sur la table : la miche, et la baguette en travers
+    ['pain', 'table', -0.2, 0.08],
+    ['baguette', 'table', 0.12, -0.1, Math.PI / 2],
   ],
   items: [
     // les placards hauts, au mur au-dessus des plans de travail (le haut au ras de la fenêtre)

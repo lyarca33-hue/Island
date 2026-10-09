@@ -931,18 +931,18 @@ export const ITEMS: ItemDef[] = [
     name: 'pain',
     portable: true,
     grip: 'cradle',
-    gripPoint: [0, 0.04, 0.05],
-    mouth: [0, 0.05, -0.09],
+    gripPoint: [0, 0.05, 0.08],
+    mouth: [0, 0.06, -0.09],
     food: { hunger: 25, bites: 5 },
     cut: 'tranches-pain',
     fragility: 10,
     durability: 20,
     build: () => {
-      // un bâtard doré, entaillé sur le dessus, couché le long de Z
-      const loaf = mesh(new THREE.SphereGeometry(0.05, 16, 10).scale(1, 0.8, 2), 0xd39a52, 0, 0.04, 0);
-      const g = group(loaf);
-      for (const z of [-0.05, 0, 0.05]) {
-        const cutMark = mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), 0xf0d29a, 0, 0.078, z);
+      // une miche ronde et dorée, entaillée sur le dessus
+      const loaf = mesh(new THREE.SphereGeometry(0.09, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.2, 1), 0xd39a52, 0, 0, 0);
+      const g = group(loaf, mesh(new THREE.CircleGeometry(0.09, 18).rotateX(Math.PI / 2), 0xb9783a, 0, 0.001, 0));
+      for (const z of [-0.04, 0, 0.04]) {
+        const cutMark = mesh(new THREE.BoxGeometry(0.08, 0.006, 0.01), 0xf0d29a, 0, 0.1, z);
         cutMark.rotation.y = 0.5;
         g.add(cutMark);
       }

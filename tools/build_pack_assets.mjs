@@ -238,15 +238,16 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies(
 const manifest = {};
 const only = args.only?.split(',');
 for (const pack of PACKS) if (!only || only.includes(pack.id)) manifest[pack.id] = await buildPack(io, pack);
-// avec --only : les autres packs gardent les tailles déjà écrites
+// les packs pas refaits (avec --only, ou écrits par un autre script) gardent les tailles déjà écrites
 const MANIFEST = 'src/game/packs/manifest.ts';
-if (only && fs.existsSync(MANIFEST)) {
+if (fs.existsSync(MANIFEST)) {
   const text = fs.readFileSync(MANIFEST, 'utf8');
   const body = text.slice(text.indexOf('{', text.indexOf('PACK_SIZES')), text.lastIndexOf('} as const') + 1);
   const old = new Function(`return ${body}`)();
   for (const id of Object.keys(old)) if (!(id in manifest)) manifest[id] = old[id];
 }
-const order = [...PACKS.map((p) => p.id)];
+// (les packs écrits par un autre script, comme les aliments Tripo, restent à la suite)
+const order = [...PACKS.map((p) => p.id), ...Object.keys(manifest).filter((id) => !PACKS.some((p) => p.id === id))];
 const sorted = Object.fromEntries(order.filter((id) => id in manifest).map((id) => [id, manifest[id]]));
 if (!Object.keys(sorted).length) process.exit(0);
 
