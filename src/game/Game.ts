@@ -38,7 +38,6 @@ import { BAGS_PER_ROLL, UPKEEP_FEMININE, UPKEEP_PLURAL } from './items/upkeep';
 import { CAKE_BATTER, CAKE_MIX, CAKE_USED_UP, cakeFor, FLAT_CAKE, HOT_DISH_HARM, PATISSERIE_FEMININE, PATISSERIE_PLURAL, TIN_CAKES, TOO_HOT } from './items/patisserie';
 import { HOT_WATER, INFUSE, LIFE_FEMININE, LIFE_PLURAL, TEA, TEA_BAGS, TEA_COLOR, teaBag } from './items/life';
 import { KitchenSound } from './sound';
-import { createMotes, INDOOR_MOTES, type MotesLook } from './motes';
 import { createPrecipitation, createWindowDrops, outdoorPanes, type Precipitation, Weather, type WindowDrops } from './meteo';
 import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
@@ -432,7 +431,6 @@ export class Game {
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
   private activeRoom: Room | null = null;
-  private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3, look: MotesLook) => void };
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
   /** Rotation voulue de la caméra autour du perso (radians, depuis la vue de départ). */
@@ -820,8 +818,6 @@ export class Game {
       });
     }
 
-    this.motes = createMotes();
-    this.scene.add(this.motes.points);
     this.precip = createPrecipitation();
     this.scene.add(this.precip.group);
     this.windowDrops = createWindowDrops(outdoorPanes(this.scene, this.underRoof));
@@ -5968,13 +5964,13 @@ export class Game {
     // image lente : plusieurs pas de jeu avant de dessiner (voir catchUp)
     const steps = THREE.MathUtils.clamp(Math.ceil(real / 0.05), 1, Math.max(1, Math.floor(this.catchUp)));
     const dt = Math.min(0.05, real / steps);
-    for (let i = 0; i < steps; i++) this.step(dt, now);
+    for (let i = 0; i < steps; i++) this.step(dt);
     this.tidyLamps();
     this.post.render();
   };
 
   /** Un pas de jeu de `dt` secondes : le perso, les objets, les besoins, la caméra, la météo… */
-  private step(dt: number, now: number): void {
+  private step(dt: number): void {
     this.character.setMoveInput(this.keyboardDir(), this.shift);
     // R : pivoter le meuble vers la droite, F : vers la gauche
     this.character.setTurnInput((this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
@@ -6048,7 +6044,7 @@ export class Game {
     }
     this.updateNightLight(dt);
     this.placeBubble();
-    // saison dehors : herbe, neige, pétales, feuilles ou flocons ; dans une pièce, poussières dorées
+    // saison dehors : herbe et neige au sol
     const look = seasonLook(this.clock.yearPos);
     // météo : pluie, flocons, gouttes aux vitres ; sol plus sombre mouillé, blanchi par la neige tombée
     const w = this.weather;
@@ -6059,7 +6055,6 @@ export class Game {
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
     this.sound.setRain(w.rain);
-    this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
   }
 
   /** Le point (x, z) est-il sous le toit d'une pièce (murs compris) ? La pluie n'y tombe pas. */
