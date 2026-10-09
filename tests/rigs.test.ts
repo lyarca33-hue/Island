@@ -16,7 +16,8 @@ describe('pièces mobiles des autres pièces', () => {
     const lid = new THREE.Group();
     const m = ROOM_RIGS.toilettes.look.parts!.couvercle.motion!;
     poseMotion(lid, m, 0);
-    expect(lid.rotation.x).toBeCloseTo(Math.PI / 2);
+    // un quart de tour, moins la pente de la lunette (remise d'aplomb)
+    expect(lid.rotation.x).toBeCloseTo(Math.PI / 2 - Math.atan(0.083));
     poseMotion(lid, m, 1);
     expect(lid.rotation.x).toBeCloseTo(0);
   });

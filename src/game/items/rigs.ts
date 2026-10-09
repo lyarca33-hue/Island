@@ -59,6 +59,11 @@ export interface Rig {
 
 const deg = THREE.MathUtils.degToRad;
 
+/** La pente vers l'avant de la lunette des toilettes, telle que modélisée (m par m). */
+const TOILET_SLOPE = 0.083;
+/** L'abattant rabattu : un quart de tour, moins cette pente (il se couche à plat sur la lunette redressée). */
+const TOILET_SHUT = Math.PI / 2 - Math.atan(TOILET_SLOPE);
+
 /** Les modèles des autres pièces qui ont une pièce qui bouge ou s'allume, par nom de fichier (sans la taille). */
 export const ROOM_RIGS: Record<string, Rig> = {
   // —— chambre
@@ -94,12 +99,20 @@ export const ROOM_RIGS: Record<string, Rig> = {
     def: {},
   },
   // —— salle de bain
-  // modélisé relevé ; fermé (0), il est rabattu d'un quart de tour vers l'avant sur sa charnière,
-  // au dos de l'abattant (z -0,08) : il se couche à plat sur la lunette (dessus à 0,425 m)
+  // modélisé relevé ; fermé (0), il est rabattu sur sa charnière, au dos de l'abattant (z -0,08) :
+  // il se couche à plat sur la lunette (dessus à 0,43 m). La lunette du modèle descend de 2 cm
+  // vers l'avant (on aurait dit les toilettes penchées) : remise d'aplomb, l'abattant rabattu
+  // d'autant moins qu'un quart de tour
   toilettes: {
     look: {
       model: 'toilettes',
-      parts: { couvercle: { from: 'abattant', pivot: [0, 0.435, -0.08], motion: { kind: 'turn', axis: 'x', rest: Math.PI / 2, angle: -Math.PI / 2 } } },
+      level: { z: 0, y: [0.15, 0.36], rise: TOILET_SLOPE },
+      // l'ombre du réservoir cuite sur le dessus de l'abattant, et la sienne sur le devant du réservoir
+      unshade: [
+        { part: 'couvercle', min: [-1, -1, -1], max: [1, 2, 1], to: 160 },
+        { min: [-0.22, 0.44, -0.14], max: [0, 0.82, 0], to: 178 },
+      ],
+      parts: { couvercle: { from: 'abattant', pivot: [0, 0.435, -0.08], motion: { kind: 'turn', axis: 'x', rest: TOILET_SHUT, angle: -TOILET_SHUT } } },
     },
     // on s'assoit sur la lunette, couvercle levé
     def: { toilet: true, seat: 0.43 },
