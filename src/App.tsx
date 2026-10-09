@@ -62,10 +62,6 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const [ready, setReady] = useState<Game | null>(null);
   const [camAngle, setCamAngle] = useState(0);
   useEffect(() => setCamAngle(ready?.cameraAngle ?? 0), [ready]);
-  const turnCamera = (dir: 1 | -1) => {
-    game.current?.rotateCamera(dir);
-    setCamAngle(game.current?.cameraAngle ?? 0);
-  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // les modèles dont sont faits des objets (aliments, meubles de la cuisine) : chargés avant de construire la maison
@@ -207,9 +203,6 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           tools={
             <>
               <span className="hud-sep" />
-              <button className="hud-icon" onClick={() => turnCamera(-1)} aria-label="Tourner la caméra à gauche" title="Tourner la caméra à gauche">
-                <Icon name="rotateLeft" />
-              </button>
               <input
                 type="range"
                 className="cam-slider"
@@ -227,9 +220,6 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                 aria-label="Faire tourner la caméra"
                 title="Faire tourner la caméra autour du perso"
               />
-              <button className="hud-icon" onClick={() => turnCamera(1)} aria-label="Tourner la caméra à droite" title="Tourner la caméra à droite">
-                <Icon name="rotateRight" />
-              </button>
               <span className="hud-sep" />
               <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
                 <Icon name="eyeOff" />
