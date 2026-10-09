@@ -26,7 +26,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from './toon';
 import { lightAllPasses } from './postfx';
-import { kitParts, PlasterSheet, tiledRoof, type Kit } from './kit';
+import { kitParts, PlasterSheet, tileRoof, type Kit } from './kit';
 import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
 
@@ -62,8 +62,6 @@ const KIT_FLOOR = 0.8;
 const PLASTER_IN = 0.012;
 /** Ce que l'enduit dépasse au plus de la face du mur (relief de 2 cm, enfoncé de PLASTER_IN). */
 const PLASTER_OUT = 0.008;
-/** Le pan de tuiles du kit est répété à peu près tous les ROOF_MODULE m (une douzaine de tuiles de large). */
-const ROOF_MODULE = 2.6;
 
 const PLASTER = 0xefe5cf;
 const CAP = 0x7c6a58;
@@ -925,14 +923,14 @@ export class Room {
       }
     }
 
-    // toit : un pan de tuiles entier de chaque côté, à la place du pan peint
+    // toit : les tuiles du kit posées une à une sur chaque pan peint
     for (const p of this.roofPans) {
       const wrap = new THREE.Group();
       wrap.position.copy(p.mesh.position);
       wrap.rotation.copy(p.mesh.rotation);
       const pan = new THREE.Group();
-      // les tuiles du kit répétées à leur taille (pas étirées sur tout le pan)
-      for (const part of tiledRoof(kit.toit, p.lx, p.slope, ROOF_MODULE)) pan.add(new THREE.Mesh(part.geometry, part.material));
+      // la tuile canal du kit, posée une à une sur tout le pan
+      for (const tiles of tileRoof(kit.tuile, p.lx, p.slope)) pan.add(tiles);
       // faîtage du pan du kit à -z : tourné pour le pan nord (son z local monte vers le faîtage)
       pan.rotation.y = p.side < 0 ? Math.PI : 0;
       // posées sur le pan peint, gardé dessous : on ne voit pas le jour entre les tuiles

@@ -116,7 +116,7 @@ Avec `--only`, seuls ces packs sont refaits et le manifeste garde les tailles de
 ## `build_kit_assets.mjs` : kit Tripo de la maison
 
 Regroupe les pièces du kit générées avec Tripo (licence d'usage commercial) et retouchées dans
-l'Atelier Tripo (mur en enduit, carreau du sol, pan de toit, porte et fenêtre en bois) en un seul
+l'Atelier Tripo (mur en enduit, carreau du sol, pan de toit, tuile canal, porte et fenêtre en bois) en un seul
 `public/kit/maison.glb` : un nœud par pièce, maillages allégés et compressés (meshopt), textures
 de couleur seules en WebP 1024 px. La carte « cuisine seule » s'en habille (`src/game/kit.ts`).
 

@@ -24,6 +24,7 @@ import sharp from 'sharp';
  * - toit : pan de 1 × 1 (mis à la taille du toit dans le jeu), faîtage à z = -0,5, égout à z = +0,5, bas à y = 0.
  * - porte : battant de 88 × 205 cm, poignée à +x, face avant vers +z, bas à y = 0.
  * - fenetre : fenêtre de 86 × 115 cm (cadre, croisillon, appui), face avant vers +z, bas à y = 0.
+ * - tuile : tuile canal bombée vers le haut, longueur le long de z (de -0,5 à 0,5), largeur x de ±0,355, bas à y = 0.
  */
 const FICHIERS = [
   // quart de tour autour de x : le relief (y) passe en z, la plaque (z) passe en y
@@ -32,6 +33,8 @@ const FICHIERS = [
   { nom: 'toit', fichier: 'toit-pan-cuisine-2_660cm.glb', garde: 0.5, bas: true },
   { nom: 'porte', fichier: 'porte-entree_205cm.glb', garde: 0.25 },
   { nom: 'fenetre', fichier: 'fenetre_115cm.glb', garde: 0.25 },
+  // posée des centaines de fois sur le toit : très allégée (sa forme est simple)
+  { nom: 'tuile', fichier: 'tuile-canal.glb', garde: 0.05, erreur: 0.03, bas: true },
 ];
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) => (v.startsWith('--') ? [...a, [v.slice(2), all[i + 1]]] : a), []));

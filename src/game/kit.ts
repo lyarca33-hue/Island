@@ -1,6 +1,6 @@
 /**
  * Le kit Tripo de la maison (public/kit/maison.glb, voir tools/build_kit_assets.mjs) : enduit des
- * murs, carreau du sol, pan de toit, porte d'entrée et fenêtre en bois. La cuisine s'en habille :
+ * murs, carreau du sol, pan de toit, tuile canal, porte d'entrée et fenêtre en bois. La cuisine s'en habille :
  * Room.dress remplace le sol, le toit, le battant de la porte et les fenêtres faits par programme,
  * et pose l'enduit sur les murs.
  *
@@ -9,7 +9,8 @@
  * - sol : carreau de 1 × 1 m à plat, dessus à y = 0,03 ;
  * - toit : pan de 1 × 1, faîtage à z = -0,5, égout à z = +0,5, bas à y = 0 ;
  * - porte : battant de 88 × 205 cm, poignée à +x, bas à y = 0 ;
- * - fenetre : fenêtre de 86 × 115 cm (cadre, croisillon, appui), bas à y = 0.
+ * - fenetre : fenêtre de 86 × 115 cm (cadre, croisillon, appui), bas à y = 0 ;
+ * - tuile : tuile canal bombée vers le haut, longueur le long de z (-0,5 à 0,5), largeur x de ±0,355, bas à y = 0.
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -18,7 +19,7 @@ import { createToonMaterial } from './toon';
 
 export const KIT_URL = `${import.meta.env.BASE_URL}kit/maison.glb`;
 
-export type KitPiece = 'mur' | 'sol' | 'toit' | 'porte' | 'fenetre';
+export type KitPiece = 'mur' | 'sol' | 'toit' | 'porte' | 'fenetre' | 'tuile';
 
 /** Une pièce du kit : ses maillages, matériaux devenus du cel shading. */
 export type Kit = Record<KitPiece, THREE.Object3D>;
@@ -63,45 +64,53 @@ export function kitParts(piece: THREE.Object3D): Array<{ geometry: THREE.BufferG
   return out;
 }
 
-/** Bord du pan de tuiles du kit qu'on retire avant de le répéter (rebord du modèle), en part du pan. */
-const ROOF_TRIM = 0.05;
-/** Relief des tuiles, en part de celui du modèle (à l'échelle de la maison, il ferait un toit trop épais). */
-const ROOF_RELIEF = 0.5;
+/** Tuile canal posée : largeur, longueur, hauteur (en part de la largeur : un peu aplatie, comme les vraies). */
+const TILE_W = 0.22;
+const TILE_L = 0.45;
+const TILE_H = 0.4;
+/** Écart entre deux rangs de tuiles de dessous (une de dessus entre elles), recouvrement visé le long de la pente. */
+const TILE_PAIR = 0.36;
+const TILE_STEP = 0.36;
+/** Ce dont le bas de chaque tuile est relevé : elle repose sur celle de dessous. */
+const TILE_LIFT = 0.02;
+/** Largeur et hauteur de la tuile du kit (son repère, voir build_kit_assets.mjs). */
+const KIT_TILE_W = 0.71;
+const KIT_TILE_H = 0.369;
 
 /**
- * Un pan de toit de `lx` × `slope` m couvert de tuiles : le pan du kit (son rebord retiré) répété
- * environ tous les `module` m, sans l'étirer, pour garder des tuiles à leur taille et leur relief
- * (un pan sur deux en miroir le long du toit).
- * Repère du pan du kit : x le long du toit, z du faîtage (-) à l'égout (+), centré, bas à y = 0.
+ * Un pan de toit de `lx` × `slope` m couvert de tuiles canal posées une à une, comme un vrai toit :
+ * des rangs de tuiles creuses (bombées vers le bas) qui descendent la pente, et entre deux rangs une
+ * tuile bombée qui les recouvre. Chaque tuile chevauche celle de dessous, de l'égout au faîtage.
+ * Repère du pan : x le long du toit, z du faîtage (-) à l'égout (+), centré, dessus du pan à y = 0.
  */
-export function tiledRoof(piece: THREE.Object3D, lx: number, slope: number, module: number): Array<{ geometry: THREE.BufferGeometry; material: THREE.Material }> {
-  const nx = Math.max(1, Math.round(lx / module)), nz = Math.max(1, Math.round(slope / module));
-  const sx = lx / nx, sz = slope / nz, sy = Math.min(sx, sz) * ROOF_RELIEF;
-  const lo = -0.5 + ROOF_TRIM, hi = 0.5 - ROOF_TRIM;
-  return kitParts(piece).map(({ geometry, material }) => {
-    const src = geometry.index ? geometry.toNonIndexed() : geometry;
-    const p = src.getAttribute('position'), uv = src.getAttribute('uv');
-    const pos: number[] = [], uvs: number[] = [];
-    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
-      for (let t = 0; t < p.count; t += 3) {
-        // triangles hors du rebord seulement (ceux à cheval, serrés sur le bord)
-        const xs = [0, 1, 2].map((k) => p.getX(t + k)), zs = [0, 1, 2].map((k) => p.getZ(t + k));
-        if (Math.max(...xs) < lo || Math.min(...xs) > hi || Math.max(...zs) < lo || Math.min(...zs) > hi) continue;
-        // un pan sur deux en miroir le long du toit : les bords qui se touchent sont les mêmes (pas de joint)
-        const flip = i % 2 === 1;
-        for (const k of flip ? [0, 2, 1] : [0, 1, 2]) {
-          const x = (THREE.MathUtils.clamp(p.getX(t + k), lo, hi) - lo) / (hi - lo), u = flip ? 1 - x : x;
-          const w = (THREE.MathUtils.clamp(p.getZ(t + k), lo, hi) - lo) / (hi - lo);
-          pos.push(-lx / 2 + (i + u) * sx, p.getY(t + k) * sy, -slope / 2 + (j + w) * sz);
-          if (uv) uvs.push(uv.getX(t + k), uv.getY(t + k));
-        }
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    g.computeVertexNormals();
-    return { geometry: g, material };
+export function tileRoof(tuile: THREE.Object3D, lx: number, slope: number): THREE.InstancedMesh[] {
+  const n = Math.max(1, Math.round(lx / TILE_PAIR)), pair = lx / n;
+  const rows = Math.max(1, Math.ceil((slope - TILE_L) / TILE_STEP) + 1);
+  const step = rows > 1 ? (slope - TILE_L) / (rows - 1) : 0;
+  const sx = TILE_W / KIT_TILE_W, sy = (TILE_W * TILE_H) / KIT_TILE_H, h = KIT_TILE_H * sy;
+  // le bas des tuiles de dessus, posé dans le creux des tuiles de dessous, de part et d'autre
+  const d = Math.min(1, (pair - TILE_W) / TILE_W);
+  const coverY = h * (1 - Math.sqrt(1 - d * d));
+  // chaque tuile penchée : son bas (côté égout) relevé de TILE_LIFT
+  const tilt = new THREE.Matrix4().makeRotationX(-Math.atan2(TILE_LIFT, TILE_L));
+  const scale = new THREE.Matrix4().makeScale(sx, sy, TILE_L);
+  const under = new THREE.Matrix4().makeTranslation(0, h, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI));
+  const mats: THREE.Matrix4[] = [];
+  for (let j = 0; j < rows; j++) {
+    const z = slope / 2 - TILE_L / 2 - j * step;
+    const at = (x: number, y: number, flip: boolean) => {
+      const m = new THREE.Matrix4().makeTranslation(x, y + TILE_LIFT / 2, z).multiply(tilt);
+      if (flip) m.multiply(under);
+      mats.push(m.multiply(scale));
+    };
+    for (let i = 0; i < n; i++) at(-lx / 2 + (i + 0.5) * pair, 0, true);
+    for (let i = 0; i <= n; i++) at(-lx / 2 + i * pair, coverY, false);
+  }
+  return kitParts(tuile).map(({ geometry, material }) => {
+    const mesh = new THREE.InstancedMesh(geometry, material, mats.length);
+    mats.forEach((m, k) => mesh.setMatrixAt(k, m));
+    mesh.computeBoundingSphere();
+    return mesh;
   });
 }
 
