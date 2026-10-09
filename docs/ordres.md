@@ -43,6 +43,7 @@ dans cette liste part au modèle de chat (s'il est réglé), qui choisit les ges
 | range les chaussures, range la télécommande, range la poêle, range la brosse à dents, range la bêche | chaque objet retourne là d'où il vient |
 | range les chaussures dans le porte-parapluies, range la bêche sur l'étagère | range là où c'est dit |
 | remets la tasse à sa place, range-la, range ça | range ce qu'on tient (ou l'objet dit) à sa place |
+| range la cuisine, range ta chambre, range le salon, range la pièce | tout ce qui traîne dans la pièce retourne à sa place |
 | range les livres, range le livre rouge | les livres à la bibliothèque |
 | range la vaisselle, range les couverts, range les ustensiles | la vaisselle propre à sa place |
 | range les courses, vide le sac de courses | vide le sac de courses à sa place |
