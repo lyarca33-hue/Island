@@ -392,6 +392,8 @@ const FRIDGE_T = 0.03;
 const FRIDGE_DOOR_T = 0.05;
 /** Centre de la caisse en z (la porte se ferme devant, la poignée dépasse), dans le repère du frigo. */
 const FRIDGE_Z = -0.11;
+/** Portée (m) de la lumière du frigo ouvert : à peine plus que l'intérieur. */
+const FRIDGE_GLOW_RANGE = 0.55;
 /** Dessus des clayettes (le bas du frigo compris) ; places de gauche à droite, près de la porte. */
 const FRIDGE_SHELVES = [FRIDGE_T + 0.01, 0.34, 0.63, 0.9];
 const FRIDGE_ROW = (z: number, shelves: number[]) => shelves.flatMap((y) => [-0.22, -0.075, 0.075, 0.22].map((x): [number, number, number] => [x, y, z]));
@@ -776,9 +778,11 @@ export const ITEMS: ItemDef[] = [
       lamp.position.set(0, H - t - 0.06, zc - D / 2 + 0.12);
       lamp.visible = false;
       // sur tous les calques comme les autres lumières (sinon recompilation de chaque matériau à chaque image)
-      const glow = lightAllPasses(new THREE.PointLight(0xfff3d6, 0, 0.45, 2));
+      // au milieu du frigo, décroissance douce et portée courte : tout l'intérieur éclairé pareil,
+      // sans tache brûlée près de la lampe ni lumière qui déborde sur le mur au-dessus
+      const glow = lightAllPasses(new THREE.PointLight(0xfff1dc, 0, FRIDGE_GLOW_RANGE, 1));
       glow.name = 'lampe-lumiere';
-      glow.position.set(0, H - t - 0.15, zc);
+      glow.position.set(0, (FRIDGE_SHELVES[1] + H) / 2, zc);
       g.add(lamp, glow);
       return g;
     },
