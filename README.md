@@ -57,8 +57,7 @@ le kit Tripo (`src/game/kit.ts`, `public/kit/maison.glb`) : sol carrelé, murs e
 d'entrée en bois qui s'ouvre toute seule quand il s'en approche (on peut sortir sur l'herbe), deux
 fenêtres en bois, un toit en tuiles à deux pans visible de dehors. Les murs tournés vers la caméra
 s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra. Ni plafonnier ni
-interrupteur : seul le soleil (ou la lune) fait des ombres, une lumière douce entre par les
-fenêtres le jour, et la nuit une lumière d'ambiance chaude suit la pièce où est le perso.
+interrupteur, et pas d'ombres pour l'instant : une lumière douce entre par les fenêtres le jour, et la nuit une lumière d'ambiance chaude suit la pièce où est le perso.
 
 La cuisine est **meublée avec les modèles Tripo** (`src/game/items/tripo.ts`,
 `public/models/cuisine.glb`) : le long du fond, les tiroirs, le lave-vaisselle, l'évier sous la

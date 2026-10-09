@@ -589,8 +589,8 @@ export class Game {
     // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // pas d'ombres pour l'instant : ni carte d'ombre ni passe d'ombre (le soleil éclaire sans ombre)
+    this.renderer.shadowMap.enabled = false;
     // les pièces « ombre seule » des objets (voir merge.ts) ne sont dessinées que dans les ombres
     shadowOnlyPass(this.renderer);
     container.appendChild(this.renderer.domElement);
@@ -602,13 +602,6 @@ export class Game {
     // ciel + sol renvoyé, et soleil (ou lune) : couleurs et direction réglées par l'heure (applySky)
     const hemi = this.hemi = lightAllPasses(new THREE.HemisphereLight(new THREE.Color(0.75, 0.85, 1.0), new THREE.Color(0.25, 0.32, 0.18), 0.9));
     this.sun = lightAllPasses(new THREE.DirectionalLight(new THREE.Color(1.0, 0.92, 0.78), 2.2));
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    const sc = this.sun.shadow.camera;
-    sc.left = -12; sc.right = 12; sc.top = 12; sc.bottom = -12; sc.near = 1; sc.far = 60;
-    this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.02;
-    this.sun.shadow.radius = 3;
     this.scene.add(hemi, this.sun, this.sun.target);
 
     this.ground = createGround();
@@ -814,15 +807,10 @@ export class Game {
     this.raf = requestAnimationFrame(this.frame);
     await this.character.load(this.recipe);
     if (this.disposed) return;
-    // derrière l'écran de chargement : une image avec le perso (lumières et ombres en place), puis
-    // tous les shaders compilés d'avance, y compris ceux des ombres du perso (redessiné dans
-    // chaque carte) que la précompilation ne voit pas
+    // derrière l'écran de chargement : une image avec le perso (lumières en place), puis tous les
+    // shaders compilés d'avance
     const frame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
     await frame();
-    this.scene.traverse((o) => {
-      const l = o as THREE.PointLight;
-      if (l.isLight && l.castShadow) l.shadow.needsUpdate = true;
-    });
     await this.post.precompile();
     await frame();
     await frame();
@@ -5710,7 +5698,7 @@ export class Game {
     const steps = THREE.MathUtils.clamp(Math.ceil(real / 0.05), 1, Math.max(1, Math.floor(this.catchUp)));
     const dt = Math.min(0.05, real / steps);
     for (let i = 0; i < steps; i++) this.step(dt, now);
-    this.scheduleShadows();
+    this.tidyLamps();
     this.post.render();
   };
 
@@ -5844,17 +5832,8 @@ export class Game {
     l.intensity = NIGHT_I * lampLevel(this.clock.solarHour);
   }
 
-  private shadowFrame = 0;
-
-  /**
-   * Seul le soleil (ou la lune) fait des ombres : sa carte est recalculée à chaque image dehors,
-   * une image sur deux dans une pièce (le toit et les murs l'arrêtent, il n'entre que par les
-   * fenêtres). Les lumières des fenêtres, la lumière de nuit et les lampes n'en font pas.
-   */
-  private scheduleShadows(): void {
-    const f = ++this.shadowFrame;
-    this.sun.shadow.autoUpdate = false;
-    if (this.activeRoom === null || f % 2 === 0) this.sun.shadow.needsUpdate = true;
+  /** Lumières des lampes cassées ou jetées : gardées dans la scène, éteintes. */
+  private tidyLamps(): void {
     for (const [item, lamp] of this.lamps) {
       // lampe cassée ou jetée : sa lumière reste dans la scène, éteinte (le nombre de lumières ne
       // doit pas changer : sinon three recompile tous les matériaux, une saccade)
