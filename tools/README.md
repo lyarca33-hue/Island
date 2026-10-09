@@ -128,3 +128,15 @@ Avec `--only`, seuls ces packs sont refaits et le manifeste garde les tailles de
 
 `<dossier des packs>` contient les dossiers tels que téléchargés sur quaternius.com
 (« Survival Pack - Sept 2020 », « Fantasy Props MegaKit[Standard] »…).
+
+## `build_kit_assets.mjs` : kit Tripo de la maison
+
+Regroupe les pièces du kit générées avec Tripo (licence d'usage commercial) et retouchées dans
+l'Atelier Tripo (mur en enduit, carreau du sol, pan de toit, porte et fenêtre en bois) en un seul
+`public/kit/maison.glb` : un nœud par pièce, maillages allégés et compressés (meshopt), textures
+de couleur seules en WebP 1024 px. La carte « cuisine seule » s'en habille (`src/game/kit.ts`).
+
+```bash
+npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
+node tools/build_kit_assets.mjs --src <dossier des modèles retouchés> --out public/kit/maison.glb
+```

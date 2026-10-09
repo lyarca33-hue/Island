@@ -14,6 +14,7 @@ import { createGround, GROUND_HALF, setGroundSeason } from './ground';
 import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
 import { loadNature } from './nature';
 import { loadInterior } from './items/interior';
+import { loadKit } from './kit';
 import { DELIVERY_SPOT, Entree } from './entree';
 import { Loisirs } from './loisirs';
 import { Chat } from './chat';
@@ -994,6 +995,10 @@ export class Game {
       this.rooms.push(room);
       this.scene.add(room.group);
     }
+    // cuisine seule : sol, murs, toit, porte et fenêtres du kit Tripo, dès qu'il est chargé (kit.ts)
+    if (CUISINE_SEULE) loadKit()
+      .then((kit) => { for (const r of this.rooms) r.dress(kit); })
+      .catch((e) => console.warn('kit de la maison non chargé', e));
     // même nombre de lumières à ombre dans chaque pièce (pas de recompilation en changeant de pièce)
     const most = (k: 'lamps' | 'windows') => Math.max(...this.rooms.map((r) => r.shadowCounts[k]));
     for (const r of this.rooms) r.padShadows(most('lamps'), most('windows'));
