@@ -69,5 +69,23 @@ test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info
   expect(velo).toBe('ok');
   await page.screenshot({ path: info.outputPath('2-velo.png') });
 
+  // le râteau pend à son rangement du garage : pris, puis « Ranger », il y retourne
+  const rateau = await page.evaluate(async () => {
+    type V = { distanceTo(o: V): number; clone(): V };
+    type Item = { def: { id: string }; object: { position: V } };
+    const g = (window as unknown as { game: { items: Item[]; pickUp(n: string): boolean; storeAway(): void; character: { carried: Item[] } } }).game;
+    const wait = async (ok: () => boolean) => {
+      for (let i = 0; i < 600 && !ok(); i++) await new Promise((r) => setTimeout(r, 100));
+      return ok();
+    };
+    const rake = g.items.find((i) => i.def.id === 'rateau')!;
+    const home = rake.object.position.clone();
+    if (!g.pickUp('râteau') || !(await wait(() => g.character.carried.includes(rake)))) return 'pas pris';
+    g.storeAway();
+    if (!(await wait(() => !g.character.carried.includes(rake)))) return 'pas rangé';
+    return rake.object.position.distanceTo(home) < 0.01 ? 'ok' : 'pas à sa place';
+  });
+  expect(rateau).toBe('ok');
+
   expect(erreurs, erreurs.join('\n')).toEqual([]);
 });

@@ -160,6 +160,7 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   carton: { model: 'carton' },
   beche: { model: 'beche' },
   rateau: { model: 'rateau' },
+  'rangement-outils': { model: 'rangement-outils' },
 };
 
 /** Les modèles chargés : chaque pièce (nœud) avec sa géométrie dans le repère du modèle. */

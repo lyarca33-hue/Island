@@ -52,6 +52,8 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
       'oignon', 'oignon', 'ail', 'banane', 'banane', 'poire', 'poire',
     ],
   ],
+  // le garage : le râteau et la bêche pendus à leur rangement
+  ['rangement-outils', 0, ['rateau', 'beche']],
   // la chambre : la chemise pend déjà dans l'armoire (maison.ts) ; un livre dans chaque table de nuit
   ['armoire', 0, ['pull', 'serviette']],
   ['table-de-nuit', 0, ['livre-vert']],

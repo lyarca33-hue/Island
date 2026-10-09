@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { DOOR, ROOM, SALON_PASS, tiles, toon, WALL_T, WIN_HIGH, type Rect, type Room, type RoomSpec, type WallName } from './room';
 import { tripoDecor } from './items/tripo';
-import { BENCH_TOP, CONSOLE_TOP, NIGHTSTAND_TOP } from './items/pieces';
+import { BENCH_TOP, CONSOLE_TOP, NIGHTSTAND_TOP, RACK_Y } from './items/pieces';
 
 /** Écart entre les intérieurs de deux pièces voisines : leurs deux murs. */
 const GAP = 2 * WALL_T;
@@ -179,10 +179,9 @@ export const GARAGE_SPEC: RoomSpec = {
     ['carton', GARAGE.x0 + 0.24, 0, GARAGE.z0 + 1.2, Q],
     ['carton', GARAGE.x0 + 0.24, 0.32, GARAGE.z0 + 1.2, Q],
     ['carton', GARAGE.x0 + 0.24, 0, GARAGE.z0 + 1.7, Q],
-    // la bêche et le râteau debout contre le mur de l'entrée, le vélo garé le long du même mur
-    // (à côté d'eux, un peu en retrait du mur sud : de quoi le sortir en reculant)
-    ['rateau', GARAGE.x1 - 0.11, 0, GARAGE.z0 + 0.8, -Q],
-    ['beche', GARAGE.x1 - 0.08, 0, GARAGE.z0 + 1.25, -Q],
+    // au fond, à droite de l'établi : le rangement à outils (le râteau et la bêche y pendent, remplissage.ts)
+    ['rangement-outils', GARAGE.x0 + 4.0, RACK_Y, GARAGE.z0 + 0.15, 0],
+    // le vélo garé le long du mur de l'entrée (un peu en retrait du mur sud : de quoi le sortir en reculant)
     ['velo', GARAGE.x1 - 0.6, 0, 1.4, Q],
   ],
 };
