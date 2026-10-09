@@ -35,7 +35,7 @@ import { fillerColor, START_CONTENTS } from './items/remplissage';
 import { cellsOf, GRIDS, pack, type Cell } from './items/cases';
 import { forgetIcons, itemIcon } from './items/vignettes';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
-import { BATTERS, OMELETTE_FILLINGS, omeletteFor, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
+import { BATTERS, OMELETTE_FILLINGS, omeletteFor, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES } from './items/prep';
 import { DRAINS, FECULENT_FEMININE, FECULENT_PLURAL, FECULENT_RECIPES, LEEK_SOUP, PACKETS, SAUCE_SERVINGS, SOUP_BROTH, SOUP_VEG, SOUPS, TOPPED } from './items/feculents';
 import { BAGS_PER_ROLL, UPKEEP_FEMININE, UPKEEP_PLURAL } from './items/upkeep';
 import { CAKE_BATTER, CAKE_MIX, CAKE_USED_UP, cakeFor, FLAT_CAKE, HOT_DISH_HARM, PATISSERIE_FEMININE, PATISSERIE_PLURAL, TIN_CAKES, TOO_HOT } from './items/patisserie';
@@ -643,6 +643,8 @@ export class Game {
   onInventory: ((ref: string | null) => void) | null = null;
   /** Ingrédient dont on attend la cuisson (ordre « cuire »). */
   private cookWait: WorldItem | null = null;
+  /** La casserole dont on attend que l'eau bouille (ordre « attendre_ebullition »). */
+  private boilWait: WorldItem | null = null;
   /** Objet tenu qui change (nom ou null) : pour l'interface. */
   onHeldChange: ((name: string | null, can: HandActions) => void) | null = null;
   /** Objet sous la souris (nom, grade, durabilité de 0 à 1, position à l'écran), ou null. */
@@ -986,6 +988,49 @@ export class Game {
     return this.character.drop(spot, undefined, undefined, false, held);
   }
 
+  /**
+   * Pose l'objet tenu `name` (sinon le dernier pris) devant soi, à une place libre du meuble : à
+   * côté, plutôt que sur une assiette ou un plat déjà posés (le livre, l'assiette sortie du placard) ;
+   * sur le meuble `onto` (sa ref) s'il est donné, pas sur l'appareil qui y est posé.
+   */
+  dropClear(name?: string, onto?: string): boolean {
+    const c = this.character;
+    const held = name ? c.heldItems.find((i) => i.name === name) : c.held;
+    if (!held) return false;
+    if (this.closeBookThen(() => this.dropClear(name, onto))) return true;
+    if (c.seated) return c.standUp(() => this.dropClear(name, onto));
+    const surface = onto ? this.byRef(onto) : undefined;
+    const spot = c.dropSpot(held);
+    if (!spot) return false;
+    const others = this.items.filter((i) => !c.carried.includes(i));
+    const owner = (o: THREE.Object3D | null) => {
+      for (; o; o = o.parent) {
+        const item = others.find((i) => i.object === o);
+        if (item) return item;
+      }
+      return undefined;
+    };
+    // le dessus du meuble sous (x, z), ou null si un objet posé (ou rien) s'y trouve
+    const top = (x: number, z: number): number | null => {
+      this.raycaster.set(new THREE.Vector3(x, 3, z), new THREE.Vector3(0, -1, 0));
+      const hit = this.raycaster.intersectObjects(others.map((i) => i.object), true).find((h) => (h.face?.normal.y ?? 0) > 0.7);
+      const under = hit && owner(hit.object);
+      return hit && under && !under.def.portable && (!surface || under === surface) ? hit.point.y : null;
+    };
+    const r = Math.max(held.size.x, held.size.z) / 2 + 0.01;
+    const fwd = spot.clone().sub(c.position).setY(0).normalize();
+    const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    for (const [s, f] of [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.12], [0.22, 0.12], [-0.22, 0.12], [0.4, 0], [-0.4, 0]]) {
+      const at = spot.clone().addScaledVector(side, s).addScaledVector(fwd, f);
+      const y = top(at.x, at.z);
+      if (y === null || y < 0.3) continue;
+      // toute la place est libre (le bord de l'objet aussi)
+      if ([[r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dz]) => top(at.x + dx, at.z + dz) === null)) continue;
+      return c.drop(at.setY(y), undefined, undefined, false, held);
+    }
+    return this.drop(name);
+  }
+
   /** Noms des objets tenus (un par main). */
   get heldNames(): string[] {
     return this.character.heldItems.map((i) => i.name);
@@ -1069,7 +1114,7 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.showering && !this.toiletVisit && !this.cookWait && !this.teaWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.showering && !this.toiletVisit && !this.cookWait && !this.boilWait && !this.teaWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
@@ -5890,6 +5935,17 @@ export class Game {
     return true;
   }
 
+  /** Attend que l'eau de la casserole `ref`, posée sur un feu allumé, bouille. */
+  waitBoil(ref: string): boolean {
+    const pan = this.byRef(ref);
+    if (!pan?.def.fill || pan.contents !== 'eau') return this.notice(pan ? `Il n’y a pas d’eau dans ${the(pan.name)}.` : `Aucun objet « ${ref} ».`);
+    if (this.boils(pan)) return true;
+    const under = this.stoveUnder(pan);
+    if (!under || !this.heaters.get(under.heater)!.on[under.i]) return this.notice(`${cap(the(pan.name))} n’est pas sur un feu allumé.`);
+    this.boilWait = pan;
+    return true;
+  }
+
   /** L'ingrédient est-il dans un ustensile posé sur un feu allumé ? */
   private heating(food: WorldItem): boolean {
     const pan = this.panOf(food);
@@ -5955,6 +6011,8 @@ export class Game {
     }
     const w = this.cookWait;
     if (w && (!this.items.includes(w) || doneness(w.def, w.cooking) !== 'cru' || !this.heating(w))) this.cookWait = null;
+    const b = this.boilWait;
+    if (b && (!this.items.includes(b) || this.boils(b) || b.contents !== 'eau' || !this.stoveUnder(b) || !this.heaters.get(this.stoveUnder(b)!.heater)!.on[this.stoveUnder(b)!.i])) this.boilWait = null;
   }
 
   /** Un ustensile sur le feu : l'eau bout et s'évapore, les ingrédients cuisent, puis brûlent (fumée). */
@@ -7951,7 +8009,7 @@ export class Game {
           tool.setDirty(true);
           // la soupe part avec son bouillon
           if (SOUPS.includes(food.name)) this.emptyPot(from);
-          this.onNotice?.(`${cap(the(food.name))} est servi${agree(food.name)} dans ${the(plate.name)}.`);
+          this.onNotice?.(`${cap(the(food.name))} ${PLURAL.has(food.name) ? 'sont' : 'est'} servi${agree(food.name)} dans ${the(plate.name)}.`);
           this.practice(XP_GESTURE);
         }, running);
       }, running);
@@ -8106,7 +8164,7 @@ export class Game {
    * Le livre de recettes : chaque recette (assemblages et plats au fourneau) avec ses ingrédients,
    * ce qui en manque à la maison (un aliment entier à couper compte), et comment la faire.
    */
-  recipeBook(): Array<{ name: string; needs: Array<{ name: string; have: boolean }>; extras: string[]; how: string; ready: boolean; plat?: string; task?: StoveRecipe['task'] }> {
+  recipeBook(): Array<{ name: string; needs: Array<{ name: string; have: boolean }>; extras: string[]; how: string; ready: boolean; plat?: string }> {
     const count = new Map<string, number>();
     for (const it of [...this.items, ...[...this.bags.values()].flat().map((n) => ({ name: n }))]) count.set(it.name, (count.get(it.name) ?? 0) + 1);
     const wholeOf = (piece: string) => [...ITEM_BY_ID.values()].find((d) => d.cut && ITEM_BY_ID.get(d.cut)?.name === piece)?.name;
@@ -8128,7 +8186,7 @@ export class Game {
     });
     const stove = STOVE_RECIPES.map((r) => {
       const needs = list(r.needs);
-      return { name: r.name, needs, extras: [], how: r.how, ready: needs.every((n) => n.have), task: r.task };
+      return { name: r.name, needs, extras: [], how: r.how, ready: needs.every((n) => n.have) };
     });
     const pot = FECULENT_RECIPES.map((r) => {
       const needs = list(r.needs);

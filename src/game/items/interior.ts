@@ -107,6 +107,8 @@ export const FOOD_LOOKS: Record<string, FoodLook> = {
   'salade-verte': plat('feuilles-salade'),
   'sandwich-jambon': plat('sandwich'),
   'sandwich-steak': plat('hamburger'),
+  // le livre de recettes de la cuisine : debout, la couverture vers la pièce (le dos vers -z, comme les livres du jeu)
+  'livre-recettes': plat('livre-recettes', { turn: [0, -Math.PI / 2, 0] }),
   // la brique et le sachet : à la boîte du jeu
   'jus-orange': plat('jus-orange', { fit: 'stretch' }),
   'legumes-surgeles': plat('legumes-surgeles', { fit: 'stretch' }),

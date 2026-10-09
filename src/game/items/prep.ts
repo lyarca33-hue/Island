@@ -492,14 +492,12 @@ export interface StoveRecipe {
   /** Ingrédients (un nom par unité : deux œufs = « œuf » deux fois). */
   needs: string[];
   how: string;
-  /** La tâche d'ordre qui la fait (orders/tasks.ts) ; sans : on la fait à la main. */
-  task?: 'omelette' | 'crepe' | 'oeuf_plat';
 }
 export const STOVE_RECIPES: StoveRecipe[] = [
-  { name: 'omelette', needs: ['œuf', 'œuf'], how: 'Casse 2 œufs dans le saladier, fouette, verse dans la poêle chaude, remue à la spatule, puis sers.', task: 'omelette' },
-  { name: 'omelette au fromage', needs: ['œuf', 'œuf', 'fromage râpé'], how: 'Comme l’omelette, avec du fromage râpé dans le saladier avant de fouetter. Marche aussi avec du jambon ou des champignons.' },
-  { name: 'crêpe', needs: ['œuf', 'lait', 'farine'], how: 'Saladier : un œuf, du lait, de la farine, fouette ; une louche de pâte dans la poêle chaude, fais-la sauter, puis tartine-la.', task: 'crepe' },
-  { name: 'œuf au plat', needs: ['œuf'], how: 'Casse un œuf directement dans la poêle sur le feu, attends qu’il soit cuit.', task: 'oeuf_plat' },
+  { name: 'omelette', needs: ['œuf', 'œuf'], how: 'Casse 2 œufs dans le saladier, fouette, verse dans la poêle chaude, remue à la spatule, puis sers.' },
+  { name: 'omelette au fromage', needs: ['œuf', 'œuf', 'fromage'], how: 'Râpe du fromage sur la planche, puis comme l’omelette, avec le fromage râpé dans le saladier avant de fouetter. Marche aussi avec du jambon ou des champignons.' },
+  { name: 'crêpe', needs: ['œuf', 'lait', 'farine'], how: 'Saladier : un œuf, du lait, de la farine, fouette ; une louche de pâte dans la poêle chaude, fais-la sauter, puis tartine-la.' },
+  { name: 'œuf au plat', needs: ['œuf'], how: 'Casse un œuf directement dans la poêle sur le feu, attends qu’il soit cuit.' },
   { name: 'pain perdu', needs: ['œuf', 'lait', 'sucre', 'tranches de pain'], how: 'Saladier : un œuf, du lait et du sucre, fouette. Pose des tranches de pain dans la poêle chaude, verse la pâte dessus, retourne-les une fois.' },
   { name: 'chocolat chaud', needs: ['tablette de chocolat'], how: 'Remplis une tasse d’eau chaude à la bouilloire (ou de lait, pour un lait au chocolat), puis mets-y un carré de chocolat.' },
   { name: 'jus et smoothies', needs: ['pomme'], how: 'Mets des fruits dans le mixeur et lance-le : un seul fruit donne son jus (pomme, poire, raisin, orange), la banane ou les fraises un smoothie. Sers-le dans une tasse ou un verre.' },

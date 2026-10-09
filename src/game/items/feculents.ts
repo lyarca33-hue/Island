@@ -70,7 +70,7 @@ export const FECULENT_PLURAL = ['pâtes', 'pâtes au beurre', 'pâtes à la toma
 /** Stock voulu (liste de courses). */
 export const FECULENT_STOCK: Record<string, number> = { 'paquet de pâtes': 1, 'paquet de riz': 1, 'brique de soupe': 1 };
 
-/** Pages du livre de recettes (gestes à la casserole, sans ordre tapé pour l'instant). */
+/** Pages du livre de recettes (gestes à la casserole ; « Préparer » dans le livre les fait faire au perso). */
 export const FECULENT_RECIPES: Array<{ name: string; needs: string[]; how: string }> = [
   { name: 'pâtes au beurre', needs: ['paquet de pâtes', 'beurre'], how: 'Remplis la casserole d’eau à l’évier, fais-la bouillir sur le feu, verse les pâtes. Une fois cuites, égoutte au-dessus de l’évier, ajoute le beurre (fromage râpé en plus si tu veux), sers à la spatule.' },
   { name: 'pâtes à la tomate', needs: ['paquet de pâtes', 'sauce tomate'], how: 'Comme les pâtes au beurre, mais verse la sauce tomate sur les pâtes égouttées.' },
