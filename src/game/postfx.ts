@@ -53,7 +53,7 @@ export function skipDarkLights(scene: THREE.Scene): void {
  * rendre à la résolution native multiplie par 4 le travail du GPU pour un gain peu visible avec
  * les contours encrés : au-delà du plafond, le navigateur agrandit l'image.
  */
-export const QUALITY_PIXELS = { basse: 0.9e6, normale: 2.1e6, haute: 4.2e6 } as const;
+export const QUALITY_PIXELS = { basse: 0.9e6, normale: 1.4e6, haute: 4.2e6 } as const;
 export type Quality = keyof typeof QUALITY_PIXELS;
 
 const QUALITY_KEY = 'rp-island-qualite';

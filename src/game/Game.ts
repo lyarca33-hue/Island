@@ -767,6 +767,14 @@ export class Game {
       .catch((e) => console.warn('kit de la maison non chargé', e));
     // la nuit, une seule lumière d'ambiance, sans ombre, qui suit la pièce du perso
     this.scene.add(this.nightLight);
+    // lumière des fenêtres : autant de projecteurs que la pièce qui a le plus de fenêtres, toujours
+    // tous dans la scène (leur nombre ne change pas, aucun shader à recompiler)
+    const most = Math.max(0, ...this.rooms.map((r) => r.winLights.length));
+    for (let i = 0; i < most; i++) {
+      const l = lightAllPasses(new THREE.SpotLight(0xffffff, 0));
+      this.windowLights.push(l);
+      this.scene.add(l, l.target);
+    }
     // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item), keep: false });
@@ -874,7 +882,8 @@ export class Game {
     this.bubble.hidden = true;
     container.appendChild(this.bubble);
 
-    this.post = new PostFx(this.renderer, this.scene, this.camera, true);
+    // sans le perso vu à travers les murs (son aura) : une passe de couleur en moins à chaque image
+    this.post = new PostFx(this.renderer, this.scene, this.camera);
     this.resizeObs = new ResizeObserver(() => this.resize());
     // fenêtre passée d'un écran Retina à un écran externe (ou zoom du navigateur) : le
     // ResizeObserver ne le voit pas, mais le plafond de pixels en dépend
@@ -6878,6 +6887,7 @@ export class Game {
       r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null);
     }
     this.updateNightLight(dt);
+    this.updateWindowLights(dt);
     this.placeBubble();
     // saison dehors : herbe et neige au sol
     const look = seasonLook(this.clock.yearPos);
@@ -6919,6 +6929,44 @@ export class Game {
    */
   private nightLight = lightAllPasses(new THREE.PointLight(NIGHT_COLOR, 0, 8, 1));
   private nightRoom: Room | null = null;
+
+  /** Projecteurs des fenêtres de la pièce du perso (voir Room.winLights). */
+  private windowLights: THREE.SpotLight[] = [];
+  private windowRoom: Room | null = null;
+  /** Fondu (0 à 1) des fenêtres de la pièce du perso, repris de zéro en changeant de pièce. */
+  private windowFade = 1;
+
+  /**
+   * Seules les fenêtres de la pièce du perso (la dernière occupée quand il sort) éclairent : dix
+   * projecteurs calculés pour chaque pixel coûtaient près de la moitié de l'image. En changeant de
+   * pièce, la lumière des nouvelles fenêtres monte en fondu.
+   */
+  private updateWindowLights(dt: number): void {
+    const room = this.activeRoom ?? this.windowRoom ?? this.rooms[0] ?? null;
+    if (room !== this.windowRoom) {
+      this.windowRoom = room;
+      this.windowFade = 0;
+    }
+    this.windowFade = Math.min(1, this.windowFade + Math.max(0, dt) / 0.6);
+    const fade = this.windowFade * this.windowFade * (3 - 2 * this.windowFade);
+    this.windowLights.forEach((l, i) => {
+      const src = room?.winLights[i];
+      if (!src) {
+        l.intensity = 0;
+        return;
+      }
+      src.updateMatrixWorld();
+      src.target.updateMatrixWorld();
+      l.position.setFromMatrixPosition(src.matrixWorld);
+      l.target.position.setFromMatrixPosition(src.target.matrixWorld);
+      l.color.copy(src.color);
+      l.intensity = src.intensity * fade;
+      l.distance = src.distance;
+      l.angle = src.angle;
+      l.penumbra = src.penumbra;
+      l.decay = src.decay;
+    });
+  }
 
   /** Allume la lumière de nuit selon l'heure, et la fait glisser vers la pièce du perso. */
   private updateNightLight(dt: number): void {
