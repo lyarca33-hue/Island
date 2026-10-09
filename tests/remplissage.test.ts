@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ITEM_BY_ID } from '../src/game/items/catalog';
 import { buildFiller, START_CONTENTS } from '../src/game/items/remplissage';
+import { cellsOf, GRIDS, pack } from '../src/game/items/cases';
 
 describe('meubles remplis au départ', () => {
   it('chaque objet existe et va dans son meuble, qui a assez de places', () => {
@@ -34,5 +35,34 @@ describe('silhouette d’un objet rangé', () => {
     const hits: THREE.Intersection[] = [];
     g.raycast(new THREE.Raycaster(new THREE.Vector3(0, 0, 5), new THREE.Vector3(0, 0, -1)), hits);
     expect(hits).toHaveLength(0);
+  });
+});
+
+describe('inventaire à cases', () => {
+  it('range des rectangles sans chevauchement, et refuse ce qui ne tient pas', () => {
+    const cells = pack(4, 2, [[1, 1], [2, 2], [1, 2], [1, 1]])!;
+    expect(cells).not.toBeNull();
+    const seen = new Set<string>();
+    for (const c of cells) for (let y = c.y; y < c.y + c.h; y++) for (let x = c.x; x < c.x + c.w; x++) {
+      expect(x < 4 && y < 2).toBe(true);
+      expect(seen.has(`${x},${y}`)).toBe(false);
+      seen.add(`${x},${y}`);
+    }
+    expect(pack(2, 2, [[2, 2], [1, 1]])).toBeNull();
+  });
+
+  it('un objet prend des cases selon sa taille', () => {
+    expect(cellsOf(new THREE.Vector3(0.08, 0.1, 0.08))).toEqual([1, 1]);
+    expect(cellsOf(new THREE.Vector3(0.26, 0.02, 0.26))).toEqual([2, 1]);
+    expect(cellsOf(new THREE.Vector3(1, 1, 1))).toEqual([3, 3]);
+  });
+
+  it('le contenu de départ tient dans la grille de chaque meuble', () => {
+    for (const [holder, , ids] of START_CONTENTS) {
+      const grid = GRIDS[holder];
+      expect(grid, holder).toBeTruthy();
+      const sizes = ids.map((id) => cellsOf(new THREE.Box3().setFromObject(ITEM_BY_ID.get(id)!.build()).getSize(new THREE.Vector3())));
+      expect(pack(grid[0], grid[1], sizes), holder).not.toBeNull();
+    }
   });
 });

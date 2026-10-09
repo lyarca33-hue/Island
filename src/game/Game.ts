@@ -27,7 +27,8 @@ import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDone
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
-import { START_CONTENTS } from './items/remplissage';
+import { fillerColor, START_CONTENTS } from './items/remplissage';
+import { cellsOf, GRIDS, pack, type Cell } from './items/cases';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
 import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
 import { DRAINS, FECULENT_FEMININE, FECULENT_PLURAL, FECULENT_RECIPES, PACKETS, SAUCE_SERVINGS, SOUP_BROTH, SOUP_VEG, SOUPS, TOPPED } from './items/feculents';
@@ -334,6 +335,8 @@ interface Flying {
 export interface MenuEntry {
   label: string;
   run: () => boolean;
+  /** Icône à côté du nom (« Inventaire »). */
+  icon?: 'inventory';
 }
 
 /** Menu au clic droit : où l'ouvrir (px, dans la vue), sur quoi, et les gestes possibles. */
@@ -3968,20 +3971,44 @@ export class Game {
     return false;
   }
 
-  /** Ce qu'il y a dans le meuble `ref` (frigo, placard, tiroir, congélateur…), pour la fenêtre d'inventaire. */
-  inventory(ref: string): { title: string; open: boolean; items: Array<{ ref: string; name: string; state: string; count: number }> } | null {
+  /**
+   * Ce qu'il y a dans le meuble `ref` (frigo, placard, tiroir, congélateur…), pour la fenêtre
+   * d'inventaire : sa grille de cases et chaque objet à sa place dans la grille (voir cases.ts).
+   */
+  inventory(ref: string): {
+    title: string;
+    open: boolean;
+    grid: [number, number];
+    items: Array<{ ref: string; name: string; state: string; color: string; cell: Cell }>;
+  } | null {
     const shelf = this.byRef(ref);
     if (!shelf?.def.slots) return null;
     const door = this.doors.get(shelf);
-    // les pareils ensemble (« pomme ×2 ») ; « au frais » va sans dire dans le frigo
-    const items: Array<{ ref: string; name: string; state: string; count: number }> = [];
-    for (const i of this.storedIn(shelf)) {
-      const state = this.stateOf(i).split(' · ').filter((w) => w !== 'au frais' && !w.startsWith('gelé')).join(' · ');
-      const same = items.find((x) => x.name === i.name && x.state === state);
-      if (same) same.count++;
-      else items.push({ ref: this.ref(i), name: i.name, state, count: 1 });
-    }
-    return { title: cap(shelf.name), open: !door || door.target === 1, items };
+    const stored = this.storedIn(shelf);
+    const grid = this.gridOf(shelf, stored);
+    const cells = pack(grid[0], grid[1], stored.map((i) => cellsOf(i.size))) ?? pack(grid[0], 99, stored.map((i) => cellsOf(i.size)))!;
+    const items = stored.map((i, k) => ({
+      ref: this.ref(i),
+      name: i.name,
+      // « au frais » va sans dire dans le frigo
+      state: this.stateOf(i).split(' · ').filter((w) => w !== 'au frais' && !w.startsWith('gelé')).join(' · '),
+      color: `#${fillerColor(i.object).toString(16).padStart(6, '0')}`,
+      cell: cells[k],
+    }));
+    return { title: cap(shelf.name), open: !door || door.target === 1, grid: [grid[0], Math.max(grid[1], ...cells.map((c) => c.y + c.h))], items };
+  }
+
+  /** Grille de cases du meuble : celle de sa fiche (cases.ts), sinon une rangée par place. */
+  private gridOf(shelf: WorldItem, stored = this.storedIn(shelf)): [number, number] {
+    return GRIDS[shelf.def.id] ?? [Math.min(6, shelf.def.slots!.length), Math.max(1, Math.ceil(Math.max(shelf.def.slots!.length, stored.length) / 6))];
+  }
+
+  /** Reste-t-il dans la grille du meuble un rectangle de cases libre pour l'objet `item` ? */
+  private roomFor(shelf: WorldItem, item: WorldItem): boolean {
+    const grid = GRIDS[shelf.def.id];
+    if (!grid) return true;
+    const inside = this.storedIn(shelf).filter((i) => i !== item);
+    return !!pack(grid[0], grid[1], [...inside, item].map((i) => cellsOf(i.size)));
   }
 
   /**
@@ -5112,6 +5139,7 @@ export class Game {
    */
   private freeSlots(shelf: WorldItem, item?: WorldItem): number[] {
     const carried = this.character.carried;
+    if (item && !this.roomFor(shelf, item)) return [];
     const height = (i: number) => Math.abs(shelf.def.slots![i][1] + 0.12 - 1);
     // places réservées (égouttoir : verres au fond, couverts au panier)
     const takes = (i: number) => !item || !shelf.def.slotHolds?.[i] || shelf.def.slotHolds[i]!.includes(item.name);
@@ -5511,7 +5539,7 @@ export class Game {
     if (item.def.slots && held.some((h) => this.fits(item, h))) add('Ranger ici ce que je tiens', () => this.storeIn(item, false));
     // ranger l'objet à sa place (sale : dans l'évier)
     if (item.def.portable && !c.carried.includes(item) && !this.atHome(item) && (item.dirty || this.homes.has(item) || this.homeOf(item))) add('Ranger', () => this.tidy(ref));
-    if (item.def.slots && (!program(item.def) || this.doors.has(item))) add('Regarder dedans', () => this.lookInside(ref));
+    if (item.def.slots && (!program(item.def) || this.doors.has(item))) out.push({ label: 'Inventaire', icon: 'inventory', run: () => this.lookInside(ref) });
     if (door && (door.target || door.open > 0) && !door.keep && !item.def.window) add('Laisser ouvert', () => this.keepOpen(ref));
     // essuyer au torchon la vaisselle mouillée posée là
     // la liste et le sac de courses

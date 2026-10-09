@@ -86,6 +86,15 @@ export function buildFiller(model: THREE.Object3D, box: THREE.Box3): THREE.Mesh 
   return mesh;
 }
 
+const colors = new WeakMap<THREE.Object3D, number>();
+
+/** Couleur d'un objet pour sa silhouette et sa case d'inventaire (0xrrggbb), retenue. */
+export function fillerColor(object: THREE.Object3D): number {
+  let hex = colors.get(object);
+  if (hex === undefined) colors.set(object, (hex = mainColor(object)));
+  return hex;
+}
+
 /** Couleur de la plus grande pièce visible de l'objet (sa couleur d'origine, hors usure). */
 function mainColor(model: THREE.Object3D): number {
   let best = -1;
