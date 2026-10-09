@@ -23,6 +23,7 @@ import { LIVRES } from './items/livres';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import type { VRMHumanBoneName } from '@pixiv/three-vrm';
 import { type BodySphere, Duvet, LIT_SHAPE } from './items/duvet';
+import { type Ball, Towel, type TowelHold } from './items/towel';
 import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
@@ -252,6 +253,17 @@ const TURN_DOWN = 1.1;
 const LIE_BACK = 1.6;
 const RISE = 1.4;
 const MAKE_BED = 3.4;
+/** Où est la serviette (son origine) quand elle est sur le porte-serviettes (repère du meuble, hauteur). */
+const TOWEL_ON_RACK = 0.5;
+/** La barre du haut du porte-serviettes (repère du modèle) : hauteur de son axe, z. */
+const TOWEL_BAR: [number, number] = [0.93, -0.025];
+/** La couleur de l'éponge (celle du modèle de la serviette). */
+const TOWEL_COLOR = 0x3b78a8;
+/** Le corps du perso sous la serviette : des boules sur ses os (rayon, m). */
+const TOWEL_BODY: Array<[VRMHumanBoneName, number]> = [
+  ['hips', 0.14], ['spine', 0.13], ['chest', 0.14], ['upperChest', 0.13], ['neck', 0.06], ['head', 0.11],
+  ['leftUpperArm', 0.05], ['rightUpperArm', 0.05], ['leftUpperLeg', 0.08], ['rightUpperLeg', 0.08], ['leftLowerLeg', 0.06], ['rightLowerLeg', 0.06],
+];
 /** Le dormeur couché de son côté du lit (part de la largeur). */
 const SLEEP_SIDE = 0.19;
 /** Le corps du dormeur sous la couette : des boules sur ses os (rayon, m). */
@@ -1826,10 +1838,11 @@ export class Game {
   private showering: { shower: WorldItem; t: number } | null = null;
   private wet = 0;
   private dripT = 0;
-  /** Serviettes : chaque maillage du tissu et ses positions au repos (le tissu ondule, tickTowels). */
-  private cloth = new Map<WorldItem, Array<{ geo: THREE.BufferGeometry; rest: Float32Array; top: number; h: number }>>();
+  /** Serviettes : leur tissu simulé, et où elles étaient à l'image d'avant (tickTowels). */
+  private towels = new Map<WorldItem, Towel>();
+  private towelKind = new Map<WorldItem, TowelHold['kind']>();
   /** En train de se sécher : la serviette frotte (le tissu bouge plus fort). */
-  private rubbing = 0;
+  private rubbing: { other: 'left' | 'right'; hands: () => Record<'left' | 'right', THREE.Vector3> } | null = null;
   private clothT = 0;
   /** Assis aux toilettes, et depuis combien de temps ; couvercles (0 fermé, 1 ouvert) ; chasses d'eau en cours (s qui restent). */
   private toiletVisit: { toilet: WorldItem; t: number } | null = null;
@@ -2482,6 +2495,14 @@ export class Game {
     if (!c.handOf(item) || target === item) return false;
     if (c.seated) return c.standUp(() => this.placeOn(item, target, at, running));
     target.object.updateMatrixWorld(true);
+    if (item.def.bathTowel && target.def.id === 'porte-serviettes') {
+      // la serviette se remet sur la barre du haut (le tissu s'y plie en deux, voir tickTowels)
+      const bar = target.object.localToWorld(new THREE.Vector3(0, TOWEL_ON_RACK, 0));
+      c.approachThen(this.standNear(bar, 0.5), bar, () => {
+        if (!c.drop(bar, undefined, undefined, false, item, target.object.quaternion.clone())) this.onNotice?.(`Impossible d’accrocher ${the(item.name)}.`);
+      }, running);
+      return true;
+    }
     const box = new THREE.Box3().setFromObject(target.object);
     const p = (at ?? box.getCenter(new THREE.Vector3())).clone();
     this.raycaster.set(new THREE.Vector3(p.x, box.max.y + 1, p.z), new THREE.Vector3(0, -1, 0));
@@ -4244,19 +4265,42 @@ export class Game {
       if (!c.freeHand(towel)) return this.notice(`Les mains sont prises (${c.heldItems.map((h) => h.name).join(' et ')}). E pour poser.`);
       return c.pickUp(towel, running, this.shelfOf(towel)?.forward, () => this.dryOff(this.ref(towel), running));
     }
-    // la serviette frotte de gauche à droite : le buste, puis la tête (un côté, l'autre)
-    const at = (y: number, side = 0) => () => {
-      const right = new THREE.Vector3(-c.forward.z, 0, c.forward.x);
-      const rub = Math.sin(this.clothT * 9);
-      return c.position.clone().addScaledVector(c.forward, 0.2).addScaledVector(right, side * 0.09 + rub * 0.08).setY(y + 0.03 * Math.cos(this.clothT * 18));
+    // un bout dans chaque main, la serviette passée derrière le dos (bas, puis haut), puis sur la tête
+    const other: 'left' | 'right' = hand.side === 'right' ? 'left' : 'right';
+    const twoHands = c.heldItems.length === 1;
+    const place = (mode: 'back' | 'head', lift: number, side: number): THREE.Vector3 => {
+      const fwd = c.forward.clone().setY(0).normalize();
+      const left = new THREE.Vector3(fwd.z, 0, -fwd.x);
+      const saw = Math.sin(this.clothT * 7) * side;
+      if (mode === 'back') {
+        const chest = (c.bone('chest') ?? c.bone('spine'))!.getWorldPosition(new THREE.Vector3());
+        return chest.addScaledVector(left, 0.24 * side).addScaledVector(fwd, 0.02).setY(chest.y + lift + 0.07 * saw);
+      }
+      const head = c.bone('head')!.getWorldPosition(new THREE.Vector3());
+      return head.addScaledVector(left, 0.15 * side).addScaledVector(fwd, 0.05 * saw).setY(head.y + 0.1);
+    };
+    // d'un geste à l'autre, les mains glissent de l'ancienne place à la nouvelle
+    const rub = (i: number) => {
+      const t0 = this.clothT;
+      return (): Record<'left' | 'right', THREE.Vector3> => {
+        const [mode, lift] = steps[i];
+        const k = i ? THREE.MathUtils.smoothstep(this.clothT - t0, 0, 0.6) : 1;
+        const at = (side: number) => (k < 1 ? place(steps[i - 1][0], steps[i - 1][1], side).lerp(place(mode, lift, side), k) : place(mode, lift, side));
+        return { left: at(1), right: at(-1) };
+      };
     };
     const wasWet = this.wet > 0 || this.body.soaked > 0.15;
     const done = () => {
-      this.rubbing = 0;
+      this.rubbing = null;
       this.wet = 0;
       this.body.dry();
     };
-    const steps: Array<[number, number]> = [[1.15, 0], [1.25, 0], [1.5, -1], [1.5, 1]];
+    const steps: Array<['back' | 'head', number]> = [['back', 0], ['back', 0.15], ['head', 0], ['head', 0]];
+    const go = (i: number, then: () => void): boolean => {
+      const hands = rub(i);
+      this.rubbing = twoHands ? { other, hands } : null;
+      return !!hand.cut(() => hands()[hand.side], then, twoHands ? { at: hands, from: i > 0, on: i < steps.length - 1 } : undefined);
+    };
     const next = (i: number): void => {
       if (i === steps.length) {
         done();
@@ -4264,10 +4308,9 @@ export class Game {
         this.onNotice?.(wasWet ? 'Tu es sec. Remets la serviette sur le porte-serviettes.' : 'Tu es déjà sec, mais ça fait du bien.');
         return;
       }
-      if (!hand.cut(at(...steps[i]), () => next(i + 1))) done();
+      if (!go(i, () => next(i + 1))) done();
     };
-    this.rubbing = 1;
-    if (!hand.cut(at(...steps[0]), () => next(1))) return done(), false;
+    if (!go(0, () => next(1))) return done(), false;
     return true;
   }
 
@@ -4706,46 +4749,110 @@ export class Game {
   }
 
   /**
-   * Le tissu des serviettes ondule : pendue, elle bouge à peine ; tenue, elle se balance quand le
-   * perso marche ; en se séchant, elle frotte et se froisse. Le bas bouge, le haut (pli, main) reste.
+   * Les serviettes de bain : un vrai tissu (towel.ts) à la place du modèle (caché, mais on clique
+   * toujours dessus). Pliée en deux sur la barre du porte-serviettes, tenue à la main, tendue entre
+   * les deux mains pour se sécher (posée sur le corps), en tas par terre, pliée en carré ailleurs.
    */
   private tickTowels(dt: number): void {
     this.clothT += dt;
     const c = this.character;
     for (const towel of this.items) {
       if (!towel.def.bathTowel) continue;
-      let parts = this.cloth.get(towel);
-      if (!parts) {
-        parts = [];
+      let cloth = this.towels.get(towel);
+      if (!cloth) {
+        // le modèle n'est plus dessiné (ses matériaux invisibles) : il sert encore aux clics
         towel.object.traverse((o) => {
           const m = o as THREE.Mesh;
-          if (!m.isMesh || m.name || !m.visible || (m.geometry.getAttribute('position')?.count ?? 0) < 60) return;
-          // le maillage peut être partagé avec d'autres serviettes : une copie à soi
-          m.geometry = m.geometry.clone();
-          const pos = m.geometry.getAttribute('position');
-          m.geometry.computeBoundingBox();
-          const b = m.geometry.boundingBox!;
-          parts!.push({ geo: m.geometry, rest: Float32Array.from(pos.array as Float32Array), top: b.max.y, h: Math.max(0.05, b.max.y - b.min.y) });
+          if (!m.isMesh) return;
+          const hide = (mat: THREE.Material) => {
+            const h = mat.clone();
+            h.visible = false;
+            return h;
+          };
+          m.material = Array.isArray(m.material) ? m.material.map(hide) : hide(m.material);
+          m.castShadow = false;
         });
-        this.cloth.set(towel, parts);
+        cloth = new Towel(TOWEL_COLOR, this.towelFolded(towel));
+        this.scene.add(cloth.mesh);
+        this.towels.set(towel, cloth);
       }
+      cloth.mesh.visible = !towel.stowed;
+      if (towel.stowed) {
+        // rangée : elle en ressortira pliée, et se dépliera de là
+        if (this.towelKind.get(towel) !== 'fold') cloth.setHold(this.towelFolded(towel));
+        this.towelKind.set(towel, 'fold');
+        continue;
+      }
+      const hold = this.towelHold(towel);
+      const before = this.towelKind.get(towel);
+      // remise sur la barre : la main l'y pose pliée en deux
+      cloth.setHold(hold, hold.kind === 'hang' && before !== 'hang');
+      this.towelKind.set(towel, hold.kind);
       const held = c.carried.includes(towel);
-      const amp = held ? (this.rubbing ? 0.035 : c.moveGait !== 'idle' ? 0.03 : 0.012) : 0.006;
-      const speed = held && this.rubbing ? 9 : held ? 3.2 : 1.4;
-      const t = this.clothT * speed;
-      for (const part of parts) {
-        const pos = part.geo.getAttribute('position') as THREE.BufferAttribute;
-        const a = pos.array as Float32Array, r = part.rest;
-        for (let i = 0; i < a.length; i += 3) {
-          const y = r[i + 1];
-          // 0 en haut (là où elle est tenue ou pliée sur la barre), 1 en bas
-          const k = Math.min(1, Math.max(0, (part.top - y) / part.h)) ** 1.5;
-          a[i] = r[i] + amp * k * Math.sin(t + y * 7 + r[i + 2] * 5);
-          a[i + 2] = r[i + 2] + amp * k * Math.cos(t * 0.8 + y * 6 + r[i] * 4);
-        }
-        pos.needsUpdate = true;
-      }
+      cloth.setBodies(held ? this.bodyBalls() : [], 0);
+      cloth.update(dt);
     }
+    for (const [towel, cloth] of this.towels) {
+      if (this.items.includes(towel)) continue;
+      cloth.mesh.removeFromParent();
+      cloth.mesh.geometry.dispose();
+      this.towels.delete(towel);
+    }
+  }
+
+  /** Où est la serviette : sur la barre d'un porte-serviettes, en main, par terre, ou rangée pliée. */
+  private towelHold(towel: WorldItem): TowelHold {
+    const c = this.character;
+    towel.object.updateMatrixWorld(true);
+    const hand = c.handOf(towel);
+    if (hand) {
+      // le haut de la serviette dans la main ; pour se sécher, l'autre bout dans l'autre main
+      const at = towel.object.localToWorld(new THREE.Vector3(0, towel.box.max.y, 0));
+      const rub = this.rubbing;
+      const b = rub && hand.palm(rub.other);
+      if (!rub || !b) return { kind: 'hold', hand: at };
+      const a = hand.palm(hand.side) ?? at;
+      const around = c.forward.clone().setY(0).normalize().negate();
+      const seed = rub.hands();
+      return { kind: 'wrap', a, b, around, seed: [seed[hand.side], seed[rub.other]] };
+    }
+    const p = towel.object.position;
+    const rack = this.items.find((i) => i.def.id === 'porte-serviettes' && p0(i.object.position).distanceTo(p0(p)) < 0.4);
+    if (rack && p.y > 0.3) {
+      rack.object.updateMatrixWorld(true);
+      const x = rack.object.worldToLocal(p.clone()).x;
+      return { kind: 'hang', a: rack.object.localToWorld(new THREE.Vector3(x - 0.32, TOWEL_BAR[0], TOWEL_BAR[1])), b: rack.object.localToWorld(new THREE.Vector3(x + 0.32, TOWEL_BAR[0], TOWEL_BAR[1])) };
+    }
+    if (p.y < 0.08) return { kind: 'free' };
+    return this.towelFolded(towel);
+  }
+
+  /** La serviette pliée en carré là où est son objet. */
+  private towelFolded(towel: WorldItem): TowelHold {
+    towel.object.updateMatrixWorld(true);
+    return { kind: 'fold', matrix: towel.object.matrixWorld.clone(), bottom: towel.box.min.y };
+  }
+
+  /** Le corps du perso en boules (monde) : la serviette s'y pose. */
+  private bodyBalls(): Ball[] {
+    const out: Ball[] = [];
+    const v = new THREE.Vector3();
+    for (const [name, r] of TOWEL_BODY) {
+      const bone = this.character.bone(name);
+      if (!bone) continue;
+      bone.getWorldPosition(v);
+      out.push({ x: v.x, y: v.y, z: v.z, r });
+      // le haut du crâne et les cheveux, au-dessus de l'os de la tête
+      if (name === 'head') out.push({ x: v.x, y: v.y + 0.11, z: v.z, r: 0.12 });
+    }
+    // le milieu des cuisses : elle ne passe pas entre les jambes
+    for (const side of ['left', 'right'] as const) {
+      const a = this.character.bone(`${side}UpperLeg`), b = this.character.bone(`${side}LowerLeg`);
+      if (!a || !b) continue;
+      const w = a.getWorldPosition(new THREE.Vector3()).add(b.getWorldPosition(v)).multiplyScalar(0.5);
+      out.push({ x: w.x, y: w.y, z: w.z, r: 0.085 });
+    }
+    return out;
   }
 
   /**
@@ -6570,6 +6677,8 @@ export class Game {
     // poser dessus ce qu'on tient (plateau, assiette vide : empiler)
     const putable = held.find((h) => h !== item && !isTwoHanded(h.grip));
     if (putable && (item.def.id === 'plateau' || (item.def.plate && putable.def.plate && !this.foodOn(item)))) add(`Poser ${the(putable.name)} dessus`, () => this.placeOn(putable, item));
+    const bathTowel = held.find((h) => h.def.bathTowel);
+    if (bathTowel && item.def.id === 'porte-serviettes') add(`Accrocher ${the(bathTowel.name)}`, () => this.placeOn(bathTowel, item));
     if (item.def.plate && !held.length && !this.shelfOf(item) && this.items.filter((i) => i.def.plate && !i.dirty && !this.foodOn(i)).length > 1) add('Empiler les assiettes', () => this.stackPlates());
     // la table : mettre le couvert, débarrasser
     if (item.def.table === 'repas' && !held.length) {

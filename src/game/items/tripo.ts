@@ -19,6 +19,7 @@ import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { createToonMaterial } from '../toon';
 import { poseMotion, ROOM_RIGS, type Motion } from './rigs';
+import { type ShadeZone, unshadeMaterial } from './unshade';
 
 /** Les fichiers de modèles, un par pièce (public/models/<pièce>.glb). */
 export const TRIPO_PACKS = ['cuisine', 'salon', 'chambre', 'salle-de-bain', 'entree', 'garage'];
@@ -61,6 +62,17 @@ export interface TripoLook {
   plinth?: number;
   /** Allonge ce qui est sous la hauteur y (repère du modèle) de `by` mètres : les pieds de la table basse. */
   stretch?: [y: number, by: number];
+  /**
+   * Remet d'aplomb ce qui penche vers l'avant : devant z, les points montent de `rise` par mètre,
+   * pleinement au-dessus de y1, pas du tout sous y0 (la lunette des toilettes, modélisée en pente).
+   */
+  level?: { z: number; y: [number, number]; rise: number };
+  /**
+   * Ombres cuites dans la texture, éclaircies (unshade.ts) : dans la boîte (repère du modèle,
+   * `part` : seulement cette pièce mobile, dans sa pose modélisée), la texture remonte vers la
+   * luminosité `to` (0-255), fondu sur `feather` m au bord de la boîte.
+   */
+  unshade?: ShadeZone[];
   /** Morceaux du modèle retirés (boîtes min, max dans son repère) : la bonde et la tirette du lavabo, mal placées. */
   cut?: Array<[V3, V3]>;
   /**
@@ -138,6 +150,8 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
       [[-0.05, 0.804, 0.25], [0.05, 0.9, 0.36]],
     ],
     fill: [{ y: 0.806, x: [-0.045, 0.045], z: [0.258, 0.352] }],
+    // une ombre cuite assombrit tout un côté du rebord (+x) : éclaircie comme l'autre
+    unshade: [{ min: [0.12, 0.7, -0.4], max: [0.42, 1.06, 0.4], to: 150, feather: 0.1 }],
   },
   douche: { model: 'douche-receveur' },
   'porte-serviettes': { model: 'porte-serviettes' },
@@ -234,7 +248,7 @@ export function hasTripoLook(id: string): boolean {
 }
 
 /** Géométries du modèle d'une fiche, dans le repère de la fiche : le corps fixe, et chaque pièce mobile. */
-const baked = new Map<string, { body: THREE.BufferGeometry; parts: Map<string, THREE.BufferGeometry>; pivots: Map<string, THREE.Vector3 | null> }>();
+const baked = new Map<string, { body: THREE.BufferGeometry; parts: Map<string, THREE.BufferGeometry>; pivots: Map<string, THREE.Vector3 | null>; material: THREE.Material }>();
 
 function bake(id: string, look: TripoLook, model: Model) {
   let b = baked.get(id);
@@ -247,24 +261,33 @@ function bake(id: string, look: TripoLook, model: Model) {
     .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(look.tilt ?? [0, 0, 0]))))
     .multiply(new THREE.Matrix4().makeScale(...(look.scale ?? [1, 1, 1])))
     .multiply(new THREE.Matrix4().makeTranslation(0, look.clip ? -s0 : 0, 0));
-  const place = (g: THREE.BufferGeometry) => {
+  const zoned: Array<{ g: THREE.BufferGeometry; zones: ShadeZone[] }> = [];
+  const all: THREE.BufferGeometry[] = [];
+  const place = (g: THREE.BufferGeometry, part?: string) => {
     let out = look.clip ? clipY(g, s0, s1) : g.clone();
     if (look.cut) out = cutBoxes(out, look.cut);
     if (look.stretch) stretchY(out, ...look.stretch);
+    if (look.level && !part) levelY(out, look.level);
+    if (look.unshade) {
+      all.push(out.clone());
+      const zones = look.unshade.filter((u) => u.part === part);
+      if (zones.length) zoned.push({ g: all[all.length - 1], zones });
+    }
     return out.applyMatrix4(m);
   };
-  const moving = new Set(Object.values(look.parts ?? {}).map((p) => p.from));
-  const fixed = [...model.parts].filter(([name]) => !moving.has(name)).map(([, g]) => place(g));
-  for (const f of look.fill ?? []) fixed.push(patch(merge([...model.parts].filter(([name]) => !moving.has(name)).map(([, g]) => g)), f).applyMatrix4(m));
+  const movers = new Set(Object.values(look.parts ?? {}).map((p) => p.from));
+  const fixed = [...model.parts].filter(([name]) => !movers.has(name)).map(([, g]) => place(g));
+  for (const f of look.fill ?? []) fixed.push(patch(merge([...model.parts].filter(([name]) => !movers.has(name)).map(([, g]) => g)), f).applyMatrix4(m));
   const parts = new Map<string, THREE.BufferGeometry>();
   const pivots = new Map<string, THREE.Vector3 | null>();
   for (const [name, p] of Object.entries(look.parts ?? {})) {
     const g = model.parts.get(p.from);
     if (!g) continue;
-    parts.set(name, place(g));
+    parts.set(name, place(g, name));
     pivots.set(name, p.pivot ? new THREE.Vector3(...p.pivot).applyMatrix4(m) : null);
   }
-  b = { body: merge(fixed), parts, pivots };
+  const material = look.unshade ? unshadeMaterial(model.material, zoned, all) : model.material;
+  b = { body: merge(fixed), parts, pivots, material };
   baked.set(id, b);
   return b;
 }
@@ -307,8 +330,9 @@ export function dressTripo(id: string, model: THREE.Object3D): THREE.Object3D {
   const src = look && models?.get(look.model);
   if (!src) return model;
   const b = bake(id, look, src);
+  const material = b.material;
   drop(plainMeshes(model));
-  model.add(meshOf(b.body, src.material));
+  model.add(meshOf(b.body, material));
   if (look.plinth) {
     // socle sombre, en retrait sous l'appareil
     const box = new THREE.Box3().setFromBufferAttribute(b.body.getAttribute('position') as THREE.BufferAttribute);
@@ -328,7 +352,7 @@ export function dressTripo(id: string, model: THREE.Object3D): THREE.Object3D {
     const pivot = b.pivots.get(name);
     if (pivot) part.position.copy(pivot);
     else part.position.set(0, 0, 0);
-    const mesh = meshOf(g, src.material);
+    const mesh = meshOf(g, material);
     if (pivot) mesh.position.copy(pivot).negate();
     part.add(mesh);
     const d = look.parts?.[name]?.drop;
@@ -428,6 +452,18 @@ export function stretchY(g: THREE.BufferGeometry, y: number, by: number): THREE.
   for (let i = 0; i < p.count; i++) {
     const v = p.getY(i);
     p.setY(i, v < y ? (v * (y + by)) / y : v + by);
+  }
+  p.needsUpdate = true;
+  return g;
+}
+
+/** Voir TripoLook.level : redresse vers l'avant (z) une pente du modèle, en fondu sur la hauteur. */
+export function levelY(g: THREE.BufferGeometry, l: { z: number; y: [number, number]; rise: number }): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const z = p.getZ(i), y = p.getY(i);
+    if (z <= l.z) continue;
+    p.setY(i, y + l.rise * (z - l.z) * THREE.MathUtils.smoothstep(y, l.y[0], l.y[1]));
   }
   p.needsUpdate = true;
   return g;

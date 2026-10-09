@@ -449,6 +449,8 @@ const THROW_LIFT = 2.4;
  * en retrait pour que la lame, pas le poing, arrive dessus.
  */
 const CUT_HAND = { fingers: [0, -0.92, -0.38] as [number, number, number], palm: [1, 0, 0] as [number, number, number] };
+/** Se frotter avec la serviette : doigts vers le haut, paume vers le corps (main droite, repère du buste). */
+const RUB_HAND = { fingers: [0, 0.8, -0.6] as [number, number, number], palm: [1, 0, -0.3] as [number, number, number] };
 const CUT_ABOVE = 0.07;
 const CUT_LIFT = 0.06;
 const CUT_BACK = 0.12;
@@ -509,6 +511,11 @@ export class Carry {
   private washT = 0;
   /** Couper : le point de l'aliment (monde) au-dessus duquel va la lame. */
   private cutAt: (() => THREE.Vector3) | null = null;
+  /** Se frotter (serviette) : où vont les deux mains pendant le geste (monde), l'autre main comprise. */
+  private rubAt: (() => Record<Side, THREE.Vector3>) | null = null;
+  /** Le frottement continue d'un geste à l'autre : les mains n'y reviennent pas (début), ne repartent pas (fin). */
+  private rubFrom = false;
+  private rubOn = false;
   /** Verser : au-dessus de quel point (monde) on incline le récipient tenu. */
   private pourAt: (() => THREE.Vector3) | null = null;
   /** Main imposée par un geste (lancer) : position depuis l'épaule et coude. */
@@ -555,6 +562,11 @@ export class Carry {
   }
 
   /** Mains contre un meuble (en train de l'agripper, de le pousser ou de le lâcher). */
+  /** Où est la paume de cette main (monde), si elle a été placée. */
+  palm(side: Side): THREE.Vector3 | null {
+    return this.palms[side]?.clone() ?? null;
+  }
+
   get bracing(): boolean {
     return this.phase === 'brace' || this.phase === 'push' || this.phase === 'unbrace';
   }
@@ -708,9 +720,12 @@ export class Carry {
    * l'aliment posé sur la planche, ou dans l'assiette pour le couteau de table) ; `onDone` une fois
    * le couteau revenu en main.
    */
-  cut(at: () => THREE.Vector3, onDone?: () => void): boolean {
+  cut(at: () => THREE.Vector3, onDone?: () => void, rub?: { at: () => Record<Side, THREE.Vector3>; from: boolean; on: boolean }): boolean {
     if (!(this.item?.def.knife || this.item?.def.wipes || this.item?.def.towel || this.item?.def.bathTowel || this.item?.def.stirs || this.item?.def.grates || this.item?.def.sweeps || this.item?.def.mops || this.item?.def.spray || this.item?.name === 'couteau de table') || this.phase !== 'hold' || this.stack.length) return false;
     this.cutAt = at;
+    this.rubAt = rub?.at ?? null;
+    this.rubFrom = !!rub?.from;
+    this.rubOn = !!rub?.on;
     // le buste se penche vers la planche (voir weights)
     this.target.copy(at());
     this.start('cut', onDone);
@@ -782,7 +797,7 @@ export class Carry {
       this.heldPos.copy(this.item.object.position);
       this.heldRot.copy(this.item.object.quaternion);
     }
-    if (this.phase === 'cut') this.cutAt = null;
+    if (this.phase === 'cut') this.cutAt = this.rubAt = null;
     if (this.phase === 'pour') this.pourAt = null;
     if (this.phase === 'store') {
       const top = this.stack.pop()!;
@@ -939,8 +954,16 @@ export class Carry {
 
   /** Place les bras pour la prise `spec` ; renvoie les mains utilisées. */
   private pose(spec: GripSpec, r: number, scale: number): Side[] {
-    const hands: Side[] = spec.left ? ['right', 'left'] : [this.side];
     const center = this.twoHandCenter(spec, r);
+    if (!spec.left && this.rubAt) {
+      // se frotter : l'autre main vient tenir l'autre bout (sa prise en miroir)
+      const other: Side = this.side === 'right' ? 'left' : 'right';
+      const mirrored = sided(GRIPS[this.grip], other);
+      this.arm(this.side, spec.right, spec, r, scale, center);
+      this.arm(other, mirrored.right, mirrored, r, scale, center);
+      return [this.side, other];
+    }
+    const hands: Side[] = spec.left ? ['right', 'left'] : [this.side];
     for (const side of hands) this.arm(side, side === 'left' && spec.left ? spec.left : spec.right, spec, r, scale, center);
     return hands;
   }
@@ -989,6 +1012,13 @@ export class Carry {
     if (this.phase !== 'cut') return 0;
     const t = this.t, T = DURATION.cut;
     return ease(Math.min(1, t / CUT_EASE, (T - t) / CUT_EASE));
+  }
+
+  /** Mains aux points du frottement : comme couper, sans retour entre deux gestes enchaînés. */
+  rubAmount(): number {
+    if (this.phase !== 'cut' || !this.rubAt) return 0;
+    const t = this.t, T = DURATION.cut;
+    return ease(Math.min(1, this.rubFrom ? 1 : t / CUT_EASE, this.rubOn ? 1 : (T - t) / CUT_EASE));
   }
 
   /** Tasse vers la bouche : monte, reste le temps de la gorgée, redescend. */
@@ -1179,6 +1209,13 @@ export class Carry {
           if (this.phase === 'drink' && neck) palmTarget.addScaledVector(vec(flip(NECK_IN, side)).multiplyScalar(scale).applyQuaternion(this.chestRot), this.sip);
         }
       }
+    }
+    const rubbing = this.rubAt ? this.rubAmount() : 0;
+    if (rubbing > 0) {
+      // les deux mains aux points donnés, paumes vers le corps
+      palmTarget.lerp(this.rubAt!()[side], rubbing);
+      const rubRot = basisRotation(rest.fingers, PALM_REST, vec(flip(RUB_HAND.fingers, side)).normalize().applyQuaternion(this.chestRot), vec(flip(RUB_HAND.palm, side)).normalize().applyQuaternion(this.chestRot));
+      handRot.slerp(rubRot, rubbing);
     }
     const offset = mirror(vec(spec.hold), side).multiplyScalar(scale).applyQuaternion(handRot);
     const wrist = palmTarget.clone().sub(offset);
