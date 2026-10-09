@@ -421,6 +421,8 @@ const HANDLE_L = 0.17;
 const PAN_FLOOR = 0.008;
 /** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier (un placard bas Tripo). */
 const WORKTOP_W = 0.73;
+/** Ce qui se range sous le plan de travail, à côté de la gazinière : de quoi cuisiner. */
+const COOKWARE_CUPBOARD = ['poêle', 'casserole', 'planche à découper', 'saladier', 'moule à gâteau', 'fouet', 'spatule', 'cuillère en bois', 'louche', 'maniques', 'râpe'];
 const WORKTOP_D = 0.55;
 /** Planche à découper : longueur, épaisseur, largeur (m). */
 const BOARD_W = 0.36;
@@ -864,6 +866,10 @@ export const ITEMS: ItemDef[] = [
     // bois et stratifié : solide
     fragility: 7,
     durability: 300,
+    // dessous, à côté de la gazinière : le placard des poêles, casseroles et ustensiles de cuisson
+    door: THREE.MathUtils.degToRad(100),
+    holds: COOKWARE_CUPBOARD,
+    slots: [0.06, -0.14].flatMap((z) => [0.06, 0.42].flatMap((y) => [-0.2, 0, 0.2].map((x): [number, number, number] => [x, y, z]))),
     build: () => {
       const H = COUNTER_H, top = 0.04;
       const wood = 0x8a6440, counter = 0xd9d3c5, line = 0x5d4129, knob = 0xc9c2b0;

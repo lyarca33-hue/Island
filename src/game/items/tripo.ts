@@ -68,7 +68,8 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
     model: 'placard-haut',
     parts: { porte: { from: 'porte-droite', pivot: [0.35, 0, 0.13] }, 'porte-2': { from: 'porte-gauche', pivot: [-0.35, 0, 0.13] } },
   },
-  'plan-de-travail': { model: 'placard-bas' },
+  // le même meuble bas que le placard, sa porte s'ouvre sur les poêles et casseroles
+  'plan-de-travail': { model: 'placard-bas', parts: { porte: { from: 'porte', pivot: [0.34, 0, 0.22] } } },
   tiroir: { model: 'meuble-tiroirs', parts: { porte: { from: 'tiroir-1' } } },
   // le frigo-congélateur coupé en deux objets : le congélateur (le tiroir du bas), le frigo posé dessus
   congelateur: { model: 'frigo', clip: [0, 0.625], parts: { porte: { from: 'tiroir' } } },

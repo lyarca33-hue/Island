@@ -23,6 +23,8 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
   ['placard-haut', 1, ['verre', 'verre', 'verre', 'verre', 'tasse', 'tasse', 'carafe', 'saladier']],
   // sous l'évier : l'entretien, le moule et la râpe
   ['placard', 0, ['pastilles', 'sacs-poubelle', 'spray', 'gants', 'moule', 'rape']],
+  // sous le plan de travail, à côté de la gazinière : de quoi cuisiner
+  ['plan-de-travail', 0, ['poele', 'casserole', 'planche', 'spatule', 'louche', 'fouet', 'cuillere-bois']],
   ['tiroir', 0, ['fourchette', 'fourchette', 'couteau-table', 'couteau-table', 'cuillere', 'cuillere', 'torchon']],
   // le lave-vaisselle a fini son lavage : propre, prêt à vider
   ['lave-vaisselle', 0, ['assiette', 'assiette', 'verre', 'verre', 'bol', 'fourchette', 'cuillere']],
