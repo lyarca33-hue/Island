@@ -20,6 +20,7 @@ import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/brea
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
+import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, type ItemDef } from './items/catalog';
@@ -216,6 +217,11 @@ const DRAG_START = 10;
 const TABLETS = 12;
 /** Usure de l'évier (le robinet) à chaque fois qu'on fait couler l'eau. */
 const WEAR_TAP = 0.4;
+/** Toilettes : temps assis (s), chasse d'eau (s). */
+const TOILET_SECONDS = 4;
+const FLUSH_SECONDS = 2.2;
+/** Vessie : on est prévenu en dessous de ce niveau. */
+const BLADDER_WARN = 18;
 /** Usure d'un appareil (bouton du feu, de la machine) à chaque allumage, et de l'ustensile à chaque plat cuit. */
 const WEAR_KNOB = 0.3;
 const WEAR_COOK = 0.5;
@@ -584,8 +590,8 @@ export class Game {
   constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
     this.recipe = recipe;
-    // pas de lit, de douche ni de toilettes pour l'instant (la maison se refait avec le kit Tripo)
-    this.needs.pause(['fatigue', 'hygiene', 'vessie']);
+    // pas de lit ni de douche pour l'instant (la maison se refait avec le kit Tripo) ; les toilettes sont là
+    this.needs.pause(['fatigue', 'hygiene']);
     // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
@@ -937,7 +943,7 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.cookWait && !this.teaWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.toiletVisit && !this.cookWait && !this.teaWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
@@ -1630,6 +1636,13 @@ export class Game {
 
   /** Siège où le perso est assis (ou s'assoit). */
   private sitting: WorldItem | null = null;
+  /** Assis aux toilettes, et depuis combien de temps ; couvercles (0 fermé, 1 ouvert) ; chasses d'eau en cours (s qui restent). */
+  private toiletVisit: { toilet: WorldItem; t: number } | null = null;
+  private lids = new Map<WorldItem, { open: number; target: number }>();
+  private flushes = new Map<WorldItem, number>();
+  /** Sorti des toilettes sans s'être lavé les mains ; déjà prévenu que la vessie est pleine. */
+  private handsToWash = false;
+  private bladderWarned = false;
 
   /**
    * S'asseoir sur le siège `ref` (sinon le plus proche) : le perso y va, se tourne dos au
@@ -1657,7 +1670,8 @@ export class Game {
     // debout, au sol, et rien dessus
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(seat.object.quaternion);
     if (seat.object.position.y > 0.05 || up.y < 0.95) return fail(`${name[0].toUpperCase()}${name.slice(1)} n’est pas debout par terre.`);
-    const on = this.itemsOn(seat);
+    // ce qui est posé sur l'assise (pas sur le réservoir des toilettes, ni sur un dossier)
+    const on = this.itemsOn(seat).filter((i) => i.object.position.y < seat.object.position.y + (seat.def.seat ?? 0) + 0.15);
     if (on.length) return fail(`Il y a ${on.map((i) => `${FEMININE.has(i.name) ? 'une' : 'un'} ${i.name}`).join(' et ')} sur ${name}.`);
     if (c.seated) return c.standUp(() => this.sit(this.ref(seat), running, then));
     // rangée sous la table : on la tire d'abord
@@ -3882,6 +3896,103 @@ export class Game {
   }
 
   /** Où se tenir devant un meuble (machine, évier) pour s'en servir. */
+  /**
+   * Va aux toilettes (les plus proches sans `ref`) : lève le couvercle, s'assoit, se soulage
+   * (la vessie se vide, tickToilet), se relève et tire la chasse ; le couvercle se rabat.
+   */
+  useToilet(ref?: string, running = false): boolean {
+    const toilet = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.toilet);
+    if (!toilet?.def.toilet) return this.notice(ref ? `${ref} n’est pas des toilettes.` : 'Il n’y a pas de toilettes.');
+    if (this.toiletVisit) return true;
+    const start = () => {
+      this.toiletVisit = { toilet, t: 0 };
+    };
+    this.setLid(toilet, true);
+    if (this.sitting === toilet && this.character.seated) return start(), true;
+    const ok = this.sit(this.ref(toilet), running, start);
+    if (!ok) this.setLid(toilet, false);
+    return ok;
+  }
+
+  /** Assis aux toilettes : la vessie se vide ; puis le perso se lève et tire la chasse. */
+  private tickToilet(dt: number): void {
+    const v = this.toiletVisit;
+    if (!v) return;
+    // relevé avant la fin (le joueur l'a fait bouger) : la visite s'arrête là
+    if (this.sitting !== v.toilet) {
+      this.toiletVisit = null;
+      return;
+    }
+    const before = Math.min(1, v.t / TOILET_SECONDS);
+    v.t += dt;
+    const done = Math.min(1, v.t / TOILET_SECONDS);
+    this.needs.restore('vessie', (done - before) * 100);
+    if (done < 1) return;
+    this.toiletVisit = null;
+    this.handsToWash = true;
+    this.soilHands('toilettes');
+    this.character.standUp(() => this.flush(this.ref(v.toilet)));
+  }
+
+  /** Tire la chasse d'eau des toilettes `ref` (les plus proches sans ref) ; le couvercle se rabat ensuite. */
+  flush(ref?: string, running = false): boolean {
+    const toilet = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.toilet);
+    if (!toilet?.def.toilet) return this.notice('Il n’y a pas de toilettes.');
+    const c = this.character;
+    const pull = () => {
+      this.flushes.set(toilet, FLUSH_SECONDS);
+      this.sound.play('chasse', this.hear(toilet.object.position));
+      this.wearItem(toilet, WEAR_TAP);
+      this.onNotice?.(this.handsToWash ? 'Chasse tirée. Pense à te laver les mains au lavabo.' : 'Chasse tirée.');
+    };
+    if (p0(c.position).distanceTo(p0(toilet.object.position)) < 1) return pull(), true;
+    if (c.busy || c.bracing || this.moving) return false;
+    c.approachThen(this.frontOf(toilet), toilet.object.position, pull, running);
+    return true;
+  }
+
+  /** Lève (ou rabat) le couvercle des toilettes : l'abattant du modèle pivote sur sa charnière (tickBathroom). */
+  private setLid(toilet: WorldItem, open: boolean): void {
+    const lid = this.lids.get(toilet) ?? { open: 0, target: 0 };
+    lid.target = open ? 1 : 0;
+    this.lids.set(toilet, lid);
+  }
+
+  /**
+   * À chaque image, la salle de bain : le couvercle des toilettes pivote, la chasse d'eau coule ;
+   * la vessie pleine prévient, puis c'est l'accident.
+   */
+  private tickBathroom(dt: number): void {
+    for (const [toilet, lid] of this.lids) {
+      lid.open = THREE.MathUtils.clamp(lid.open + Math.sign(lid.target - lid.open) * dt * 2.5, 0, 1);
+      poseRig(toilet.object, 'couvercle', THREE.MathUtils.smootherstep(lid.open, 0, 1));
+    }
+    for (const [toilet, t] of this.flushes) {
+      const left = t - dt;
+      if (left > 0) this.flushes.set(toilet, left);
+      else {
+        this.flushes.delete(toilet);
+        this.setLid(toilet, false);
+      }
+    }
+    // lavé les mains (lavabo ou évier) après les toilettes : plus besoin de le rappeler
+    if (this.handsToWash && this.washing && !this.washing.thirst && !this.washing.dishes && !this.washing.teeth) this.handsToWash = false;
+    if (!this.items.some((i) => i.def.toilet)) return;
+    const v = this.needs.values.vessie;
+    if (v > 50) this.bladderWarned = false;
+    else if (v < BLADDER_WARN && !this.bladderWarned && !this.toiletVisit) {
+      this.bladderWarned = true;
+      this.onNotice?.('Envie pressante : vite, aux toilettes !');
+    }
+    if (v <= 0 && !this.toiletVisit) {
+      // trop tard : un petit accident, l'hygiène en prend un coup
+      this.needs.set('vessie', 100);
+      this.needs.restore('hygiene', -50);
+      this.addDebris(new Spill(p0(this.character.position), 0xe9dc8a, 0.28));
+      this.onNotice?.('Trop tard… un petit accident. Il va falloir essuyer.');
+    }
+  }
+
   private frontOf(item: WorldItem): THREE.Vector3 {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion);
     // contre l'évier pour atteindre le robinet, contre la gazinière pour atteindre les feux du fond (le perso se penche un peu)
@@ -4881,6 +4992,8 @@ export class Game {
     else if (program(item.def)) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
     else if (item.def.bin && !item.def.outdoor && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
+    // toilettes, mains vides : on y va (couvercle levé, assis, chasse tirée)
+    else if (item.def.toilet && !held.length) return this.useToilet(this.ref(item), running);
     // mains vides : un clic sur un gros meuble ne fait rien (on le déplace par le menu, « Déplacer »)
     else if (item.def.movable && !held.length) return false;
     // évier : la vaisselle sale en main se lave ; la tasse (propre) se remplit d'eau ; sinon on se lave les mains
@@ -5399,7 +5512,13 @@ export class Game {
     const lamp = this.lamps.get(item);
     if (lamp) add(lamp.on ? 'Éteindre la lampe' : 'Allumer la lampe', () => this.switchLamp(ref, !lamp.on));
     // siège
-    if (item.def.seat && item !== this.sitting) add('S’asseoir', () => this.sit(ref));
+    if (item.def.toilet) {
+      if (!this.toiletVisit) add('Aller aux toilettes', () => this.useToilet(ref));
+      add('Tirer la chasse', () => this.flush(ref));
+      if (this.lids.get(item)?.target) add('Fermer le couvercle', () => (this.setLid(item, false), true));
+      else add('Ouvrir le couvercle', () => (this.setLid(item, true), true));
+    }
+    if (item.def.seat && !item.def.toilet && item !== this.sitting) add('S’asseoir', () => this.sit(ref));
     if (item.def.seat && item !== this.sitting && this.chairTable(item)) {
       if (this.tucked(item)) add('Tirer la chaise', () => this.slideChair(ref, false));
       else add('Ranger sous la table', () => this.slideChair(ref, true));
@@ -5732,6 +5851,8 @@ export class Game {
     this.tickUpkeep(dt);
     this.tickPour(dt);
     this.tickSinks(dt);
+    this.tickToilet(dt);
+    this.tickBathroom(dt);
     this.tickIce(dt);
     this.tickTea(dt);
     this.tickSound(dt);

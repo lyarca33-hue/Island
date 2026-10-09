@@ -408,6 +408,18 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.wash(),
   },
   {
+    name: 'toilettes',
+    description: 'Aller aux toilettes : le perso lève le couvercle, s’assoit, la vessie se vide, puis il se relève et tire la chasse. Penser à se laver les mains ensuite.',
+    params: {},
+    run: (g) => g.useToilet(),
+  },
+  {
+    name: 'chasse',
+    description: 'Tirer la chasse d’eau des toilettes.',
+    params: {},
+    run: (g) => g.flush(),
+  },
+  {
     name: 'aller_piece',
     description: 'Aller dans une pièce de la maison (pour l’instant, seulement la cuisine) : le perso s’arrête juste après l’entrée.',
     params: { piece: 'cuisine' },

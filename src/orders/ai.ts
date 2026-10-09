@@ -162,6 +162,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - Les aliments vieillissent hors du frigo (« à manger vite », puis « périmé » : mal au ventre) ; un plat cuit refroidit (« froid » : le réchauffer au micro-ondes avec « cuire ») ; un plat préparé a des étoiles (★, meilleures avec la compétence cuisine, un plat assaisonné, chaud, frais). Le livre de recettes (dans la cuisine) se lit avec « lire »
 - Ustensiles : fouet, spatule, cuillère en bois et louche dans le pot à ustensiles ; saladier et râpe au placard ; œufs, lait, beurre, fromage au frigo
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
+- {"tache": "toilettes"} : aller aux toilettes (lever le couvercle, s'asseoir, se soulager, tirer la chasse) ; se laver les mains ensuite
+- {"tache": "chasse"} : tirer la chasse d'eau
 - {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (pour l'instant, seulement la cuisine)
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
@@ -267,6 +269,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'laisser_ouvert': return s('objet') ? { kind: 'laisser_ouvert', ref: s('objet') } : null;
     case 'glacons': return { kind: 'glacons', dans: s('dans') || undefined };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
+    case 'toilettes': return { kind: 'toilettes' };
+    case 'chasse': return { kind: 'chasse' };
     case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };

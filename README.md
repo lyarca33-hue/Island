@@ -75,15 +75,18 @@ pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pi�
   table basse sur le tapis, le fauteuil et le lampadaire, la bibliothèque et quelques livres ;
 - la **chambre** : le lit tête au mur, une table de nuit de chaque côté (lampe de chevet, réveil qui
   donne l'heure), l'armoire, la plante et le tapis ;
-- la **salle de bain** : la douche dans le coin, les toilettes, le lavabo (le robinet coule, on s'y
-  lave les mains) sous son miroir, le porte-serviettes ;
+- la **salle de bain** : la douche dans le coin, les toilettes (un clic ou « va aux toilettes » : le
+  perso lève le couvercle, s'assoit, la vessie se vide, il se relève, tire la chasse et le couvercle
+  se rabat ; les mains sont alors à laver), le lavabo (le robinet coule, on s'y lave les mains) sous
+  son miroir, le porte-serviettes ;
 - l'**entrée** : le portemanteau et son manteau, le miroir, les chaussures, le porte-parapluies, une
   lettre sous la porte, la boîte aux lettres dehors ;
 - le **garage** : l'établi et sa caisse à outils, l'étagère, des cartons, le vélo, la bêche et le râteau.
 
 Tapis, douche, miroirs et portemanteau sont du décor fixe (`decor`) ; le reste se prend ou se pousse.
-Dormir, la télé, la douche et les toilettes, retirés avec l'ancienne maison, ne sont pas encore
-rebranchés : la fatigue, l'hygiène et la vessie restent en pause.
+Dormir, la télé et la douche, retirés avec l'ancienne maison, ne sont pas encore rebranchés : la
+fatigue et l'hygiène restent en pause. La vessie, elle, baisse : en dessous de 18, le perso est
+prévenu ; à zéro, c'est l'accident.
 
 ### Les ordres
 

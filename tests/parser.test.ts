@@ -92,7 +92,13 @@ describe('ordres de la cuisine : magasin, marché, appareils', () => {
   });
 
   it('les gestes des pièces retirées partent à l’IA (elle dit ce qui manque)', () => {
-    for (const t of ['prends une douche', 'va dormir', 'va aux toilettes', 'lance une lessive', 'va pêcher', 'arrose le potager', 'zappe']) expect(parse(t)).toBeNull();
+    for (const t of ['prends une douche', 'va dormir', 'lance une lessive', 'va pêcher', 'arrose le potager', 'zappe']) expect(parse(t)).toBeNull();
+  });
+
+  it('les toilettes : y aller, tirer la chasse', () => {
+    for (const t of ['va aux toilettes', 'va aux WC', 'fais pipi']) expect(parse(t)).toEqual([{ kind: 'toilettes' }]);
+    expect(parse('tire la chasse')).toEqual([{ kind: 'chasse' }]);
+    expect(parse('fais ta toilette')).toEqual([{ kind: 'laver', visage: true }]);
   });
 
   it('le magasin et le marché', () => {

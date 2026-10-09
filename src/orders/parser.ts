@@ -524,6 +524,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return [{ kind: 'ranger', refs: [(things.find(isLoose) ?? things[0]).ref] }];
     }
     case 'aller': {
+      // « va aux toilettes », « va aux WC », « va faire pipi »
+      if (rest.some((x) => ['toilettes', 'toilette', 'wc', 'pipi'].includes(x)) && !rest.includes('ta')) return [{ kind: 'toilettes' }];
       // « va dans la cuisine »
       const room = roomIn(rest);
       if (room && !found.length) return [{ kind: 'piece', piece: room }];
@@ -531,6 +533,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return target ? [{ kind: 'aller', ref: target.ref }] : null;
     }
     case 'cafe':
+      // « fais pipi », « fais tes besoins »
+      if (rest.includes('pipi') || rest.includes('besoins')) return [{ kind: 'toilettes' }];
       // « fais ta toilette »
       if (rest.includes('toilette')) return [{ kind: 'laver', visage: true }];
       // « fais les courses »
@@ -662,6 +666,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return machineWash(original) || rest.includes('vaisselle') ? [{ kind: 'charger_lv' }] : null;
     case 'tirer':
     case 'pousser': {
+      // « tire la chasse (d'eau) »
+      if (rest.includes('chasse')) return [{ kind: 'chasse' }];
       // « rentre dans la cuisine »
       if (roomIn(rest) && !found.length) return [{ kind: 'piece', piece: roomIn(rest)! }];
       // « tire la chaise », « pousse la chaise sous la table »
