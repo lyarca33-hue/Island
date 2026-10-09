@@ -63,6 +63,48 @@ export function kitParts(piece: THREE.Object3D): Array<{ geometry: THREE.BufferG
   return out;
 }
 
+/** Bord du pan de tuiles du kit qu'on retire avant de le répéter (rebord du modèle), en part du pan. */
+const ROOF_TRIM = 0.05;
+/** Relief des tuiles, en part de celui du modèle (à l'échelle de la maison, il ferait un toit trop épais). */
+const ROOF_RELIEF = 0.5;
+
+/**
+ * Un pan de toit de `lx` × `slope` m couvert de tuiles : le pan du kit (son rebord retiré) répété
+ * environ tous les `module` m, sans l'étirer, pour garder des tuiles à leur taille et leur relief
+ * (un pan sur deux en miroir le long du toit).
+ * Repère du pan du kit : x le long du toit, z du faîtage (-) à l'égout (+), centré, bas à y = 0.
+ */
+export function tiledRoof(piece: THREE.Object3D, lx: number, slope: number, module: number): Array<{ geometry: THREE.BufferGeometry; material: THREE.Material }> {
+  const nx = Math.max(1, Math.round(lx / module)), nz = Math.max(1, Math.round(slope / module));
+  const sx = lx / nx, sz = slope / nz, sy = Math.min(sx, sz) * ROOF_RELIEF;
+  const lo = -0.5 + ROOF_TRIM, hi = 0.5 - ROOF_TRIM;
+  return kitParts(piece).map(({ geometry, material }) => {
+    const src = geometry.index ? geometry.toNonIndexed() : geometry;
+    const p = src.getAttribute('position'), uv = src.getAttribute('uv');
+    const pos: number[] = [], uvs: number[] = [];
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+      for (let t = 0; t < p.count; t += 3) {
+        // triangles hors du rebord seulement (ceux à cheval, serrés sur le bord)
+        const xs = [0, 1, 2].map((k) => p.getX(t + k)), zs = [0, 1, 2].map((k) => p.getZ(t + k));
+        if (Math.max(...xs) < lo || Math.min(...xs) > hi || Math.max(...zs) < lo || Math.min(...zs) > hi) continue;
+        // un pan sur deux en miroir le long du toit : les bords qui se touchent sont les mêmes (pas de joint)
+        const flip = i % 2 === 1;
+        for (const k of flip ? [0, 2, 1] : [0, 1, 2]) {
+          const x = (THREE.MathUtils.clamp(p.getX(t + k), lo, hi) - lo) / (hi - lo), u = flip ? 1 - x : x;
+          const w = (THREE.MathUtils.clamp(p.getZ(t + k), lo, hi) - lo) / (hi - lo);
+          pos.push(-lx / 2 + (i + u) * sx, p.getY(t + k) * sy, -slope / 2 + (j + w) * sz);
+          if (uv) uvs.push(uv.getX(t + k), uv.getY(t + k));
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    g.computeVertexNormals();
+    return { geometry: g, material };
+  });
+}
+
 /** Copie en nombres simples (la compression meshopt rend des attributs quantifiés et entrelacés). */
 function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
