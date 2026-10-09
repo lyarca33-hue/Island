@@ -21,7 +21,8 @@ import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/brea
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
-import { Duvet } from './items/duvet';
+import type { VRMHumanBoneName } from '@pixiv/three-vrm';
+import { type BodySphere, Duvet, LIT_SHAPE } from './items/duvet';
 import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
@@ -251,9 +252,14 @@ const TURN_DOWN = 1.1;
 const LIE_BACK = 1.6;
 const RISE = 1.4;
 const MAKE_BED = 3.4;
-/** La couette du dormeur : rabattue sous le menton, la bosse de son côté du lit (part de la largeur). */
-const COVER = { fold: 0.22, foldZ: -0.42 };
+/** Le dormeur couché de son côté du lit (part de la largeur). */
 const SLEEP_SIDE = 0.19;
+/** Le corps du dormeur sous la couette : des boules sur ses os (rayon, m). */
+const BODY_BALLS: Array<[VRMHumanBoneName, number]> = [
+  ['hips', 0.15], ['spine', 0.14], ['chest', 0.15], ['upperChest', 0.14], ['leftUpperArm', 0.06], ['rightUpperArm', 0.06],
+  ['leftLowerArm', 0.05], ['rightLowerArm', 0.05], ['leftUpperLeg', 0.09], ['rightUpperLeg', 0.09], ['leftLowerLeg', 0.07],
+  ['rightLowerLeg', 0.07], ['leftFoot', 0.1], ['rightFoot', 0.1], ['leftToes', 0.1], ['rightToes', 0.1],
+];
 /**
  * Le réveil : heure proposée, pas du réglage (h), durée de la sonnerie (s réelles), une salve toutes
  * les ALARM_EVERY s ; au-delà de 14 h de sommeil, on ne l'attend pas. Ses sonneries.
@@ -4236,7 +4242,7 @@ export class Game {
   }
 
   /** Sommeil en cours : le lit, l'étape (rabattre la couette, s'asseoir, s'allonger, dormir, se lever), son temps. */
-  private sleep: { bed: WorldItem; phase: 'open' | 'lie' | 'asleep' | 'up'; t: number; speed: number; side: number; sat?: boolean; alarm?: number; then?: () => void } | null = null;
+  private sleep: { bed: WorldItem; phase: 'open' | 'lie' | 'asleep' | 'up'; t: number; speed: number; side: number; sat?: boolean; alarm?: number; coverIn?: number; then?: () => void } | null = null;
   /** Réveils réglés : l'heure (h, à la demi-heure) et la sonnerie. */
   private alarms = new Map<WorldItem, { hour: number; tone: Ringtone }>();
   /** Sonnerie en cours : le réveil, le temps qui reste, la prochaine salve. */
@@ -4250,18 +4256,58 @@ export class Game {
   /** En train de faire son lit. */
   private bedMaking: { bed: WorldItem; t: number } | null = null;
 
-  /** La couette souple du lit `bed` (faite à la première demande), si le lit a sa pièce `couette`. */
+  /**
+   * La couette du lit `bed` : un tissu simulé qui remplace la couette rigide du modèle (sa pièce
+   * `couette`, cachée), fait dès que le modèle est là.
+   */
   private duvetOf(bed: WorldItem): Duvet | null {
     let d = this.duvets.get(bed);
     if (d) return d;
+    const part = bed.part('couette');
     let mesh: THREE.Mesh | null = null;
-    bed.part('couette')?.traverse((o) => {
+    part?.traverse((o) => {
       if (!mesh && o instanceof THREE.Mesh) mesh = o;
     });
-    if (!mesh) return null;
-    d = new Duvet(mesh);
+    if (!part || !mesh) return null;
+    d = new Duvet(LIT_SHAPE, (mesh as THREE.Mesh).material as THREE.Material);
+    part.visible = false;
+    bed.object.add(d.mesh);
     this.duvets.set(bed, d);
+    const unmade = this.unmadeBeds.has(bed);
+    if (unmade) d.setUnmade();
     return d;
+  }
+
+  /** Lits défaits à la sauvegarde (leur couette se fait au chargement du modèle). */
+  private unmadeBeds = new Set<WorldItem>();
+  private duvetScan = 0;
+
+  /** Le corps du dormeur, en boules dans le repère du lit, pour que la couette se pose dessus. */
+  private bodyIn(bed: WorldItem): BodySphere[] {
+    const inv = bed.object.matrixWorld.clone().invert();
+    const out: BodySphere[] = [];
+    const v = new THREE.Vector3();
+    for (const [name, r] of BODY_BALLS) {
+      const bone = this.character.bone(name);
+      if (!bone) continue;
+      bone.getWorldPosition(v).applyMatrix4(inv);
+      out.push({ x: v.x, y: v.y, z: v.z, r });
+    }
+    // le milieu des cuisses et des tibias
+    const mid = (a: VRMHumanBoneName, b: VRMHumanBoneName, r: number) => {
+      const p = this.character.bone(a), q = this.character.bone(b);
+      if (!p || !q) return;
+      const w = p.getWorldPosition(new THREE.Vector3()).add(q.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5).applyMatrix4(inv);
+      out.push({ x: w.x, y: w.y, z: w.z, r });
+    };
+    mid('leftUpperLeg', 'leftLowerLeg', 0.085);
+    mid('rightUpperLeg', 'rightLowerLeg', 0.085);
+    mid('leftLowerLeg', 'leftFoot', 0.065);
+    mid('rightLowerLeg', 'rightFoot', 0.065);
+    // le bout des chaussures
+    mid('leftFoot', 'leftToes', 0.1);
+    mid('rightFoot', 'rightToes', 0.1);
+    return out;
   }
 
   /**
@@ -4316,7 +4362,7 @@ export class Game {
     c.approachThen(spot.stand, bed.object.position.clone().setY(1), () => {
       // on rabat la couette d'un geste
       c.gesture('interact');
-      this.duvetOf(bed)?.to({ fold: 1, foldZ: -0.05, body: 0, mess: 0 }, TURN_DOWN);
+      this.duvetOf(bed)?.turnDown(TURN_DOWN, spot.side);
       this.sleep = { bed, phase: 'open', t: 0, speed: this.clock.speed, side: spot.side };
     }, running);
     return true;
@@ -4482,7 +4528,7 @@ export class Game {
     s.phase = 'up';
     s.t = 0;
     this.clock.speed = s.speed;
-    this.duvetOf(s.bed)?.to({ fold: 1, foldZ: -0.05, body: 0, mess: 1 }, RISE);
+    this.duvetOf(s.bed)?.throwBack(RISE * 0.8, s.side);
     this.character.riseFromBed(RISE, () => {
       const then = s.then;
       if (this.sleep === s) this.sleep = null;
@@ -4505,7 +4551,7 @@ export class Game {
     const duvet = this.duvetOf(bed);
     if (!duvet) return fail('Ce lit n’a pas de couette.');
     if (this.sleep?.bed === bed) return fail('Le perso est encore au lit.');
-    if (!duvet.unmade && duvet.pose.fold < 0.05) return fail('Le lit est déjà fait.');
+    if (!duvet.open) return fail('Le lit est déjà fait.');
     if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
     if (c.carried.length) return fail('Pose d’abord ce que tu tiens pour faire le lit.');
     if (c.seated) return c.standUp(() => this.makeBed(this.ref(bed), running));
@@ -4523,13 +4569,38 @@ export class Game {
     };
     return c.startWash(spot.stand, o.position.clone().setY(1), at, false, () => {
       this.bedMaking = { bed, t: 0 };
-      duvet.to({ fold: 0, foldZ: -0.05, body: 0, mess: 0 }, MAKE_BED);
+      duvet.make(MAKE_BED);
     }, running);
   }
 
   /** Couche, sommeil, lever ; le lit qu'on fait ; la couette de chaque lit. */
   private tickSleep(dt: number): void {
-    for (const d of this.duvets.values()) d.update(dt);
+    // la couette de chaque lit, dès que son modèle est là ; le dormeur dessous
+    if (--this.duvetScan <= 0) {
+      this.duvetScan = 30;
+      for (const it of this.items) if (it.def.bed && !this.duvets.has(it)) this.duvetOf(it);
+      // ce qui est posé sur le lit : la couette passe par-dessus
+      for (const [bed, d] of this.duvets) {
+        const inv = bed.object.matrixWorld.clone().invert();
+        const on: Array<[number, number, number, number, number, number]> = [];
+        for (const it of this.items) {
+          if (it === bed || it.def.movable || this.character.carried.includes(it)) continue;
+          const lb = it.box.clone().applyMatrix4(it.object.matrixWorld).applyMatrix4(inv);
+          if (lb.min.y > LIT_SHAPE.top + 0.3 || lb.max.y < LIT_SHAPE.top - 0.02) continue;
+          if (lb.max.x < -LIT_SHAPE.halfWidth || lb.min.x > LIT_SHAPE.halfWidth || lb.max.z < LIT_SHAPE.z[0] || lb.min.z > LIT_SHAPE.z[1]) continue;
+          on.push([lb.min.x, lb.max.x, lb.min.y, lb.max.y, lb.min.z, lb.max.z]);
+        }
+        d.objects = on;
+      }
+    }
+    // couché sous la couette : elle le cache (pas de silhouette à travers)
+    this.post.tucked = !!this.sleep && this.character.lying;
+    for (const [bed, d] of this.duvets) {
+      const s = this.sleep;
+      const c = this.character;
+      d.bodies = s?.bed === bed && (c.lying || c.seated || s.phase === 'up') ? this.bodyIn(bed) : [];
+      d.update(dt);
+    }
     const m = this.bedMaking;
     if (m) {
       m.t += dt;
@@ -4551,6 +4622,10 @@ export class Game {
     }
     s.t += dt;
     const c = this.character;
+    if (s.coverIn !== undefined && (s.coverIn -= dt) <= 0) {
+      s.coverIn = undefined;
+      this.duvetOf(s.bed)?.cover(LIE_BACK * 0.9, s.side);
+    }
     if (s.phase === 'open') {
       // une envie de bouger avant d'être couché : on renonce (la couette reste ouverte)
       if (c.wantsToMove && s.t > 0.2) {
@@ -4575,7 +4650,8 @@ export class Game {
           this.sleep = null;
           return;
         }
-        this.duvetOf(s.bed)?.to({ ...COVER, body: 1, side: s.side, mess: 0 }, LIE_BACK * 1.2);
+        // en s'allongeant, il remonte la couette sur lui
+        s.coverIn = LIE_BACK * 0.7;
       });
       if (ok !== 'ok') {
         this.sleep = null;
@@ -6477,7 +6553,7 @@ export class Game {
       if (this.sleep?.bed === item) add('Se réveiller', () => this.wakeUp());
       else add('Dormir', () => this.sleepIn(ref));
       const duvet = this.duvetOf(item);
-      if (duvet && (duvet.unmade || duvet.pose.fold > 0.05) && this.sleep?.bed !== item) add('Faire le lit', () => this.makeBed(ref));
+      if (duvet?.open && this.sleep?.bed !== item) add('Faire le lit', () => this.makeBed(ref));
     }
     if (item.def.shower && !this.showering) add('Prendre une douche', () => this.takeShower(ref));
     if (item.def.bathTowel) add('Se sécher', () => this.dryOff(ref));
@@ -8268,6 +8344,7 @@ export class Game {
         put('sachets', this.teaBoxes.get(item));
         put('rouleau', this.rolls.get(item));
         put('reveil', this.alarms.get(item)?.hour);
+        put('defait', this.duvets.get(item)?.unmade || undefined);
         put('sonnerie', this.tones.get(item) ?? this.alarms.get(item)?.tone);
         put('poubelle', this.binFill.get(item));
         put('jus', this.blended.get(item));
@@ -8284,6 +8361,10 @@ export class Game {
         if (typeof x.pastilles === 'number') this.tablets.set(item, x.pastilles);
         if (typeof x.sachets === 'number') this.teaBoxes.set(item, x.sachets);
         if (typeof x.rouleau === 'number') this.rolls.set(item, x.rouleau);
+        if (x.defait === true && item.def.bed) {
+          this.unmadeBeds.add(item);
+          this.duvets.get(item)?.setUnmade();
+        }
         const tone = RINGTONES.find((r) => r.id === x.sonnerie)?.id;
         if (tone) this.tones.set(item, tone);
         if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, { hour: x.reveil, tone: tone ?? 'cloche' });

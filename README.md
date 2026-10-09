@@ -73,7 +73,7 @@ Autour de la cuisine, les **autres pièces sont meublées avec leurs modèles Tr
 pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pièce>.glb`) :
 - le **salon** : le meuble télé et la télé au fond, le canapé face à elle avec ses deux coussins, la
   table basse sur le tapis, le fauteuil et le lampadaire, la bibliothèque et quelques livres ;
-- la **chambre** : le lit tête au mur et sa couette souple (un clic ou « va te coucher » : le perso
+- la **chambre** : le lit tête au mur et sa couette, un vrai tissu simulé qui drape sur les bords du lit, se plie et se froisse (un clic ou « va te coucher » : le perso
   rabat la couette, s'assoit au bord, s'allonge et la couette le recouvre ; il dort, le temps file et
   la fatigue remonte, jusqu'à être reposé ou réveillé, C ou un clic au sol ; il repousse la couette
   en se levant, et le lit reste défait jusqu'à « fais ton lit » : il tire la couette et la lisse),
