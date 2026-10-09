@@ -1153,6 +1153,9 @@ export const KITCHEN: RoomSpec = {
     ['placard-haut', 0.77, WALL_CUPBOARD_Y, ROOM.z0 + 0.185, 0],
     // au-dessus de la gazinière, la barre où pendent la poêle et la casserole
     ['barre-casseroles', 0, 1, ROOM.z0 + 0.01, 0],
+    // au-dessus du placard, à gauche de la gazinière : la barre aimantée des couteaux, et les ustensiles à leurs crochets
+    ['barre-couteaux', -0.9, 1.13, ROOM.z0 + 0.02, 0],
+    ['barre-ustensiles', -0.53, 1.1, ROOM.z0 + 0.01, 0],
     // le coin repas devant la fenêtre du sud : la table, une chaise de chaque côté
     ['table', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z, 0],
     ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z - 0.5, 0],

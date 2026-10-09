@@ -20,11 +20,14 @@ import { createToonMaterial } from '../toon';
 export const START_CONTENTS: Array<[string, number, string[]]> = [
   // les placards hauts : la vaisselle de tous les jours à gauche, les verres et le saladier à droite
   ['placard-haut', 0, ['assiette', 'assiette', 'assiette', 'assiette', 'bol', 'bol', 'tasse', 'tasse']],
-  ['placard-haut', 1, ['verre', 'verre', 'verre', 'verre', 'tasse', 'tasse', 'carafe', 'saladier']],
+  ['placard-haut', 1, ['verre', 'verre', 'verre', 'verre', 'tasse', 'tasse', 'carafe']],
   // sous l'évier : l'entretien, le moule et la râpe
   ['placard', 0, ['pastilles', 'sacs-poubelle', 'spray', 'gants', 'moule', 'rape']],
   // sous le plan de travail, à côté de la gazinière : de quoi cuisiner
-  ['plan-de-travail', 0, ['planche', 'spatule', 'louche', 'fouet', 'cuillere-bois']],
+  ['plan-de-travail', 0, ['planche', 'saladier']],
+  // au mur : le couteau à sa barre aimantée, les ustensiles à leurs crochets
+  ['barre-couteaux', 0, ['couteau']],
+  ['barre-ustensiles', 0, ['spatule', 'louche', 'fouet', 'cuillere-bois']],
   // la poêle et la casserole pendent à leur barre, au-dessus de la gazinière
   ['barre-casseroles', 0, ['poele', 'casserole']],
   ['tiroir', 0, ['fourchette', 'fourchette', 'couteau-table', 'couteau-table', 'cuillere', 'cuillere', 'torchon']],

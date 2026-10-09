@@ -424,6 +424,11 @@ const RAIL_W = 0.7;
 const RAIL_Y = 0.6;
 const RAIL_Z = 0.05;
 const RAIL_HOOKS: Array<[number, 'poêle' | 'casserole']> = [[-0.22, 'poêle'], [0, 'casserole'], [0.22, 'poêle']];
+/** Barre à ustensiles (spatule, louche…) : hauteur et avancée de la barre, écart et places des crochets. */
+const UTENSIL_RAIL_Y = 0.4;
+const UTENSIL_RAIL_Z = 0.03;
+const UTENSIL_GAP = 0.08;
+const UTENSIL_HOOKS = [-1.5, -0.5, 0.5, 1.5].map((k) => k * UTENSIL_GAP);
 /** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier (un placard bas Tripo). */
 const WORKTOP_W = 0.73;
 /** Ce qui se range sous le plan de travail, à côté de la gazinière : de quoi cuisiner. */
@@ -1059,6 +1064,29 @@ export const ITEMS: ItemDef[] = [
       );
       // un crochet en S à chaque place
       for (const [x] of RAIL_HOOKS) g.add(mesh(new THREE.TorusGeometry(0.014, 0.003, 6, 12, Math.PI * 1.5).rotateY(Math.PI / 2), steel, x, RAIL_Y - 0.018, RAIL_Z));
+      return g;
+    },
+  },
+  {
+    id: 'barre-ustensiles',
+    name: 'barre à ustensiles',
+    portable: false,
+    movable: false,
+    durability: 300,
+    fragility: 10,
+    holds: ['spatule', 'cuillère en bois', 'louche', 'fouet'],
+    // pendus tête en bas par le bout du manche (un demi-tour dans le plan du mur : la louche garde son creux vers la pièce)
+    slots: UTENSIL_HOOKS.map((x): [number, number, number] => [x, UTENSIL_RAIL_Y - 0.022, UTENSIL_RAIL_Z]),
+    slotTilt: [Math.PI, Math.PI, 0],
+    build: () => {
+      const steel = 0x8f969d, dark = 0x3a3d41;
+      const w = UTENSIL_HOOKS.length * UTENSIL_GAP + 0.06;
+      const g = group(
+        mesh(new THREE.CylinderGeometry(0.007, 0.007, w, 10).rotateZ(Math.PI / 2), steel, 0, UTENSIL_RAIL_Y, UTENSIL_RAIL_Z),
+        mesh(new THREE.BoxGeometry(0.016, 0.04, UTENSIL_RAIL_Z + 0.01), dark, -w / 2 + 0.02, UTENSIL_RAIL_Y, (UTENSIL_RAIL_Z + 0.01) / 2),
+        mesh(new THREE.BoxGeometry(0.016, 0.04, UTENSIL_RAIL_Z + 0.01), dark, w / 2 - 0.02, UTENSIL_RAIL_Y, (UTENSIL_RAIL_Z + 0.01) / 2),
+      );
+      for (const x of UTENSIL_HOOKS) g.add(mesh(new THREE.TorusGeometry(0.011, 0.0025, 6, 12, Math.PI * 1.5).rotateY(Math.PI / 2), steel, x, UTENSIL_RAIL_Y - 0.014, UTENSIL_RAIL_Z));
       return g;
     },
   },
