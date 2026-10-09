@@ -59,4 +59,16 @@ describe('pièces mobiles des autres pièces', () => {
       }
     }
   });
+
+  it("une `porte` tourne ou glisse comme le jeu la bouge d'après sa fiche", () => {
+    for (const [name, rig] of Object.entries(ROOM_RIGS)) {
+      const m = rig.look.parts?.porte?.motion;
+      if (!m) continue;
+      if (m.kind === 'slide') expect(rig.def.drawer, name).toBe(m.distance);
+      else if (m.kind === 'turn') {
+        expect(rig.def.door, name).toBeCloseTo(m.angle);
+        expect(rig.def.doorAxis ?? 'y', name).toBe(m.axis);
+      }
+    }
+  });
 });
