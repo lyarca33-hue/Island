@@ -124,3 +124,17 @@ de couleur seules en WebP 1024 px. La carte « cuisine seule » s'en habille (`s
 npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
 node tools/build_kit_assets.mjs --src <dossier des modèles retouchés> --out public/kit/maison.glb
 ```
+
+## `build_cuisine_assets.mjs` : meubles et appareils Tripo de la cuisine
+
+Regroupe les modèles de la cuisine générés avec Tripo (licence d'usage commercial), déjà corrigés
+(1 unité = 1 m, posés au sol, avant vers +z, un atlas WebP, pièces mobiles en nœuds nommés : voir
+`tripo/modeles/cuisine/README.md` dans les fichiers du projet), en un seul `public/models/cuisine.glb` :
+un nœud par modèle nommé comme son fichier sans la taille (`placard-bas`), ses pièces mobiles en
+enfants, sommets compressés (meshopt). `src/game/items/tripo.ts` (`TRIPO_LOOKS`) dit quel modèle
+habille quelle fiche du jeu, et où sont les charnières.
+
+```bash
+npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions meshoptimizer
+node tools/build_cuisine_assets.mjs --src <dossier des modèles corrigés> --out public/models/cuisine.glb
+```

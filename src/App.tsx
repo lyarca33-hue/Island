@@ -7,6 +7,7 @@ import { prefetchModel } from './creator/vrm';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
 import { preloadPacks } from './game/packs/assets';
+import { loadTripo } from './game/items/tripo';
 import { AutoSave, clearLocal, type GameSave, loadLocal, saveLocal } from './game/save';
 import { AiSettingsForm } from './orders/AiSettingsForm';
 import { ChatBar } from './orders/ChatBar';
@@ -61,10 +62,10 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const [ready, setReady] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // les modèles dont sont faits des objets (aliments) : chargés avant de construire la maison
+  // les modèles dont sont faits des objets (aliments, meubles de la cuisine) : chargés avant de construire la maison
   const [packsReady, setPacksReady] = useState(false);
   useEffect(() => {
-    void preloadPacks(['nourriture']).then(() => setPacksReady(true));
+    void Promise.all([preloadPacks(['nourriture']), loadTripo()]).then(() => setPacksReady(true));
   }, []);
   const [held, setHeld] = useState<string | null>(null);
   const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, recipes: false, book: null, seated: false });

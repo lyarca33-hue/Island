@@ -181,13 +181,13 @@ function disks(n: number, r: number, skin: THREE.ColorRepresentation, flesh: THR
 }
 
 /** Garde-manger : largeur, profondeur, hauteur, rayons (dessus de chaque étagère, m). */
-const PM_W = 0.7;
-const PM_D = 0.45;
-const PM_H = 1.95;
+const PM_W = 0.77;
+const PM_D = 0.62;
+const PM_H = 2;
 const PM_T = 0.025;
-const PM_SHELVES = [0.08, 0.5, 0.9, 1.3];
+const PM_SHELVES = [0.13, 0.55, 0.97, 1.39];
 /** Places : devant puis au fond, de gauche à droite, sur chaque étagère. */
-const PM_SLOTS = PM_SHELVES.flatMap((y) => [0.08, -0.1].flatMap((z) => [-0.24, -0.08, 0.08, 0.24].map((x): [number, number, number] => [x, y, z])));
+const PM_SLOTS = PM_SHELVES.flatMap((y) => [0.08, -0.12].flatMap((z) => [-0.21, -0.07, 0.07, 0.21].map((x): [number, number, number] => [x, y, z])));
 const PM_WOOD = 0xc9a87a;
 
 export const PANTRY_ITEMS: ItemDef[] = [
@@ -312,8 +312,8 @@ export const PANTRY_ITEMS: ItemDef[] = [
     movable: true,
     durability: 300,
     fragility: 7,
-    // une grande armoire à provisions : porte à charnière à gauche (elle s'ouvre vers le mur, l'intérieur reste visible), quatre étagères
-    door: -THREE.MathUtils.degToRad(100),
+    // une grande armoire à provisions : porte à charnière à droite (la poignée à gauche, comme le modèle Tripo), quatre étagères
+    door: THREE.MathUtils.degToRad(100),
     holds: PANTRY_THINGS,
     slots: PM_SLOTS,
     build: () => {
@@ -325,16 +325,19 @@ export const PANTRY_ITEMS: ItemDef[] = [
         box(W, t, D, PM_WOOD, 0, H - t / 2, 0),
         box(W, 0.06, D, 0x8a6440, 0, 0.03, 0),
       );
-      for (const y of PM_SHELVES.slice(1)) g.add(box(W - 2 * t, 0.018, D - t - 0.01, PM_WOOD, 0, y - 0.009, 0));
+      // les étagères (gardées sous le modèle Tripo, qui n'est qu'une coque : tripo.ts)
+      const shelves = group(...PM_SHELVES.map((y) => box(W - 2 * t - 0.14, 0.018, D - t - 0.12, PM_WOOD, 0, y - 0.009, -0.04)));
+      shelves.name = 'dedans';
+      g.add(shelves);
       const door = new THREE.Group();
       door.name = 'porte';
-      door.position.set(-W / 2, 0, D / 2);
+      door.position.set(W / 2, 0, D / 2);
       door.add(
-        box(W, H - 0.07, 0.025, PM_WOOD, W / 2, 0.07 + (H - 0.07) / 2, 0.0125),
+        box(W, H - 0.07, 0.025, PM_WOOD, -W / 2, 0.07 + (H - 0.07) / 2, 0.0125),
         // deux panneaux en relief et un bouton
-        box(W - 0.12, 0.7, 0.008, 0xd6b88c, W / 2, 0.55, 0.029),
-        box(W - 0.12, 0.8, 0.008, 0xd6b88c, W / 2, 1.4, 0.029),
-        mesh(new THREE.SphereGeometry(0.016, 10, 8), 0xc9c2b0, W - 0.05, 1.05, 0.04),
+        box(W - 0.12, 0.7, 0.008, 0xd6b88c, -W / 2, 0.55, 0.029),
+        box(W - 0.12, 0.8, 0.008, 0xd6b88c, -W / 2, 1.4, 0.029),
+        mesh(new THREE.SphereGeometry(0.016, 10, 8), 0xc9c2b0, -W + 0.05, 1.05, 0.04),
       );
       g.add(door);
       return g;

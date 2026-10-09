@@ -20,6 +20,7 @@ import { createToonMaterial } from '../toon';
 import { packModel, packReady } from '../packs/assets';
 import type { ModelName } from '../packs/manifest';
 import type { ItemDef } from './catalog';
+import { dressTripo, hasTripoLook } from './tripo';
 
 export const INTERIOR_URL = `${import.meta.env.BASE_URL}models/interior.glb`;
 
@@ -123,6 +124,8 @@ function plainMeshes(root: THREE.Object3D, also = ''): THREE.Mesh[] {
  */
 export function buildModel(def: ItemDef): THREE.Object3D {
   const model = def.build();
+  // meubles et appareils de la cuisine faits avec Tripo (tripo.ts)
+  if (hasTripoLook(def.id)) return dressTripo(def.id, model);
   const food = FOOD_LOOKS[def.id];
   if (food && packReady('nourriture')) return dressFood(def, model, food);
   const look = INTERIOR_LOOKS[def.id];
@@ -207,5 +210,7 @@ function dressFood(def: ItemDef, model: THREE.Object3D, look: FoodLook): THREE.O
 
 /** Vrai si la fiche est habillée par un pack (et qu'il est chargé). */
 export function hasLook(def: ItemDef): boolean {
+  // (les modèles Tripo sont chargés avant la maison : déjà en place, rien à rhabiller)
+  if (hasTripoLook(def.id)) return false;
   return (!!kit && def.id in INTERIOR_LOOKS) || (def.id in FOOD_LOOKS && packReady('nourriture'));
 }

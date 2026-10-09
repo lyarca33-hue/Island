@@ -5,6 +5,10 @@
  *
  * Tous sont posés au sol, l'avant vers +Z, et font la hauteur du plan de travail (sauf le
  * micro-ondes, posé dessus, et la poubelle) : mis côte à côte, ils forment le plan de travail.
+ *
+ * Leurs mesures sont celles des modèles Tripo qui les habillent (tripo.ts) : plan de travail à
+ * 83 cm, places de rangement, enceinte du four. Les pièces nommées `dedans` (étagères, paniers,
+ * sole du four) restent sous le modèle : il n'est qu'une coque.
  */
 import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
@@ -33,6 +37,13 @@ function group(...parts: THREE.Object3D[]): THREE.Group {
 
 const box = (w: number, h: number, d: number, color: THREE.ColorRepresentation, x: number, y: number, z: number) => mesh(new THREE.BoxGeometry(w, h, d), color, x, y, z);
 
+/** Pièces de l'intérieur d'un meuble (étagères, paniers) : gardées sous le modèle Tripo, qui n'est qu'une coque. */
+function inside(...parts: THREE.Object3D[]): THREE.Group {
+  const g = group(...parts);
+  g.name = 'dedans';
+  return g;
+}
+
 /** Lueur d'un appareil en marche (four, micro-ondes) : cachée au repos. */
 function glow(w: number, h: number, d: number, color: THREE.ColorRepresentation, x: number, y: number, z: number): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false }));
@@ -49,11 +60,11 @@ const MIXER_BASE = 0.1;
 const MIXER_JAR = 0.2;
 const MIXER_CUP = 0.13;
 /** Hauteur du grille-pain (m). */
-const TOASTER_H = 0.17;
+const TOASTER_H = 0.16;
 /** Où se pose la tasse à côté de la bouilloire, sous son bec (x, m). */
-const KETTLE_CUP = 0.1;
-/** Hauteur du plan de travail (m), comme sous la machine à café et l'évier. */
-const COUNTER_H = 0.9;
+const KETTLE_CUP = 0.11;
+/** Hauteur du plan de travail (m), comme l'évier et les meubles bas Tripo. */
+const COUNTER_H = 0.83;
 /** Épaisseur du plan de travail, des parois des meubles et des portes (m). */
 const TOP = 0.04;
 const WALL = 0.02;
@@ -103,50 +114,60 @@ function carcass(w: number, d: number, color: THREE.ColorRepresentation = WOOD):
 }
 
 /** Placard : dessus du fond (y) et des étagères, places de gauche à droite. */
-const CUP_W = 0.6;
+const CUP_W = 0.73;
 const CUP_D = 0.55;
-const CUP_SHELVES = [0.08 + WALL, 0.48];
+const CUP_SHELVES = [0.06, 0.42];
 // une rangée devant (places 0 à 5), puis une au fond (6 à 11) pour les verres et les bols
-const CUP_SLOTS = [0.04, -0.13].flatMap((z) => CUP_SHELVES.flatMap((y) => [-0.18, 0, 0.18].map((x): [number, number, number] => [x, y, z])));
+const CUP_SLOTS = [0.06, -0.14].flatMap((z) => CUP_SHELVES.flatMap((y) => [-0.2, 0, 0.2].map((x): [number, number, number] => [x, y, z])));
+
+/** Placard haut (au mur) : largeur, hauteur, profondeur ; dessus du fond et de l'étagère ; places. */
+const WALL_CUP_W = 0.7;
+const WALL_CUP_H = 0.8;
+const WALL_CUP_D = 0.36;
+const WALL_CUP_SHELVES = [0.1, 0.4];
+const WALL_CUP_SLOTS = [0.03, -0.1].flatMap((z) => WALL_CUP_SHELVES.flatMap((y) => [-0.2, 0, 0.2].map((x): [number, number, number] => [x, y, z])));
 
 /** Tiroir : largeur, profondeur du meuble, fond du tiroir (y), course (m). */
-const DRAWER_W = 0.5;
-const DRAWER_D = 0.55;
-const DRAWER_Y = 0.7;
+const DRAWER_W = 0.52;
+const DRAWER_D = 0.56;
+const DRAWER_Y = 0.61;
 const DRAWER_OUT = 0.36;
 
-/** Four : largeur, profondeur ; bas et haut de l'enceinte ; grille (m). */
+/** Four (sur son socle) : largeur, profondeur ; bas et haut de l'enceinte ; grille (m). */
 const OVEN_W = 0.6;
 const OVEN_D = 0.58;
-const OVEN_LOW = 0.16;
-const OVEN_HIGH = 0.66;
-const OVEN_RACK = 0.3;
+const OVEN_LOW = 0.17;
+const OVEN_HIGH = 0.69;
+const OVEN_RACK = 0.33;
 
 /** Lave-vaisselle : largeur, profondeur, bas de la porte, paniers (m). */
-const DW_W = 0.6;
-const DW_D = 0.58;
-const DW_LOW = 0.1;
-const DW_RACKS = [0.2, 0.5];
+const DW_W = 0.61;
+const DW_D = 0.62;
+const DW_LOW = 0.09;
+const DW_RACKS = [0.2, 0.48];
 
 /** Micro-ondes : largeur, profondeur, hauteur ; largeur de l'enceinte (le tableau de commande à droite). */
-const MW_W = 0.46;
-const MW_D = 0.34;
-const MW_H = 0.27;
+const MW_W = 0.5;
+const MW_D = 0.4;
+const MW_H = 0.305;
 const MW_CAV = 0.32;
 
-/** Congélateur sous le frigo : largeur, profondeur, hauteur, fond du tiroir, course (m). */
-const FZ_W = 0.6;
-const FZ_D = 0.6;
-const FZ_H = 0.45;
-const FZ_Y = 0.07;
+/** Congélateur sous le frigo : largeur, profondeur, hauteur, fond du tiroir, course ; avant et profondeur du bac (m). */
+const FZ_W = 0.68;
+const FZ_D = 0.68;
+const FZ_H = 0.625;
+const FZ_Y = 0.12;
 const FZ_OUT = 0.34;
+const FZ_FRONT = 0.12;
+const FZ_BIN = 0.42;
 const FRIDGE_WHITE = 0xe9e6de;
 /** Ce qui va au congélateur (la lasagne : un plat surgelé). */
 export const FROZEN_THINGS = ['bac à glaçons', 'lasagne', 'steak', 'pain', ...FROZEN_FOOD];
 
-/** Poubelle à pédale : côté, hauteur (m). */
-const BIN_S = 0.3;
-const BIN_H = 0.55;
+/** Poubelle à pédale, ronde : rayon, hauteur, centre (z, m ; la pédale dépasse devant). */
+const BIN_R = 0.215;
+const BIN_H = 0.65;
+const BIN_Z = -0.04;
 
 export const KITCHEN_ITEMS: ItemDef[] = [
   {
@@ -162,8 +183,8 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     slots: CUP_SLOTS,
     build: () => {
       const g = carcass(CUP_W, CUP_D);
-      // étagère du milieu (la planche sous la place du haut)
-      g.add(box(CUP_W - 2 * WALL, WALL, CUP_D - WALL - 0.03, WOOD, 0, CUP_SHELVES[1] - WALL / 2, 0));
+      // le fond et l'étagère du milieu (la planche sous la place du haut)
+      g.add(inside(...CUP_SHELVES.map((y) => box(CUP_W - 2 * WALL - 0.07, WALL, CUP_D - WALL - 0.08, WOOD, 0, y - WALL / 2, -0.03))));
       const door = new THREE.Group();
       door.name = 'porte';
       door.position.set(CUP_W / 2, 0, CUP_D / 2);
@@ -172,9 +193,43 @@ export const KITCHEN_ITEMS: ItemDef[] = [
         box(CUP_W - 0.004, dh, WALL, 0x9a7048, -CUP_W / 2, 0.1 + dh / 2, WALL / 2),
         box(CUP_W - 0.08, dh - 0.08, 0.004, DARK_WOOD, -CUP_W / 2, 0.1 + dh / 2, WALL + 0.002),
         // poignée à gauche, en haut
-        box(0.014, 0.1, 0.014, KNOB, -CUP_W + 0.05, 0.72, WALL + 0.015),
+        box(0.014, 0.1, 0.014, KNOB, -CUP_W + 0.05, 0.66, WALL + 0.015),
       );
       g.add(door);
+      return g;
+    },
+  },
+  {
+    id: 'placard-haut',
+    name: 'placard haut',
+    portable: false,
+    // accroché au mur, au-dessus du plan de travail
+    movable: false,
+    durability: 300,
+    fragility: 7,
+    // deux battants : celui de droite (charnière à droite) et son miroir à gauche (`porte-2`)
+    door: THREE.MathUtils.degToRad(100),
+    holds: ['tasse', 'verre', 'bol', 'assiette', 'carafe', ...PREP_CUPBOARD],
+    slots: WALL_CUP_SLOTS,
+    build: () => {
+      const w = WALL_CUP_W, h = WALL_CUP_H, d = WALL_CUP_D;
+      const g = group(
+        box(WALL, h, d, WOOD, -w / 2 + WALL / 2, h / 2, 0),
+        box(WALL, h, d, WOOD, w / 2 - WALL / 2, h / 2, 0),
+        box(w, h, WALL, WOOD, 0, h / 2, -d / 2 + WALL / 2),
+        box(w, WALL, d, WOOD, 0, h - WALL / 2, 0),
+        inside(...WALL_CUP_SHELVES.map((y) => box(w - 2 * WALL - 0.04, WALL, d - WALL - 0.08, WOOD, 0, y - WALL / 2, -0.03))),
+      );
+      for (const side of [1, -1]) {
+        const door = new THREE.Group();
+        door.name = side > 0 ? 'porte' : 'porte-2';
+        door.position.set((side * w) / 2, 0, d / 2);
+        door.add(
+          box(w / 2 - 0.004, h - 0.02, WALL, 0x9a7048, (-side * w) / 4, h / 2, WALL / 2),
+          box(0.014, 0.1, 0.014, KNOB, -side * (w / 2 - 0.05), 0.15, WALL + 0.015),
+        );
+        g.add(door);
+      }
       return g;
     },
   },
@@ -192,7 +247,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     build: () => {
       const g = carcass(DRAWER_W, DRAWER_D);
       // deux fausses façades de tiroir en bas, avec leur poignée
-      for (const [y0, y1] of [[0.1, 0.38], [0.4, 0.66]]) {
+      for (const [y0, y1] of [[0.1, 0.33], [0.35, 0.58]]) {
         g.add(box(DRAWER_W - 0.004, y1 - y0 - 0.006, WALL, 0x9a7048, 0, (y0 + y1) / 2, DRAWER_D / 2 + WALL / 2));
         g.add(box(0.14, 0.014, 0.014, KNOB, 0, y1 - 0.06, DRAWER_D / 2 + WALL + 0.01));
       }
@@ -202,8 +257,8 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       const iw = DRAWER_W - 2 * WALL - 0.01, id = DRAWER_D - 0.04;
       const zc = DRAWER_D / 2 - id / 2;
       drawer.add(
-        box(DRAWER_W - 0.004, 0.16, WALL, 0x9a7048, 0, 0.765, DRAWER_D / 2 + WALL / 2),
-        box(0.14, 0.014, 0.014, KNOB, 0, 0.8, DRAWER_D / 2 + WALL + 0.01),
+        box(DRAWER_W - 0.004, 0.17, WALL, 0x9a7048, 0, 0.685, DRAWER_D / 2 + WALL / 2),
+        box(0.14, 0.014, 0.014, KNOB, 0, 0.72, DRAWER_D / 2 + WALL + 0.01),
         box(iw, 0.006, id, 0xb08a5c, 0, DRAWER_Y + 0.003, zc),
         box(0.01, 0.1, id, 0xb08a5c, -iw / 2, DRAWER_Y + 0.05, zc),
         box(0.01, 0.1, id, 0xb08a5c, iw / 2, DRAWER_Y + 0.05, zc),
@@ -226,7 +281,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     drawer: FZ_OUT,
     holds: FROZEN_THINGS,
     // deux rangées de deux, puis une au milieu
-    slots: [...[-0.13, 0.13].flatMap((x) => [-0.12, 0.1].map((z): [number, number, number] => [x, FZ_Y + 0.006, z])), [0, FZ_Y + 0.006, -0.12], [0, FZ_Y + 0.006, 0.1]],
+    slots: [...[-0.15, 0.15].flatMap((x) => [-0.2, 0.02].map((z): [number, number, number] => [x, FZ_Y + 0.006, z])), [0, FZ_Y + 0.006, -0.2], [0, FZ_Y + 0.006, 0.02]],
     build: () => {
       const t = 0.03;
       const g = group(
@@ -236,18 +291,20 @@ export const KITCHEN_ITEMS: ItemDef[] = [
         box(FZ_W, t, FZ_D, FRIDGE_WHITE, 0, FZ_H - t / 2, 0),
         box(FZ_W + 0.004, 0.05, 0.04, 0x8d9093, 0, 0.025, FZ_D / 2 - 0.02),
       );
-      // le tiroir : façade blanche, poignée, bac givré
+      // le tiroir : façade blanche, poignée, bac givré (derrière la façade)
       const drawer = new THREE.Group();
       drawer.name = 'porte';
-      const iw = FZ_W - 2 * t - 0.01, id = FZ_D - 0.06;
-      const zc = FZ_D / 2 - id / 2;
+      const iw = FZ_W - 2 * t - 0.03, id = FZ_BIN;
+      const zc = FZ_FRONT - id / 2;
       drawer.add(
-        box(FZ_W - 0.004, FZ_H - 0.07, 0.05, FRIDGE_WHITE, 0, 0.06 + (FZ_H - 0.07) / 2, FZ_D / 2 + 0.025),
-        box(FZ_W - 0.12, 0.025, 0.03, 0x9ea4aa, 0, FZ_H - 0.08, FZ_D / 2 + 0.06),
-        box(iw, 0.006, id, 0xdfe9ee, 0, FZ_Y + 0.003, zc),
-        box(0.01, 0.2, id, 0xdfe9ee, -iw / 2, FZ_Y + 0.1, zc),
-        box(0.01, 0.2, id, 0xdfe9ee, iw / 2, FZ_Y + 0.1, zc),
-        box(iw, 0.2, 0.01, 0xdfe9ee, 0, FZ_Y + 0.1, FZ_D / 2 - id),
+        box(FZ_W - 0.004, FZ_H - 0.11, 0.05, FRIDGE_WHITE, 0, 0.1 + (FZ_H - 0.11) / 2, FZ_FRONT + 0.025),
+        box(FZ_W - 0.12, 0.025, 0.03, 0x9ea4aa, 0, FZ_H - 0.08, FZ_FRONT + 0.06),
+        inside(
+          box(iw, 0.006, id, 0xdfe9ee, 0, FZ_Y + 0.003, zc),
+          box(0.01, 0.2, id, 0xdfe9ee, -iw / 2, FZ_Y + 0.1, zc),
+          box(0.01, 0.2, id, 0xdfe9ee, iw / 2, FZ_Y + 0.1, zc),
+          box(iw, 0.2, 0.01, 0xdfe9ee, 0, FZ_Y + 0.1, FZ_FRONT - id),
+        ),
       );
       g.add(drawer);
       return g;
@@ -396,24 +453,26 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     heats: { seconds: 8, burns: true },
     build: () => {
       const w = OVEN_W, d = OVEN_D, h = COUNTER_H - TOP;
-      const inside = 0x3a3d42;
+      const dark = 0x3a3d42;
       const g = group(
         box(WALL, h, d, BLACK, -w / 2 + WALL / 2, h / 2, 0),
         box(WALL, h, d, BLACK, w / 2 - WALL / 2, h / 2, 0),
-        box(w, h, WALL, inside, 0, h / 2, -d / 2 + WALL / 2),
-        // socle et sole, voûte, bandeau de commande
+        box(w, h, WALL, dark, 0, h / 2, -d / 2 + WALL / 2),
+        // socle, voûte, bandeau de commande
         box(w, OVEN_LOW, d, BLACK, 0, OVEN_LOW / 2, 0),
-        box(w - 2 * WALL, 0.01, d - WALL, inside, 0, OVEN_LOW + 0.005, 0),
         box(w, h - OVEN_HIGH, d, BLACK, 0, (OVEN_HIGH + h) / 2, 0),
-        box(w - 0.02, 0.15, 0.01, INOX, 0, 0.77, d / 2 + 0.005),
-        // grille
-        box(w - 2 * WALL, 0.006, d - 0.08, STEEL, 0, OVEN_RACK + 0.003, 0),
+        box(w - 0.02, 0.1, 0.01, INOX, 0, 0.73, d / 2 + 0.005),
+        // sole et grille
+        inside(
+          box(w - 2 * WALL - 0.04, 0.01, d - WALL - 0.06, dark, 0, OVEN_LOW + 0.005, -0.02),
+          box(w - 2 * WALL - 0.04, 0.006, d - 0.12, STEEL, 0, OVEN_RACK + 0.003, -0.02),
+        ),
         box(w + 0.02, TOP, d + 0.02, COUNTER, 0, COUNTER_H - TOP / 2, 0.01),
         glow(w - 2 * WALL - 0.01, OVEN_HIGH - OVEN_LOW - 0.02, d - 0.06, 0xff9a3c, 0, (OVEN_LOW + OVEN_HIGH) / 2, 0),
       );
       // boutons du bandeau
-      for (const x of [-0.2, -0.12, 0.12, 0.2]) g.add(mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.02, 14).rotateX(Math.PI / 2), BLACK, x, 0.77, d / 2 + 0.02));
-      g.add(box(0.1, 0.035, 0.006, 0x1d2a22, 0, 0.77, d / 2 + 0.012));
+      for (const x of [-0.2, -0.12, 0.12, 0.2]) g.add(mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.02, 14).rotateX(Math.PI / 2), BLACK, x, 0.73, d / 2 + 0.02));
+      g.add(box(0.1, 0.035, 0.006, 0x1d2a22, 0, 0.73, d / 2 + 0.012));
       const door = new THREE.Group();
       door.name = 'porte';
       door.position.set(0, OVEN_LOW, d / 2);
@@ -445,21 +504,22 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     washes: { seconds: 6 },
     build: () => {
       const w = DW_W, d = DW_D, h = COUNTER_H - TOP;
-      const inside = 0xa8b0b8;
+      const steel = 0xa8b0b8;
       const g = group(
         box(WALL, h, d, INOX, -w / 2 + WALL / 2, h / 2, 0),
         box(WALL, h, d, INOX, w / 2 - WALL / 2, h / 2, 0),
-        box(w, h, WALL, inside, 0, h / 2, -d / 2 + WALL / 2),
+        box(w, h, WALL, steel, 0, h / 2, -d / 2 + WALL / 2),
         box(w, DW_LOW, d, 0x7d8389, 0, DW_LOW / 2, 0),
-        box(w - 2 * WALL, 0.01, d - WALL, inside, 0, DW_LOW + 0.005, 0),
-        box(w, 0.02, d, inside, 0, h - 0.01, 0),
+        box(w, 0.02, d, steel, 0, h - 0.01, 0),
         box(w + 0.02, TOP, d + 0.02, COUNTER, 0, COUNTER_H - TOP / 2, 0.01),
       );
-      // paniers : un fond en grille et un rebord
+      // cuve, et paniers : un fond en grille et un rebord
+      const racks = inside(box(w - 2 * WALL - 0.02, 0.01, d - WALL - 0.1, steel, 0, DW_LOW + 0.005, -0.04));
       for (const y of DW_RACKS) {
-        g.add(box(w - 2 * WALL - 0.02, 0.008, d - 0.08, 0x8e979f, 0, y + 0.004, 0));
-        g.add(box(w - 2 * WALL - 0.02, 0.05, 0.008, 0x8e979f, 0, y + 0.025, (d - 0.08) / 2));
+        racks.add(box(w - 2 * WALL - 0.04, 0.008, d - 0.14, 0x8e979f, 0, y + 0.004, -0.03));
+        racks.add(box(w - 2 * WALL - 0.04, 0.05, 0.008, 0x8e979f, 0, y + 0.025, (d - 0.14) / 2 - 0.03));
       }
+      g.add(racks);
       const door = new THREE.Group();
       door.name = 'porte';
       door.position.set(0, DW_LOW, d / 2);
@@ -488,24 +548,24 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     door: -THREE.MathUtils.degToRad(100),
     // on y réchauffe aussi les plats préparés
     holds: [...OVEN_FOOD, ...STOVE_RECIPES.map((r) => r.name), ...RECIPE_DISHES.map((d) => d.name)],
-    slots: [[-MW_W / 2 + WALL + MW_CAV / 2 - 0.01, 0.024, 0]],
+    slots: [[-MW_W / 2 + WALL + MW_CAV / 2 - 0.01, 0.03, -0.02]],
     heats: { seconds: 4, burns: false },
     build: () => {
       const w = MW_W, d = MW_D, h = MW_H;
-      const body = 0xe7e4dc, inside = 0xd8d4c8;
+      const body = 0xe7e4dc, back = 0xd8d4c8;
       const cx = -w / 2 + WALL + MW_CAV / 2 - 0.01;
       const g = group(
         box(w, WALL, d, body, 0, WALL / 2, 0),
         box(w, WALL, d, body, 0, h - WALL / 2, 0),
         box(WALL, h, d, body, -w / 2 + WALL / 2, h / 2, 0),
-        box(w, h, WALL, inside, 0, h / 2, -d / 2 + WALL / 2),
+        box(w, h, WALL, back, 0, h / 2, -d / 2 + WALL / 2),
         // tableau de commande à droite (cloison de l'enceinte comprise)
         box(w - MW_CAV - WALL, h, d, body, w / 2 - (w - MW_CAV - WALL) / 2, h / 2, 0),
         box(0.07, 0.04, 0.004, 0x1d2a22, w / 2 - 0.06, h - 0.06, d / 2 + 0.002),
         mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.014, 14).rotateX(Math.PI / 2), 0x8d9093, w / 2 - 0.06, 0.12, d / 2 + 0.007),
         mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.014, 14).rotateX(Math.PI / 2), 0x8d9093, w / 2 - 0.06, 0.07, d / 2 + 0.007),
         // plateau tournant
-        mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.004, 24), 0xcfe3e8, cx, WALL + 0.002, 0),
+        inside(mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.004, 24), 0xcfe3e8, cx, 0.028, -0.02)),
         glow(MW_CAV - 0.01, h - 2 * WALL - 0.01, d - WALL - 0.02, 0xffe39a, cx, h / 2, 0.005),
       );
       const door = new THREE.Group();
@@ -530,11 +590,11 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     fragility: 5,
     // comme la machine à café : la tasse se pose à côté, sous le bec, et l'eau chaude y coule
     // de l'eau chaude : un sachet de thé dans la tasse (ou la théière) la fait infuser
-    pour: { at: [KETTLE_CUP, 0, 0.03], fills: ['tasse', 'théière'], liquid: 'eau chaude', seconds: 2.4, color: 0xd7e4e6 },
+    pour: { at: [KETTLE_CUP, 0, 0], fills: ['tasse', 'théière'], liquid: 'eau chaude', seconds: 2.4, color: 0xd7e4e6 },
     // il faut de l'eau dedans : on y verse celle d'une casserole, d'une bouteille ou d'une tasse
     tank: 1,
     // le bouton du socle l'allume ; l'eau chauffe, puis le thé coule ; elle s'éteint seule si on l'oublie
-    heat: { spots: [[KETTLE_CUP, 0, 0.03]], lit: 'voyant', warmup: 4, autoOff: 45 },
+    heat: { spots: [[KETTLE_CUP, 0, 0]], lit: 'voyant', warmup: 4, autoOff: 45 },
     build: () => {
       const body = 0xe7e3da, dark = 0x3b3f44;
       const x = -0.06;
@@ -556,7 +616,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       const button = group(mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.01, 14).rotateX(Math.PI / 2), 0xd0463a, x - 0.03, 0.0125, 0.088));
       button.name = 'bouton-0';
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.006, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb347 }));
-      lamp.position.set(x + 0.03, 0.0125, 0.09);
+      lamp.position.set(x + 0.03, 0.015, 0.088);
       const lit = group(lamp);
       lit.name = 'voyant-0';
       lit.visible = false;
@@ -565,7 +625,7 @@ export const KITCHEN_ITEMS: ItemDef[] = [
       const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 6), toon(0x7a4519));
       jet.name = 'jet';
       jet.visible = false;
-      jet.position.set(KETTLE_CUP, 0.18, 0.03);
+      jet.position.set(KETTLE_CUP - 0.035, 0.19, 0);
       g.add(jet);
       return g;
     },
@@ -658,29 +718,32 @@ export const KITCHEN_ITEMS: ItemDef[] = [
     doorAxis: 'x',
     bin: 8,
     build: () => {
-      const s = BIN_S, h = BIN_H, t = 0.012;
-      const color = 0x5f8a6e;
+      const r = BIN_R, h = BIN_H;
+      const color = 0x7fa596;
+      const wall = mesh(new THREE.CylinderGeometry(r, r * 0.97, h, 28, 1, true), color, 0, h / 2, BIN_Z);
+      (wall.material as THREE.Material).side = THREE.DoubleSide;
       const g = group(
-        box(s, 0.02, s, color, 0, 0.01, 0),
-        box(t, h, s, color, -s / 2 + t / 2, h / 2, 0),
-        box(t, h, s, color, s / 2 - t / 2, h / 2, 0),
-        box(s, h, t, color, 0, h / 2, -s / 2 + t / 2),
-        box(s, h, t, color, 0, h / 2, s / 2 - t / 2),
+        mesh(new THREE.CylinderGeometry(r * 0.97, r * 0.97, 0.03, 28), color, 0, 0.015, BIN_Z),
+        wall,
         // pédale
-        box(0.12, 0.015, 0.06, 0x4a4d52, 0, 0.03, s / 2 + 0.03),
+        box(0.08, 0.02, 0.08, 0x4a4d52, 0, 0.03, BIN_Z + r + 0.03),
       );
       // sac et déchets : montent avec ce qu'on jette (Game.ts)
-      const trash = box(s - 2 * t - 0.004, 1, s - 2 * t - 0.004, 0x3b3f3a, 0, 0, 0);
+      const trash = mesh(new THREE.CylinderGeometry(r - 0.025, r - 0.03, 1, 20), 0x3b3f3a, 0, 0, BIN_Z);
       trash.geometry.translate(0, 0.5, 0);
-      trash.position.y = 0.02;
+      trash.position.y = 0.04;
       trash.scale.y = 0.001;
       trash.visible = false;
       trash.name = 'dechets';
       g.add(trash);
+      // couvercle rond (le modèle Tripo n'en a pas encore) : charnière derrière, en haut
       const lid = new THREE.Group();
       lid.name = 'porte';
-      lid.position.set(0, h, -s / 2);
-      lid.add(box(s + 0.01, 0.02, s + 0.01, 0x4f7a5e, 0, 0.01, s / 2));
+      lid.position.set(0, h, BIN_Z - r);
+      lid.add(
+        mesh(new THREE.CylinderGeometry(r + 0.008, r + 0.008, 0.02, 28), 0xb9c2c0, 0, 0.01, r),
+        mesh(new THREE.CylinderGeometry(r - 0.02, r - 0.01, 0.025, 28), color, 0, 0.03, r),
+      );
       g.add(lid);
       return g;
     },
