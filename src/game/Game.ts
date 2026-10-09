@@ -1630,6 +1630,36 @@ export class Game {
     return this.rooms.find((r) => r.contains(p))?.spec.name ?? null;
   }
 
+  /** Monte sur le vélo (mains vides), comme « Monter sur le vélo » au menu. */
+  rideBike(running = false): boolean {
+    const bike = this.items.find((i) => i.def.bike);
+    if (!bike) {
+      this.onNotice?.('Il n’y a pas de vélo.');
+      return false;
+    }
+    if (this.velo.riding) return true;
+    return this.velo.mount(bike, running);
+  }
+
+  /** En selle sur le vélo, prêt à rouler. */
+  get onBike(): boolean {
+    return this.velo.inSaddle;
+  }
+
+  /** Descend du vélo. */
+  getOffBike(): boolean {
+    if (!this.velo.riding) {
+      this.onNotice?.('Pas sur le vélo.');
+      return false;
+    }
+    return this.velo.dismount();
+  }
+
+  /** Saute sur place (comme la touche Espace). */
+  jump(): boolean {
+    return this.mouvements.jump();
+  }
+
   /** Marche jusqu'à la pièce `name` : juste après l'entrée, tourné vers la pièce. */
   walkToRoom(name: string, running = false): boolean {
     const room = this.rooms.find((r) => r.spec.name === name);
