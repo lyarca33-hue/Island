@@ -16,6 +16,7 @@ import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
 import { UPKEEP_ITEMS } from './upkeep';
 import { LIFE_ITEMS } from './life';
 import { FECULENT_ITEMS } from './feculents';
+import { PIECES_ITEMS } from './pieces';
 
 export interface ItemDef {
   id: string;
@@ -288,11 +289,11 @@ function group(...parts: THREE.Object3D[]): THREE.Group {
 export const TABLE_H = 0.74;
 /** Épaisseur d'un livre (m) : les places d'un rayon sont collées les unes aux autres. */
 const BOOK_T = 0.045;
-/** Bibliothèque : trois rayons (dessus des planches), places de gauche à droite sur chacun. */
-const SHELF_W = 1.0;
-const SHELF_D = 0.3;
-const SHELF_H = 1.42;
-const SHELVES = [0.06, 0.5, 0.94];
+/** Bibliothèque (mesures du modèle Tripo) : quatre rayons (dessus des planches), places de gauche à droite sur chacun. */
+const SHELF_W = 1.03;
+const SHELF_D = 0.49;
+const SHELF_H = 1.8;
+const SHELVES = [0.047, 0.457, 0.877, 1.322];
 export const SLOTS_PER_SHELF = 20;
 const SHELF_SLOTS = SHELVES.flatMap((y) =>
   Array.from({ length: SLOTS_PER_SHELF }, (_, i): [number, number, number] => [-0.47 + BOOK_T / 2 + 0.002 + i * (BOOK_T + 0.001), y, 0]),
@@ -1419,6 +1420,8 @@ export const ITEMS: ItemDef[] = [
   ...LIFE_ITEMS,
   // pâtes, riz et soupes à la casserole (feculents.ts)
   ...FECULENT_ITEMS,
+  // le salon, la chambre, la salle de bain, l'entrée et le garage, faits avec Tripo (pieces.ts)
+  ...PIECES_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

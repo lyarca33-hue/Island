@@ -1593,7 +1593,7 @@ export class Game {
   }
 
   /** Lampes qu'on allume d'un clic (lampe de chevet) : leur lumière, allumée ou non. */
-  private lamps = new Map<WorldItem, { light: THREE.PointLight; on: boolean; bulb: THREE.MeshBasicMaterial | null; shade: THREE.MeshBasicMaterial | null }>();
+  private lamps = new Map<WorldItem, { light: THREE.PointLight; on: boolean; bulb: THREE.MeshBasicMaterial | null; shade: THREE.MeshBasicMaterial | null; glow: THREE.MeshToonMaterial | null }>();
 
   /** Lumière d'une lampe (fiche `lamp`), éteinte au départ, qui suit la lampe si on la déplace. */
   private addLampLight(item: WorldItem): void {
@@ -1614,7 +1614,13 @@ export class Game {
       const m = item.object.getObjectByName(name);
       return m instanceof THREE.Mesh && m.material instanceof THREE.MeshBasicMaterial ? m.material : null;
     };
-    this.lamps.set(item, { light, on: false, bulb: part('ampoule'), shade: part('abat-jour') });
+    // abat-jour d'un modèle Tripo (texture peinte) : sa propre copie du matériau, qui s'éclaire allumée
+    let glow: THREE.MeshToonMaterial | null = null;
+    item.object.getObjectByName('abat-jour')?.traverse((o) => {
+      if (glow || !(o instanceof THREE.Mesh) || !(o.material instanceof THREE.MeshToonMaterial)) return;
+      o.material = glow = o.material.clone();
+    });
+    this.lamps.set(item, { light, on: false, bulb: part('ampoule'), shade: part('abat-jour'), glow });
   }
 
   private setLamp(item: WorldItem, on: boolean): void {
@@ -1626,6 +1632,7 @@ export class Game {
     // ampoule allumée au-dessus de 1 : le bloom la fait briller ; abat-jour éclairé par-dessous
     lamp.bulb?.color.setRGB(on ? 2.6 : 0.23, on ? 2.1 : 0.2, on ? 1.3 : 0.17);
     lamp.shade?.color.set(on ? 0xfff3d6 : 0xe9dcc0);
+    lamp.glow?.emissive.setHex(on ? 0x5a4426 : 0x000000);
   }
 
   /** La porte intérieure ou les rideaux sous ce pixel (avant tout objet), et leur pièce. */

@@ -1,6 +1,6 @@
 /**
- * Les meubles, appareils et ustensiles de la cuisine faits avec Tripo, en un seul .glb pour le jeu
- * (public/models/cuisine.glb, lu par src/game/items/tripo.ts). Les modèles d'entrée sont déjà corrigés
+ * Les meubles, appareils et ustensiles d'une pièce faits avec Tripo, en un seul .glb pour le jeu
+ * (public/models/cuisine.glb, salon.glb, chambre.glb…, lus par src/game/items/tripo.ts). Les modèles d'entrée sont déjà corrigés
  * (voir tripo/modeles/cuisine/README.md : 1 unité = 1 m, posés au sol, avant vers +z, un atlas WebP,
  * pièces mobiles en nœuds nommés) : ce script les regroupe sans les retoucher, un nœud par modèle
  * nommé comme son fichier sans la taille (« placard-bas »), ses pièces mobiles en enfants
@@ -8,6 +8,10 @@
  *
  *   npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions meshoptimizer
  *   node tools/build_cuisine_assets.mjs --src <dossier des modèles corrigés> --out public/models/cuisine.glb
+ *   node tools/build_cuisine_assets.mjs --src <…>/garage --out public/models/garage.glb --skip porte-garage
+ *
+ * `--skip` laisse de côté des modèles (noms sans la taille, séparés par des virgules) : la porte du
+ * garage, déjà dans le kit de la maison.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,7 +28,8 @@ if (!SRC) throw new Error('--src <dossier des modèles corrigés> manquant');
 await MeshoptEncoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
 
-const files = fs.readdirSync(SRC).filter((f) => /_\d+cm\.glb$/.test(f)).sort();
+const skip = new Set((args.skip ?? '').split(',').filter(Boolean));
+const files = fs.readdirSync(SRC).filter((f) => /_\d+cm\.glb$/.test(f) && !skip.has(f.replace(/_\d+cm\.glb$/, ''))).sort();
 const docs = await Promise.all(files.map((f) => io.read(path.join(SRC, f))));
 const [doc, ...rest] = docs;
 const scene = doc.getRoot().listScenes()[0];

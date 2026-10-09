@@ -17,7 +17,7 @@ function area(g: THREE.BufferGeometry): number {
   return s;
 }
 
-describe('modèles Tripo de la cuisine', () => {
+describe('modèles Tripo de la maison', () => {
   it('chaque fiche habillée existe dans le catalogue', () => {
     for (const id of Object.keys(TRIPO_LOOKS)) expect(ITEM_BY_ID.has(id), id).toBe(true);
   });
@@ -28,7 +28,8 @@ describe('modèles Tripo de la cuisine', () => {
       for (const name of Object.keys(look.parts ?? {})) {
         if (name === 'porte' || name === 'porte-2') expect(!!(def.door || def.drawer), `${id} : ${name}`).toBe(true);
         else if (name.startsWith('bouton-')) expect(+name.slice(7), `${id} : ${name}`).toBeLessThan(def.heat!.spots.length);
-        else expect(name, id).toBe('levier');
+        // les autres pièces que le jeu montre, allume ou bouge : levier, abat-jour, couette, écran, abattant, drapeau
+        else expect(['levier', 'abat-jour', 'couette', 'ecran', 'couvercle', 'drapeau'], `${id} : ${name}`).toContain(name);
       }
     }
   });

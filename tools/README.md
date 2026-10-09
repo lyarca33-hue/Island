@@ -125,11 +125,11 @@ npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/e
 node tools/build_kit_assets.mjs --src <dossier des modèles retouchés> --out public/kit/maison.glb
 ```
 
-## `build_cuisine_assets.mjs` : meubles et appareils Tripo de la cuisine
+## `build_cuisine_assets.mjs` : meubles et objets Tripo d'une pièce
 
-Regroupe les modèles de la cuisine générés avec Tripo (licence d'usage commercial), déjà corrigés
+Regroupe les modèles d'une pièce (cuisine, salon, chambre, salle de bain, entrée, garage) générés avec Tripo (licence d'usage commercial), déjà corrigés
 (1 unité = 1 m, posés au sol, avant vers +z, un atlas WebP, pièces mobiles en nœuds nommés : voir
-`tripo/modeles/cuisine/README.md` dans les fichiers du projet), en un seul `public/models/cuisine.glb` :
+`tripo/modeles/<pièce>/README.md` dans les fichiers du projet), en un seul `public/models/<pièce>.glb` :
 un nœud par modèle nommé comme son fichier sans la taille (`placard-bas`), ses pièces mobiles en
 enfants, sommets compressés (meshopt). `src/game/items/tripo.ts` (`TRIPO_LOOKS`) dit quel modèle
 habille quelle fiche du jeu, et où sont les charnières.
@@ -137,4 +137,7 @@ habille quelle fiche du jeu, et où sont les charnières.
 ```bash
 npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions meshoptimizer
 node tools/build_cuisine_assets.mjs --src <dossier des modèles corrigés> --out public/models/cuisine.glb
+# une par pièce ; au garage, la porte basculante est déjà dans le kit
+for p in salon chambre salle-de-bain entree; do node tools/build_cuisine_assets.mjs --src <…>/$p --out public/models/$p.glb; done
+node tools/build_cuisine_assets.mjs --src <…>/garage --out public/models/garage.glb --skip porte-garage
 ```
