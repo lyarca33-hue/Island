@@ -31,7 +31,7 @@ export function loadKit(): Promise<Kit> {
     .setMeshoptDecoder(MeshoptDecoder)
     .loadAsync(KIT_URL)
     .then((gltf) => {
-      const mats = new Map<THREE.Material | string, THREE.Material>();
+      const mats = new Map<THREE.Material, THREE.Material>();
       const kit = {} as Kit;
       for (const node of [...gltf.scene.children]) {
         node.position.set(0, 0, 0);
@@ -39,22 +39,9 @@ export function loadKit(): Promise<Kit> {
         node.traverse((o) => {
           if (!(o instanceof THREE.Mesh)) return;
           const m = o.material as THREE.MeshStandardMaterial;
-          // tuiles du toit : creux assombris (couleurs aux sommets), sinon le cel shading les aplatit
-          const tiles = node.name === 'toit';
-          const key = tiles ? 'toit' : m;
-          if (!mats.has(key)) {
-            const t = createToonMaterial({ color: m.color, map: m.map, rimStrength: 0 });
-            t.vertexColors = tiles;
-            mats.set(key, t);
-          }
-          if (tiles) {
-            o.geometry = plain(o.geometry).applyMatrix4(o.matrixWorld);
-            o.position.set(0, 0, 0);
-            o.quaternion.identity();
-            o.scale.set(1, 1, 1);
-            shadeTiles(o.geometry);
-          }
-          o.material = mats.get(key)!;
+          // les joints des tuiles du toit sont peints dans sa texture : rien à assombrir
+          if (!mats.has(m)) mats.set(m, createToonMaterial({ color: m.color, map: m.map, rimStrength: 0 }));
+          o.material = mats.get(m)!;
           o.castShadow = o.receiveShadow = true;
         });
         node.removeFromParent();
@@ -74,28 +61,6 @@ export function kitParts(piece: THREE.Object3D): Array<{ geometry: THREE.BufferG
     if (o instanceof THREE.Mesh) out.push({ geometry: plain(o.geometry).applyMatrix4(o.matrixWorld), material: o.material as THREE.Material });
   });
   return out;
-}
-
-/** Tuiles : ombre des creux selon la hauteur (le dessus des tuiles clair, le fond des rangs sombre) et la pente. */
-const TILE_DARK = 0.45;
-
-function shadeTiles(g: THREE.BufferGeometry): void {
-  g.computeVertexNormals();
-  const p = g.getAttribute('position'), n = g.getAttribute('normal');
-  let lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < p.count; i++) {
-    lo = Math.min(lo, p.getY(i));
-    hi = Math.max(hi, p.getY(i));
-  }
-  // les tuiles occupent le haut du pan (le dessous est la volige) : creux à mi-hauteur, crêtes en haut
-  const base = lo + (hi - lo) * 0.5;
-  const col = new Float32Array(p.count * 3);
-  for (let i = 0; i < p.count; i++) {
-    const h = THREE.MathUtils.smoothstep(p.getY(i), base, hi);
-    const k = (TILE_DARK + (1 - TILE_DARK) * h) * (0.7 + 0.3 * Math.max(0, n.getY(i)));
-    col.set([k, k, k], i * 3);
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
 }
 
 /** Copie en nombres simples (la compression meshopt rend des attributs quantifiés et entrelacés). */
