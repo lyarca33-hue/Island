@@ -5938,8 +5938,13 @@ export class Game {
     }
   }
 
+  /** Le meuble a un inventaire à cases (ses places, hors appareil sans porte et objet qu'on porte). */
+  private hasInventory(item: WorldItem): boolean {
+    return !!item.def.slots && !item.def.portable && (!program(item.def) || this.doors.has(item));
+  }
+
   /** Clic sur un objet : le prendre, l'ajouter à la pile tenue, ou y ranger ce qu'on tient. */
-  private tryPickUp(item: WorldItem, running: boolean, opts: { body?: boolean; button?: number } = {}): boolean {
+  private tryPickUp(item: WorldItem, running: boolean, opts: { body?: boolean; button?: number; click?: boolean } = {}): boolean {
     const c = this.character;
     const held = c.heldItems;
     const door = this.doors.get(item);
@@ -5959,6 +5964,9 @@ export class Game {
     else if (item.def.heat && !item.def.pour) return this.useStove(item, running);
     // frigo : on y range ce qu'on tient ; mains vides, on l'ouvre
     else if (door && held.length) return this.storeIn(item, running);
+    // clic du joueur, mains vides, sur un meuble qui a un inventaire (frigo, placard, tiroir, armoire, barre au mur…) :
+    // son inventaire à cases s'ouvre ; un appareil se met en marche par un clic sur son côté
+    else if (opts.click && !held.length && this.hasInventory(item) && !(door && (door.target === 1 || door.open > 0)) && !(program(item.def) && opts.body)) return this.lookInside(this.ref(item), running);
     // porte ouverte (ou pas encore refermée) : tout clic sur le frigo la ferme, même là où la porte
     // n'est plus (l'intérieur, le côté)
     else if (door && (door.target === 1 || door.open > 0)) return this.closeDoor(this.ref(item));
@@ -6353,8 +6361,8 @@ export class Game {
       this.switchLamp(this.ref(hit.item), undefined, shift);
       return;
     }
-    // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser
-    this.tryPickUp(hit.item, shift, { body: !!(hit.item.def.door || hit.item.def.drawer) && !hit.door, button: hit.button });
+    // frigo : mains vides, son inventaire ; porte ouverte, la fermer
+    this.tryPickUp(hit.item, shift, { body: !!(hit.item.def.door || hit.item.def.drawer) && !hit.door, button: hit.button, click: true });
   }
 
   /**
@@ -6481,7 +6489,7 @@ export class Game {
     if (item.def.slots && held.some((h) => this.fits(item, h))) add(item.def.slotTilt ? 'Accrocher ici' : 'Ranger ici ce que je tiens', () => this.storeIn(item, false));
     // ranger l'objet à sa place (sale : dans l'évier)
     if (item.def.portable && !c.carried.includes(item) && !this.atHome(item) && (item.dirty || this.homes.has(item) || this.homeOf(item))) add('Ranger', () => this.tidy(ref));
-    if (item.def.slots && (!program(item.def) || this.doors.has(item))) out.push({ label: 'Inventaire', icon: 'inventory', run: () => this.lookInside(ref) });
+    if (this.hasInventory(item)) out.push({ label: 'Inventaire', icon: 'inventory', run: () => this.lookInside(ref) });
     if (door && (door.target || door.open > 0) && !door.keep && !item.def.window) add('Laisser ouvert', () => this.keepOpen(ref));
     // essuyer au torchon la vaisselle mouillée posée là
     // la liste et le sac de courses
