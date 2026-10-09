@@ -305,6 +305,11 @@ export class Character {
     return this.carries ? (SIDES_.map((s) => this.carries![s]).find((c) => c.reading) ?? null) : null;
   }
 
+  /** Où le perso va (le bout de son chemin), s'il marche. */
+  get goal(): THREE.Vector3 | null {
+    return this.path[this.path.length - 1] ?? this.target;
+  }
+
   /** Une main est-elle en train de prendre, poser ou ranger ? */
   get busy(): boolean {
     return !!this.carries && (this.carries.right.busy || this.carries.left.busy);

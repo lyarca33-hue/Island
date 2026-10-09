@@ -1621,6 +1621,38 @@ export class Game {
     return true;
   }
 
+  /**
+   * Va fermer à clé (`locked`) ou déverrouiller la porte qui a un verrou (salle de bain), de
+   * l'intérieur : le perso y va d'abord s'il est ailleurs. `f` : la porte visée (sinon la première).
+   */
+  lockDoor(locked: boolean, running = false, f?: { room: Room; index: number }): boolean {
+    const door = f ?? this.rooms.map((room) => ({ room, index: room.doorIndexWithLock() })).find((d) => d.index >= 0);
+    if (!door) {
+      this.onNotice?.('Aucune porte ne se ferme à clé.');
+      return false;
+    }
+    const { room, index } = door;
+    if (room.doorLock(index).locked === locked) {
+      this.onNotice?.(locked ? 'La porte est déjà fermée à clé.' : 'La porte n’est pas fermée à clé.');
+      return true;
+    }
+    if (this.moving) {
+      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
+      return false;
+    }
+    const c = this.character;
+    if (c.seated) return c.standUp(() => this.lockDoor(locked, running, door));
+    // toujours côté pièce : le verrou se tourne de l'intérieur
+    const inside = room.entrySpot().stand;
+    const { stand, face } = room.fixtureSpot('porte', index, inside);
+    c.approachThen(stand, face, () => {
+      room.setLocked(index, locked);
+      this.sound.play('tinte', 0.5);
+      this.onNotice?.(locked ? `Porte de la ${room.spec.name} fermée à clé.` : 'Porte déverrouillée.');
+    }, running);
+    return true;
+  }
+
   /** Va allumer (`on`) ou éteindre la lampe `ref` (sinon la plus proche) ; sans `on`, inverse. */
   switchLamp(ref?: string, on?: boolean, running = false): boolean {
     const item = ref ? this.byRef(ref) : this.nearest((i) => this.lamps.has(i));
@@ -5430,7 +5462,7 @@ export class Game {
       if (fixture) {
         const r = el.getBoundingClientRect();
         const on = this.fixtureOn(fixture);
-        const state = fixture.kind === 'porte' ? (on ? 'ouverte' : 'fermée') : (on ? 'tirés' : 'ouverts');
+        const state = fixture.kind === 'porte' ? (fixture.room.doorLock(fixture.index).locked ? 'fermée à clé' : on ? 'ouverte' : 'fermée') : (on ? 'tirés' : 'ouverts');
         this.onHover?.({ name: fixture.kind, grade: gradeName(1, fixture.kind === 'porte'), condition: 1, state, x: e.clientX - r.left, y: e.clientY - r.top });
         return;
       }
@@ -5450,7 +5482,11 @@ export class Game {
       if (fixture) {
         const on = this.fixtureOn(fixture);
         const label = fixture.kind === 'porte' ? (on ? 'Fermer la porte' : 'Ouvrir la porte') : (on ? 'Ouvrir les rideaux' : 'Tirer les rideaux');
-        this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: fixture.kind, entries: [{ label, run: () => this.useFixture(fixture, !on) }] });
+        const lock = fixture.kind === 'porte' ? fixture.room.doorLock(fixture.index) : null;
+        // fermée à clé : on la déverrouille (de l'intérieur) avant de l'ouvrir
+        const entries = lock?.locked ? [] : [{ label, run: () => this.useFixture(fixture, !on) }];
+        if (lock?.has) entries.push({ label: lock.locked ? 'Déverrouiller' : 'Fermer à clé', run: () => this.lockDoor(!lock.locked, false, fixture) });
+        this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: fixture.kind, entries });
         return;
       }
       const item = this.hitAt(e.clientX, e.clientY)?.item ?? null;
@@ -6085,6 +6121,8 @@ export class Game {
     if (inRoom) this.activeRoom = inRoom;
     else if (this.activeRoom && !this.activeRoom.contains(c.position, 2 * WALL_T + 0.15)) this.activeRoom = null;
     for (const r of this.rooms) {
+      // fermé à clé dans la salle de bain : le perso déverrouille en sortant
+      if (r.unlockToLeave(c.position, c.goal)) this.onNotice?.('Porte déverrouillée.');
       r.overcast = this.weather.cloud;
       r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null);
     }

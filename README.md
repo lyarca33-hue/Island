@@ -80,7 +80,9 @@ pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pi�
   il en sort mouillé, à sécher avec la serviette, sinon il laisse des gouttes), les toilettes (un clic ou « va aux toilettes » : le
   perso lève le couvercle, s'assoit, la vessie se vide, il se relève, tire la chasse et le couvercle
   se rabat ; les mains sont alors à laver), le lavabo (le robinet coule, on s'y lave les mains) sous
-  son miroir, le porte-serviettes ;
+  son miroir, le porte-serviettes, le porte-papier (on y accroche le rouleau) ; la porte se ferme à
+  clé de l'intérieur (clic droit sur la porte, ou « ferme la porte à clé ») : le voyant passe au
+  rouge, et le perso la déverrouille en sortant ;
 - l'**entrée** : le portemanteau et son manteau, le miroir, les chaussures, le porte-parapluies, une
   lettre sous la porte, la boîte aux lettres dehors ;
 - le **garage** : l'établi et sa caisse à outils, l'étagère, des cartons, le vélo, la bêche et le râteau.

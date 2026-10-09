@@ -106,6 +106,11 @@ describe('ordres de la cuisine : magasin, marché, appareils', () => {
     for (const t of ['accroche le pq au porte pq', 'range le papier toilette', 'accroche le rouleau de papier sur le dérouleur']) expect(parseOrder(t, { enMain: [], objets: wc })).toEqual([{ kind: 'ranger_place', ref: 'papier-toilette' }]);
   });
 
+  it('la porte de la salle de bain : à clé, ou pas', () => {
+    for (const t of ['ferme la porte à clé', 'verrouille la porte', 'enferme-toi']) expect(parse(t)).toEqual([{ kind: 'verrou', fermer: true }]);
+    expect(parse('déverrouille la porte')).toEqual([{ kind: 'verrou', fermer: false }]);
+  });
+
   it('la douche : la prendre, se sécher', () => {
     for (const t of ['prends une douche', 'va sous la douche']) expect(parse(t)).toEqual([{ kind: 'douche' }]);
     expect(parse('sèche-toi')).toEqual([{ kind: 'secher' }]);

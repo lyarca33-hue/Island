@@ -107,6 +107,8 @@ export type Intent =
   /** Aller aux toilettes (s'asseoir, se soulager, tirer la chasse) ; tirer la chasse. */
   | { kind: 'toilettes' }
   | { kind: 'chasse' }
+  /** Fermer à clé (`fermer`) ou déverrouiller la porte de la salle de bain. */
+  | { kind: 'verrou'; fermer: boolean }
   /** Aller dans la pièce `piece` (la cuisine). */
   | { kind: 'piece'; piece: string }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
@@ -827,6 +829,8 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act('toilettes');
     case 'chasse':
       return act('chasse');
+    case 'verrou':
+      return act('verrou', { fermer: intent.fermer ? 'oui' : 'non' });
     case 'piece':
       return act('aller_piece', { piece: intent.piece });
     case 'lire': {

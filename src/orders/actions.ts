@@ -432,6 +432,12 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.flush(),
   },
   {
+    name: 'verrou',
+    description: 'Fermer à clé (`fermer` oui) ou déverrouiller (non) la porte de la salle de bain, de l’intérieur. Fermée à clé, elle ne s’ouvre plus ; le perso la déverrouille en sortant.',
+    params: { fermer: 'oui ou non' },
+    run: (g, a) => g.lockDoor(a.fermer !== 'non'),
+  },
+  {
     name: 'aller_piece',
     description: 'Aller dans une pièce de la maison (pour l’instant, seulement la cuisine) : le perso s’arrête juste après l’entrée.',
     params: { piece: 'cuisine' },

@@ -36,6 +36,8 @@ const VERBS: Record<string, string[]> = {
   prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer', 'sors', 'sort', 'sortir'],
   poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer', 'mets', 'met', 'mettre', 'remets', 'remettre'],
   ranger: ['range', 'ranger', 'rangez', 'accroche', 'accrocher', 'raccroche', 'raccrocher', 'suspends'],
+  verrouiller: ['verrouille', 'verrouiller', 'enferme', 'enfermer'],
+  deverrouiller: ['deverrouille', 'deverrouiller'],
   aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher', 'entre', 'entrer'],
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
@@ -874,6 +876,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       if (tv) return [{ kind: 'eteindre', ref: tv.ref }];
       // « arrête le lave-vaisselle » ; « ferme le four » : la porte
       const closes = ['ferme', 'fermer', 'referme', 'refermer'].includes(word);
+      // « ferme la porte à clé », « ferme à clé »
+      if (closes && (rest.includes('cle') || rest.includes('verrou'))) return [{ kind: 'verrou', fermer: true }];
       const app = found.find((o) => o.sorte === 'appareil');
       if (app && !closes) return [{ kind: 'eteindre', ref: app.ref }];
       // « ferme le frigo », « ferme le tiroir »
@@ -881,6 +885,11 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       // « arrête de lire », « ferme le livre », « stop »
       return !rest.length || rest.some((x) => ['lire', 'lecture', 'livre', 'lis'].includes(x)) ? [{ kind: 'arreter_lire' }] : null;
     }
+    // « verrouille la porte », « enferme-toi » ; « déverrouille la porte »
+    case 'verrouiller':
+      return [{ kind: 'verrou', fermer: true }];
+    case 'deverrouiller':
+      return [{ kind: 'verrou', fermer: false }];
     case 'jeter': {
       // « jette la bouteille », « jette ça » (ce qu'on tient)
       const thing = found.filter((o) => o.portable);

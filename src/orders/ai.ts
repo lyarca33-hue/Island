@@ -166,6 +166,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "secher"} : se sécher avec la serviette (sur le porte-serviettes)
 - {"tache": "toilettes"} : aller aux toilettes (lever le couvercle, s'asseoir, se soulager, tirer la chasse) ; se laver les mains ensuite
 - {"tache": "chasse"} : tirer la chasse d'eau
+- {"tache": "verrou", "fermer": true} : fermer à clé la porte de la salle de bain, de l'intérieur (« fermer » faux : la déverrouiller) ; le perso la déverrouille tout seul en sortant
 - {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (pour l'instant, seulement la cuisine)
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
@@ -275,6 +276,7 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'secher': return { kind: 'secher' };
     case 'toilettes': return { kind: 'toilettes' };
     case 'chasse': return { kind: 'chasse' };
+    case 'verrou': return { kind: 'verrou', fermer: o.fermer !== false };
     case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };

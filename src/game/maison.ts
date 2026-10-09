@@ -231,7 +231,7 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
   name: 'salle de bain',
   rect: SALLE_DE_BAIN,
   floor: () => tiled(SALLE_DE_BAIN),
-  doors: [{ wall: 'sud', u0: BATH_DOOR.x0, u1: BATH_DOOR.x1, inner: true }],
+  doors: [{ wall: 'sud', u0: BATH_DOOR.x0, u1: BATH_DOOR.x1, inner: true, lock: true }],
   joined: ['sud', 'est'],
   windows: () => [{ wall: 'nord', u0: SALLE_DE_BAIN.x0 + 0.9, u1: SALLE_DE_BAIN.x0 + 1.6, y0: 1.45, y1: WIN_HIGH }],
   items: [
