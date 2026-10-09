@@ -75,7 +75,7 @@ export const ROOM_RIGS: Record<string, Rig> = {
   // l'abat-jour s'éclaire, la lumière part de son milieu (le jeu ajoute l'ampoule)
   'lampe-chevet': {
     look: { model: 'lampe-chevet', parts: { 'abat-jour': { from: 'abat-jour' } } },
-    def: { lamp: { y: 0.29, color: 0xffc98a, intensity: 1.4, range: 4.5 } },
+    def: { lamp: { y: 0.29, color: 0xffc98a, intensity: 0.4, range: 3 } },
   },
   // la couette se cache quand le perso dort (le jeu montre `couette-dormeur` sur lui)
   lit: {
@@ -86,7 +86,7 @@ export const ROOM_RIGS: Record<string, Rig> = {
   television: { look: { model: 'television', parts: { ecran: { from: 'ecran' } } }, def: { screen: true } },
   lampadaire: {
     look: { model: 'lampadaire', parts: { 'abat-jour': { from: 'abat-jour' } } },
-    def: { lamp: { y: 1.42, color: 0xffd6a0, intensity: 2.2, range: 6 } },
+    def: { lamp: { y: 1.42, color: 0xffd6a0, intensity: 0.9, range: 5 } },
   },
   // tiré à 1 (le modèle, de toute sa largeur) ; ouvert, il se tasse vers son bord droit, la tringle reste
   rideau: {

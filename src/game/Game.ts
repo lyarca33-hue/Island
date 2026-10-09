@@ -1606,7 +1606,8 @@ export class Game {
   /** Lumière d'une lampe (fiche `lamp`), éteinte au départ, qui suit la lampe si on la déplace. */
   private addLampLight(item: WorldItem): void {
     const def = item.def.lamp!;
-    const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 2));
+    // décroissance douce (1) : collée au mur, une décroissance en 1/d² y faisait une tache aveuglante
+    const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 1));
     light.position.y = def.y;
     // sans ombre : une ombre de lampe redessine la scène six fois, pour un effet à peine visible
     // sous le soleil et la lumière d'ambiance
@@ -1629,10 +1630,10 @@ export class Game {
     if (!lamp) return;
     lamp.on = on;
     lamp.light.intensity = on ? item.def.lamp!.intensity : 0;
-    // ampoule allumée au-dessus de 1 : le bloom la fait briller ; abat-jour éclairé par-dessous
-    lamp.bulb?.color.setRGB(on ? 2.6 : 0.23, on ? 2.1 : 0.2, on ? 1.3 : 0.17);
-    lamp.shade?.color.set(on ? 0xfff3d6 : 0xe9dcc0);
-    lamp.glow?.emissive.setHex(on ? 0x5a4426 : 0x000000);
+    // ampoule allumée un peu au-dessus de 1 : une lueur, pas un halo ; abat-jour doucement éclairé
+    lamp.bulb?.color.setRGB(on ? 1.3 : 0.23, on ? 1.05 : 0.2, on ? 0.7 : 0.17);
+    lamp.shade?.color.set(on ? 0xf6e2bc : 0xe9dcc0);
+    lamp.glow?.emissive.setHex(on ? 0x2a1f12 : 0x000000);
   }
 
   /** La porte intérieure ou les rideaux sous ce pixel (avant tout objet), et leur pièce. */
@@ -5456,8 +5457,13 @@ export class Game {
     });
   }
 
-  /** Clic gauche sur un objet : le prendre (ou ouvrir la porte, appuyer sur le bouton…). */
+  /** Clic gauche sur un objet : le prendre (ou ouvrir la porte, appuyer sur le bouton, allumer la lampe…). */
   private clickItem(hit: NonNullable<ReturnType<Game['hitAt']>>, shift: boolean): void {
+    // lampe : un clic l'allume ou l'éteint (on la prend par « Prendre », au clic droit, ou en la traînant)
+    if (this.lamps.has(hit.item) && !this.character.carried.includes(hit.item) && !this.moving) {
+      this.switchLamp(this.ref(hit.item), undefined, shift);
+      return;
+    }
     // frigo : clic sur la porte = l'ouvrir ou la fermer, sur le côté = le pousser
     this.tryPickUp(hit.item, shift, { body: !!(hit.item.def.door || hit.item.def.drawer) && !hit.door, button: hit.button });
   }
