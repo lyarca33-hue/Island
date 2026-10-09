@@ -456,6 +456,24 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.lockDoor(a.fermer !== 'non'),
   },
   {
+    name: 'regler_reveil',
+    description: 'Régler le réveil (sur la table de nuit) à l’heure `heure` (7.5 = 7 h 30, à la demi-heure près) ; « non » le coupe. Réglé, il sonne chaque jour à cette heure et réveille le perso qui dort.',
+    params: { heure: 'heure (nombre) ou non', reveil: 'ref du réveil (facultatif)' },
+    run: (g, a) => g.setAlarm(a.heure === 'non' ? null : Number(a.heure), a.reveil || undefined),
+  },
+  {
+    name: 'sonnerie_reveil',
+    description: 'Changer la sonnerie du réveil : cloche, bip ou mélodie (sans `sonnerie` : la suivante). On l’entend une fois.',
+    params: { sonnerie: 'cloche, bip ou mélodie (facultatif)', reveil: 'ref du réveil (facultatif)' },
+    run: (g, a) => g.setRingtone(a.sonnerie || undefined, a.reveil || undefined),
+  },
+  {
+    name: 'arreter_reveil',
+    description: 'Arrêter la sonnerie du réveil qui sonne (il reste réglé pour le lendemain).',
+    params: {},
+    run: (g) => g.stopRinging(),
+  },
+  {
     name: 'aller_piece',
     description: 'Aller dans une pièce de la maison (pour l’instant, seulement la cuisine) : le perso s’arrête juste après l’entrée.',
     params: { piece: 'cuisine' },

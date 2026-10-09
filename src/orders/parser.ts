@@ -417,6 +417,13 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
       out.push({ kind: 'argent' });
       continue;
     }
+    // le réveil : « règle le réveil à 7 h 30 », « réveille-moi à 6 h », « coupe le réveil »,
+    // « arrête la sonnerie », « mets la sonnerie mélodie »
+    const alarm = parseAlarm(w);
+    if (alarm) {
+      out.push(alarm);
+      continue;
+    }
     // « va prendre la tasse » : aller + autre verbe → seulement l'autre verbe
     // « va te laver » : le pronom entre les deux
     if (VERB_OF.get(w[0]) === 'aller' && ['te', 't'].includes(w[1]) && VERB_OF.has(w[2])) w = [w[0], ...w.slice(2)];
@@ -430,6 +437,29 @@ export function parseOrder(text: string, world: { enMain: string[]; objets: Worl
     out.push(...intent);
   }
   return out;
+}
+
+/** Un ordre pour le réveil, sinon null. */
+function parseAlarm(w: string[]): Intent | null {
+  const text = w.join(' ');
+  const about = /\b(reveil|reveils|sonnerie|alarme)\b/.test(text);
+  const hm = /\b(\d{1,2}) ?(?:h|heures?)(?: ?(\d{1,2})| et (demie|demi|quart))?\b/.exec(text) ?? /\b(\d{1,2})h(\d{2})\b/.exec(text);
+  const heure = hm ? (Number(hm[1]) + (hm[2] ? Number(hm[2]) / 60 : hm[3] === 'quart' ? 0.25 : hm[3] ? 0.5 : 0)) % 24 : undefined;
+  // « réveille-moi à 7 h »
+  if (!about) return VERB_OF.get(w[0]) === 'reveiller' && heure !== undefined ? { kind: 'reveil', heure } : null;
+  const v = w[0];
+  const tone = /\b(cloche|bip|bips|melodie|musique)\b/.exec(text)?.[1];
+  const sonnerie = tone ? ({ bips: 'bip', melodie: 'mélodie', musique: 'mélodie' } as Record<string, string>)[tone] ?? tone : undefined;
+  // « change la sonnerie », « mets la sonnerie cloche »
+  if (/\bsonnerie\b/.test(text) && (tone || /^(change|changer|choisis|choisir)$/.test(v))) return { kind: 'reveil', sonnerie: sonnerie ?? '', heure };
+  if (heure !== undefined) return { kind: 'reveil', heure, sonnerie };
+  // « arrête la sonnerie », « arrête le réveil », « stop »
+  if (VERB_OF.get(v) === 'arreter' || /^(fais|fait) taire$/.test(w.slice(0, 2).join(' '))) return { kind: 'reveil', arreter: true };
+  // « coupe le réveil », « désactive l'alarme », « éteins le réveil »
+  if (['coupe', 'couper', 'desactive', 'desactiver', 'eteins', 'eteindre', 'enleve', 'enlever', 'supprime', 'supprimer'].includes(v)) return { kind: 'reveil', couper: true };
+  // « règle le réveil » sans heure : 7 h
+  if (['regle', 'regler', 'mets', 'mettre', 'programme', 'programmer', 'active', 'activer'].includes(v)) return { kind: 'reveil', heure: 7 };
+  return null;
 }
 
 function parseClause(verb: string, rest: string[], original: string, world: { enMain: string[]; objets: WorldObject[] }, word = ''): Intent[] | null {

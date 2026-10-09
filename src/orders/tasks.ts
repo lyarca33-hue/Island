@@ -113,6 +113,8 @@ export type Intent =
   | { kind: 'faire_lit'; ref?: string }
   /** Fermer à clé (`fermer`) ou déverrouiller la porte de la salle de bain. */
   | { kind: 'verrou'; fermer: boolean }
+  /** Le réveil : le régler à `heure` (h, 7.5 = 7 h 30), le couper, arrêter sa sonnerie, en changer. */
+  | { kind: 'reveil'; heure?: number; couper?: boolean; arreter?: boolean; sonnerie?: string }
   /** Aller dans la pièce `piece` (la cuisine). */
   | { kind: 'piece'; piece: string }
   /** Lire le livre `ref` (ou celui qu'on tient, sinon le plus proche). */
@@ -843,6 +845,12 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       return act('faire_lit', intent.ref ? { lit: intent.ref } : {});
     case 'verrou':
       return act('verrou', { fermer: intent.fermer ? 'oui' : 'non' });
+    case 'reveil':
+      if (intent.arreter) return act('arreter_reveil');
+      if (intent.sonnerie !== undefined) await act('sonnerie_reveil', intent.sonnerie ? { sonnerie: intent.sonnerie } : {});
+      if (intent.couper) return act('regler_reveil', { heure: 'non' });
+      if (intent.heure !== undefined) return act('regler_reveil', { heure: String(intent.heure) });
+      return;
     case 'piece':
       return act('aller_piece', { piece: intent.piece });
     case 'lire': {

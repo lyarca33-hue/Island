@@ -9,7 +9,7 @@
 
 const KEY = 'island-sons';
 
-export type SoundName = 'bip' | 'ding' | 'tinte' | 'casse' | 'verse' | 'pas' | 'pas-herbe' | 'chasse';
+export type SoundName = 'bip' | 'ding' | 'tinte' | 'casse' | 'verse' | 'pas' | 'pas-herbe' | 'chasse' | 'sonnerie-cloche' | 'sonnerie-bip' | 'sonnerie-melodie';
 
 /** Ambiance continue, de 0 à 1 (distance et murs déjà comptés), donnée à chaque image. */
 export interface Ambience {
@@ -215,6 +215,23 @@ export class KitchenSound {
     } else if (name === 'pas-herbe') {
       // dans l'herbe : un froissement doux
       this.burst(t, 0.12, 2400 + Math.random() * 800, 0.035 * volume);
+    } else if (name === 'sonnerie-cloche') {
+      // la sonnette du réveil mécanique : le marteau qui frappe vite les deux cloches (1 s)
+      for (let i = 0; i < 22; i++) {
+        const f = i % 2 ? 2350 : 2650;
+        this.tone('triangle', f, t + i * 0.045, 0.06, 0.12 * volume);
+        this.tone('sine', f * 2.7, t + i * 0.045, 0.03, 0.03 * volume);
+      }
+    } else if (name === 'sonnerie-bip') {
+      // le réveil électronique : quatre bips serrés (1 s)
+      for (let i = 0; i < 4; i++) this.tone('square', 2000, t + i * 0.13, 0.08, 0.07 * volume);
+    } else if (name === 'sonnerie-melodie') {
+      // une petite mélodie qui monte (1,2 s)
+      const notes = [784, 988, 1175, 1568, 1175, 1568];
+      notes.forEach((f, i) => {
+        this.tone('sine', f, t + i * 0.18, 0.22, 0.14 * volume);
+        this.tone('sine', f * 2, t + i * 0.18, 0.12, 0.03 * volume);
+      });
     } else if (name === 'chasse') {
       // la chasse d'eau : l'eau qui se rue (un souffle qui monte puis retombe), puis le réservoir qui gargouille
       this.sweep(t, 2.6, 350, 1300, 0.3 * volume);

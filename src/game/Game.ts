@@ -246,6 +246,21 @@ const MAKE_BED = 3.4;
 /** La couette du dormeur : rabattue sous le menton, la bosse de son côté du lit (part de la largeur). */
 const COVER = { fold: 0.22, foldZ: -0.42 };
 const SLEEP_SIDE = 0.19;
+/**
+ * Le réveil : heure proposée, pas du réglage (h), durée de la sonnerie (s réelles), une salve toutes
+ * les ALARM_EVERY s ; au-delà de 14 h de sommeil, on ne l'attend pas. Ses sonneries.
+ */
+const ALARM_HOUR = 7;
+const ALARM_STEP = 0.5;
+const ALARM_RING = 12;
+const ALARM_EVERY = 1.4;
+const ALARM_REACH = 14 * 60;
+const RINGTONES = [
+  { id: 'cloche', name: 'cloche', sound: 'sonnerie-cloche' },
+  { id: 'bip', name: 'bip', sound: 'sonnerie-bip' },
+  { id: 'melodie', name: 'mélodie', sound: 'sonnerie-melodie' },
+] as const;
+type Ringtone = (typeof RINGTONES)[number]['id'];
 /** Usure d'un appareil (bouton du feu, de la machine) à chaque allumage, et de l'ustensile à chaque plat cuit. */
 const WEAR_KNOB = 0.3;
 const WEAR_COOK = 0.5;
@@ -1494,6 +1509,8 @@ export class Game {
     if (this.body.soaked > 0.3) perso += ', trempé par la pluie (se sécher à la serviette)';
     if (this.sleep) perso += `, couché dans ${this.ref(this.sleep.bed)}${this.sleep.phase === 'asleep' ? ', endormi' : ''}`;
     for (const [bed, d] of this.duvets) if (d.unmade && this.sleep?.bed !== bed) perso += `, ${this.ref(bed)} défait (à faire)`;
+    for (const [item, a] of this.alarms) perso += `, ${this.ref(item)} réglé à ${this.hourText(a.hour)}`;
+    if (this.ringing) perso += `, ${this.ref(this.ringing.item)} sonne`;
     return {
       perso: this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
@@ -4138,7 +4155,13 @@ export class Game {
   }
 
   /** Sommeil en cours : le lit, l'étape (rabattre la couette, s'asseoir, s'allonger, dormir, se lever), son temps. */
-  private sleep: { bed: WorldItem; phase: 'open' | 'lie' | 'asleep' | 'up'; t: number; speed: number; side: number; sat?: boolean; then?: () => void } | null = null;
+  private sleep: { bed: WorldItem; phase: 'open' | 'lie' | 'asleep' | 'up'; t: number; speed: number; side: number; sat?: boolean; alarm?: number; then?: () => void } | null = null;
+  /** Réveils réglés : l'heure (h, à la demi-heure) et la sonnerie. */
+  private alarms = new Map<WorldItem, { hour: number; tone: Ringtone }>();
+  /** Sonnerie en cours : le réveil, le temps qui reste, la prochaine salve. */
+  private ringing: { item: WorldItem; left: number; next: number; rot: number } | null = null;
+  /** Minutes de l'horloge au dernier tour (pour voir passer l'heure du réveil). */
+  private alarmLast = -1;
   /** La couette souple de chaque lit. */
   private duvets = new Map<WorldItem, Duvet>();
   /** Voile sombre devant la scène pendant qu'on dort. */
@@ -4216,6 +4239,151 @@ export class Game {
       this.sleep = { bed, phase: 'open', t: 0, speed: this.clock.speed, side: spot.side };
     }, running);
     return true;
+  }
+
+  /** « 7 h », « 6 h 30 ». */
+  private hourText(h: number): string {
+    const m = Math.round((h % 1) * 60);
+    return m ? `${Math.floor(h)} h ${String(m).padStart(2, '0')}` : `${Math.floor(h)} h`;
+  }
+
+  /** Sonnerie du réveil `item` (réglé ou pas) : la cloche, sinon celle choisie. */
+  private toneOf(item: WorldItem): (typeof RINGTONES)[number] {
+    const id = this.alarms.get(item)?.tone ?? this.tones.get(item) ?? 'cloche';
+    return RINGTONES.find((r) => r.id === id) ?? RINGTONES[0];
+  }
+
+  /** Sonnerie choisie pour chaque réveil (gardée même coupé). */
+  private tones = new Map<WorldItem, Ringtone>();
+
+  /**
+   * Règle le réveil `ref` (sinon le plus proche) à `hour` h (à la demi-heure près) ; `null` le coupe.
+   * Réglé, il sonne chaque jour à cette heure et réveille le perso qui dort.
+   */
+  setAlarm(hour: number | null, ref?: string, running = false): boolean {
+    return this.atAlarm(ref, running, (item) => this.armAlarm(item, hour));
+  }
+
+  /** Le réveil `ref` (sinon le plus proche) ; le perso y va (le prend en main, s'assoit au lit : sans bouger) puis `fn`. */
+  private atAlarm(ref: string | undefined, running: boolean, fn: (item: WorldItem) => void): boolean {
+    const item = ref ? this.byRef(ref) : (this.ringing?.item ?? this.nearest((i) => i.def.id === 'reveil'));
+    if (item?.def.id !== 'reveil') {
+      this.onNotice?.(ref ? `${ref} n’est pas un réveil.` : 'Pas de réveil.');
+      return false;
+    }
+    const c = this.character;
+    // au lit, on tend le bras vers la table de nuit
+    if (this.sleep && this.sleep.phase !== 'up') {
+      fn(item);
+      return true;
+    }
+    if (c.seated) return c.standUp(() => this.atAlarm(this.ref(item), running, fn));
+    const press = () => {
+      if (!c.carried.includes(item)) c.gesture('interact');
+      fn(item);
+    };
+    if (c.carried.includes(item)) press();
+    else c.approachThen(c.standFor(item), item.object.position, press, running);
+    return true;
+  }
+
+  private armAlarm(item: WorldItem, hour: number | null): void {
+    if (hour === null) {
+      this.alarms.delete(item);
+      if (this.ringing?.item === item) this.silence();
+      this.onNotice?.('Réveil coupé.');
+      return;
+    }
+    const h = (((Math.round(hour / ALARM_STEP) * ALARM_STEP) % 24) + 24) % 24;
+    const tone = this.toneOf(item).id;
+    this.alarms.set(item, { hour: h, tone });
+    if (this.sleep && this.sleep.phase !== 'up') this.sleep.alarm = this.nextAlarm();
+    this.onNotice?.(`Réveil réglé à ${this.hourText(h)} (sonnerie : ${this.toneOf(item).name}).`);
+  }
+
+  /** Change la sonnerie du réveil `ref` (`tone`, sinon la suivante) et la fait entendre. */
+  setRingtone(tone?: string, ref?: string, running = false): boolean {
+    const next = tone ? RINGTONES.find((r) => r.id === tone || r.name === tone) : undefined;
+    if (tone && !next) {
+      this.onNotice?.(`Sonneries : ${RINGTONES.map((r) => r.name).join(', ')}.`);
+      return false;
+    }
+    return this.atAlarm(ref, running, (item) => this.pickTone(item, next?.id));
+  }
+
+  private pickTone(item: WorldItem, tone?: Ringtone): void {
+    const now = this.toneOf(item);
+    const next = RINGTONES.find((r) => r.id === tone) ?? RINGTONES[(RINGTONES.indexOf(now) + 1) % RINGTONES.length];
+    this.tones.set(item, next.id);
+    const a = this.alarms.get(item);
+    if (a) a.tone = next.id;
+    this.sound.play(next.sound, this.hear(item.object.position));
+    this.onNotice?.(`Sonnerie du réveil : ${next.name}.`);
+  }
+
+  /** Le prochain réveil qui sonnera (minutes de l'horloge), s'il tombe dans les 14 h qui viennent. */
+  private nextAlarm(): number | undefined {
+    const now = this.clock.minutes;
+    let best: number | undefined;
+    for (const { hour } of this.alarms.values()) {
+      let at = Math.floor(now / 1440) * 1440 + hour * 60;
+      if (at <= now) at += 1440;
+      if (at - now <= ALARM_REACH && (best === undefined || at < best)) best = at;
+    }
+    return best;
+  }
+
+  /** Va arrêter la sonnerie du réveil. */
+  stopRinging(running = false): boolean {
+    if (!this.ringing) {
+      this.onNotice?.('Le réveil ne sonne pas.');
+      return false;
+    }
+    return this.atAlarm(undefined, running, () => {
+      if (this.silence()) this.onNotice?.('Sonnerie arrêtée.');
+    });
+  }
+
+  /** Coupe la sonnerie (le réveil se repose). */
+  private silence(): boolean {
+    const r = this.ringing;
+    if (!r) return false;
+    r.item.object.rotation.z = r.rot;
+    this.ringing = null;
+    return true;
+  }
+
+  /** Le réveil sonne à son heure, tremble sur la table de nuit, et réveille le dormeur. */
+  private tickAlarm(dt: number): void {
+    const now = this.clock.minutes;
+    const last = this.alarmLast;
+    this.alarmLast = now;
+    if (last >= 0 && now > last && !this.ringing) {
+      for (const [item, { hour }] of this.alarms) {
+        const at = hour * 60;
+        if (Math.floor((last - at) / 1440) < Math.floor((now - at) / 1440)) {
+          this.ringing = { item, left: ALARM_RING, next: 0, rot: item.object.rotation.z };
+          this.say({ cloche: 'Driiing ! Driiing !', bip: 'Bip bip bip !', melodie: '♪ Tilili tilili ♪' }[this.toneOf(item).id]);
+          const s = this.sleep;
+          if (s && s.phase === 'asleep') {
+            this.onNotice?.(`Le réveil sonne : debout à ${this.clock.label}.`);
+            this.getOutOfBed();
+          }
+          break;
+        }
+      }
+    }
+    const r = this.ringing;
+    if (!r) return;
+    r.left -= dt;
+    r.next -= dt;
+    if (r.next <= 0) {
+      this.sound.play(this.toneOf(r.item).sound, this.hear(r.item.object.position));
+      r.next = ALARM_EVERY;
+    }
+    // il tremble sur la table de nuit
+    if (!this.character.carried.includes(r.item)) r.item.object.rotation.z = r.rot + Math.sin(r.left * 60) * 0.06;
+    if (r.left <= 0) this.silence();
   }
 
   /** Se réveille et sort du lit (puis `then`) ; faux si le perso n'est pas au lit. */
@@ -4319,7 +4487,9 @@ export class Game {
           // on éteint la lampe de chevet en se couchant
           for (const [item, lamp] of this.lamps) if (lamp.on && item.object.position.distanceTo(s.bed.object.position) < 2.5) this.setLamp(item, false);
           this.clock.speed = SLEEP_SPEED;
-          this.onNotice?.('Zzz… (C, ou un clic au sol, pour se réveiller)');
+          s.alarm = this.nextAlarm();
+          const alarm = s.alarm !== undefined ? ` (réveil à ${this.hourText((s.alarm / 60) % 24)})` : '';
+          this.onNotice?.(`Zzz…${alarm} (C, ou un clic au sol, pour se réveiller)`);
         })) {
           this.sleep = null;
           return;
@@ -4339,7 +4509,8 @@ export class Game {
       else if (s.sat || (c.wantsToMove === false && s.t > 1)) this.sleep = null;
     } else if (s.phase === 'asleep') {
       if (veil) veil.style.opacity = String(Math.min(SLEEP_DIM, (s.t / SLEEP_FADE) * SLEEP_DIM));
-      const rested = this.needs.values.fatigue >= 100;
+      // réveil réglé : on dort jusqu'à ce qu'il sonne (tickAlarm) ; sinon, jusqu'à être reposé
+      const rested = s.alarm === undefined && this.needs.values.fatigue >= 100;
       if (rested || c.wantsToMove) {
         if (rested) this.onNotice?.(`Bien reposé : réveillé à ${this.clock.label}.`);
         this.getOutOfBed();
@@ -5919,6 +6090,18 @@ export class Game {
     if (this.bagless.has(item)) add('Mettre un sac neuf', () => this.newBinBag(ref));
     // horloge, meubles tachés
     if (item.def.clock) add('Regarder l’heure', () => this.readClock());
+    if (item.def.id === 'reveil') {
+      const a = this.alarms.get(item);
+      if (this.ringing?.item === item) add('Arrêter la sonnerie', () => this.stopRinging());
+      if (!a) add(`Régler le réveil à ${ALARM_HOUR} h`, () => this.setAlarm(ALARM_HOUR, ref));
+      else {
+        add(`Plus tôt (${this.hourText((a.hour + 24 - ALARM_STEP) % 24)})`, () => this.setAlarm(a.hour - ALARM_STEP, ref));
+        add(`Plus tard (${this.hourText((a.hour + ALARM_STEP) % 24)})`, () => this.setAlarm(a.hour + ALARM_STEP, ref));
+        add('Couper le réveil', () => this.setAlarm(null, ref));
+      }
+      const next = RINGTONES[(RINGTONES.indexOf(this.toneOf(item)) + 1) % RINGTONES.length];
+      add(`Sonnerie : ${this.toneOf(item).name} → ${next.name}`, () => this.setRingtone(next.id, ref));
+    }
     if (this.grime.has(item) && held.some((h) => h.def.spray)) add('Nettoyer au spray', () => this.cleanSurface(ref));
     if (item.def.gloves && !this.gloved) add('Enfiler les gants', () => this.putOnGloves());
     // évier
@@ -6319,6 +6502,7 @@ export class Game {
     this.tickShower(dt);
     this.tickTowels(dt);
     this.tickSleep(dt);
+    this.tickAlarm(dt);
     this.tickBathroom(dt);
     this.tickIce(dt);
     this.tickTea(dt);
@@ -7707,6 +7891,8 @@ export class Game {
         put('pastilles', this.tablets.get(item));
         put('sachets', this.teaBoxes.get(item));
         put('rouleau', this.rolls.get(item));
+        put('reveil', this.alarms.get(item)?.hour);
+        put('sonnerie', this.tones.get(item) ?? this.alarms.get(item)?.tone);
         put('poubelle', this.binFill.get(item));
         put('jus', this.blended.get(item));
         put('sac', this.bags.get(item));
@@ -7722,6 +7908,9 @@ export class Game {
         if (typeof x.pastilles === 'number') this.tablets.set(item, x.pastilles);
         if (typeof x.sachets === 'number') this.teaBoxes.set(item, x.sachets);
         if (typeof x.rouleau === 'number') this.rolls.set(item, x.rouleau);
+        const tone = RINGTONES.find((r) => r.id === x.sonnerie)?.id;
+        if (tone) this.tones.set(item, tone);
+        if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, { hour: x.reveil, tone: tone ?? 'cloche' });
         if (typeof x.poubelle === 'number') {
           this.binFill.set(item, x.poubelle);
           this.showTrash(item);

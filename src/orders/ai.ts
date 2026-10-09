@@ -170,6 +170,7 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "reveiller"} : se réveiller et sortir du lit (le lit reste défait)
 - {"tache": "faire_lit", "objet": "<ref du lit>"} : faire le lit défait (tirer la couette, la lisser)
 - {"tache": "verrou", "fermer": true} : fermer à clé la porte de la salle de bain, de l'intérieur (« fermer » faux : la déverrouiller) ; le perso la déverrouille tout seul en sortant
+- {"tache": "reveil", "heure": 7.5} : régler le réveil de la chambre à 7 h 30 (à la demi-heure près) ; {"tache": "reveil", "couper": true} le coupe ; {"tache": "reveil", "arreter": true} arrête sa sonnerie ; {"tache": "reveil", "sonnerie": "cloche"} change la sonnerie (cloche, bip, mélodie ; "" : la suivante). Réglé, il sonne chaque jour et réveille le perso qui dort
 - {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (pour l'instant, seulement la cuisine)
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
@@ -283,6 +284,13 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'reveiller': return { kind: 'reveiller' };
     case 'faire_lit': return { kind: 'faire_lit', ref: s('objet') || undefined };
     case 'verrou': return { kind: 'verrou', fermer: o.fermer !== false };
+    case 'reveil': return {
+      kind: 'reveil',
+      heure: typeof o.heure === 'number' ? o.heure : undefined,
+      couper: o.couper === true || undefined,
+      arreter: o.arreter === true || undefined,
+      sonnerie: typeof o.sonnerie === 'string' ? o.sonnerie : undefined,
+    };
     case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };

@@ -77,7 +77,7 @@ pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pi�
   rabat la couette, s'assoit au bord, s'allonge et la couette le recouvre ; il dort, le temps file et
   la fatigue remonte, jusqu'à être reposé ou réveillé, C ou un clic au sol ; il repousse la couette
   en se levant, et le lit reste défait jusqu'à « fais ton lit » : il tire la couette et la lisse),
-  une table de nuit de chaque côté (lampe de chevet, réveil qui donne l'heure), l'armoire, la plante
+  une table de nuit de chaque côté (lampe de chevet, réveil qui donne l'heure et se règle : un clic, ou « règle le réveil à 7 h 30 », « coupe le réveil » ; il sonne chaque jour à son heure en tremblant, cloche, bip ou mélodie au choix, « mets la sonnerie mélodie », et réveille le perso qui dort ; « arrête la sonnerie »), l'armoire, la plante
   et le tapis ;
 - la **salle de bain** : la douche dans le coin (un clic ou « prends une douche » : le perso se
   place sous le pommeau, l'eau coule et la vapeur monte, il se frotte ; l'hygiène remonte à fond et
