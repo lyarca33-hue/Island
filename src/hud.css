@@ -69,6 +69,8 @@
 .hud-icon:focus-visible, .act:focus-visible, .chat-mode:focus-visible, .chat-send:focus-visible, .hud-clock:focus-visible, .menu-section-title:focus-visible {
   outline: 2px solid var(--hud-honey); outline-offset: 1px;
 }
+.cam-slider { width: 96px; margin: 0 4px; accent-color: var(--hud-honey); cursor: ew-resize; }
+.cam-slider:focus-visible { outline: 2px solid var(--hud-honey); outline-offset: 2px; border-radius: 4px; }
 .hud-sep { width: 1px; height: 16px; margin: 0 3px; background: var(--hud-line-strong); }
 
 /* Panneau du menu */
@@ -374,6 +376,7 @@
 @media (pointer: coarse) {
   :root { --hud-bar: 44px; --hud-ring: 40px; }
   .hud-icon { width: 38px; height: 38px; }
+  .cam-slider { width: 84px; }
   .chat-hint, .chat-mode .key, .act-keys, .act-info { display: none !important; }
   .act { padding: 0 12px; height: 36px; }
 }
