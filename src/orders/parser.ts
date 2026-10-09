@@ -35,7 +35,7 @@ export function normalize(text: string): string {
 const VERBS: Record<string, string[]> = {
   prendre: ['prends', 'prend', 'prendre', 'attrape', 'attraper', 'ramasse', 'ramasser', 'saisis', 'saisir', 'recupere', 'recuperer', 'sors', 'sort', 'sortir'],
   poser: ['pose', 'poser', 'repose', 'reposer', 'lache', 'lacher', 'depose', 'deposer', 'mets', 'met', 'mettre', 'remets', 'remettre'],
-  ranger: ['range', 'ranger', 'rangez'],
+  ranger: ['range', 'ranger', 'rangez', 'accroche', 'accrocher', 'raccroche', 'raccrocher', 'suspends'],
   aller: ['va', 'vas', 'aller', 'marche', 'marcher', 'cours', 'courir', 'rejoins', 'rejoindre', 'approche', 'approcher', 'entre', 'entrer'],
   cafe: ['fais', 'fait', 'faire', 'prepare', 'preparer', 'sers', 'servir'],
   boire: ['bois', 'boit', 'boire'],
@@ -110,7 +110,7 @@ const OPENS = new Set(['frigo', 'placard', 'appareil', 'poubelle']);
 /** Meubles où l'on range (et où l'on peut regarder ce qu'il y a). */
 const STORES = new Set(['frigo', 'placard', 'rangement', 'égouttoir']);
 /** Où se range un objet qui ne va ni au frais ni dans la bibliothèque. */
-const STORED_IN: Record<string, string> = { pull: 'armoire', tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'crochets', maniques: 'crochets', couteau: 'barre à couteaux',
+const STORED_IN: Record<string, string> = { pull: 'armoire', tasse: 'placard', assiette: 'placard', verre: 'placard', bol: 'placard', carafe: 'placard', lettre: 'tiroir', fourchette: 'tiroir', 'couteau de table': 'tiroir', cuillère: 'tiroir', torchon: 'crochets', maniques: 'crochets', couteau: 'barre à couteaux', 'papier toilette': 'porte-papier',
   // les provisions : l'épicerie au garde-manger, le frais au frigo, les surgelés au congélateur
   ...Object.fromEntries([...PANTRY_THINGS.map((n) => [n, 'garde-manger']), ...FRESH_THINGS.map((n) => [n, 'frigo']), ...FROZEN_FOOD.map((n) => [n, 'congélateur'])]) };
 /** Boissons du frigo (se boivent à la bouteille ou se versent dans un verre). */
@@ -155,6 +155,8 @@ const ALIASES: Record<string, string[]> = {
   douche: ['douche', 'douches'],
   toilettes: ['toilettes', 'toilette', 'wc', 'cuvette', 'chiottes'],
   serviette: ['serviette', 'serviettes'],
+  'papier toilette': ['papier', 'pq'],
+  'porte papier': ['derouleur', 'distributeur', 'pq'],
   frigo: ['frigo', 'frigos', 'frigidaire', 'refrigerateur'],
   'bouteille d eau': ['bouteille', 'bouteilles'],
   pomme: ['pomme', 'pommes', 'fruit', 'fruits'],

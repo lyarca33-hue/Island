@@ -238,6 +238,8 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
     // les toilettes au fond, sous la fenêtre ; le lavabo contre le mur ouest, après la douche
     ['toilettes', BATH.toilet, 0, SALLE_DE_BAIN.z0 + 0.27, 0],
     ['papier-toilette', BATH.toilet, 0.805, SALLE_DE_BAIN.z0 + 0.09, 0],
+    // le porte-papier au mur, à droite des toilettes : on y accroche le rouleau
+    ['derouleur', BATH.toilet + 0.4, 0.66, SALLE_DE_BAIN.z0 + 0.035, 0],
     ['lavabo', SALLE_DE_BAIN.x0 + 0.37, 0, BATH.sink, Q],
     // sur le rebord du lavabo : le verre à dents et sa brosse, le savon
     ['verre-dents', SALLE_DE_BAIN.x0 + 0.07, 0.94, BATH.sink - 0.2, 0],
@@ -255,9 +257,8 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
     // la colonne de la douche au mur, au-dessus du receveur (un objet : on y entre)
     hang(room, 'ouest', SALLE_DE_BAIN.z0 + 0.48, 0.95, 'douche-colonne');
     lay(room, 'tapis-bain', SALLE_DE_BAIN.x0 + 0.5, SALLE_DE_BAIN.z0 + 1.3, 0, 0.5);
-    // le miroir au-dessus du lavabo, le dérouleur à côté des toilettes
+    // le miroir au-dessus du lavabo
     hang(room, 'ouest', BATH.sink, 1.08, 'miroir-lavabo');
-    hang(room, 'nord', BATH.toilet + 0.4, 0.7, 'derouleur');
   },
 };
 

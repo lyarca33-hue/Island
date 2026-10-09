@@ -434,8 +434,8 @@ export class Character {
     return this.root.position.clone().addScaledVector(fwd, 0.36 + Math.max(item.size.x, item.size.z) / 2).add(side).setY(0);
   }
 
-  /** Repose l'objet tenu (le dernier pris, ou `item`) en `spot`, tourné comme le perso ou de `yaw`. */
-  drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false, item: WorldItem | null = this.held): boolean {
+  /** Repose l'objet tenu (le dernier pris, ou `item`) en `spot`, tourné comme le perso ou de `yaw` (ou accroché ainsi : `hung`). */
+  drop(spot: THREE.Vector3, yaw = this.heading, onDone?: () => void, upright = false, item: WorldItem | null = this.held, hung?: THREE.Quaternion): boolean {
     const hand = item ? this.handOf(item) : null;
     if (!hand || this.busy) return false;
     if (spot.y < 0.05) {
@@ -449,7 +449,7 @@ export class Character {
     return hand.drop(spot, yaw, () => {
       this.order = this.order.filter((s) => s !== hand.side);
       onDone?.();
-    }, upright);
+    }, upright, hung);
   }
 
   /** En train de déplacer un gros meuble (ou de l'agripper / le lâcher). */

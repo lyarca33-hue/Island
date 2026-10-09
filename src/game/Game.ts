@@ -5333,7 +5333,7 @@ export class Game {
         const other = both && this.character.heldItems.find((i) => this.fits(shelf, i) && this.freeSlots(shelf, i).length > 0);
         if (other) this.storeNext(shelf, other);
       };
-      this.character.drop(pos, new THREE.Euler().setFromQuaternion(rot, 'YXZ').y, next, true, item);
+      this.character.drop(pos, new THREE.Euler().setFromQuaternion(rot, 'YXZ').y, next, true, item, shelf.def.slotTilt ? rot : undefined);
     }
   }
 

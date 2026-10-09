@@ -722,14 +722,16 @@ export class Carry {
 
   /**
    * Repose l'objet tenu à l'endroit `spot` (sol ou dessus d'un meuble), tourné de `yaw`. Une pile
-   * se repose à plat, telle quelle ; `upright` : debout (livre rangé).
+   * se repose à plat, telle quelle ; `upright` : debout (livre rangé). `hung` : accroché au mur
+   * (barre à couteaux, porte-papier), tourné ainsi, son origine en `spot`.
    */
-  drop(spot: THREE.Vector3, yaw: number, onDone?: () => void, upright = false): boolean {
+  drop(spot: THREE.Vector3, yaw: number, onDone?: () => void, upright = false, hung?: THREE.Quaternion): boolean {
     if (!this.item || this.phase !== 'hold') return false;
     this.groundRot.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     // à plat : une pile, ou un objet qui se pose couché (livre), sauf rangé debout (bibliothèque)
     if (!upright && (this.stack.length || this.item.def.layFlat)) this.groundRot.multiply(LAY_FLAT);
-    this.groundPos.copy(spot).setY(spot.y + this.item.restLift(this.groundRot));
+    if (hung) this.groundRot.copy(hung);
+    this.groundPos.copy(spot).setY(spot.y + (hung ? 0 : this.item.restLift(this.groundRot)));
     this.target.copy(this.item.gripPoint).applyQuaternion(this.groundRot).add(this.groundPos);
     this.start('lower', onDone);
     return true;

@@ -29,6 +29,12 @@ function meuble(id: string, name: string, size: Size, color: THREE.ColorRepresen
   return { id, name, portable: false, movable: true, durability: 300, build: () => block(size, color), ...ROOM_RIGS[id]?.def, ...more };
 }
 
+/**
+ * Porte-papier : où va le centre de la face du rouleau accroché (repère du meuble). Couché le long de
+ * la barre du modèle (y 0.042, z 0.025), centré, la barre en haut du trou du carton.
+ */
+const PQ_ROLL = [0.045, 0.03, 0.05];
+
 /** Un petit objet qu'on prend à la main. */
 function objet(id: string, name: string, size: Size, color: THREE.ColorRepresentation, more: Partial<ItemDef> = {}): ItemDef {
   return { id, name, portable: true, fragility: 4, durability: 80, build: () => block(size, color), ...ROOM_RIGS[id]?.def, ...more };
@@ -211,6 +217,14 @@ export const PIECES_ITEMS: ItemDef[] = [
   objet('savon-pain', 'savon', [0.05, 0.04, 0.08], 0xe7a6b4, { grip: 'cradle', fragility: 1, soap: true }),
   objet('gel-douche', 'gel douche', [0.09, 0.16, 0.1], 0x6a9fd0, { grip: 'cradle', fragility: 3 }),
   objet('papier-toilette', 'papier toilette', [0.11, 0.09, 0.11], 0xf4f1ea, { fragility: 1 }),
+  // au mur à côté des toilettes : le rouleau s'y accroche, enfilé sur la barre (en travers, le long du mur)
+  meuble('derouleur', 'porte-papier', [0.22, 0.074, 0.07], 0x9a9ea3, {
+    movable: false,
+    fragility: 10,
+    holds: ['papier toilette'],
+    slots: [[PQ_ROLL[0], PQ_ROLL[1], PQ_ROLL[2]]],
+    slotTilt: [0, 0, Math.PI / 2],
+  }),
 
   // —— entrée
   // dehors, au bord du chemin : plantée dans le sol

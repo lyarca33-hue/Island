@@ -139,6 +139,7 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   'savon-pain': { model: 'savon-pain' },
   'gel-douche': { model: 'flacon-douche' },
   'papier-toilette': { model: 'papier-toilette' },
+  derouleur: { model: 'derouleur' },
   'porte-parapluies': { model: 'porte-parapluies' },
   parapluie: { model: 'parapluie' },
   chaussure: { model: 'chaussure' },
