@@ -4810,6 +4810,40 @@ export class Game {
     return rack ?? frozen ?? cold ?? wall ?? all.find((s) => !s.def.cold) ?? all[0];
   }
 
+  /**
+   * Ce qu'il y a à ranger dans la pièce `room` (celle du perso si omise), les plus proches d'abord :
+   * ce qui n'est pas à sa place, et la vaisselle sale qui n'attend pas déjà à l'évier ou au
+   * lave-vaisselle. On laisse ce qui sèche à l'égouttoir, ce qui est servi ou porte quelque chose,
+   * et ce qui cuit.
+   */
+  toTidy(room?: string): string[] {
+    const name = room ?? this.roomName;
+    const r = this.rooms.find((x) => x.spec.name === name);
+    if (!r) return [];
+    const c = this.character;
+    const spots = this.items
+      .filter((s) => s.def.wash?.dishes)
+      .flatMap((s) => {
+        s.object.updateMatrixWorld(true);
+        return s.def.wash!.dishes!.map((d) => new THREE.Vector3(...d).applyMatrix4(s.object.matrixWorld));
+      });
+    const loose = (i: WorldItem) => i.def.portable && !c.carried.includes(i) && r.contains(i.object.position);
+    const waiting = (i: WorldItem) => {
+      const shelf = this.shelfOf(i)?.shelf;
+      if (shelf?.def.rack && !i.dirty) return true;
+      if (!i.dirty) return false;
+      return !!shelf?.def.washes || spots.some((at) => p0(at).distanceTo(p0(i.object.position)) < 0.2 && Math.abs(at.y - i.object.position.y) < 0.3);
+    };
+    // posé sur `base` (portable), juste au-dessus
+    const on = (i: WorldItem, base: WorldItem) => base !== i && base.def.portable && !c.carried.includes(base) && !this.shelfOf(i) && base.object.position.y < i.object.position.y && i.object.position.y - base.object.position.y < 0.3 && this.isAbove(i, base);
+    // une poêle qui cuit, une assiette servie (ce qui est dessus part d'abord), le plat servi
+    const busy = (i: WorldItem) => (i.def.cookware && this.inPan(i).length > 0) || this.items.some((o) => on(o, i) || (!!i.def.food && on(i, o)));
+    return this.items
+      .filter((i) => loose(i) && !this.atHome(i) && (i.dirty || this.homes.has(i) || this.homeOf(i)) && !waiting(i) && !busy(i))
+      .sort((a, b) => a.object.position.distanceTo(c.position) - b.object.position.distanceTo(c.position))
+      .map((i) => this.ref(i));
+  }
+
   /** Range ce qu'on tient, un objet après l'autre (voir tidy). */
   storeAway(running = false): boolean {
     const c = this.character;
