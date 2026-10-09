@@ -46,10 +46,8 @@ export const WALL_T = 0.12;
 const CUT_H = 0.2;
 /** Hauteur d'une porte ou d'un passage. */
 export const DOOR_H = 2.08;
-/** Passage de la cuisine à l'entrée (mur ouest de la cuisine, mur est de l'entrée) : de z0 à z1. */
+/** Porte d'entrée de la maison (mur ouest de la cuisine) : de z0 à z1. */
 export const DOOR = { z0: 1.35, z1: 2.25 };
-/** Passage de la cuisine au salon (mur est de la cuisine, mur ouest du salon) : de z0 à z1. */
-export const SALON_PASS = { z0: -1.9, z1: -1.0 };
 /** Distance (m) à laquelle une porte s'ouvre devant le perso, et sa vitesse (ouverture par seconde). */
 const DOOR_NEAR = 1.4;
 const DOOR_SPEED = 1.8;
@@ -65,8 +63,6 @@ const PLASTER_IN = 0.012;
 /** Ce que l'enduit dépasse au plus de la face du mur (relief de 2 cm, enfoncé de PLASTER_IN). */
 const PLASTER_OUT = 0.008;
 const KIT_ROOF_T = 0.8;
-/** Hauteur du plan de travail : le haut des meubles bas, le bas de la crédence. */
-const COUNTER_H = 0.9;
 
 const PLASTER = 0xefe5cf;
 const CAP = 0x7c6a58;
@@ -74,7 +70,6 @@ const SKIRT = 0x8a6440;
 const FRAME = 0xf6f3ec;
 export const WOOD = 0x8a6440;
 export const DARK_WOOD = 0x5d4129;
-const COUNTER = 0xd9d3c5;
 
 /** Suspensions : hauteur de l'ampoule, couleur et force de la lumière allumée, portée (m). */
 const LAMP_Y = 1.95;
@@ -1241,139 +1236,23 @@ export class Room {
 }
 
 /**
- * Décor de la cuisine : crédence, hotte, meuble d'angle, tapis.
- */
-function kitchenDecor(room: Room, anchor: Anchors): void {
-  const { x0, z0 } = room.rect;
-  const stoveX = anchor('gaziniere')?.x ?? 0;
-  const sinkX = anchor('evier')?.x ?? -1.6;
-  const tableAt = anchor('table');
-  const north = room.wallGroup('nord'), west = room.wallGroup('ouest');
-
-  // crédence carrelée au-dessus des plans de travail, du coin au frigo et au bout de la rangée ouest
-  const fridge = anchor('frigo');
-  const bin = anchor('poubelle');
-  const splashTex = tiles(128, 4, '#dfecef', '#cfe1e6', '#ffffff', 2);
-  const splashN = (fridge ? fridge.x - 0.32 : 0.9) - x0;
-  const texN = splashTex.clone();
-  texN.repeat.set(splashN / 0.4, 1);
-  texN.needsUpdate = true;
-  const splashH = WIN_LOW - COUNTER_H;
-  north.add(box(splashN, splashH, 0.012, toon(0xffffff, texN), x0 + splashN / 2, COUNTER_H + splashH / 2, z0 + 0.006, false));
-  const splashW = (bin ? bin.z + 0.2 : -0.5) - z0;
-  const texW = splashTex.clone();
-  texW.repeat.set(splashW / 0.4, 1);
-  texW.needsUpdate = true;
-  west.add(box(0.012, splashH, splashW, toon(0xffffff, texW), x0 + 0.006, COUNTER_H + splashH / 2, z0 + splashW / 2, false));
-
-  // hotte au-dessus de la gazinière
-  const inox = toon(0xc3c8cd);
-  north.add(
-    box(0.62, 0.1, 0.48, inox, stoveX, 1.68, z0 + 0.24),
-    box(0.5, 0.12, 0.36, inox, stoveX, 1.79, z0 + 0.18),
-    box(0.26, WALL_H - 1.85, 0.24, inox, stoveX, (WALL_H + 1.85) / 2, z0 + 0.12),
-    box(0.5, 0.01, 0.4, toon(0x55595e), stoveX, 1.628, z0 + 0.25, false),
-  );
-
-  // l'étagère à épices au-dessus du plan de travail est un objet (prep.ts) : ses pots se prennent
-
-  // l'horloge au-dessus du coin café est un objet (upkeep.ts) : elle donne l'heure du jeu
-
-  // meuble d'angle (les deux rangées partent de lui), une plante dessus
-  const corner = new THREE.Group();
-  corner.add(
-    box(0.6, COUNTER_H - 0.04, 0.6, toon(WOOD), 0, (COUNTER_H - 0.04) / 2, 0),
-    box(0.62, 0.04, 0.62, toon(COUNTER), 0, COUNTER_H - 0.02, 0),
-    box(0.58, 0.08, 0.02, toon(DARK_WOOD), 0, 0.04, 0.3),
-  );
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.16, 16), toon(0xb5653a));
-  pot.position.set(-0.06, COUNTER_H + 0.08, -0.06);
-  corner.add(pot);
-  for (const [x, z, h] of [[0, 0, 0.32], [0.06, 0.03, 0.24], [-0.05, 0.05, 0.27], [0.03, -0.06, 0.22]]) {
-    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, h, 8), toon(0x4f8a3c));
-    leaf.position.set(-0.06 + x, COUNTER_H + 0.16 + h / 2, -0.06 + z);
-    leaf.castShadow = true;
-    corner.add(leaf);
-  }
-  corner.position.set(x0 + 0.3, 0, z0 + 0.3);
-  corner.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = true; });
-  room.group.add(corner);
-  room.obstacles.push({ box: new THREE.Box3(new THREE.Vector3(-0.31, 0, -0.31), new THREE.Vector3(0.31, COUNTER_H, 0.31)), pos: corner.position.clone(), yaw: 0, wall: false });
-
-  // tapis sous la table et sa chaise
-  if (tableAt) room.group.add(box(2, 0.01, 2.1, toon(0xb04a3c), tableAt.x, 0.008, tableAt.z - 0.45, false), box(1.8, 0.012, 1.9, toon(0xd8b07a), tableAt.x, 0.009, tableAt.z - 0.45, false));
-  // tapis devant l'évier
-  room.group.add(box(0.8, 0.01, 0.45, toon(0x5b7fa8), sinkX, 0.008, z0 + 1.0, false));
-}
-
-/**
- * La cuisine : passage vers l'entrée (mur ouest) et vers le salon (mur est), fenêtre au-dessus de
- * l'évier et à côté de la table (mur sud, sur le jardin), suspension au-dessus de la table,
- * interrupteur à côté du passage de l'entrée.
- *
- * Le long du fond : lave-vaisselle à côté de l'évier (sous la fenêtre), plan de travail pour
- * couper entre l'évier et la gazinière, tiroir à couverts, le frigo, puis le garde-manger au bout. Le long du mur
- * ouest : le coin café, le placard à vaisselle (micro-ondes dessus), le four, la poubelle. Les deux
- * rangées partent du meuble d'angle.
+ * La cuisine, vide en attendant ses meubles Tripo : la porte d'entrée de la maison (mur ouest),
+ * une fenêtre au fond (au-dessus de la future place de l'évier) et une sur le mur sud, la
+ * suspension au milieu du plafond, l'interrupteur à côté de la porte. Le toit déborde des quatre côtés.
  */
 export const KITCHEN: RoomSpec = {
   name: 'cuisine',
   rect: ROOM,
   floor: () => tiledFloor(ROOM),
-  doors: [
-    { wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1 },
-    { wall: 'est', u0: SALON_PASS.z0, u1: SALON_PASS.z1 },
+  doors: [{ wall: 'ouest', u0: DOOR.z0, u1: DOOR.z1, leaf: true }],
+  joined: [],
+  windows: () => [
+    { wall: 'nord', u0: -2.1, u1: -1.1, y0: WIN_LOW, y1: WIN_HIGH },
+    { wall: 'sud', u0: 0.45, u1: 1.55, y0: 0.95, y1: WIN_HIGH },
   ],
-  joined: ['est', 'ouest'],
-  windows: (anchor) => {
-    const sinkX = anchor('evier')?.x ?? -1.6;
-    const tableX = anchor('table')?.x ?? 1;
-    return [
-      // celle de l'évier s'ouvre : son battant est l'objet `fenetre` (KITCHEN.items)
-      { wall: 'nord', u0: sinkX - 0.5, u1: sinkX + 0.5, y0: WIN_LOW, y1: WIN_HIGH, sash: true },
-      // celle de la table donne sur le jardin (le mur est est dos au salon)
-      { wall: 'sud', u0: tableX - 0.55, u1: tableX + 0.55, y0: 0.95, y1: WIN_HIGH },
-    ];
-  },
-  lamps: (anchor) => {
-    const t = anchor('table');
-    return [{ x: t ? t.x : 1.6, z: t ? t.z - 0.2 : 1, kind: 'suspension' }];
-  },
+  lamps: () => [{ x: 0, z: 0, kind: 'suspension' }],
   lightSwitch: { wall: 'ouest', u: DOOR.z1 + 0.2 },
-  runs: [
-    { wall: 'nord', from: ROOM.x0 + 0.6, items: ['lave-vaisselle', 'evier', 'plan-de-travail', 'gaziniere', 'tiroir', 0.04, 'congelateur', 0.04, 'garde-manger'] },
-    { wall: 'ouest', from: ROOM.z0 + 0.6, items: ['machine-a-cafe', 'placard', 'four', 0.04, 'poubelle'] },
-  ],
-  onTop: [
-    ['micro-ondes', 'placard'],
-    ['bouilloire', 'tiroir'],
-    // le pot à ustensiles à côté de la bouilloire, l'étagère à épices au mur au-dessus du plan de travail
-    ['pot-ustensiles', 'tiroir', 0.17, -0.14],
-    ['etagere-epices', 'plan-de-travail', 0, -0.15],
-    // le livre de recettes debout contre le mur, de l'autre côté de la bouilloire
-    ['livre-recettes', 'tiroir', -0.2, -0.17, Math.PI / 2],
-    // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier, le torchon devant
-    ['grille-pain', 'lave-vaisselle', -0.16, -0.14],
-    ['egouttoir', 'lave-vaisselle', 0.145, 0],
-    ['mixeur', 'four'],
-    // au mur : la barre à couteaux sous l'étagère à épices, les crochets (torchon, maniques) au-dessus du four
-    ['barre-couteaux', 'plan-de-travail', 0.12, -0.24],
-    ['crochets', 'four', 0, -0.31],
-    ['frigo', 'congelateur'],
-  ],
-  items: [
-    // l'horloge au mur au-dessus du coin café, le battant de la fenêtre de l'évier
-    ['horloge', ROOM.x0 + 0.004, 1.68, -1.89, Math.PI / 2],
-    ['fenetre', -1.57, WIN_LOW + 0.05, ROOM.z0 - 0.03, 0],
-    // l'îlot au milieu, ses deux tabourets côté table (on s'y assoit face à l'îlot)
-    ['ilot', -0.9, 0, -0.3, 0],
-    ['tabouret', -1.2, 0, 0.75, Math.PI],
-    ['tabouret', -0.6, 0, 0.75, Math.PI],
-    // le balai et le seau (la serpillière dedans) dans le coin, après le garde-manger
-    ['balai', 2.55, 0, -2.66, 0],
-    ['seau', 2.95, 0, -2.5, 0],
-    // dehors, contre le mur ouest de l'entrée (entree.ts), près de la porte : le conteneur où vont les sacs poubelle
-    ['conteneur', -6.35, 0, 2.3, 0],
-  ],
-  decor: kitchenDecor,
+  runs: [],
+  onTop: [],
+  items: [],
 };

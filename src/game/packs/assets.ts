@@ -3,15 +3,14 @@
  * tools/build_pack_assets.mjs) : chaque modèle y est un nœud nommé comme le fichier d'origine,
  * posé au sol (bas de sa boîte à y = 0) et centré.
  *
- * Les packs dont le jeu fait des objets (survie, pêche) sont chargés avant de construire la
- * maison (preloadPacks) : `packModel` les rend alors tout de suite. Le décor (voitures, train,
- * marché, station) arrive ensuite : `packModel` rend un groupe vide qui se remplit au chargement.
+ * Les packs dont le jeu fait des objets (nourriture) sont chargés avant de construire la maison
+ * (preloadPacks) : `packModel` les rend alors tout de suite. Un pack pas encore chargé : `packModel`
+ * rend un groupe vide qui se remplit au chargement.
  * Les matériaux deviennent du cel shading, comme le reste du jeu.
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { createToonMaterial } from '../toon';
 import { PACK_SIZES, type ModelName, type PackId } from './manifest';
 
@@ -159,53 +158,5 @@ export function packModel<P extends PackId>(id: P, name: ModelName<P>, fit: Fit 
     pending.get(id)!.push({ name, into: inner, own });
     void loadPack(id);
   }
-  return g;
-}
-
-// ——— les monstres (Bestiary - Dungeon Monsters Kit) ———
-
-export type CreatureId = 'puglin' | 'imp';
-const creatures = new Map<CreatureId, THREE.Object3D>();
-const creatureLoading = new Map<CreatureId, Promise<void>>();
-
-/** Charge un monstre (squelette de la Universal Animation Library, voir build_pack_assets.mjs). */
-export function loadCreature(id: CreatureId): Promise<void> {
-  let p = creatureLoading.get(id);
-  if (p) return p;
-  p = new GLTFLoader()
-    .setMeshoptDecoder(MeshoptDecoder)
-    .loadAsync(`${import.meta.env.BASE_URL}packs/${id}.glb`)
-    .then((gltf) => {
-      const mats = new Map<THREE.Material, THREE.Material>();
-      gltf.scene.traverse((o) => {
-        if (!(o instanceof THREE.Mesh)) return;
-        const m = o.material as THREE.Material;
-        if (!mats.has(m)) mats.set(m, toonOf(m));
-        o.material = mats.get(m)!;
-        o.castShadow = true;
-        o.receiveShadow = true;
-        // le squelette bouge : la boîte du maillage au repos ne suffit pas à le garder à l'écran
-        o.frustumCulled = false;
-      });
-      gltf.scene.updateMatrixWorld(true);
-      creatures.set(id, gltf.scene);
-    })
-    .catch((e) => console.warn(`Monstre ${id} non chargé`, e));
-  creatureLoading.set(id, p);
-  return p;
-}
-
-/** Un monstre à la hauteur voulue (m), posé au sol ; vide si son fichier n'a pas été chargé. */
-export function creatureModel(id: CreatureId, height: number): THREE.Group {
-  const g = new THREE.Group();
-  const src = creatures.get(id);
-  if (!src) return g;
-  const copy = cloneSkinned(src);
-  const box = new THREE.Box3().setFromObject(src);
-  const s = height / Math.max(0.01, box.max.y - box.min.y);
-  copy.scale.multiplyScalar(s);
-  copy.position.y = -box.min.y * s;
-  copy.name = 'monstre';
-  g.add(copy);
   return g;
 }

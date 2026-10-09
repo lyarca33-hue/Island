@@ -81,21 +81,6 @@ python3 tools/build_anim_assets.py --src public/models/xbot.glb --out public/ani
 ```
 
 
-## `build_nature_assets.py` : le jardin (pack nature de Quaternius)
-
-Regroupe dans `public/models/nature.glb` les modèles du jardin pris dans le « Stylized Nature
-MegaKit » de Quaternius (CC0, version gratuite, à télécharger sur quaternius.com) : seulement
-ceux de la liste `MODELS`, textures réduites en WebP, sans les cartes de relief.
-
-```bash
-pip install pillow numpy
-python3 tools/build_nature_assets.py --src "Stylized Nature MegaKit[Standard]/glTF" --out public/models/nature.glb
-```
-
-Pour ajouter un modèle : l'ajouter à `MODELS` (et son matériau à `MATERIALS` s'il est nouveau),
-puis le placer dans `src/game/nature.ts`.
-
-
 ## `build_interior_assets.py` : les meubles (pack intérieur de Quaternius)
 
 Regroupe dans `public/models/interior.glb` les meubles de l'« Ultimate House Interior Pack » de
@@ -112,14 +97,13 @@ nom du meuble : les pièces nommées (portes, tiroirs, écran…) restent celles
 
 ## `build_pack_assets.mjs` : packs de Quaternius
 
-Fait un `.glb` par pack dans `public/packs` (survie, peche, voitures, trains, armes, fantasy,
-scifi, nourriture) et écrit `src/game/packs/manifest.ts` (taille de chaque modèle). Chaque modèle devient un
-nœud nommé comme son fichier, posé au sol et centré ; sommets compressés (meshopt), textures en
-WebP 1024 px, décor simplifié. Les monstres (puglin, imp) sont gardés avec leur squelette.
+Fait un `.glb` par pack dans `public/packs` (aujourd'hui seulement `nourriture`) et écrit
+`src/game/packs/manifest.ts` (taille de chaque modèle). Chaque modèle devient un nœud nommé comme
+son fichier, posé au sol et centré ; sommets compressés (meshopt), textures en WebP 1024 px.
 
 ```bash
 npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
-node tools/build_pack_assets.mjs --src <dossier des packs> --out public/packs [--only puglin,imp]
+node tools/build_pack_assets.mjs --src <dossier des packs> --out public/packs [--only nourriture]
 ```
 
 Avec `--only`, seuls ces packs sont refaits et le manifeste garde les tailles des autres. Le pack
@@ -127,7 +111,7 @@ Avec `--only`, seuls ces packs sont refaits et le manifeste garde les tailles de
 `src/game/items/interior.ts` (`FOOD_LOOKS`) dit lequel habille quel aliment du jeu.
 
 `<dossier des packs>` contient les dossiers tels que téléchargés sur quaternius.com
-(« Survival Pack - Sept 2020 », « Fantasy Props MegaKit[Standard] »…).
+(« Ultimate Food Pack - Oct 2019 »).
 
 ## `build_kit_assets.mjs` : kit Tripo de la maison
 

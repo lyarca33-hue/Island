@@ -1,8 +1,8 @@
 /**
  * Le kit Tripo de la maison (public/kit/maison.glb, voir tools/build_kit_assets.mjs) : enduit des
- * murs, carreau du sol, pan de toit, porte d'entrée et fenêtre en bois. La carte « cuisine seule »
- * (carte.ts) habille sa pièce avec : Room.dress remplace le sol, le toit, le battant de la porte
- * et les fenêtres faits par programme, et pose l'enduit sur les murs.
+ * murs, carreau du sol, pan de toit, porte d'entrée et fenêtre en bois. La cuisine s'en habille :
+ * Room.dress remplace le sol, le toit, le battant de la porte et les fenêtres faits par programme,
+ * et pose l'enduit sur les murs.
  *
  * Repère des pièces dans le fichier :
  * - mur : plaque de 1 × 1 m, x le long du mur, y de 0 à 1, relief tourné vers +z (z de 0 à 2 cm) ;

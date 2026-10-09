@@ -72,7 +72,7 @@ describe('argent', () => {
     expect(aisle.find((r) => r.def.id === 'assiette')?.broken).toBe(2);
     expect(aisle.find((r) => r.def.id === 'chaise')?.broken).toBe(1);
     expect(aisle.some((r) => r.def.id === 'pomme' || r.def.id === 'lettre')).toBe(false);
-    // le papier toilette, les pastilles et la vaisselle sont toujours en rayon
+    // les pastilles et la vaisselle sont toujours en rayon
     for (const id of HOUSE_ALWAYS) expect(aisle.some((r) => r.def.id === id)).toBe(true);
     expect(a.takeBroken('chaise')?.p).toEqual([1, 0, 2]);
     expect(a.takeBroken('chaise')).toBeUndefined();

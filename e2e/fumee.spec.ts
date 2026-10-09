@@ -1,42 +1,20 @@
 /**
- * Test de fumée : le jeu se charge dans un vrai navigateur, le perso prend la tasse, se fait un
- * café et s'assoit, sans aucune erreur dans la console. Les gestes passent par window.game (les
- * mêmes appels que la console : game.pickUp('tasse')…), l'état par game.describe().
+ * Test de fumée : le jeu se charge dans un vrai navigateur, sur la cuisine vide (en attendant ses
+ * meubles Tripo), sans aucune erreur dans la console. L'état passe par
+ * window.game (game.describe(), game.rooms…).
  *
- * Sans carte graphique (CI), le rendu tombe à une image par seconde environ. Le jeu, qui n'avance
- * que de 50 ms par image, tournerait vingt fois au ralenti (le café coulait en cinq minutes, ou pas
- * du tout à temps) : game.catchUp lui fait rattraper le temps réel en jouant plusieurs pas par image.
+ * Sans carte graphique (CI), le rendu tombe à une image par seconde environ : game.catchUp fait
+ * rattraper le temps réel au jeu en jouant plusieurs pas par image.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-interface Etat {
-  perso: string;
-  enMain: string[];
-  objets: Array<{ ref: string; nom: string; ou: string }>;
+interface Jeu {
+  rooms: unknown[];
+  catchUp: number;
+  describe(): { perso: string; objets: unknown[] };
 }
 
-const etat = (page: Page) =>
-  page.evaluate(() => {
-    const d = (window as unknown as { game: { describe(): Etat } }).game.describe();
-    return { perso: d.perso, enMain: d.enMain, objets: d.objets.map((o) => ({ ref: o.ref, nom: o.nom, ou: o.ou })) };
-  });
-
-const tasse = async (page: Page) => (await etat(page)).objets.find((o) => o.nom === 'tasse')?.ou ?? '';
-
-/** Le perso a fini son geste (bras revenus, arrivé, plus rien en cours). */
-const auRepos = (page: Page) =>
-  expect
-    .poll(() => page.evaluate(() => (window as unknown as { game: { character: { idle: boolean } } }).game.character.idle), { timeout: 120_000 })
-    .toBe(true);
-
-/** Appelle une méthode du jeu (game.pickUp('tasse')…) et rend sa réponse. */
-const geste = (page: Page, methode: string, ...args: unknown[]) =>
-  page.evaluate(([m, a]) => {
-    const g = (window as unknown as { game: Record<string, (...x: unknown[]) => unknown> }).game;
-    return g[m as string](...(a as unknown[]));
-  }, [methode, args] as const);
-
-test('le jeu se lance : prendre la tasse, faire un café, s’asseoir', async ({ page }, info) => {
+test('le jeu se lance : la cuisine vide, sans erreur', async ({ page }, info) => {
   const erreurs: string[] = [];
   page.on('pageerror', (e) => erreurs.push(`exception : ${e.message}`));
   page.on('console', (m) => {
@@ -48,41 +26,20 @@ test('le jeu se lance : prendre la tasse, faire un café, s’asseoir', async ({
   await expect(page.getByText('Chargement…')).toBeVisible();
   await expect(page.getByText('Chargement…')).toHaveCount(0, { timeout: 120_000 });
   expect(await page.evaluate(() => 'game' in window)).toBe(true);
-  // le jeu suit le temps réel même à une image par seconde
   await page.evaluate(() => {
-    (window as unknown as { game: { catchUp: number } }).game.catchUp = 40;
+    (window as unknown as { game: Jeu }).game.catchUp = 40;
   });
-  await page.screenshot({ path: info.outputPath('1-charge.png') });
 
-  // la tasse posée sur la table, prise en main
-  expect(await tasse(page)).not.toBe('en main');
-  expect(await geste(page, 'pickUp', 'tasse')).toBe(true);
-  await expect.poll(async () => (await etat(page)).enMain, { timeout: 120_000 }).toContain('tasse');
-
-  // un café à la machine : la tasse finit pleine de café
-  expect(await geste(page, 'makeCoffee')).toBe(true);
-  await expect.poll(() => tasse(page), { timeout: 300_000, intervals: [2000] }).toContain('contient du café');
-  await auRepos(page);
-  await page.screenshot({ path: info.outputPath('2-cafe.png') });
-
-  // s'asseoir sur le siège le plus proche
-  expect(await geste(page, 'sit')).toBe(true);
-  await expect.poll(async () => (await etat(page)).perso, { timeout: 120_000 }).toContain('assis sur');
-  await auRepos(page);
-  await page.screenshot({ path: info.outputPath('3-assis.png') });
-
-  expect(erreurs, erreurs.join('\n')).toEqual([]);
-});
-
-test('l’ancienne maison se charge encore (réglage carte)', async ({ page }) => {
-  const erreurs: string[] = [];
-  page.on('pageerror', (e) => erreurs.push(`exception : ${e.message}`));
-  page.on('console', (m) => {
-    if (m.type() === 'error') erreurs.push(`console : ${m.text()}`);
+  // une seule pièce, la cuisine, sans aucun objet
+  const etat = await page.evaluate(() => {
+    const g = (window as unknown as { game: Jeu }).game;
+    const d = g.describe();
+    return { pieces: g.rooms.length, objets: d.objets.length, perso: d.perso };
   });
-  await page.goto('/?carte=ancienne');
-  await expect(page.getByText('Chargement…')).toHaveCount(0, { timeout: 120_000 });
-  const pieces = await page.evaluate(() => (window as unknown as { game: { rooms: unknown[] } }).game.rooms.length);
-  expect(pieces).toBeGreaterThan(1);
+  expect(etat.pieces).toBe(1);
+  expect(etat.objets).toBe(0);
+  expect(etat.perso).toContain('cuisine');
+  await page.screenshot({ path: info.outputPath('1-cuisine.png') });
+
   expect(erreurs, erreurs.join('\n')).toEqual([]);
 });

@@ -1,9 +1,7 @@
 /**
- * Sauter, nager, grimper (les clips et la physique sont dans character.ts, l'étang dans nage.ts) :
+ * Sauter, grimper (les clips et la physique sont dans character.ts) :
  * - sauter : Espace, ou « Sauter » au menu du perso ; on retombe sur un meuble bas si on passe
  *   au-dessus ;
- * - nager : « Nager » au menu de l'étang (les mains vides) : le perso plonge depuis la rive, nage
- *   au clavier ou au clic, et remonte sur la rive en y arrivant ;
  * - grimper : « Grimper dessus » au menu d'un meuble d'une hauteur de table (les mains vides) ;
  *   au bord, on retombe.
  *
@@ -12,8 +10,6 @@
 import * as THREE from 'three';
 import type { Character } from './character';
 import type { WorldItem } from './items/carry';
-import { Pond } from './nage';
-import { DOCK_L } from './items/plein-air';
 
 export interface MouvementsHost {
   readonly character: Character;
@@ -36,18 +32,14 @@ const ITEM_REACH = 3;
 
 export class Mouvements {
   private host: MouvementsHost;
-  private pond: WorldItem | null = null;
 
   constructor(host: MouvementsHost) {
     this.host = host;
   }
 
-  /** Branche l'étang et les dessus des meubles au perso. */
-  attach(items: WorldItem[]): void {
+  /** Branche les dessus des meubles au perso. */
+  attach(): void {
     const c = this.host.character;
-    this.pond = items.find((i) => i.def.id === 'etang') ?? null;
-    const dock = items.find((i) => i.def.id === 'ponton');
-    c.water = this.pond ? new Pond(dock ? { x: dock.object.position.x, end: dock.object.position.z + DOCK_L / 2 } : null) : null;
     c.ground = (x, z) => this.topAt(x, z);
   }
 
@@ -75,43 +67,14 @@ export class Mouvements {
   menu(item: WorldItem | null, add: (label: string, run: () => boolean) => void): void {
     const c = this.host.character;
     if (!item) {
-      if (c.swimming) add('Sortir de l’eau', () => this.leaveWater());
-      else if (c.canJump) add('Sauter', () => this.jump());
+      if (c.canJump) add('Sauter', () => this.jump());
       return;
     }
-    if (item === this.pond && !c.swimming) add('Nager', () => this.swim(false));
-    if (this.climbable(item) && !c.swimming) add('Grimper dessus', () => this.climb(item, false));
+    if (this.climbable(item)) add('Grimper dessus', () => this.climb(item, false));
   }
 
   jump(): boolean {
-    const c = this.host.character;
-    if (c.swimming) return false;
-    return c.jump();
-  }
-
-  leaveWater(): boolean {
-    const c = this.host.character;
-    if (c.leaveWater()) return true;
-    this.host.notice('Pas de place sur la rive pour sortir de l’eau.');
-    return false;
-  }
-
-  /** Va plonger dans l'étang depuis la rive la plus proche. */
-  swim(running: boolean): boolean {
-    const c = this.host.character;
-    const water = c.water;
-    if (!water || c.swimming) return false;
-    if (c.carried.length) {
-      this.host.notice('Pose d’abord ce que tu tiens pour nager.');
-      return false;
-    }
-    if (!c.canJump) return false;
-    const spot = water.entry(c.position, (p) => !c.nav?.blocked(p));
-    if (!spot) {
-      this.host.notice('Pas de place sur la rive pour plonger.');
-      return false;
-    }
-    return c.swimIn(spot.bank, spot.water, running);
+    return this.host.character.jump();
   }
 
   /** Va au pied de `item`, du côté le plus proche où il y a la place, et grimpe dessus. */

@@ -1,8 +1,7 @@
 /**
  * Sons du jeu, fabriqués à la volée (Web Audio, sans fichier) : le grésillement d'une poêle,
  * l'eau qui bout, le bip du four et du micro-ondes, la vaisselle qui tinte, le verre qui casse ;
- * et l'ambiance : les pas, la douche, la chasse d'eau, la télé, les oiseaux le jour, les grillons
- * la nuit, la pluie. Coupables dans le menu (Affichage), réglage gardé dans le navigateur.
+ * et l'ambiance : les pas, les oiseaux le jour, les grillons la nuit, la pluie. Coupables dans le menu (Affichage), réglage gardé dans le navigateur.
  *
  * Le navigateur ne laisse jouer un son qu'après un geste du joueur : le contexte audio naît au
  * premier clic ou à la première touche.
@@ -10,15 +9,10 @@
 
 const KEY = 'island-sons';
 
-export type SoundName = 'bip' | 'ding' | 'tinte' | 'casse' | 'verse' | 'pas' | 'pas-herbe' | 'chasse';
+export type SoundName = 'bip' | 'ding' | 'tinte' | 'casse' | 'verse' | 'pas' | 'pas-herbe';
 
 /** Ambiance continue, de 0 à 1 (distance et murs déjà comptés), donnée à chaque image. */
 export interface Ambience {
-  /** Douche qui coule. */
-  douche: number;
-  /** Télé allumée, et sa chaîne (0 dessin animé, 1 météo, 2 aquarium). */
-  tele: number;
-  chaine: number;
   /** Oiseaux (le jour) et grillons (la nuit). */
   oiseaux: number;
   grillons: number;
@@ -35,13 +29,9 @@ export class KitchenSound {
   private noise: AudioBuffer | null = null;
   private sizzle: { gain: GainNode; filter: BiquadFilterNode } | null = null;
   private boil: { gain: GainNode; filter: BiquadFilterNode } | null = null;
-  private shower: Loop | null = null;
-  private tvLoop: Loop | null = null;
   private rainLoop: Loop | null = null;
   private crackle = 0;
   private bubble = 0;
-  private syllable = 0;
-  private tvFx = 0;
   private chirp = 1;
   private cricket = 0.5;
   private drop = 0;
@@ -51,7 +41,7 @@ export class KitchenSound {
   /** Ce qui a joué (les derniers sons, avec leur heure) : pour le banc de test et le débogage. */
   readonly log: Array<{ name: string; at: number }> = [];
   /** Niveau des sons continus en cours (0 à 1). */
-  levels = { gresille: 0, bout: 0, douche: 0, tele: 0, oiseaux: 0, grillons: 0, pluie: 0 };
+  levels = { gresille: 0, bout: 0, oiseaux: 0, grillons: 0, pluie: 0 };
 
   constructor() {
     let saved: { on?: boolean; volume?: number } = {};
@@ -130,8 +120,6 @@ export class KitchenSound {
     };
     this.sizzle = loop('highpass', 3200, 0.7);
     this.boil = loop('lowpass', 420, 1.2);
-    this.shower = loop('bandpass', 2600, 0.5);
-    this.tvLoop = loop('bandpass', 900, 2.5);
     this.rainLoop = loop('bandpass', 1800, 0.35);
     return ctx;
   }
@@ -163,12 +151,10 @@ export class KitchenSound {
 
   /** Ambiance continue, à chaque image (voir `Ambience`). */
   ambient(dt: number, a: Ambience): void {
-    this.levels = { ...this.levels, douche: a.douche, tele: a.tele, oiseaux: a.oiseaux, grillons: a.grillons, pluie: a.pluie };
+    this.levels = { ...this.levels, oiseaux: a.oiseaux, grillons: a.grillons, pluie: a.pluie };
     const ctx = this.ctx;
-    if (!ctx || !this.shower || !this.tvLoop || !this.rainLoop) return;
+    if (!ctx || !this.rainLoop) return;
     const t = ctx.currentTime;
-    // la douche : un souffle d'eau régulier, qui ondule à peine
-    this.shower.gain.gain.setTargetAtTime(a.douche * (0.16 + Math.random() * 0.03), t, 0.08);
     // la pluie : un bruissement large, étouffé et plus grave à l'intérieur, et des gouttes
     this.rainLoop.gain.gain.setTargetAtTime(a.pluie * (a.dedans ? 0.12 : 0.22), t, 0.3);
     this.rainLoop.filter.frequency.setTargetAtTime(a.dedans ? 700 : 1800, t, 0.3);
@@ -177,26 +163,6 @@ export class KitchenSound {
       this.drop = 0.02 + Math.random() * 0.12 / Math.max(0.2, a.pluie);
       if (a.pluie > 0.05 && !a.dedans) this.blip(1400 + Math.random() * 1800, 0.025, a.pluie * 0.03);
     }
-    // la télé : des voix (un bruit filtré qui parle par syllabes) et, selon la chaîne, ses bruitages
-    this.syllable -= dt;
-    if (this.syllable <= 0) {
-      this.syllable = 0.07 + Math.random() * 0.16;
-      const pause = Math.random() < 0.15;
-      this.tvLoop.gain.gain.setTargetAtTime(pause ? 0 : a.tele * (0.1 + Math.random() * 0.12), t, 0.02);
-      this.tvLoop.filter.frequency.setTargetAtTime((a.chaine === 0 ? 1300 : 750) + Math.random() * 500, t, 0.02);
-    }
-    this.tvFx -= dt;
-    if (this.tvFx <= 0 && a.tele > 0.01) {
-      if (a.chaine === 0) {
-        // dessin animé : des « boing » et des petites notes
-        this.tvFx = 0.8 + Math.random() * 2;
-        this.slide('triangle', 220 + Math.random() * 200, 700 + Math.random() * 500, 0.25, a.tele * 0.05);
-      } else if (a.chaine === 2) {
-        // aquarium : des bulles
-        this.tvFx = 0.1 + Math.random() * 0.4;
-        this.blip(300 + Math.random() * 400, 0.06, a.tele * 0.05);
-      } else this.tvFx = 1;
-    } else if (a.tele <= 0.01) this.tvFx = 0;
     // les oiseaux : une petite phrase de deux à cinq notes qui glissent, de temps en temps
     this.chirp -= dt;
     if (this.chirp <= 0) {
@@ -249,10 +215,6 @@ export class KitchenSound {
     } else if (name === 'pas-herbe') {
       // dans l'herbe : un froissement doux
       this.burst(t, 0.12, 2400 + Math.random() * 800, 0.035 * volume);
-    } else if (name === 'chasse') {
-      // la chasse d'eau : l'eau qui se rue (un souffle qui monte puis retombe), puis le réservoir qui gargouille
-      this.sweep(t, 2.6, 350, 1300, 0.3 * volume);
-      for (let i = 0; i < 6; i++) this.blipAt(t + 1.6 + Math.random() * 1.6, 150 + Math.random() * 200, 0.08, 0.05 * volume);
     }
   }
 
@@ -270,7 +232,7 @@ export class KitchenSound {
     osc.stop(at + len + 0.05);
   }
 
-  /** Une note qui glisse de `from` à `to` (chant d'oiseau, « boing » de dessin animé). */
+  /** Une note qui glisse de `from` à `to` (chant d'oiseau). */
   private slide(type: OscillatorType, from: number, to: number, len: number, peak: number, at = this.ctx!.currentTime): void {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator();
@@ -284,28 +246,6 @@ export class KitchenSound {
     osc.connect(gain).connect(this.master!);
     osc.start(at);
     osc.stop(at + len + 0.05);
-  }
-
-  /** Un souffle d'eau qui enfle puis retombe, son filtre glissant de `from` à `to` (chasse d'eau). */
-  private sweep(at: number, len: number, from: number, to: number, peak: number): void {
-    const ctx = this.ctx!;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise;
-    src.loop = true;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = 0.8;
-    filter.frequency.setValueAtTime(from, at);
-    filter.frequency.exponentialRampToValueAtTime(to, at + len * 0.3);
-    filter.frequency.exponentialRampToValueAtTime(from * 0.8, at + len);
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(peak, at + 0.25);
-    gain.gain.setValueAtTime(peak, at + len * 0.4);
-    gain.gain.exponentialRampToValueAtTime(0.0001, at + len);
-    src.connect(filter).connect(gain).connect(this.master!);
-    src.start(at);
-    src.stop(at + len + 0.05);
   }
 
   /** Une bulle qui éclate : une note grave qui glisse vers le haut. */

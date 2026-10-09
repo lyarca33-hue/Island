@@ -12,7 +12,6 @@ import type { FirebaseApp } from 'firebase/app';
 import type { Auth, User } from 'firebase/auth';
 import type { Firestore } from 'firebase/firestore';
 import type { GameSave } from './save';
-import { CARTE_SUFFIX } from './carte';
 
 export interface FirebaseSettings {
   apiKey: string;
@@ -22,10 +21,13 @@ export interface FirebaseSettings {
 }
 
 const SETTINGS_KEY = 'island-firebase';
-const SYNC_KEY = `island-cloud-sync${CARTE_SUFFIX}`;
-/** Champs du document : une partie par carte (carte.ts), dans le même document. */
-const PARTIE = CARTE_SUFFIX ? 'partieCuisine' : 'partie';
-const SAVED_AT = CARTE_SUFFIX ? 'savedAtCuisine' : 'savedAt';
+const SYNC_KEY = 'island-cloud-sync-kit';
+/**
+ * Champs du document : la partie de la maison en kit Tripo. Celles d'avant (`partie`,
+ * `partieCuisine`) restent dans le même document, pas relues ni écrasées.
+ */
+const PARTIE = 'partieKit';
+const SAVED_AT = 'savedAtKit';
 /** Envoi au cloud au plus toutes les tant de secondes (et quand on quitte l'onglet). */
 const PUSH_SECONDS = 60;
 

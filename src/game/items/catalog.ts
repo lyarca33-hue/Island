@@ -10,20 +10,12 @@ import { lightAllPasses } from '../postfx';
 import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
-import { BEDROOM_ITEMS } from './bedroom';
 import { DISHES } from './recipes';
-import { SALON_ITEMS } from './salon';
 import { FRESH_THINGS, PAN_FOOD, PANTRY_ITEMS } from './pantry';
-import { BATHROOM_ITEMS } from './bathroom';
 import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
 import { UPKEEP_ITEMS } from './upkeep';
 import { LIFE_ITEMS } from './life';
-import { GARDEN_ITEMS } from '../jardin';
-import { ENTREE_ITEMS } from './entree';
 import { FECULENT_ITEMS } from './feculents';
-import { OUTDOOR_ITEMS } from './plein-air';
-import { ANIMAL_ITEMS } from './animaux';
-import { LINGE_ITEMS } from './linge';
 
 export interface ItemDef {
   id: string;
@@ -1399,31 +1391,17 @@ export const ITEMS: ItemDef[] = [
   },
   // la cuisine : rangements et appareils (kitchen.ts)
   ...KITCHEN_ITEMS,
-  // la chambre : lit, table de nuit, lampe de chevet, armoire (bedroom.ts)
-  ...BEDROOM_ITEMS,
   // les plats des recettes (recipes.ts)
   ...DISHES,
-  // le salon : canapé, table basse, télé (salon.ts)
-  ...SALON_ITEMS,
   // les provisions, le garde-manger et les courses (pantry.ts)
   ...PANTRY_ITEMS,
-  // la salle de bain : lavabo, douche, toilettes, serviette (bathroom.ts)
-  ...BATHROOM_ITEMS,
   // les gestes de cuisine : œufs, lait, saladier, ustensiles, épices (prep.ts)
   ...PREP_ITEMS,
   // meubles et entretien : barre à couteaux, crochets, horloge, fenêtre, îlot, balai… (upkeep.ts)
   ...UPKEEP_ITEMS,
   ...LIFE_ITEMS,
-  ...GARDEN_ITEMS,
-  // l'entrée : banc à chaussures, miroir, portemanteau et vêtements, boîte aux lettres (entree.ts)
-  ...ENTREE_ITEMS,
-  ...OUTDOOR_ITEMS,
-  // le chaton, sa gamelle, ses croquettes (animaux.ts)
-  ...ANIMAL_ITEMS,
   // pâtes, riz et soupes à la casserole (feculents.ts)
   ...FECULENT_ITEMS,
-  // la lessive : panier à linge, machine à laver, sèche-linge, étendoir (linge.ts)
-  ...LINGE_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

@@ -9,32 +9,19 @@
 import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
-import { applySky, GameClock, seasonLook, TIME_SPEED } from './clock';
+import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF, setGroundSeason } from './ground';
-import { Garden, GARDEN_FEMININE, GARDEN_START } from './jardin';
-import { loadNature } from './nature';
 import { loadInterior } from './items/interior';
 import { loadKit } from './kit';
-import { DELIVERY_SPOT, Entree } from './entree';
-import { Loisirs } from './loisirs';
-import { Chat } from './chat';
 import { Mouvements } from './mouvements';
-import { Paysage } from './paysage';
-import { FISH_BY_ID, OUTDOOR_FEMININE, OUTDOOR_START } from './items/plein-air';
-import { ANIMAL_FEMININE, ANIMAL_START } from './items/animaux';
 import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
-import { ENTREE_FEMININE } from './items/entree';
-import { Buanderie } from './buanderie';
-import { LINGE_FEMININE } from './items/linge';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
-import { SOFA_NAP } from './items/salon';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
-import { brushModel, showRoll, TOOTH_SPOT } from './items/bathroom';
 import { isTwoHanded } from './items/grips';
-import { ITEM_BY_ID, SLOTS_PER_SHELF, TABLE_H, type ItemDef } from './items/catalog';
+import { ITEM_BY_ID, type ItemDef } from './items/catalog';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -54,9 +41,7 @@ import { Needs } from './needs';
 import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
 import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
-import { CUISINE_SEULE } from './carte';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
-import { CHANNELS, Tv } from './tv';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, type Quality } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -76,22 +61,6 @@ const FOCUS_HEIGHT = 0.9;
 /** Soif rendue par une tasse pleine bue en entier, et regain d'énergie si c'est du café (moitié moins pour le thé). */
 const DRINK_THIRST = 35;
 const COFFEE_ENERGY = 12;
-/**
- * Dormir : vitesse de l'horloge pendant le sommeil (minutes de jeu par minute réelle : une nuit de
- * 8 h passe en une douzaine de secondes), durée des fondus au noir (s), noir de la chambre pendant
- * le sommeil (opacité du voile), et au-dessus de quelle fatigue on n'a pas sommeil.
- */
-const SLEEP_SPEED = 2400;
-const SLEEP_FADE = 0.7;
-const SLEEP_DIM = 0.55;
-const NOT_SLEEPY = 90;
-/** Sieste sur le canapé : de 1 à 2 h (minutes de jeu). */
-const NAP_MIN = 60;
-const NAP_MAX = 120;
-/** Le réveil : heure proposée, durée de la sonnerie (s réelles) ; au-delà de 14 h de sommeil, on l'ignore. */
-const ALARM_HOUR = 7;
-const ALARM_RING = 2.4;
-const ALARM_REACH = 14 * 60;
 const TEA_ENERGY = 6;
 /** Où l'on met un sachet de thé. */
 const TEA_VESSELS = ['tasse', 'théière'];
@@ -184,43 +153,16 @@ const liquidColor = (liquid: string): THREE.ColorRepresentation => LIQUID_COLOR.
 /** Contenance d'un récipient (litres). */
 const volumeOf = (item: WorldItem) => item.def.tank ?? item.def.volume ?? 0.25;
 const WASH_FACE = { seconds: 3 * SPLASH_CYCLE, hygiene: 40 };
-/**
- * Salle de bain. Après la douche : temps (s) où le perso reste mouillé sans se sécher, une goutte
- * par terre toutes les DRIP_EVERY secondes de marche ; temps pour qu'une serviette mouillée sèche
- * (deux fois plus vite sur le porte-serviettes), et pour que le miroir se désembue.
- */
-const WET_SECONDS = 45;
 /** Chaleur d'un feu de gazinière allumé, au ras de la gazinière (°C de ressenti), et du four en marche ; ça ne se sent plus au-delà de NEAR_HEAT (m). */
 const HEAT_PER_FIRE = 2.5;
 const HEAT_OVEN = 4;
 const NEAR_HEAT = 1.6;
 /** Temps (s réelles) entre deux « Brr… » ou « Pfiou… » du perso. */
 const BODY_SAY_EVERY = 40;
-const DRIP_EVERY = 1.6;
-const TOWEL_DRY = 150;
-const MIRROR_CLEAR = 40;
-/** Demi-côté (m) de la douche : dedans, les gouttes tombent dans le receveur. */
-const SHOWER_W_HALF = 0.5;
-/** Toilettes : temps assis (s), chasse d'eau (s), angle du couvercle ouvert (rad). */
-const TOILET_SECONDS = 4;
-const FLUSH_SECONDS = 2.2;
-const LID_OPEN = 1.75;
-/** Vessie : on n'y va pas au-dessus de ce niveau ; on est prévenu en dessous de BLADDER_WARN. */
-const TOILET_NO_NEED = 85;
-const BLADDER_WARN = 18;
-/**
- * Brossage des dents au lavabo : durée (s), hygiène et humeur gagnées ; on n'y gagne en humeur
- * qu'une fois par matinée ou soirée (BRUSH_AGAIN minutes de jeu entre deux) ; au coucher, un
- * rappel si les dents n'ont pas été brossées depuis BRUSH_NIGHT minutes.
- */
-const BRUSH = { seconds: 4 * SPLASH_CYCLE, hygiene: 8, mood: 3 };
-const BRUSH_AGAIN = 4 * 60;
-const BRUSH_NIGHT = 5 * 60;
-/** Passages aux toilettes par rouleau de papier ; sans papier, l'hygiène et l'humeur en pâtissent. */
-const ROLL_USES = 6;
-const NO_PAPER = { hygiene: 10, mood: 3 };
 /** Vaisselle : temps à frotter sous l'eau par pièce (s). */
 const DISH_SECONDS = 2.5;
+/** Où le livreur pose les courses : dehors, à côté de la porte d'entrée (mur ouest de la cuisine). */
+const DELIVERY_SPOT = new THREE.Vector3(-4.4, 0, 1.0);
 
 /** Un repas assis à table, dans l'assiette, rassasie un peu plus que debout, l'aliment à la main. */
 const TABLE_MEAL = 1.25;
@@ -229,163 +171,28 @@ const TABLE_REACH = 1.1;
 
 /**
  * Objets posés au départ dans la cuisine, hors des meubles rangés contre les murs (voir les
- * fiches des pièces, rooms.ts) : [id, x, y, z, rotation (rad)].
+ * fiches des pièces, rooms.ts) : [id, x, y, z, rotation (rad)]. La cuisine est vide en attendant
+ * ses meubles et ses objets refaits avec Tripo : les listes de départ ci-dessous se rempliront avec eux.
  */
-const START_ITEMS: Array<[string, number, number, number, number]> = [
-  // coin repas, côté caméra : la table, sa chaise au fond (on s'y assoit face à la caméra)
-  ['table', 1, 0, 1, 0],
-  ['chaise', 1, 0, -0.02, 0],
-  // le couvert devant la chaise : l'assiette, la fourchette à gauche et le couteau à droite de qui
-  // s'assoit (assez écartés de l'assiette pour ne pas partir avec elle quand on la prend)
-  ['assiette', 1, TABLE_H, 0.88, 0],
-  ['fourchette', 1.22, TABLE_H, 0.786, -Math.PI / 2],
-  ['couteau-table', 0.78, TABLE_H, 0.786, -Math.PI / 2],
-  ['tasse', 0.64, TABLE_H, 0.852, -0.19],
-  ['lettre', 1.36, TABLE_H, 0.852, 0.26],
-  // le plateau, de l'autre côté de la table
-  ['plateau', 1, TABLE_H, 1.13, 0],
-  // la carafe d'eau, au bout de la table
-  ['carafe', 1.36, TABLE_H, 1.13, -Math.PI / 2],
-  // la caisse rangée dans le coin, près de la fenêtre
-  ['caisse', 2.85, 0, 2.45, 0],
-];
+const START_ITEMS: Array<[string, number, number, number, number]> = [];
 
 /** Ustensiles posés au départ sur un feu : [id, appareil, n° du feu]. */
-const START_ON_STOVE: Array<[string, string, number]> = [
-  ['poele', 'gaziniere', 0],
-  ['casserole', 'gaziniere', 3],
-];
+const START_ON_STOVE: Array<[string, string, number]> = [];
 
 /**
  * Posés sur le plan de travail au départ : [id, x, z, rotation] dans le repère du meuble (sur le
  * dessus, l'avant vers +Z).
  */
-const START_ON_WORKTOP: Array<[string, number, number, number]> = [
-  ['planche', -0.14, 0.02, 0],
-  // le savon, au bout du plan de travail contre l'évier
-  ['savon', -0.4, -0.16, 0],
-  ['pain', 0.32, -0.08, 0.3],
-  // l'éponge, près de l'évier
-  ['eponge', -0.42, 0.1, 0.2],
-  // la liste de courses, au fond du plan de travail
-  ['liste-courses', 0.42, -0.18, -0.2],
-];
+const START_ON_WORKTOP: Array<[string, number, number, number]> = [];
 
 /** Posés au départ sur l'îlot : [id, x, z, rotation] dans le repère de l'îlot. */
-const START_ON_ISLAND: Array<[string, number, number, number]> = [['theiere', 0.3, 0.05, Math.PI / 2], ['moule', -0.25, 0.05, 0]];
+const START_ON_ISLAND: Array<[string, number, number, number]> = [];
 
 /** Rangés au départ dans un meuble : [id, meuble, place]. */
-const START_STORED: Array<[string, string, number]> = [
-  // les pulls pliés dans l'armoire de la chambre
-  ['pull', 'armoire', 0],
-  ['sachets-the', 'garde-manger', 4],
-  // le couteau de cuisine, aimanté sur la barre au-dessus du plan de travail
-  ['couteau', 'barre-couteaux', 1],
-  ['pull-bleu', 'armoire', 1],
-  ['pull-vert', 'armoire', 4],
-  ['bouteille-eau', 'frigo', 8],
-  ['bouteille-eau', 'frigo', 9],
-  ['pomme', 'frigo', 5],
-  ['pomme', 'frigo', 6],
-  ['sandwich', 'frigo', 1],
-  ['steak', 'frigo', 0],
-  ['steak', 'frigo', 3],
-  ['tomate', 'frigo', 2],
-  ['carotte', 'frigo', 4],
-  ['concombre', 'frigo', 7],
-  ['bac-glacons', 'congelateur', 0],
-  ['lasagne', 'congelateur', 1],
-  ['lasagne', 'congelateur', 3],
-  // sous l'évier, en vrai ; ici au placard
-  ['pastilles', 'placard', 2],
-  // deux assiettes de plus, pour recevoir (et empiler)
-  ['assiette', 'placard', 0],
-  ['assiette', 'placard', 1],
-  // verres et bols au fond du placard, cuillères au tiroir
-  ['verre', 'placard', 6],
-  ['verre', 'placard', 7],
-  ['bol', 'placard', 8],
-  ['bol', 'placard', 9],
-  ['cuillere', 'tiroir', 4],
-  ['cuillere', 'tiroir', 5],
-  // un verre et une cuillère qui sèchent déjà sur l'égouttoir
-  ['verre', 'egouttoir', 0],
-  ['cuillere', 'egouttoir', 4],
-  // les gestes : œufs, lait, beurre et fromage au frigo ; saladier et râpe au placard ; ustensiles au pot ; épices sur l'étagère
-  ['lait', 'frigo', 29],
-  ['beurre', 'frigo', 30],
-  ['fromage', 'frigo', 31],
-  ['oeuf', 'frigo', 36],
-  ['oeuf', 'frigo', 37],
-  ['oeuf', 'frigo', 38],
-  ['oeuf', 'frigo', 39],
-  ['saladier', 'placard', 3],
-  ['rape', 'placard', 5],
-  // l'entretien : torchon et maniques aux crochets, la serpillière dans son seau, les sacs poubelle,
-  // le spray et les gants au placard (sous l'évier, en vrai)
-  ['torchon', 'crochets', 0],
-  ['maniques', 'crochets', 2],
-  ['serpilliere', 'seau', 0],
-  ['gants', 'placard', 4],
-  ['sacs-poubelle', 'placard', 10],
-  ['spray', 'placard', 11],
-  ['fouet', 'pot-ustensiles', 0],
-  ['spatule', 'pot-ustensiles', 1],
-  ['cuillere-bois', 'pot-ustensiles', 2],
-  ['louche', 'pot-ustensiles', 3],
-  ['sel', 'etagere-epices', 0],
-  ['poivre', 'etagere-epices', 1],
-  ['paprika', 'etagere-epices', 2],
-  ['herbes', 'etagere-epices', 3],
-  ['huile', 'etagere-epices', 4],
-  // les provisions : le frais au frigo (derrière, puis la clayette du haut)
-  ['jambon', 'frigo', 10],
-  ['saucisses', 'frigo', 11],
-  ['poulet', 'frigo', 12],
-  ['poisson', 'frigo', 13],
-  ['yaourt', 'frigo', 14],
-  ['creme', 'frigo', 15],
-  ['salade', 'frigo', 16],
-  ['champignons', 'frigo', 17],
-  ['poivron', 'frigo', 18],
-  ['courgette', 'frigo', 19],
-  ['citron', 'frigo', 20],
-  ['orange', 'frigo', 21],
-  ['moutarde', 'frigo', 22],
-  ['ketchup', 'frigo', 23],
-  ['jus-orange', 'frigo', 24],
-  ['soda', 'frigo', 25],
-  ['eau-gazeuse', 'frigo', 26],
-  ['vin', 'frigo', 27],
-  ['mayonnaise', 'frigo', 28],
-  // l'épicerie au garde-manger : pommes de terre et oignons en bas, le sec au-dessus
-  ['pomme-de-terre', 'garde-manger', 0],
-  ['pomme-de-terre', 'garde-manger', 1],
-  ['oignon', 'garde-manger', 2],
-  ['oignon', 'garde-manger', 3],
-  ['farine', 'garde-manger', 8],
-  ['sucre', 'garde-manger', 9],
-  ['sauce-tomate', 'garde-manger', 10],
-  ['confiture', 'garde-manger', 11],
-  ['vinaigre', 'garde-manger', 12],
-  ['pate-tartiner', 'garde-manger', 13],
-  ['ail', 'garde-manger', 14],
-  ['levure', 'garde-manger', 15],
-  ['biscuits', 'garde-manger', 16],
-  ['chocolat', 'garde-manger', 17],
-  // pâtes, riz et soupe en brique, au fond du bas
-  ['paquet-pates', 'garde-manger', 5],
-  ['paquet-riz', 'garde-manger', 6],
-  ['brique-soupe', 'garde-manger', 7],
-  // les surgelés
-  ['frites', 'congelateur', 2],
-  ['legumes-surgeles', 'congelateur', 4],
-  // la serviette, étendue sur le porte-serviettes de la salle de bain
-  ['serviette', 'porte-serviettes', 0],
-];
+const START_STORED: Array<[string, string, number]> = [];
 
 /** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
-const START_WEAR: Record<string, number> = { table: 0.55, caisse: 0.3, livre: 0.12, 'livre-vert': 0.8 };
+const START_WEAR: Record<string, number> = {};
 
 /** Usure (points de durabilité) : par gorgée bue (tasse pleine = 1), par seconde de lecture, par mètre poussé. */
 const WEAR_DRINK = 6;
@@ -432,18 +239,6 @@ const WEAR_DISHWASH = 0.3;
 /** Usure d'un siège chaque fois qu'on s'y assoit. */
 const WEAR_SIT = 0.5;
 
-/** Livres de départ : rangés dans la bibliothèque (place) ou posés à plat ([x, y, z, rotation]). */
-const START_BOOKS: Array<[string, number | [number, number, number, number]]> = [
-  ['livre-rouge', SLOTS_PER_SHELF],
-  ['livre-vert', SLOTS_PER_SHELF + 1],
-  ['livre-ocre', SLOTS_PER_SHELF + 2],
-  ['livre-violet', 2 * SLOTS_PER_SHELF],
-  ['livre', [-1.9, 0, 1.35, 0.4]],
-  // de quoi demander au perso de « ranger tous les livres »
-  ['livre-vert', [0.2, 0, 2.1, 1.3]],
-  ['livre-ocre', [1.04, TABLE_H, 1.25, 1.42]],
-];
-
 /** Un objet de la pièce tel que les ordres le voient (voir Game.describe). */
 export interface WorldObject {
   ref: string;
@@ -473,7 +268,7 @@ export interface WorldObject {
 const program = (def: ItemDef) => def.heats ?? def.washes ?? def.blends;
 
 /** Noms féminins (accord des messages). */
-const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...PATISSERIE_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...GARDEN_FEMININE, ...ENTREE_FEMININE, ...OUTDOOR_FEMININE, ...ANIMAL_FEMININE, ...FECULENT_FEMININE, ...LINGE_FEMININE]);
+const FEMININE = new Set(['tasse', 'lettre', 'caisse', 'chaise', 'table', 'bibliothèque', 'machine à café', "bouteille d'eau", 'pomme', 'poubelle', 'planche à découper', 'carotte', 'tomate', 'rondelles de carotte', 'tranches de tomate', 'tranches de pain', 'rondelles de concombre', 'gazinière', 'poêle', 'casserole', 'pomme de terre', 'assiette', 'fourchette', 'bouilloire', 'lasagne', 'boîte de pastilles', 'éponge', 'cuillère', 'carafe', 'douche', 'serviette', 'toilettes', 'brosse à dents', ...DISH_FEMININE, ...PANTRY_FEMININE, ...PREP_FEMININE, ...PATISSERIE_FEMININE, ...UPKEEP_FEMININE, ...LIFE_FEMININE, ...FECULENT_FEMININE]);
 /** Noms au pluriel (les morceaux d'un aliment coupé). */
 const PLURAL = new Set(['toilettes', 'quartiers de pomme', 'tranches de pain', 'rondelles de carotte', 'tranches de tomate', 'rondelles de concombre', ...PANTRY_PLURAL, ...PREP_PLURAL, ...PATISSERIE_PLURAL, ...UPKEEP_PLURAL, ...LIFE_PLURAL, ...FECULENT_PLURAL]);
 /** Accord d'un adjectif avec le nom (« coupée », « finis ») et article (« La pomme », « Les quartiers »). */
@@ -571,8 +366,6 @@ export interface HandActions {
   book: string | null;
   /** Assis : on peut se lever. */
   seated: boolean;
-  /** Couché dans le lit (endormi) : on peut se réveiller. */
-  sleeping: boolean;
 }
 
 const SHADOW_TMP = new THREE.Vector3();
@@ -616,20 +409,8 @@ export class Game {
   /** Sacs de courses posés : les aliments (noms) encore dedans. */
   private bags = new Map<WorldItem, string[]>();
   private ground: THREE.Mesh;
-  /** Le jardin dehors : arbres, fleurs, potager, pommier (jardin.ts). */
-  private garden: Garden;
-  /** L'entrée : vêtements, chaussures, boîte aux lettres et courrier (entree.ts). */
-  private entree: Entree;
-  /** Pêche à l'étang, feu de camp, trousse de secours (loisirs.ts). */
-  private loisirs: Loisirs;
-  /** Le chaton : le nourrir, le caresser, sa gamelle, sa sieste sur le canapé (chat.ts). */
-  private chat: Chat;
-  /** Sauter, nager dans l'étang, grimper sur un meuble (mouvements.ts). */
+  /** Sauter, grimper sur un meuble (mouvements.ts). */
   private mouvements: Mouvements;
-  /** Route, marché, train, station autour de la maison (paysage.ts). */
-  private paysage = new Paysage();
-  /** La lessive : panier à linge, machine à laver, sèche-linge, étendoir (buanderie.ts). */
-  private laundry: Buanderie;
   /** La pièce : sol, murs (abaissés côté caméra), porte, fenêtres. */
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
@@ -730,25 +511,6 @@ export class Game {
   private washing: { sink: WorldItem; t: number; seconds: number; hygiene: number; face: boolean; dishes?: WorldItem[]; thirst?: number; teeth?: { brush: WorldItem; shown: THREE.Object3D[] } } | null = null;
   /** Vaisselle lavée à reprendre en main, une pièce après l'autre (et d'où la prendre). */
   private pickQueue: Array<{ item: WorldItem; from: THREE.Vector3 }> = [];
-  /** Salle de bain : douche en cours, temps mouillé qui reste (s), serviettes mouillées (temps pour sécher), buée du miroir (0 à 1). */
-  private showering: { shower: WorldItem; t: number } | null = null;
-  private wet = 0;
-  private dripT = 0;
-  private towelsWet = new Map<WorldItem, number>();
-  private mirrorFog = 0;
-  /** Assis aux toilettes, et depuis combien de temps ; couvercles (0 fermé, 1 ouvert) ; chasses d'eau en cours (s qui restent). */
-  private toiletVisit: { toilet: WorldItem; t: number } | null = null;
-  private lids = new Map<WorldItem, { open: number; target: number }>();
-  private flushes = new Map<WorldItem, number>();
-  /** Sorti des toilettes sans s'être lavé les mains ; déjà prévenu que la vessie est pleine. */
-  private handsToWash = false;
-  private bladderWarned = false;
-  /** Passages qui restent sur chaque rouleau de papier toilette (absent = neuf). */
-  private paper = new Map<WorldItem, number>();
-  /** Dernier brossage des dents (minutes de jeu, horloge), -1 = jamais. */
-  private lastBrush = -1;
-  /** Ce qu'il faut dire du papier toilette en tirant la chasse (fin du rouleau, plus de papier). */
-  private paperNote: string | null = null;
   /** Appareils qui chauffent (gazinière, machine à café) : feux allumés, chaleur de chaque feu (0 à 1), temps allumé sans servir (s). */
   private heaters = new Map<WorldItem, { on: boolean[]; warm: number[]; unused: number }>();
   /** Fumée (ça brûle) et vapeur (l'eau bout) au-dessus des ustensiles. */
@@ -762,8 +524,6 @@ export class Game {
   private stream: THREE.Mesh;
   /** Évier : bouchon mis, robinet ouvert, eau dans la cuve (0 à 1), temps avant la prochaine flaque (s). */
   private sinks = new Map<WorldItem, { plug: boolean; tap: boolean; water: number; spill: number; warned: boolean }>();
-  /** Télés du salon : allumées ou non, chaîne, écran et lueur (tv.ts). */
-  private tvs = new Map<WorldItem, Tv>();
   /** Glaçons dans un récipient : les cubes (enfants de son modèle) et le temps avant qu'ils fondent (s). */
   private iced = new Map<WorldItem, { cubes: THREE.Mesh[]; t: number; fresh: boolean }>();
   /** Plats coupés en bouchées dans l'assiette (cutInPlate) : chaque bouchée compte double. */
@@ -820,8 +580,8 @@ export class Game {
   constructor(container: HTMLElement, recipe: Recipe | null = null) {
     this.container = container;
     this.recipe = recipe;
-    // cuisine seule (carte.ts) : pas de lit, de douche ni de toilettes pour l'instant
-    if (CUISINE_SEULE) this.needs.pause(['fatigue', 'hygiene', 'vessie']);
+    // pas de lit, de douche ni de toilettes pour l'instant (la maison se refait avec le kit Tripo)
+    this.needs.pause(['fatigue', 'hygiene', 'vessie']);
     // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
@@ -849,86 +609,17 @@ export class Game {
 
     this.ground = createGround();
     this.scene.add(this.ground);
-    this.garden = new Garden({
-      character: this.character,
-      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
-      notice: (t) => this.onNotice?.(t),
-      say: (t) => this.say(t),
-      mood: (n) => this.addMood(n),
-      soilHands: (why) => this.soilHands(why),
-      pour: (can, at, stand) => this.pourThen(can, null, null, at, stand, at(), false),
-      pouring: () => !!this.pouring,
-      sitting: () => this.sitting,
-    });
-    // cuisine seule (carte.ts) : ni jardin ni paysage autour, juste le sol d'herbe
-    if (!CUISINE_SEULE) this.scene.add(this.garden.group);
-    // les arbres et les plantes du pack nature, dès que le fichier est chargé (en attendant, ceux faits
-    // par programme) ; en qualité basse, moins d'herbes et de fleurs au sol
-    if (!CUISINE_SEULE) loadNature()
-      .then((kit) => this.garden.dress(kit, ROOMS.map((r) => r.rect), this.qualityLevel === 'basse' ? 0.4 : 1))
-      .catch((e) => console.warn('pack nature non chargé', e));
     // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
     loadInterior()
       .then(() => {
         for (const it of this.items) it.restyle();
       })
       .catch((e) => console.warn('pack intérieur non chargé', e));
-    this.entree = new Entree({
-      character: this.character,
-      items: () => this.items,
-      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
-      remove: (item) => this.removeItem(item),
-      notice: (t) => this.onNotice?.(t),
-      say: (t) => this.say(t),
-      mood: (n) => this.addMood(n),
-      sitting: () => this.sitting,
-      sit: (seat, then) => this.sit(this.ref(seat), false, then),
-      outdoors: () => !this.underRoof(this.character.position.x, this.character.position.z),
-      outdoorAir: () => this.body.outdoor,
-      rain: () => this.weather.rain,
-    });
-    this.loisirs = new Loisirs({
-      character: this.character,
-      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
-      remove: (item) => this.removeItem(item),
-      notice: (t) => this.onNotice?.(t),
-      say: (t) => this.say(t),
-      mood: (n) => this.addMood(n),
-      health: () => this.needs.health,
-      heal: (n) => this.needs.heal(n),
-      night: () => this.clock.isNight,
-      items: () => this.items,
-      lit: (fire) => !!this.heaters.get(fire)?.on.some(Boolean),
-      useFire: (fire) => this.useStove(fire, false),
-    });
     this.mouvements = new Mouvements({
       character: this.character,
       items: () => this.items,
       notice: (t) => this.onNotice?.(t),
       obstacle: (it) => this.isObstacle(it),
-    });
-    this.chat = new Chat({
-      character: this.character,
-      remove: (item) => this.removeItem(item),
-      notice: (t) => this.onNotice?.(t),
-      say: (t) => this.say(t),
-      mood: (n) => this.addMood(n),
-      route: (from, to) => this.character.nav?.route(from, to) ?? [to],
-      isFish: (id) => FISH_BY_ID.has(id),
-    });
-    if (!CUISINE_SEULE) this.scene.add(this.paysage.group);
-    this.laundry = new Buanderie({
-      character: this.character,
-      spawn: (id, at, yaw) => this.spawnAt(id, at, yaw),
-      remove: (item) => this.removeItem(item),
-      notice: (t) => this.onNotice?.(t),
-      say: (t) => this.say(t),
-      mood: (n) => this.addMood(n),
-      sound: (name, at) => this.sound.play(name, this.hear(at)),
-      outdoors: (at) => !this.underRoof(at.x, at.z),
-      weather: () => this.weather,
-      night: () => this.clock.isNight,
-      outdoorAir: () => this.body.outdoor,
     });
     this.scene.add(this.character.root);
 
@@ -959,8 +650,7 @@ export class Game {
       this.scene.add(item.object);
       return item;
     };
-    const outside = CUISINE_SEULE ? [] : [...GARDEN_START, ...OUTDOOR_START, ...ANIMAL_START];
-    for (const [id, x, y, z, rot] of [...START_ITEMS, ...outside, ...ROOMS.flatMap((r) => r.items ?? [])]) {
+    for (const [id, x, y, z, rot] of [...START_ITEMS, ...ROOMS.flatMap((r) => r.items ?? [])]) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -989,31 +679,23 @@ export class Game {
       it.object.position.copy(new THREE.Vector3(x, base.box.max.y, z).applyMatrix4(base.object.matrixWorld));
       it.object.rotation.y = base.object.rotation.y + rot;
     }
-    this.placeAlarmClock();
     for (const spec of ROOMS) {
       const room = new Room(spec, (id) => this.items.find((i) => i.def.id === id)?.object.position);
       this.rooms.push(room);
       this.scene.add(room.group);
     }
-    // cuisine seule : sol, murs, toit, porte et fenêtres du kit Tripo, dès qu'il est chargé (kit.ts)
-    if (CUISINE_SEULE) loadKit()
+    // sol, murs, toit, porte et fenêtres du kit Tripo, dès qu'il est chargé (kit.ts)
+    loadKit()
       .then((kit) => { for (const r of this.rooms) r.dress(kit); })
       .catch((e) => console.warn('kit de la maison non chargé', e));
     // même nombre de lumières à ombre dans chaque pièce (pas de recompilation en changeant de pièce)
     const most = (k: 'lamps' | 'windows') => Math.max(...this.rooms.map((r) => r.shadowCounts[k]));
     for (const r of this.rooms) r.padShadows(most('lamps'), most('windows'));
-    this.placeBathroomKit();
     // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item), keep: false });
     for (const item of this.items) if (item.def.lamp) this.addLampLight(item);
     for (const item of this.items) if (item.def.wash) this.sinks.set(item, { plug: false, tap: false, water: 0, spill: 0, warned: false });
-    for (const item of this.items) {
-      if (!item.def.screen) continue;
-      const tv = new Tv(item);
-      this.tvs.set(item, tv);
-      this.scene.add(tv.light);
-    }
     // la carafe d'eau, presque pleine
     for (const item of this.items) {
       if (!item.def.jug) continue;
@@ -1021,12 +703,7 @@ export class Game {
       item.contents = 'eau';
       item.setLiquidColor(liquidColor('eau'));
     }
-    this.garden.attach(this.items);
-    this.entree.attach(this.items);
-    this.loisirs.attach(this.items);
-    this.chat.attach(this.items, this.scene);
-    this.mouvements.attach(this.items);
-    this.laundry.attach(this.items);
+    this.mouvements.attach();
     // la bouilloire a de quoi faire deux tasses au départ
     for (const item of this.items) {
       if (!item.def.tank) continue;
@@ -1074,20 +751,6 @@ export class Game {
         it.object.quaternion.setFromAxisAngle(UP, island.object.rotation.y + rot);
         const at = new THREE.Vector3(x, island.box.max.y, z).applyMatrix4(island.object.matrixWorld);
         it.object.position.copy(at).setY(at.y + it.restLift(it.object.quaternion));
-      }
-    }
-    // les livres de la bibliothèque du salon (pas de salon dans la cuisine seule)
-    const shelf = this.items.find((i) => i.def.id === 'bibliotheque');
-    for (const [id, at] of START_BOOKS) {
-      if (!shelf) break;
-      const book = add(id);
-      if (typeof at === 'number') {
-        const slot = this.slot(shelf, at);
-        book.object.position.copy(slot.pos);
-        book.object.quaternion.copy(slot.rot);
-      } else {
-        book.object.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), at[3]).multiply(LAY_FLAT);
-        book.object.position.set(at[0], at[1] + book.restLift(book.object.quaternion), at[2]);
       }
     }
 
@@ -1281,27 +944,19 @@ export class Game {
 
   /** Plus rien en cours : le perso est arrivé, ses mains sont libres de tout geste, le café a coulé. */
   get idle(): boolean {
-    // endormi, c'est fini : on ne bouge plus jusqu'au réveil
-    if (this.sleep) return this.sleep.phase === 'asleep';
-    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.showering && !this.toiletVisit && !this.cookWait && !this.teaWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
+    return this.character.idle && !this.sliding && !this.brew && !this.washing && !this.cookWait && !this.teaWait && !this.tossing && !this.appliances.size && !this.pickQueue.length && !this.flying.length && ![...this.doors.values()].some((d) => d.then || d.open !== d.target);
   }
 
   /** Les obstacles à contourner, sauf `skip`. */
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
-    const around = CUISINE_SEULE ? [] : [...this.garden.obstacles, ...this.paysage.obstacles];
-    for (const o of [...around, ...this.loisirs.obstacles]) nav.add(o.box, o.pos, o.yaw);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
-    // on entre dans la douche : seule sa paroi vitrée (côté +X) se contourne
-    for (const it of this.items) if (it !== skip && it.def.shower) nav.add(new THREE.Box3(new THREE.Vector3(it.box.max.x - 0.04, 0, it.box.min.z), new THREE.Vector3(it.box.max.x, 2, it.box.max.z - 0.15)), it.object.position, it.object.rotation.y);
     return nav;
   }
 
   /** Ce qui bloque le passage d'un meuble : sa boîte ; l'îlot, son caisson seulement (les genoux passent sous le plateau). */
   private navBox(it: WorldItem): THREE.Box3 {
-    const garden = this.garden.navBox(it);
-    if (garden) return garden;
     if (it.def.table !== 'comptoir') return it.box;
     const b = it.box.clone();
     b.max.z = Math.min(b.max.z, -b.min.z);
@@ -1315,7 +970,6 @@ export class Game {
 
   /** Obstacle : un meuble, ou un gros objet (porté à deux mains : chaise, caisse) posé au sol. */
   private isObstacle(it: WorldItem): boolean {
-    if (it.def.shower || this.loisirs.walkable(it) || this.chat.walkable(it)) return false;
     if (!it.def.portable) return true;
     return isTwoHanded(it.grip) && it.object.position.y < 0.05 && !this.character.carried.includes(it) && !this.flying.some((f) => f.item === it);
   }
@@ -1756,8 +1410,6 @@ export class Game {
         ou += `, ${part}${door.target ? 'ouvert' : 'fermé'}${part === 'porte ' || item.def.window ? 'e' : ''}`;
       }
       if (this.appliances.has(item)) ou += ', en marche';
-      const tv = this.tvs.get(item);
-      if (tv) ou += tv.on ? `, allumée (${CHANNELS[tv.channel]})` : ', éteinte';
       if (this.crumbs.has(item)) ou += ', des miettes (à essuyer)';
       if (item.def.seat && this.tucked(item)) ou += ', rangée sous la table';
       if (item.def.blends) {
@@ -1774,7 +1426,6 @@ export class Game {
       if (item.def.id === 'sacs-poubelle') ou += `, ${this.bagsLeft(item)} sac${this.bagsLeft(item) > 1 ? 's' : ''} dans le rouleau`;
       if (this.grime.has(item)) ou += `, taché${agree(item.name)} (à nettoyer au spray)`;
       if (item.def.clock) ou += `, indique ${this.clockText()}`;
-      if (item.def.id === 'reveil') ou += this.alarms.has(item) ? `, sonne à ${this.hourText(this.alarms.get(item)!)}` : ', réveil coupé';
       if (item.def.window && this.smell > 0.1) ou += ', la cuisine sent le brûlé (ouvrir pour aérer)';
       if (item.def.food && item.portion < 1) ou += `, entamé${agree(item.name)}`;
       if (item.def.tank) {
@@ -1804,13 +1455,9 @@ export class Game {
       if (item === this.sitting) ou += ', le perso est assis dessus';
       if (item.def.id === 'liste-courses') ou += `, il manque : ${this.listText() || 'rien'}`;
       if (this.bags.has(item)) ou += `, contient : ${this.bags.get(item)!.join(', ') || 'rien'}`;
-      if (item === this.sleep?.bed) ou += ', le perso dort dedans';
       const lamp = this.lamps.get(item);
       if (lamp) ou += lamp.on ? ', allumée' : ', éteinte';
       if (item === reading?.held) ou += ', ouvert (le perso le lit)';
-      // lessive, jardin, pêche, entrée : leur état (« linge sec », « 3 pommes »), comme dans l'infobulle
-      const outside = this.garden.stateOf(item) ?? this.entree.stateOf(item) ?? this.laundry.stateOf(item) ?? this.loisirs.stateOf(item);
-      if (outside) ou += `, ${outside}`;
       const etat = `${gradeName(item.condition, FEMININE.has(item.name))} (${Math.round(item.condition * 100)} %)`;
       const coupable = (!!item.def.cut && item.portion === 1) || undefined;
       return { ref: this.ref(item), nom: item.name, portable: item.def.portable, deuxMains: isTwoHanded(item.grip) || undefined, sorte, cuisson, coupable, ou, etat, distance: Math.round(item.object.position.distanceTo(p) * 10) / 10 };
@@ -1823,7 +1470,7 @@ export class Game {
     if (this.body.state !== 'normal') perso += `, ${BODY_STATES[this.body.state].label.toLowerCase()} (${this.body.label}) : ${BODY_STATES[this.body.state].tip.toLowerCase()}`;
     if (this.body.soaked > 0.3) perso += ', trempé par la pluie (se sécher à la serviette)';
     return {
-      perso: this.sleep ? `${perso}, endormi dans ${this.ref(this.sleep.bed)}` : this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
+      perso: this.sitting ? `${perso}, assis sur ${this.ref(this.sitting)}` : perso,
       enMain: carried.map((i) => this.ref(i)),
       mains: hands.loads.map((l) => l.map((i) => this.ref(i))),
       mainsLibres: hands.free,
@@ -1853,39 +1500,6 @@ export class Game {
       return false;
     }
     return this.tryPickUp(item, false);
-  }
-
-  /**
-   * Allume (`on`) ou éteint la télé `item` ; sans `on`, inverse. Assis, le perso a la télécommande ;
-   * debout, il va devant la télé.
-   */
-  private setTv(item: WorldItem, on: boolean | undefined, running: boolean): boolean {
-    const tv = this.tvs.get(item)!;
-    if (this.moving) {
-      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-      return false;
-    }
-    const want = on ?? !tv.on;
-    const done = () => {
-      tv.set(want);
-      this.onNotice?.(want ? `Télé allumée : ${CHANNELS[tv.channel]}.` : 'Télé éteinte.');
-    };
-    if (this.sitting) done();
-    else this.character.approachThen(this.standBefore(item, 0.45), item.object.position, done, running);
-    return true;
-  }
-
-  /** Chaîne suivante (à la télécommande si le perso est assis). */
-  private zapTv(item: WorldItem, running: boolean): boolean {
-    const tv = this.tvs.get(item)!;
-    if (!tv.on) return this.setTv(item, true, running);
-    const done = () => {
-      tv.zap();
-      this.onNotice?.(`Chaîne : ${CHANNELS[tv.channel]}.`);
-    };
-    if (this.sitting) done();
-    else this.character.approachThen(this.standBefore(item, 0.45), item.object.position, done, running);
-    return true;
   }
 
   /** La pièce où est le perso ; dehors, celle dont l'interrupteur est le plus proche. */
@@ -1946,44 +1560,6 @@ export class Game {
     }
     const { x0, x1, z0, z1 } = room.rect;
     this.character.approachThen(room.switchSpot().stand, new THREE.Vector3((x0 + x1) / 2, 0, (z0 + z1) / 2), () => {}, running);
-    return true;
-  }
-
-  /** Change de chaîne sur la télé `ref` : la suivante, ou `channel` (« météo ») ; allumée d'abord s'il le faut. */
-  zapTo(ref: string, channel?: string, running = false): boolean {
-    const item = this.byRef(ref);
-    const tv = item && this.tvs.get(item);
-    if (!item || !tv) {
-      this.onNotice?.(`${ref} n’est pas une télé.`);
-      return false;
-    }
-    if (channel !== undefined) {
-      const i = CHANNELS.indexOf(channel);
-      if (i < 0) {
-        this.onNotice?.(`Pas de chaîne « ${channel} » (il y a : ${CHANNELS.join(', ')}).`);
-        return false;
-      }
-      // allumée, zapTv passe à la suivante : on se place juste avant
-      tv.channel = (i - (tv.on ? 1 : 0) + CHANNELS.length) % CHANNELS.length;
-    }
-    return this.zapTv(item, running);
-  }
-
-  /** Va ouvrir (`open`) ou fermer le couvercle des toilettes `ref` (les plus proches sans ref). */
-  toiletLid(open: boolean, ref?: string, running = false): boolean {
-    const toilet = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.toilet);
-    if (!toilet?.def.toilet) {
-      this.onNotice?.('Il n’y a pas de toilettes.');
-      return false;
-    }
-    const c = this.character;
-    const done = () => {
-      this.setLid(toilet, open);
-      this.onNotice?.(open ? 'Couvercle levé.' : 'Couvercle baissé.');
-    };
-    if (p0(c.position).distanceTo(p0(toilet.object.position)) < 1) return done(), true;
-    if (c.busy || c.bracing || this.moving) return false;
-    c.approachThen(this.frontOf(toilet), toilet.object.position, done, running);
     return true;
   }
 
@@ -2095,7 +1671,6 @@ export class Game {
       this.onNotice?.(ref ? `${ref} ne s’allume pas.` : 'Pas de lampe à allumer.');
       return false;
     }
-    if (this.sleep) return this.wakeUp(() => this.switchLamp(this.ref(item), on, running));
     const want = on ?? !lamp.on;
     const c = this.character;
     if (c.seated) return c.standUp(() => this.switchLamp(this.ref(item), want, running));
@@ -2108,287 +1683,6 @@ export class Game {
     if (c.carried.includes(item)) press();
     else c.approachThen(c.standFor(item), item.object.position, press, running);
     return true;
-  }
-
-  /**
-   * Sommeil en cours : le lit, la phase (fondu vers le noir, endormi, fondu au réveil), le temps
-   * passé dans la phase, la vitesse de l'horloge à rendre au réveil, et quoi faire une fois levé.
-   */
-  private sleep: { bed: WorldItem; phase: 'down' | 'asleep' | 'up'; t: number; speed: number; then?: () => void; nap?: number; alarm?: number } | null = null;
-  /** Réveils réglés : l'heure où ils sonnent (absent : coupé). */
-  private alarms = new Map<WorldItem, number>();
-  /** Sonnerie en cours : le réveil, le temps qui reste, le prochain « bip ». */
-  private ringing: { item: WorldItem; left: number; next: number } | null = null;
-  /** Minutes de l'horloge au dernier tour (pour voir passer l'heure du réveil). */
-  private alarmLast = -1;
-  /** Voile noir devant la scène : s'endormir et se réveiller passent par le noir. */
-  private veil: HTMLDivElement | null = null;
-
-  /**
-   * Va se coucher dans le lit `ref` (sinon le plus proche) et dort : l'écran passe au noir, le perso
-   * est couché sous la couette, le temps file et la fatigue remonte. Il se réveille seul une fois
-   * reposé, ou quand on le demande (C, clic, touches de déplacement).
-   */
-  sleepIn(ref?: string, running = false): boolean {
-    const bed = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.bed);
-    const c = this.character;
-    const fail = (msg: string) => {
-      this.onNotice?.(msg);
-      return false;
-    };
-    if (!bed?.def.bed) return fail(ref ? `On ne dort pas dans : ${ref}.` : 'Il n’y a pas de lit.');
-    if (this.sleep) return fail('Le perso dort déjà.');
-    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-    if (c.carried.length) return fail('Pose d’abord ce que tu tiens pour te coucher.');
-    if (this.needs.values.fatigue >= NOT_SLEEPY) return fail('Le perso n’a pas sommeil (fatigue presque pleine).');
-    if (c.seated) return c.standUp(() => this.sleepIn(this.ref(bed), running));
-    const side = this.bedSide(bed);
-    if (!side) return fail('Pas de place à côté du lit pour s’y coucher.');
-    // un petit rappel, sans empêcher de dormir : les dents du soir
-    const h = this.clock.hour;
-    if ((h >= 18 || h < 5) && this.items.some((i) => i.def.id === 'brosse-a-dents') && (this.lastBrush < 0 || this.clock.minutes - this.lastBrush > BRUSH_NIGHT)) {
-      this.say('Et les dents ? Pas encore brossées ce soir…');
-      this.onNotice?.('Les dents n’ont pas été brossées ce soir : demain matin, un passage au lavabo.');
-    }
-    c.approachThen(side.stand, side.feet.clone().setY(0), () => {
-      this.sleep = { bed, phase: 'down', t: 0, speed: this.clock.speed, alarm: this.nextAlarm() };
-    }, running);
-    return true;
-  }
-
-  /**
-   * Fait la sieste sur le canapé `ref` (sinon le plus proche) : le perso s'y allonge, le temps file
-   * et il se réveille seul au bout d'une à deux heures (ou quand on le demande).
-   */
-  nap(ref?: string, running = false): boolean {
-    const sofa = ref ? this.byRef(ref) : this.nearest((i) => i.def.id === 'canape');
-    const c = this.character;
-    const fail = (msg: string) => {
-      this.onNotice?.(msg);
-      return false;
-    };
-    if (sofa?.def.id !== 'canape') return fail(ref ? `On ne fait pas la sieste sur : ${ref}.` : 'Il n’y a pas de canapé.');
-    if (this.sleep) return fail('Le perso dort déjà.');
-    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-    if (c.carried.length) return fail('Pose d’abord ce que tu tiens pour faire la sieste.');
-    if (this.needs.values.fatigue >= NOT_SLEEPY) return fail('Le perso n’a pas sommeil (fatigue presque pleine).');
-    if (c.seated) return c.standUp(() => this.nap(this.ref(sofa), running));
-    const spot = this.restSpot(sofa);
-    if (!spot) return fail('Pas de place devant le canapé pour s’y allonger.');
-    c.approachThen(spot.stand, spot.feet.clone().setY(0), () => {
-      this.sleep = { bed: sofa, phase: 'down', t: 0, speed: this.clock.speed, nap: NAP_MIN + Math.random() * (NAP_MAX - NAP_MIN) };
-    }, running);
-    return true;
-  }
-
-  /** Où s'allonger : dans le lit (son côté libre) ou sur le canapé. */
-  private restSpot(item: WorldItem): { stand: THREE.Vector3; feet: THREE.Vector3; head: THREE.Vector3 } | null {
-    if (item.def.bed) return this.bedSide(item);
-    const o = item.object;
-    o.updateMatrixWorld(true);
-    const head = SOFA_NAP.head.clone().applyQuaternion(o.quaternion).setY(0).normalize();
-    const feet = SOFA_NAP.feet.clone().applyMatrix4(o.matrixWorld);
-    for (const x of [0, 0.5, -0.5]) {
-      const stand = new THREE.Vector3(x, 0, SOFA_NAP.front + 0.38).applyMatrix4(o.matrixWorld).setY(0);
-      if (!this.character.nav?.blocked(stand)) return { stand, feet, head };
-    }
-    return null;
-  }
-
-  /** Le réveil sur la table de nuit libre (celle sans la lampe), s'il n'y est pas déjà. */
-  private placeAlarmClock(): void {
-    if (this.items.some((i) => i.def.id === 'reveil')) return;
-    const lamp = this.items.find((i) => i.def.id === 'lampe-chevet');
-    const tables = this.items.filter((i) => i.def.id === 'table-de-nuit');
-    const base = tables.sort((a, b) => (lamp ? b.object.position.distanceTo(lamp.object.position) - a.object.position.distanceTo(lamp.object.position) : 0))[0];
-    const def = ITEM_BY_ID.get('reveil');
-    if (!base || !def) return;
-    const it = new WorldItem(def);
-    this.items.push(it);
-    this.scene.add(it.object);
-    base.object.updateMatrixWorld(true);
-    it.object.position.copy(new THREE.Vector3(0.06, base.box.max.y, 0.04).applyMatrix4(base.object.matrixWorld));
-    it.object.rotation.y = base.object.rotation.y;
-  }
-
-  /** Règle le réveil `ref` (sinon le plus proche) à `hour` h ; `null` le coupe. */
-  setAlarm(hour: number | null, ref?: string): boolean {
-    const item = ref ? this.byRef(ref) : this.nearest((i) => i.def.id === 'reveil');
-    if (item?.def.id !== 'reveil') {
-      this.onNotice?.(ref ? `${ref} n’est pas un réveil.` : 'Pas de réveil.');
-      return false;
-    }
-    if (hour === null) {
-      this.alarms.delete(item);
-      if (this.ringing?.item === item) this.ringing = null;
-      this.onNotice?.('Réveil coupé.');
-      return true;
-    }
-    const h = ((Math.round(hour * 2) / 2) % 24 + 24) % 24;
-    this.alarms.set(item, h);
-    this.onNotice?.(`Réveil réglé à ${this.hourText(h)}.`);
-    return true;
-  }
-
-  /** « 7 h », « 6 h 30 ». */
-  private hourText(h: number): string {
-    const m = Math.round((h % 1) * 60);
-    return m ? `${Math.floor(h)} h ${String(m).padStart(2, '0')}` : `${Math.floor(h)} h`;
-  }
-
-  /** Le prochain réveil qui sonnera (minutes de l'horloge), s'il tombe dans la nuit qui vient. */
-  private nextAlarm(): number | undefined {
-    const now = this.clock.minutes;
-    let best: number | undefined;
-    for (const h of this.alarms.values()) {
-      const day = Math.floor(now / 1440) * 1440;
-      let at = day + h * 60;
-      if (at <= now) at += 1440;
-      if (at - now <= ALARM_REACH && (best === undefined || at < best)) best = at;
-    }
-    return best;
-  }
-
-  /** Le réveil sonne à son heure (« Driiing ! ») et réveille le dormeur. */
-  private tickAlarm(dt: number): void {
-    const now = this.clock.minutes;
-    const last = this.alarmLast;
-    this.alarmLast = now;
-    if (last >= 0 && now > last) {
-      for (const [item, h] of this.alarms) {
-        const at = h * 60;
-        if (Math.floor((last - at) / 1440) < Math.floor((now - at) / 1440)) {
-          this.ringing = { item, left: ALARM_RING, next: 0 };
-          this.say('Driiing ! Driiing !');
-          const s = this.sleep;
-          if (s && !s.nap && s.phase !== 'up') s.alarm = Math.min(s.alarm ?? now, now);
-          break;
-        }
-      }
-    }
-    const r = this.ringing;
-    if (!r) return;
-    r.left -= dt;
-    r.next -= dt;
-    if (r.next <= 0) {
-      this.sound.play('bip', this.hear(r.item.object.position));
-      r.next = 0.18;
-    }
-    if (r.left <= 0) this.ringing = null;
-  }
-
-  /** Se réveille et sort du lit (puis `then`) ; faux si le perso ne dort pas. */
-  wakeUp(then?: () => void): boolean {
-    const s = this.sleep;
-    if (!s) return false;
-    if (then) s.then = then;
-    if (s.phase === 'asleep') {
-      s.phase = 'up';
-      s.t = 0;
-    }
-    return true;
-  }
-
-  /**
-   * Où se coucher dans le lit : le côté libre (droite ou gauche du lit, vu du pied), où se tenir à
-   * côté, les pieds du dormeur sur le matelas et la direction de l'oreiller.
-   */
-  private bedSide(bed: WorldItem): { stand: THREE.Vector3; feet: THREE.Vector3; head: THREE.Vector3 } | null {
-    const o = bed.object;
-    o.updateMatrixWorld(true);
-    const def = bed.def.bed!;
-    const b = bed.box;
-    const toWorld = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).applyMatrix4(o.matrixWorld);
-    const head = new THREE.Vector3(0, 0, -1).applyQuaternion(o.quaternion).setY(0).normalize();
-    // de préférence du côté de la lampe de chevet
-    const lamp = [...this.lamps.keys()].sort((a, c) => a.object.position.distanceTo(o.position) - c.object.position.distanceTo(o.position))[0];
-    const lampX = lamp ? o.worldToLocal(lamp.object.position.clone()).x : 1;
-    for (const sx of lampX < 0 ? [-1, 1] : [1, -1]) {
-      const edge = sx > 0 ? b.max.x : b.min.x;
-      const stand = toWorld(edge + sx * 0.38, 0, 0.1).setY(0);
-      if (this.character.nav?.blocked(stand)) continue;
-      // couché de son côté du lit, la tête sur l'oreiller (le haut du crâne à 25 cm de la tête de lit)
-      const feet = toWorld(sx * (b.max.x - b.min.x) * 0.22, def.top + 0.08, (def.head ?? b.min.z) + 0.25 + 1.62);
-      return { stand, feet, head };
-    }
-    return null;
-  }
-
-  /** Fondu au noir, coucher, nuit qui file, réveil. */
-  private tickSleep(dt: number): void {
-    const s = this.sleep;
-    if (!this.veil) {
-      const v = this.veil = document.createElement('div');
-      v.style.cssText = 'position:absolute;inset:0;background:#05070d;opacity:0;pointer-events:none;z-index:1';
-      this.container.appendChild(v);
-    }
-    if (!s) {
-      this.veil.style.opacity = '0';
-      return;
-    }
-    s.t += dt;
-    const c = this.character;
-    const night = (on: boolean) => {
-      const duvet = s.bed.object.getObjectByName('couette');
-      const cover = s.bed.object.getObjectByName('couette-dormeur');
-      if (duvet) duvet.visible = !on;
-      if (cover) cover.visible = on;
-    };
-    if (s.phase === 'down') {
-      // une envie de bouger avant d'être couché : on renonce
-      if (c.wantsToMove) {
-        this.sleep = null;
-        return;
-      }
-      this.veil.style.opacity = String(Math.min(1, s.t / SLEEP_FADE));
-      if (s.t < SLEEP_FADE) return;
-      const side = this.restSpot(s.bed);
-      if (!side || !c.lieDown(side.feet, side.head, side.stand)) {
-        this.sleep = null;
-        this.onNotice?.('Impossible de se coucher ici.');
-        return;
-      }
-      night(true);
-      // on éteint la lampe de chevet en se couchant
-      if (s.bed.def.bed) for (const [item, lamp] of this.lamps) if (lamp.on && item.object.position.distanceTo(s.bed.object.position) < 2.5) this.setLamp(item, false);
-      this.clock.speed = SLEEP_SPEED;
-      s.phase = 'asleep';
-      s.t = 0;
-      // la sieste : jusqu'à l'heure dite
-      if (s.nap) s.nap = this.clock.minutes + s.nap;
-      const alarm = s.alarm !== undefined ? ` (réveil à ${this.hourText((s.alarm / 60) % 24)})` : '';
-      this.onNotice?.(s.nap ? 'Petite sieste… Zzz (C pour se réveiller)' : `Zzz…${alarm} (C pour se réveiller)`);
-    } else if (s.phase === 'asleep') {
-      // le noir s'éclaircit un peu : on voit le perso dormir
-      this.veil.style.opacity = String(Math.max(SLEEP_DIM, 1 - s.t / SLEEP_FADE));
-      const now = this.clock.minutes;
-      // réveil réglé : on dort jusqu'à ce qu'il sonne ; sieste : une à deux heures ; sinon, reposé
-      const napped = !!s.nap && now >= s.nap;
-      const rang = !s.nap && s.alarm !== undefined && now >= s.alarm;
-      const rested = !napped && !rang && s.alarm === undefined && this.needs.values.fatigue >= 100;
-      if (napped || rang || rested || c.wantsToMove) {
-        s.phase = 'up';
-        s.t = 0;
-        if (napped) this.onNotice?.(`Fin de la sieste : réveillé à ${this.clock.label}.`);
-        else if (rang) this.onNotice?.(`Le réveil a sonné : debout à ${this.clock.label}.`);
-        else if (rested) this.onNotice?.(`Bien reposé : réveillé à ${this.clock.label}.`);
-      }
-    } else {
-      this.clock.speed = s.speed;
-      const k = Math.min(1, s.t / SLEEP_FADE);
-      if (c.lying) {
-        this.veil.style.opacity = String(Math.max(SLEEP_DIM, k));
-        if (k < 1) return;
-        c.getUp();
-        night(false);
-        s.t = 0;
-        return;
-      }
-      this.veil.style.opacity = String(1 - k);
-      if (k < 1) return;
-      this.sleep = null;
-      s.then?.();
-    }
   }
 
   /** Siège où le perso est assis (ou s'assoit). */
@@ -3568,17 +2862,13 @@ export class Game {
       this.stepDist = 0;
       this.sound.play(this.activeRoom ? 'pas' : 'pas-herbe', 0.8);
     }
-    // l'ambiance : douche, télé, et dehors oiseaux le jour, grillons la nuit (pas l'hiver), pluie
-    const tv = [...this.tvs.values()].filter((t) => t.on).sort((a, b) => this.hear(b.item.object.position) - this.hear(a.item.object.position))[0];
+    // l'ambiance : dehors oiseaux le jour, grillons la nuit (pas l'hiver), pluie
     const dedans = !!this.activeRoom;
     const out = dedans ? 0.25 : 1;
     const rain = this.sound.rain;
     const night = this.clock.isNight;
     const winter = this.clock.season === 3;
     this.sound.ambient(Math.max(0, dt), {
-      douche: this.showering ? this.hear(this.showering.shower.object.position) : 0,
-      tele: tv ? this.hear(tv.item.object.position) : 0,
-      chaine: tv?.channel ?? 0,
       oiseaux: night ? 0 : out * (winter ? 0.3 : 1) * (1 - rain),
       grillons: night && !winter ? out * (1 - rain) : 0,
       pluie: rain,
@@ -5107,443 +4397,6 @@ export class Game {
     return this.washAt(this.nearest((i) => !!i.def.wash), true, running, true);
   }
 
-  /**
-   * Prend une douche (la plus proche sans `ref`) : le perso entre sous le pommeau, l'eau coule, il
-   * se frotte ; l'hygiène remonte à fond (tickShower). Il en ressort mouillé : à sécher avec la serviette.
-   */
-  takeShower(ref?: string, running = false): boolean {
-    const c = this.character;
-    const held = c.heldItems;
-    const shower = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.shower);
-    const fail = (t: string) => {
-      this.onNotice?.(t);
-      return false;
-    };
-    if (!shower?.def.shower) return fail(ref ? `${ref} n’est pas une douche.` : 'Il n’y a pas de douche.');
-    if (!c.canCarry) return fail('Crée un perso pour pouvoir te doucher.');
-    if (this.moving) return fail(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-    if (this.showering) return fail('Tu es déjà sous la douche.');
-    if (this.washing) return fail('Tu te laves déjà.');
-    if (held.length) return fail(`Pose d’abord ce que tu tiens (${held.map((h) => h.name).join(' et ')}) pour te doucher.`);
-    if (c.seated) return c.standUp(() => this.takeShower(ref, running));
-    if (c.busy || c.bracing) return false;
-    const spec = shower.def.shower;
-    const o = shower.object;
-    o.updateMatrixWorld(true);
-    const stand = new THREE.Vector3(spec.stand[0], 0, spec.stand[1]).applyMatrix4(o.matrixWorld).setY(0);
-    const head = new THREE.Vector3(...spec.head).applyMatrix4(o.matrixWorld);
-    // les mains se frottent devant la poitrine (la droite du perso à sa droite)
-    const at = () => {
-      const fwd = head.clone().sub(stand).setY(0).normalize();
-      const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-      const mid = stand.clone().addScaledVector(fwd, 0.22).setY(1.12);
-      return { right: mid.clone().addScaledVector(right, 0.07), left: mid.clone().addScaledVector(right, -0.07) };
-    };
-    return c.startWash(stand, head.clone().setY(0), at, true, () => {
-      this.showering = { shower, t: 0 };
-      this.wet = 0;
-    }, running);
-  }
-
-  /** Sous la douche : l'eau coule, la vapeur monte, le miroir s'embue ; à la fin, le perso sort mouillé. */
-  private tickShower(dt: number): void {
-    const s = this.showering;
-    if (!s) return;
-    const sec = s.shower.def.shower!.seconds;
-    const before = Math.min(1, s.t / sec);
-    s.t += dt;
-    const done = Math.min(1, s.t / sec);
-    this.needs.restore('hygiene', (done - before) * 100);
-    this.mirrorFog = Math.min(1, this.mirrorFog + dt / sec);
-    const rain = s.shower.part('jet');
-    const steam = s.shower.part('vapeur');
-    if (rain) {
-      rain.visible = done < 1;
-      // les filets tremblent un peu
-      for (const m of rain.children) m.scale.x = m.scale.z = 0.7 + 0.5 * Math.abs(Math.sin(s.t * 23 + m.userData.phase * 9));
-    }
-    if (steam) {
-      steam.visible = done < 1;
-      const [hx, , hz] = s.shower.def.shower!.head;
-      for (const m of steam.children) {
-        const k = (m.userData.phase + s.t * 0.22) % 1;
-        m.position.set(hx + Math.sin(m.userData.phase * 40) * 0.25, 0.5 + k * 1.7, hz + 0.15 + Math.cos(m.userData.phase * 40) * 0.2);
-        m.scale.setScalar(0.25 + k * 0.6);
-      }
-    }
-    if (done < 1) return;
-    this.showering = null;
-    this.wet = WET_SECONDS;
-    this.wearItem(s.shower, WEAR_TAP);
-    this.character.stopWash();
-    this.laundry.showered();
-    this.onNotice?.('Douche prise : propre de la tête aux pieds. Sèche-toi avec la serviette, sinon tu mouilles le sol.');
-  }
-
-  /**
-   * Se sèche avec la serviette (celle qu'on tient, sinon la plus proche : le perso va la prendre) :
-   * on se frotte le buste puis la tête. La serviette reste mouillée un moment.
-   */
-  dryOff(ref?: string, running = false): boolean {
-    const c = this.character;
-    const fail = (t: string) => {
-      this.onNotice?.(t);
-      return false;
-    };
-    const towel = c.heldItems.find((h) => h.def.bathTowel) ?? (ref ? this.byRef(ref) : this.nearest((i) => !!i.def.bathTowel));
-    if (!towel?.def.bathTowel) return fail('Il n’y a pas de serviette.');
-    if (!c.canCarry) return fail('Crée un perso pour pouvoir te sécher.');
-    if (this.showering) return fail('Finis d’abord ta douche.');
-    if (c.busy || c.bracing || this.moving) return false;
-    if (c.seated) return c.standUp(() => this.dryOff(ref, running));
-    const hand = c.handOf(towel);
-    if (!hand) {
-      if (!c.freeHand(towel)) return fail(`Les mains sont prises (${c.heldItems.map((h) => h.name).join(' et ')}). E pour poser.`);
-      return c.pickUp(towel, running, this.shelfOf(towel)?.forward, () => this.dryOff(this.ref(towel), running));
-    }
-    const at = (y: number) => () => c.position.clone().addScaledVector(c.forward, 0.2).setY(y);
-    const wasWet = this.wet > 0 || this.body.soaked > 0.15;
-    return hand.cut(at(1.15), () => {
-      if (!hand.cut(at(1.5), () => {
-        this.wet = 0;
-        this.body.dry();
-        if (wasWet) {
-          this.towelsWet.set(towel, TOWEL_DRY);
-          towel.part('mouillee')?.traverse((o) => (o.visible = true));
-          this.wearItem(towel, 1);
-        }
-        this.onNotice?.(wasWet ? 'Tu es sec. Remets la serviette sur le porte-serviettes pour qu’elle sèche.' : 'Tu es déjà sec, mais ça fait du bien.');
-      })) {
-        this.wet = 0;
-        this.body.dry();
-      }
-    });
-  }
-
-  /**
-   * Va aux toilettes (les plus proches sans `ref`) : ouvre le couvercle, s'assoit, se soulage
-   * (la vessie se vide, tickToilet), se relève et tire la chasse.
-   */
-  useToilet(ref?: string, running = false): boolean {
-    const toilet = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.toilet);
-    const fail = (t: string) => {
-      this.onNotice?.(t);
-      return false;
-    };
-    if (!toilet?.def.toilet) return fail(ref ? `${ref} n’est pas des toilettes.` : 'Il n’y a pas de toilettes.');
-    if (this.needs.values.vessie > TOILET_NO_NEED) return fail('Pas besoin d’y aller pour l’instant.');
-    if (this.toiletVisit) return true;
-    const start = () => {
-      this.toiletVisit = { toilet, t: 0 };
-    };
-    this.setLid(toilet, true);
-    if (this.sitting === toilet && this.character.seated) return start(), true;
-    const ok = this.sit(this.ref(toilet), running, start);
-    if (!ok) this.setLid(toilet, false);
-    return ok;
-  }
-
-  /** Assis aux toilettes : la vessie se vide ; puis le perso se lève et tire la chasse. */
-  private tickToilet(dt: number): void {
-    const v = this.toiletVisit;
-    if (!v) return;
-    // relevé avant la fin (le joueur l'a fait bouger) : la visite s'arrête là
-    if (this.sitting !== v.toilet) {
-      this.toiletVisit = null;
-      return;
-    }
-    const before = Math.min(1, v.t / TOILET_SECONDS);
-    v.t += dt;
-    const done = Math.min(1, v.t / TOILET_SECONDS);
-    this.needs.restore('vessie', (done - before) * 100);
-    if (done < 1) return;
-    this.toiletVisit = null;
-    this.handsToWash = true;
-    this.soilHands('toilettes');
-    this.useToiletPaper(v.toilet);
-    this.character.standUp(() => this.flush(this.ref(v.toilet)));
-  }
-
-  /** Tire la chasse d'eau des toilettes `ref` (les plus proches sans ref) ; le couvercle se rabat ensuite. */
-  flush(ref?: string, running = false): boolean {
-    const toilet = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.toilet);
-    if (!toilet?.def.toilet) {
-      this.onNotice?.('Il n’y a pas de toilettes.');
-      return false;
-    }
-    const c = this.character;
-    const pull = () => {
-      this.flushes.set(toilet, FLUSH_SECONDS);
-      this.sound.play('chasse', this.hear(toilet.object.position));
-      this.wearItem(toilet, WEAR_TAP);
-      const paper = this.paperNote ? ` ${this.paperNote}` : '';
-      this.paperNote = null;
-      this.onNotice?.(`${this.handsToWash ? 'Chasse tirée. Pense à te laver les mains au lavabo.' : 'Chasse tirée.'}${paper}`);
-    };
-    if (p0(c.position).distanceTo(p0(toilet.object.position)) < 1) return pull(), true;
-    if (c.busy || c.bracing || this.moving) return false;
-    c.approachThen(this.frontOf(toilet), toilet.object.position, pull, running);
-    return true;
-  }
-
-  /** Ouvre (ou ferme) le couvercle des toilettes : il pivote vers le réservoir (tickBathroom). */
-  private setLid(toilet: WorldItem, open: boolean): void {
-    const lid = this.lids.get(toilet) ?? { open: 0, target: 0 };
-    lid.target = open ? 1 : 0;
-    this.lids.set(toilet, lid);
-  }
-
-  /**
-   * Brosse et verre à dents sur le rebord du lavabo ; dérouleur de papier au mur à côté des
-   * toilettes (à la place du rouleau dessiné par le décor), un rouleau dessus et trois de rechange
-   * sur la tablette du miroir (pas sur le réservoir : on ne pourrait plus s'asseoir). Une partie
-   * sauvée d'avant leur arrivée les retrouve au chargement.
-   */
-  private placeBathroomKit(): void {
-    const toilet = this.items.find((i) => i.def.toilet);
-    const sink = this.items.find((i) => i.def.mirror);
-    // le rouleau dessiné au mur (salle-de-bain.ts) laisse place au vrai dérouleur
-    for (const room of this.rooms) {
-      room.group.traverse((o) => {
-        const g = (o as THREE.Mesh).geometry;
-        if (g instanceof THREE.CylinderGeometry && g.parameters.radiusTop === 0.055 && g.parameters.height === 0.1 && o.parent) o.parent.visible = false;
-      });
-    }
-    if (this.items.some((i) => i.def.id === 'derouleur')) return;
-    const put = (id: string, base: WorldItem, at: [number, number, number]) => {
-      const def = ITEM_BY_ID.get(id);
-      if (!def) return null;
-      const it = new WorldItem(def);
-      base.object.updateMatrixWorld(true);
-      it.object.position.copy(new THREE.Vector3(...at).applyMatrix4(base.object.matrixWorld));
-      it.object.rotation.y = base.object.rotation.y;
-      this.items.push(it);
-      this.scene.add(it.object);
-      return it;
-    };
-    if (sink) {
-      put('verre-a-dents', sink, TOOTH_SPOT);
-      // debout dans le verre, un peu penchée
-      put('brosse-a-dents', sink, [TOOTH_SPOT[0], TOOTH_SPOT[1] + 0.01, TOOTH_SPOT[2]])?.object.rotateZ(0.12);
-      // les rouleaux de rechange sur la tablette du miroir
-      for (const x of [-0.02, 0.1, 0.22]) put('papier-toilette', sink, [x, 1.08, -0.155]);
-    }
-    if (toilet) {
-      const holder = put('derouleur', toilet, [0.36, 0.72 - toilet.object.position.y, toilet.box.min.z]);
-      const roll = put('papier-toilette', toilet, [0, 0, 0]);
-      if (holder && roll) {
-        const { pos, rot } = this.slot(holder, 0);
-        roll.object.position.copy(pos);
-        roll.object.quaternion.copy(rot);
-      }
-    }
-  }
-
-  /**
-   * Se brosse les dents au lavabo `ref` (le plus proche sans ref) : la brosse posée près du lavabo
-   * passe dans la main droite, les mains vont du robinet à la bouche ; un peu d'hygiène, et de
-   * bonne humeur une fois le matin et une fois le soir.
-   */
-  brushTeeth(ref?: string, running = false): boolean {
-    const c = this.character;
-    const sink = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.mirror);
-    if (!sink?.def.wash) return this.notice('Il n’y a pas de lavabo.');
-    const brushes = this.items.filter((i) => i.def.id === 'brosse-a-dents');
-    const brush = brushes.filter((b) => !c.carried.includes(b) && b.object.position.distanceTo(sink.object.position) < 1.5)[0];
-    if (!brushes.length) return this.notice('Il n’y a pas de brosse à dents.');
-    if (!brush) return this.notice(brushes.some((b) => c.carried.includes(b)) ? 'Pose la brosse à dents près du lavabo (dans son verre), puis brosse-toi les dents.' : 'La brosse à dents n’est pas au lavabo : rapporte-la à côté du verre.');
-    if (!c.canCarry) return this.notice('Crée un perso pour pouvoir te brosser les dents.');
-    if (this.moving) return this.notice(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-    if (this.washing) return this.notice('Tu es déjà au lavabo.');
-    if (c.heldItems.length) return this.notice(`Pose d’abord ce que tu tiens (${c.heldItems.map((h) => h.name).join(' et ')}) pour te brosser les dents.`);
-    if (c.busy || c.bracing) return false;
-    if (c.seated) return c.standUp(() => this.brushTeeth(this.ref(sink), running));
-    return c.startWash(this.frontOf(sink), sink.object.position, this.handsUnderTap(sink), true, () => {
-      // la brosse quitte le verre pour la main droite (le temps du brossage)
-      brush.object.visible = false;
-      const parts = c.dressHands(() => {
-        const m = brushModel();
-        m.position.y = -0.03;
-        return m;
-      });
-      c.undress(parts.slice(1));
-      this.washing = { sink, t: 0, seconds: BRUSH.seconds, hygiene: BRUSH.hygiene, face: true, teeth: { brush, shown: parts.slice(0, 1) } };
-    }, running);
-  }
-
-  /** Brossage fini : la brosse retourne au verre ; humeur et message selon le moment de la journée. */
-  private teethDone(teeth: { brush: WorldItem; shown: THREE.Object3D[] }): void {
-    const c = this.character;
-    const back = () => {
-      c.undress(teeth.shown);
-      teeth.brush.object.visible = true;
-    };
-    if (!c.stopWash(back)) back();
-    this.wearItem(teeth.brush, 1);
-    const fresh = this.lastBrush < 0 || this.clock.minutes - this.lastBrush >= BRUSH_AGAIN;
-    this.lastBrush = this.clock.minutes;
-    if (!fresh) return void this.onNotice?.('Dents brossées, encore : elles étaient déjà bien propres.');
-    this.addMood(BRUSH.mood);
-    const h = this.clock.hour;
-    this.say('Haleine fraîche !');
-    this.onNotice?.(`Dents brossées${h >= 4 && h < 12 ? ' : bien parti pour la journée' : h >= 18 || h < 4 ? ' : prêt pour la nuit' : ''}.`);
-  }
-
-  /** Passages qui restent sur le rouleau de papier `roll`. */
-  private rollLeft(roll: WorldItem): number {
-    return this.paper.get(roll) ?? ROLL_USES;
-  }
-
-  /** Le dérouleur le plus proche des toilettes `toilet` (à moins de 1,5 m) et le rouleau qu'il porte, vide compris. */
-  private rollAt(toilet: WorldItem): { holder: WorldItem; roll: WorldItem | null } | null {
-    const p = toilet.object.position;
-    const holder = this.items.filter((i) => i.def.id === 'derouleur' && i.object.position.distanceTo(p) < 1.5).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
-    return holder ? { holder, roll: this.storedIn(holder)[0] ?? null } : null;
-  }
-
-  /** Rouleaux de papier neufs de la maison (pas ceux sur un dérouleur), les plus proches du perso d'abord. */
-  private spareRolls(): WorldItem[] {
-    const p = this.character.position;
-    return this.items
-      .filter((i) => i.def.id === 'papier-toilette' && this.rollLeft(i) > 0 && this.shelfOf(i)?.shelf.def.id !== 'derouleur')
-      .sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p));
-  }
-
-  /** Le papier des toilettes : le rouleau s'use d'un passage ; sans papier, hygiène et humeur en pâtissent. */
-  private useToiletPaper(toilet: WorldItem): void {
-    const at = this.rollAt(toilet);
-    const roll = at?.roll;
-    const left = roll ? this.rollLeft(roll) : 0;
-    const spares = this.spareRolls().length;
-    if (!roll || left <= 0) {
-      this.needs.restore('hygiene', -NO_PAPER.hygiene);
-      this.addMood(-NO_PAPER.mood);
-      this.say('Zut, plus de papier !');
-      this.paperNote = spares ? 'Plus de papier : mets un rouleau neuf sur le dérouleur.' : 'Plus de papier, et plus de rouleau de rechange : il faudra en racheter.';
-      return;
-    }
-    this.paper.set(roll, left - 1);
-    showRoll(roll.object, (left - 1) / ROLL_USES);
-    if (left - 1 === 0) this.paperNote = spares ? `Fin du rouleau : mets-en un neuf sur le dérouleur (encore ${spares} de rechange).` : 'Fin du rouleau, et c’était le dernier : il faudra en racheter.';
-    else if (left - 1 === 1) this.paperNote = 'Le rouleau de papier est presque fini.';
-  }
-
-  /** Met un rouleau neuf (tenu, sinon un de rechange) sur le dérouleur `ref` (le plus proche sans ref) ; le carton vide part. */
-  changeRoll(ref?: string, running = false): boolean {
-    const c = this.character;
-    const holder = ref ? this.byRef(ref) : this.nearest((i) => i.def.id === 'derouleur');
-    if (holder?.def.id !== 'derouleur') return this.notice('Il n’y a pas de dérouleur de papier.');
-    const old = this.storedIn(holder)[0];
-    if (old && this.rollLeft(old) > 0) return this.notice('Il reste du papier sur le rouleau.');
-    const fresh = c.heldItems.find((h) => h.def.id === 'papier-toilette' && this.rollLeft(h) > 0) ?? this.spareRolls()[0];
-    if (!fresh) return this.notice('Plus de rouleau de rechange : il faudra en racheter.');
-    if (!c.handOf(fresh)) return this.chain([() => this.take(fresh, running), () => this.changeRoll(this.ref(holder), running)]);
-    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(holder.object.quaternion);
-    c.approachThen(c.standFor(holder, fwd), holder.object.position, () => {
-      if (old && !c.carried.includes(old)) {
-        this.removeItem(old);
-        this.paper.delete(old);
-      }
-      const spares = this.spareRolls().filter((r) => r !== fresh).length;
-      this.storeNext(holder, fresh, false);
-      this.onNotice?.(`Rouleau neuf en place${old ? ', le carton vide jeté' : ''} (${spares ? `encore ${spares} de rechange` : 'c’était le dernier de rechange'}).`);
-    }, running);
-    return true;
-  }
-
-  /** Se regarde dans le miroir du lavabo : le perso dit à quoi il ressemble (selon l'hygiène). */
-  lookInMirror(ref?: string, running = false): boolean {
-    const sink = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.mirror);
-    if (!sink?.def.mirror) {
-      this.onNotice?.('Il n’y a pas de miroir.');
-      return false;
-    }
-    const c = this.character;
-    if (c.busy || c.bracing || this.moving) return false;
-    if (c.seated) return c.standUp(() => this.lookInMirror(ref, running));
-    c.approachThen(this.frontOf(sink), sink.object.position, () => {
-      const h = this.needs.values.hygiene;
-      if (this.mirrorFog > 0.4 && sink.part('buee')) this.say('Le miroir est plein de buée…');
-      else if (this.wet > 0) this.say('Tout mouillé ! Vite, la serviette.');
-      else if (h > 80) this.say('Tout propre, tout beau !');
-      else if (h > 45) this.say('Ça va… un brin de toilette ne ferait pas de mal.');
-      else this.say('Oh là là… il me faut une douche.');
-    }, running);
-    return true;
-  }
-
-  /**
-   * À chaque image, la salle de bain : le perso mouillé qui marche laisse des gouttes par terre,
-   * la serviette mouillée sèche, le miroir se désembue, le couvercle des toilettes pivote, la
-   * chasse d'eau tourbillonne ; la vessie pleine prévient, puis c'est l'accident.
-   */
-  private tickBathroom(dt: number): void {
-    const c = this.character;
-    if (this.wet > 0 && !this.showering) {
-      this.wet = Math.max(0, this.wet - dt);
-      const inShower = this.items.some((i) => i.def.shower && p0(c.position).distanceTo(p0(i.object.position)) < SHOWER_W_HALF);
-      if (c.moveGait !== 'idle' && !inShower) {
-        this.dripT += dt;
-        if (this.dripT > DRIP_EVERY) {
-          this.dripT = 0;
-          this.addDebris(new Spill(p0(c.position).addScaledVector(c.forward, -0.15), 0x9fcde6, 0.07 + Math.random() * 0.05));
-        }
-      }
-    }
-    for (const [towel, t] of this.towelsWet) {
-      // mieux étendue sur le porte-serviettes qu'en boule par terre
-      const left = t - dt * (this.shelfOf(towel) ? 2 : 1);
-      if (left > 0) this.towelsWet.set(towel, left);
-      else {
-        this.towelsWet.delete(towel);
-        towel.part('mouillee')?.traverse((o) => (o.visible = false));
-      }
-    }
-    if (!this.showering && this.mirrorFog > 0) this.mirrorFog = Math.max(0, this.mirrorFog - dt / MIRROR_CLEAR);
-    for (const sink of this.items) {
-      if (!sink.def.mirror) continue;
-      const fog = sink.part('buee') as THREE.Mesh | undefined;
-      if (!fog) continue;
-      fog.visible = this.mirrorFog > 0.01;
-      (fog.material as THREE.MeshBasicMaterial).opacity = this.mirrorFog * 0.85;
-    }
-    for (const [toilet, lid] of this.lids) {
-      lid.open = THREE.MathUtils.clamp(lid.open + Math.sign(lid.target - lid.open) * dt * 2.5, 0, 1);
-      const part = toilet.part('couvercle');
-      if (part) part.rotation.x = -LID_OPEN * THREE.MathUtils.smootherstep(lid.open, 0, 1);
-    }
-    for (const [toilet, t] of this.flushes) {
-      const left = t - dt;
-      const pool = toilet.part('eau');
-      if (pool) {
-        pool.rotation.y += dt * 9;
-        const k = Math.sin((1 - Math.max(0, left) / FLUSH_SECONDS) * Math.PI);
-        pool.position.y = (pool.userData.y ??= pool.position.y) - 0.04 * k;
-      }
-      if (left > 0) this.flushes.set(toilet, left);
-      else {
-        this.flushes.delete(toilet);
-        if (pool) pool.position.y = pool.userData.y;
-        this.setLid(toilet, false);
-      }
-    }
-    // lavé les mains (lavabo ou évier) après les toilettes : plus besoin de le rappeler
-    if (this.handsToWash && this.washing && !this.washing.thirst && !this.washing.dishes && !this.washing.teeth) this.handsToWash = false;
-    const v = this.needs.values.vessie;
-    if (v > 50) this.bladderWarned = false;
-    else if (v < BLADDER_WARN && !this.bladderWarned && !this.toiletVisit) {
-      this.bladderWarned = true;
-      this.onNotice?.('Envie pressante : vite, aux toilettes !');
-    }
-    if (v <= 0 && !this.toiletVisit) {
-      // trop tard : un petit accident, l'hygiène en prend un coup
-      this.needs.set('vessie', 100);
-      this.needs.restore('hygiene', -50);
-      this.addDebris(new Spill(p0(c.position), 0xe9dc8a, 0.28));
-      this.onNotice?.('Trop tard… un petit accident. Il va falloir essuyer et prendre une douche.');
-    }
-  }
-
   /** Où vont les mains sous le robinet de l'évier (monde), de part et d'autre du filet d'eau. */
   private handsUnderTap(sink: WorldItem): () => Record<'right' | 'left', THREE.Vector3> {
     const o = sink.object;
@@ -5599,7 +4452,6 @@ export class Game {
       this.onNotice?.(`Vaisselle faite : ${dishes.map((d) => the(d.name)).join(' et ')} ${wet}${rack}.`);
       return;
     }
-    if (w.teeth) return this.teethDone(w.teeth);
     this.character.stopWash();
     if (!w.thirst) this.wetHands = 1;
     // les mains sales ne sont propres qu'avec du savon (le flacon à côté de l'évier, ou le lavabo)
@@ -5878,8 +4730,6 @@ export class Game {
   }
 
   private switchTo(on: boolean, ref?: string, running = false, pan?: string): boolean {
-    const screen = ref ? this.byRef(ref) : undefined;
-    if (screen && this.tvs.has(screen)) return this.setTv(screen, on, running);
     const item = this.heaterItem(ref);
     if (!item) return false;
     const under = pan ? this.byRef(pan) : undefined;
@@ -6058,16 +4908,6 @@ export class Game {
     if (!c.canCarry) this.onNotice?.('Crée un perso pour pouvoir porter des objets.');
     else if (this.moving) this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
     else if (this.washing || this.character.washing) this.onNotice?.('Tu te laves, un instant.');
-    // jardin : potager, pommier, massif de fleurs (jardin.ts)
-    else if (this.garden.owns(item)) return this.garden.click(item, running);
-    // boîte aux lettres : relever le courrier (entree.ts)
-    else if (this.entree.owns(item)) return this.entree.click(item, running);
-    // étang, ponton, trousse de secours (loisirs.ts)
-    else if (this.loisirs.owns(item)) return this.loisirs.click(item, running);
-    // le chaton, sa gamelle (chat.ts)
-    else if (this.chat.owns(item)) return this.chat.click(item, running);
-    // machines à laver, étendoir, linge propre à ranger dans l'armoire (buanderie.ts)
-    else if (this.laundry.owns(item)) return this.laundry.click(item, running);
     // bouton d'un appareil (un feu de la gazinière, la machine à café) : l'allumer ou l'éteindre
     else if (opts.button !== undefined && item.def.heat) return this.toggleHeat(item, running, opts.button);
     // poubelle : on y jette ce qu'on tient
@@ -6092,8 +4932,6 @@ export class Game {
     else if (program(item.def)) return this.appliances.has(item) ? this.stopAppliance(this.ref(item)) : this.runAppliance(item, running);
     // poubelle pas vide : clic sur le côté, on la vide
     else if (item.def.bin && !item.def.outdoor && this.binFill.get(item)) return this.emptyBin(this.ref(item), running);
-    // télé, mains vides : on l'allume ou on l'éteint
-    else if (item.def.screen && !held.length) return this.setTv(item, undefined, running);
     // mains vides : un gros meuble s'agrippe pour le déplacer
     else if (item.def.movable && !held.length) return this.grabFurniture(item, running);
     // évier : la vaisselle sale en main se lave ; la tasse (propre) se remplit d'eau ; sinon on se lave les mains
@@ -6106,8 +4944,6 @@ export class Game {
     else if (item === this.brew?.cup) this.onNotice?.(`${cap(theLiquid(this.brew.machine.def.pour!.liquid))} coule encore.`);
     // un aliment en main : on le sert dans l'assiette cliquée
     else if (item.def.plate && held.some((h) => h.def.food)) return this.serveOn(item, held.find((h) => h.def.food)!, running);
-    // le dérouleur : on y change le rouleau fini
-    else if (item.def.id === 'derouleur') return this.changeRoll(this.ref(item), running);
     else if (item.def.slots && held.length) return this.storeIn(item, running);
     else if (item.def.slots) this.onNotice?.('Clique sur un livre pour le prendre, ou apporte des livres à ranger.');
     else return this.take(item, running);
@@ -6310,8 +5146,7 @@ export class Game {
       if (e.code === 'KeyK' && !e.repeat) this.cut();
       if (e.code === 'KeyG' && !e.repeat) this.prepare();
       if (e.code === 'KeyC' && !e.repeat) {
-        if (this.sleep) this.wakeUp();
-        else if (this.character.seated) this.standUp();
+        if (this.character.seated) this.standUp();
         else this.sit();
       }
       if (e.code === 'KeyL' && !e.repeat) {
@@ -6530,10 +5365,8 @@ export class Game {
       this.prepMenu(null, add);
       const rack = wetDish && this.homeOf(wetDish);
       if (rack?.def.rack) add(`Mettre ${the(wetDish!.name)} à égoutter`, () => this.storeIn(rack, false, wetDish));
-      if (held.some((h) => h.def.bathTowel)) add('Se sécher', () => this.dryOff());
       for (const h of new Set(held.map((i) => i.name))) add(`Poser : ${h}`, () => this.drop(h));
       if (can.seated) add('Se lever', () => this.standUp());
-      if (can.sleeping) add('Se réveiller', () => this.wakeUp());
       this.mouvements.menu(null, add);
       return out;
     }
@@ -6568,12 +5401,6 @@ export class Game {
       if (heat.on.some(Boolean)) add('Éteindre', () => this.switchOff(ref));
       else add('Allumer', () => this.switchOn(ref));
     }
-    // télé : allumer, éteindre, changer de chaîne
-    const tv = this.tvs.get(item);
-    if (tv) {
-      add(tv.on ? 'Éteindre la télé' : 'Allumer la télé', () => this.setTv(item, !tv.on, false));
-      if (tv.on) add('Changer de chaîne', () => this.zapTv(item, false));
-    }
     // four, micro-ondes, lave-vaisselle, grille-pain, mixeur
     if (program(item.def)) {
       if (this.appliances.has(item)) add('Arrêter', () => this.stopAppliance(ref));
@@ -6591,15 +5418,6 @@ export class Game {
     if (this.bagless.has(item)) add('Mettre un sac neuf', () => this.newBinBag(ref));
     // horloge, meubles tachés
     if (item.def.clock) add('Regarder l’heure', () => this.readClock());
-    if (item.def.id === 'reveil') {
-      const h = this.alarms.get(item);
-      if (h === undefined) add(`Régler le réveil à ${ALARM_HOUR} h`, () => this.setAlarm(ALARM_HOUR, ref));
-      else {
-        add(`Réveil plus tôt (${this.hourText((h + 23) % 24)})`, () => this.setAlarm(h - 1, ref));
-        add(`Réveil plus tard (${this.hourText((h + 1) % 24)})`, () => this.setAlarm(h + 1, ref));
-        add('Couper le réveil', () => this.setAlarm(null, ref));
-      }
-    }
     if (this.grime.has(item) && held.some((h) => h.def.spray)) add('Nettoyer au spray', () => this.cleanSurface(ref));
     if (item.def.gloves && !this.gloved) add('Enfiler les gants', () => this.putOnGloves());
     // évier
@@ -6626,20 +5444,6 @@ export class Game {
       add(sink.plug ? 'Enlever le bouchon' : `Boucher ${the(item.name)}`, () => this.setPlug(!sink.plug, ref));
       if (!held.length) add('Boire au robinet', () => this.washAt(item, true, false, true));
     }
-    // salle de bain : miroir, douche, toilettes, serviette
-    if (item.def.mirror) add('Se regarder dans le miroir', () => this.lookInMirror(ref));
-    if ((item.def.mirror || item.def.id === 'brosse-a-dents' || item.def.id === 'verre-a-dents') && !held.length && !this.washing) add('Se brosser les dents', () => this.brushTeeth(item.def.mirror ? ref : undefined));
-    const paper = item.def.toilet ? this.rollAt(item) : item.def.id === 'derouleur' ? { holder: item, roll: this.storedIn(item)[0] ?? null } : null;
-    if (paper && (!paper.roll || this.rollLeft(paper.roll) <= 0)) add('Mettre un rouleau neuf', () => this.changeRoll(this.ref(paper.holder)));
-    if (item.def.shower && !this.showering) add('Prendre une douche', () => this.takeShower(ref));
-    if (item.def.toilet) {
-      if (this.needs.values.vessie <= TOILET_NO_NEED && !this.toiletVisit) add('Aller aux toilettes', () => this.useToilet(ref));
-      add('Tirer la chasse', () => this.flush(ref));
-      const lid = this.lids.get(item);
-      if (lid?.target) add('Fermer le couvercle', () => (this.setLid(item, false), true));
-      else add('Ouvrir le couvercle', () => (this.setLid(item, true), true));
-    }
-    if (item.def.bathTowel) add('Se sécher', () => this.dryOff(ref));
     // ustensile : y mettre l'ingrédient tenu
     const food = item.def.cookware && held.find((h) => this.cookFits(item, h));
     if (food) add(`Mettre ${the(food.name)} dedans`, () => this.putIn(item, food, false));
@@ -6660,15 +5464,6 @@ export class Game {
       add('Mettre la table', () => this.setTable());
       add('Débarrasser', () => this.clearTable());
     }
-    // lit, lampe de chevet
-    if (item.def.bed) {
-      if (this.sleep?.bed === item) add('Se réveiller', () => this.wakeUp());
-      else if (!this.sleep) add('Dormir', () => this.sleepIn(ref));
-    }
-    if (item.def.id === 'canape') {
-      if (this.sleep?.bed === item) add('Se réveiller', () => this.wakeUp());
-      else if (!this.sleep) add('Faire la sieste', () => this.nap(ref));
-    }
     const lamp = this.lamps.get(item);
     if (lamp) add(lamp.on ? 'Éteindre la lampe' : 'Allumer la lampe', () => this.switchLamp(ref, !lamp.on));
     // siège
@@ -6679,12 +5474,7 @@ export class Game {
     }
     if (item.def.table && this.crumbs.has(item) && held.some((h) => h.def.wipes)) add(item.def.table === 'repas' ? 'Essuyer la table' : `Essuyer ${the(item.name)}`, () => this.wipeTable(ref));
     if (item === this.sitting) add('Se lever', () => this.standUp());
-    this.garden.menu(item, add);
-    this.entree.menu(item, add);
-    this.loisirs.menu(item, add);
-    this.chat.menu(item, add);
     this.mouvements.menu(item, add);
-    this.laundry.menu(item, add);
     // prendre (sans s'en servir), déplacer un meuble
     if (item.def.portable) add(`Prendre ${the(item.name)}`, () => this.take(item, false));
     if (item.def.movable && !held.length) add(`Déplacer ${the(item.name)}`, () => this.grabFurniture(item, false));
@@ -6702,11 +5492,6 @@ export class Game {
   get cookingSkill(): { level: number; points: number; from: number; next: number | null } {
     const level = this.cookingLevel;
     return { level, points: this.skillPoints, from: pointsFor(level), next: level < SKILL_MAX ? pointsFor(level + 1) : null };
-  }
-
-  /** La compétence jardinage (jardin.ts), comme cookingSkill. */
-  get gardeningSkill(): { level: number; points: number; from: number; next: number | null } {
-    return this.garden.skill;
   }
 
   /** Le perso s'exerce en cuisine : des points, et un message au passage d'un niveau. */
@@ -6844,8 +5629,6 @@ export class Game {
   }
 
   private stateOf(item: WorldItem): string {
-    const garden = this.garden.stateOf(item) ?? this.entree.stateOf(item) ?? this.laundry.stateOf(item) ?? this.loisirs.stateOf(item) ?? this.chat.stateOf(item);
-    if (garden) return garden;
     const words: string[] = [];
     const a = agree(item.name);
     const cuisson = doneness(item.def, item.cooking);
@@ -6855,10 +5638,6 @@ export class Game {
     if (item.def.seat && this.tucked(item)) words.push('rangée sous la table');
     if (this.tablets.has(item)) words.push(`${this.tablets.get(item)} pastille${this.tablets.get(item)! > 1 ? 's' : ''}`);
     if (item.def.washes && this.tabletIn.has(item)) words.push('pastille mise');
-    if (item.def.id === 'papier-toilette') {
-      const left = this.rollLeft(item);
-      words.push(left <= 0 ? 'vide' : left >= ROLL_USES ? 'neuf' : `encore ${left} passage${left > 1 ? 's' : ''}`);
-    }
     if (item.def.tank) {
       const cups = Math.floor((item.level * item.def.tank) / SERVING + 0.2);
       words.push(cups ? `eau pour ${cups} tasse${cups > 1 ? 's' : ''}` : 'vide');
@@ -6875,10 +5654,6 @@ export class Game {
     if (this.iced.has(item)) words.push('avec glaçons');
     if (this.steeps.has(item)) words.push('sachet de thé');
     words.push(...this.prepWords(item));
-    if (this.towelsWet.has(item)) words.push('mouillée');
-    if (item.def.shower && this.showering?.shower === item) words.push('l’eau coule');
-    if (item.def.mirror && this.mirrorFog > 0.3 && item.part('buee')) words.push('miroir embué');
-    if (this.lids.get(item)?.target) words.push('couvercle ouvert');
     if (door?.keep) words.push('laissé ouvert');
     if (this.appliances.has(item)) words.push('en marche');
     if (this.heaters.get(item)?.on.some(Boolean)) words.push(`allumé${a}`);
@@ -7023,9 +5798,6 @@ export class Game {
     this.tickEating();
     this.tickWash(dt);
     this.tickUpkeep(dt);
-    this.tickShower(dt);
-    this.tickToilet(dt);
-    this.tickBathroom(dt);
     this.tickPour(dt);
     this.tickSinks(dt);
     this.tickIce(dt);
@@ -7034,8 +5806,6 @@ export class Game {
     this.tickPickQueue();
     this.tickFlying(dt);
     this.debris = this.debris.filter((d) => d.update(dt));
-    this.tickSleep(dt);
-    this.tickAlarm(dt);
     this.tickNeeds(dt);
     const book = held.find((h) => h.def.buildOpen);
     if (book && c.reading?.held === book) this.wearItem(book, dt * WEAR_READ);
@@ -7074,7 +5844,6 @@ export class Game {
       r.overcast = this.weather.cloud;
       r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null, r === this.shadowRoom);
     }
-    for (const tv of this.tvs.values()) tv.tick(dt);
     this.placeBubble();
     // saison dehors : herbe, neige, pétales, feuilles ou flocons ; dans une pièce, poussières dorées
     const look = seasonLook(this.clock.yearPos);
@@ -7087,12 +5856,6 @@ export class Game {
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
     this.sound.setRain(w.rain);
-    this.garden.update(dt, this.clock.yearPos, Math.max(look.snow, w.cover));
-    this.garden.rain(w.rain, (dt * this.clock.speed) / 3600);
-    this.loisirs.update(dt);
-    this.chat.update(dt, (dt * this.clock.speed) / 60);
-    if (!CUISINE_SEULE) this.paysage.update(dt);
-    this.laundry.update(dt, this.clock.speed / TIME_SPEED);
     this.motes.update(now / 1000, this.character.position, this.activeRoom ? INDOOR_MOTES : look);
   }
 
@@ -7185,7 +5948,6 @@ export class Game {
       recipes: this.readingRecipes,
       book: this.readingBook,
       seated: !!this.sitting,
-      sleeping: !!this.sleep,
     };
   }
 
@@ -7203,11 +5965,11 @@ export class Game {
       weather: this.weather,
       outdoors,
       gait: c.lying ? 'sleep' : c.seated ? 'sit' : c.moveGait,
-      inBed: !!this.sleep,
-      showering: !!this.showering,
-      showerWet: this.wet > 0,
-      // un feu à côté, et les vêtements de l'entrée (manteau, écharpe, bonnet)
-      nearHeat: this.heatNear(p) + this.entree.warmth(outdoors),
+      inBed: false,
+      showering: false,
+      showerWet: false,
+      // un feu à côté
+      nearHeat: this.heatNear(p),
     });
     this.needs.factors = this.body.needFactors;
     this.needs.canHeal = this.body.state === 'normal';
@@ -7215,7 +5977,7 @@ export class Game {
     if (was) this.onBodyState(was);
     // grelotter ou transpirer : le perso le redit de temps en temps (pas en dormant)
     this.bodySayT -= dt;
-    if (this.body.state !== 'normal' && this.bodySayT <= 0 && !this.sleep && this.clock.speed > 0) {
+    if (this.body.state !== 'normal' && this.bodySayT <= 0 && this.clock.speed > 0) {
       this.bodySayT = BODY_SAY_EVERY;
       const cold = this.body.state === 'froid' || this.body.state === 'hypothermie';
       const lines = cold ? ['Brr… j’ai froid.', 'Je grelotte…', 'Un bon thé chaud, vite…'] : ['Pfiou, quelle chaleur…', 'Je transpire…', 'Un verre bien frais, vite…'];
@@ -7300,8 +6062,6 @@ export class Game {
     this.lastSips = sips;
     this.tickDry(hours);
     this.tickDelivery(hours);
-    this.garden.tick(hours, this.clock.season);
-    this.entree.tick(hours, this.clock.day, this.clock.hour);
   }
 
   // ——— gestes de cuisine (lot 3) : casser, mélanger, remuer, faire sauter, servir, assaisonner, tartiner, râper, goûter ———
@@ -8172,7 +6932,7 @@ export class Game {
   marketItems(): Array<{ ref: string; name: string; stars: number; price: number }> {
     const carried = this.character.carried;
     return this.items.flatMap((it) => {
-      if (carried.includes(it) || this.bags.has(it) || this.flying.some((f) => f.item === it) || (!it.def.food && !FISH_BY_ID.has(it.def.id))) return [];
+      if (carried.includes(it) || this.bags.has(it) || this.flying.some((f) => f.item === it) || !it.def.food) return [];
       if (it.def.cook && doneness(it.def, it.cooking) === 'cru') return [];
       const stars = this.starsOf(it);
       const price = sellPrice(it.def, stars, freshness(it.def, it.age));
@@ -8235,12 +6995,12 @@ export class Game {
       return;
     }
     const bag = new WorldItem(def);
-    // dans l'entrée, à côté de la porte de la maison
+    // dehors, à côté de la porte d'entrée
     bag.object.position.copy(DELIVERY_SPOT);
     this.items.push(bag);
     this.scene.add(bag.object);
     this.bags.set(bag, d.names);
-    this.onNotice?.('Ding-dong ! Les courses sont arrivées : le sac est dans l’entrée, à côté de la porte. Clic droit dessus : « Ranger les courses ».');
+    this.onNotice?.('Ding-dong ! Les courses sont arrivées : le sac est dehors, à côté de la porte d’entrée. Clic droit dessus : « Ranger les courses ».');
   }
 
   /** Pose un objet acheté : un meuble là où l'ancien a cassé, un objet portable devant la porte (`i` : rang, pour ne pas les empiler). */
@@ -8269,11 +7029,6 @@ export class Game {
     if (it.def.wash) this.sinks.set(it, { plug: false, tap: false, water: 0, spill: 0, warned: false });
     const n = it.def.heat?.spots.length ?? 0;
     if (n) this.heaters.set(it, { on: Array(n).fill(false), warm: Array(n).fill(0), unused: 0 });
-    if (it.def.screen) {
-      const tv = new Tv(it);
-      this.tvs.set(it, tv);
-      this.scene.add(tv.light);
-    }
   }
 
   /**
@@ -8435,15 +7190,9 @@ export class Game {
         put('melange', this.mixes.get(item));
         put('epices', this.seasoned.has(item) ? [...this.seasoned.get(item)!] : undefined);
         put('garniture', this.toppings.get(item));
-        put('papier', this.paper.get(item));
-        if (item.def.id === 'brosse-a-dents' && this.lastBrush >= 0) x.brossage = Math.round(this.lastBrush);
         if (this.bagless.has(item)) x.sansSac = true;
         if (this.flatCakes.has(item)) x.sansLevure = true;
         if (this.lamps.get(item)?.on) x.lampe = true;
-        Object.assign(x, this.entree.extras(item), this.garden.extras(item), this.loisirs.extras(item));
-        Object.assign(x, this.entree.extras(item), this.garden.extras(item));
-        Object.assign(x, this.laundry.extras(item), this.chat.extras(item));
-        put('reveil', this.alarms.get(item));
         return x;
       },
       setExtras: (item, x) => {
@@ -8468,19 +7217,8 @@ export class Game {
         const tops = asArray(x.garniture);
         if (tops) this.toppings.set(item, tops);
         if (x.sansSac) this.bagless.add(item);
-        if (typeof x.papier === 'number') {
-          this.paper.set(item, x.papier);
-          showRoll(item.object, x.papier / ROLL_USES);
-        }
-        if (typeof x.brossage === 'number') this.lastBrush = x.brossage;
         if (x.sansLevure) this.flatten(item);
         if (x.lampe) this.setLamp(item, true);
-        this.entree.setExtras(item, x);
-        this.garden.setExtras(item, x);
-        this.loisirs.setExtras(item, x);
-        this.laundry.setExtras(item, x);
-        this.chat.setExtras(item, x);
-        if (typeof x.reveil === 'number' && item.def.id === 'reveil') this.alarms.set(item, x.reveil);
       },
       perso: this.character,
       clock: this.clock,
@@ -8502,9 +7240,6 @@ export class Game {
       delivery: () => this.delivery,
       setDelivery: (d) => (this.delivery = d),
       done: () => {
-        this.placeBathroomKit();
-        this.entree.restored();
-        this.placeAlarmClock(); // partie sauvée avant le réveil
         this.character.nav = this.buildNav();
       },
     };
