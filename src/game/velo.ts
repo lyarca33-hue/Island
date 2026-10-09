@@ -123,6 +123,11 @@ export class Velo {
     return this.ride?.bike ?? null;
   }
 
+  /** En selle, prêt à rouler (ni en train de monter, ni de descendre). */
+  get inSaddle(): boolean {
+    return this.ride?.stage === 'ride';
+  }
+
   menu(item: WorldItem | null, add: (label: string, run: () => boolean) => void): void {
     if (this.ride) {
       if (!item || item === this.ride.bike) add('Descendre du vélo', () => this.dismount());
@@ -196,6 +201,11 @@ class BikeRide implements Ride {
   private host: VeloHost;
   private def: Bike;
   private phase: 'mount' | 'ride' | 'dismount' = 'mount';
+
+  /** Où en est la balade : on monte, on roule, on descend. */
+  get stage(): 'mount' | 'ride' | 'dismount' {
+    return this.phase;
+  }
   private t = 0;
   speed = 0;
   /** Cap du perso (celui du vélo : l'avant du modèle, vers -X, est le devant du perso). */

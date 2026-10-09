@@ -29,12 +29,31 @@ export function lightAllPasses<T extends THREE.Light>(light: T): T {
   return light;
 }
 
+/** Lumières ponctuelles de la scène (lampes, frigo, lumière de nuit), cachées ou non. */
+function pointLights(scene: THREE.Scene): THREE.PointLight[] {
+  const out: THREE.PointLight[] = [];
+  scene.traverse((o) => {
+    if ((o as THREE.PointLight).isPointLight) out.push(o as THREE.PointLight);
+  });
+  return out;
+}
+
+/**
+ * Lumière ponctuelle éteinte (intensité 0) : retirée du rendu. three la compte sinon dans le
+ * shader de chaque matériau éclairé, pour chaque pixel, sans rien ajouter à l'image (le jour, les
+ * lampes, la lumière de nuit et celle du frigo sont toutes éteintes). Les shaders de chaque nombre
+ * de lampes allumées sont compilés d'avance (PostFx.precompile) : allumer une lampe ne fige rien.
+ */
+export function skipDarkLights(scene: THREE.Scene): void {
+  for (const l of pointLights(scene)) l.visible = l.intensity > 0;
+}
+
 /**
  * Plafond de pixels de l'image 3D par réglage de qualité. Sur un écran Retina (ratio 2), tout
  * rendre à la résolution native multiplie par 4 le travail du GPU pour un gain peu visible avec
  * les contours encrés : au-delà du plafond, le navigateur agrandit l'image.
  */
-export const QUALITY_PIXELS = { basse: 0.9e6, normale: 2.1e6, haute: 4.2e6 } as const;
+export const QUALITY_PIXELS = { basse: 0.9e6, normale: 1.4e6, haute: 4.2e6 } as const;
 export type Quality = keyof typeof QUALITY_PIXELS;
 
 const QUALITY_KEY = 'rp-island-qualite';
@@ -98,6 +117,8 @@ export class PostFx {
   private charRT: THREE.WebGLRenderTarget;
   /** Perso caché vu en transparence avec une aura (en jeu ; inutile dans le créateur). */
   private seeThrough: boolean;
+  /** Perso couché sous la couette : on ne le montre pas à travers (elle le cache pour de vrai). */
+  tucked = false;
   private charMat = new THREE.MeshBasicMaterial({ colorWrite: false, fog: false });
   private quad: THREE.Mesh;
   private quadScene = new THREE.Scene();
@@ -106,6 +127,8 @@ export class PostFx {
   private blurMat: THREE.ShaderMaterial;
   private finalMat: THREE.ShaderMaterial;
   private pw = 1;
+  /** Programmes de shaders déjà compilés pour chaque nombre de lampes allumées (voir precompile). */
+  private warmed = -1;
   private ph = 1;
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera, seeThrough = false) {
@@ -284,10 +307,15 @@ export class PostFx {
     this.renderCharacter();
     // bloom (et masque du perso caché, en alpha)
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
-    this.brightMat.uniforms.gap.value = this.seeThrough ? HIDDEN_GAP / (this.camera.far - this.camera.near) : 0;
+    const through = this.seeThrough && !this.tucked;
+    this.brightMat.uniforms.gap.value = through ? HIDDEN_GAP / (this.camera.far - this.camera.near) : 0;
+    this.finalMat.uniforms.seeThrough.value = through ? 1 : 0;
     this.pass(this.brightMat, this.brightRT);
     this.blur(this.brightRT, this.blurRT, 1);
     this.pass(this.finalMat, null);
+    // nouveaux shaders depuis la dernière précompilation (un objet chargé ensuite) : leurs variantes
+    // pour chaque nombre de lampes allumées, compilées en fond avant qu'on allume une lampe
+    if (this.warmed >= 0 && r.info.programs && r.info.programs.length > this.warmed) void this.precompile();
   }
 
   /**
@@ -299,9 +327,20 @@ export class PostFx {
     const r = this.renderer, prev = r.getRenderTarget();
     // même cible que le vrai rendu : l'espace de couleur de sortie fait partie de la clé du shader
     r.setRenderTarget(this.sceneRT);
-    const ready = r.compileAsync(this.scene, this.camera);
-    r.setRenderTarget(prev);
-    await ready;
+    // une fois par nombre de lumières ponctuelles allumées (voir skipDarkLights) : de 0 à toutes
+    const points = pointLights(this.scene), shown = points.map((l) => l.visible);
+    const ready: Promise<unknown>[] = [];
+    try {
+      for (let n = 0; n <= points.length; n++) {
+        points.forEach((l, i) => (l.visible = i < n));
+        ready.push(r.compileAsync(this.scene, this.camera));
+      }
+    } finally {
+      points.forEach((l, i) => (l.visible = shown[i]));
+      r.setRenderTarget(prev);
+    }
+    this.warmed = r.info.programs?.length ?? 0;
+    await Promise.all(ready);
   }
 
   /**

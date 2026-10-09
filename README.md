@@ -57,7 +57,7 @@ le kit Tripo (`src/game/kit.ts`, `public/kit/maison.glb`) : sol carrelé, murs e
 d'entrée en bois qui s'ouvre toute seule quand il s'en approche (on peut sortir sur l'herbe), deux
 fenêtres en bois, un toit en tuiles à deux pans visible de dehors. Les murs tournés vers la caméra
 s'abaissent pour qu'on voie dedans, et se relèvent quand on tourne la caméra. Ni plafonnier ni
-interrupteur, et pas d'ombres pour l'instant : une lumière douce entre par les fenêtres le jour, et la nuit une lumière d'ambiance chaude suit la pièce où est le perso.
+interrupteur, et pas d'ombres pour l'instant : une lumière douce entre par les fenêtres de la pièce où est le perso le jour, et la nuit une lumière d'ambiance chaude suit la pièce où est le perso.
 
 La cuisine est **meublée avec les modèles Tripo** (`src/game/items/tripo.ts`,
 `public/models/cuisine.glb`) : le long du fond, les tiroirs, le lave-vaisselle, l'évier sous la
@@ -73,7 +73,7 @@ Autour de la cuisine, les **autres pièces sont meublées avec leurs modèles Tr
 pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pièce>.glb`) :
 - le **salon** : le meuble télé et la télé au fond, le canapé face à elle avec ses deux coussins, la
   table basse sur le tapis, le fauteuil et le lampadaire, la bibliothèque et quelques livres ;
-- la **chambre** : le lit tête au mur et sa couette souple (un clic ou « va te coucher » : le perso
+- la **chambre** : le lit tête au mur et sa couette, un vrai tissu simulé qui drape sur les bords du lit, se plie et se froisse (un clic ou « va te coucher » : le perso
   rabat la couette, s'assoit au bord, s'allonge et la couette le recouvre ; il dort, le temps file et
   la fatigue remonte, jusqu'à être reposé ou réveillé, C ou un clic au sol ; il repousse la couette
   en se levant, et le lit reste défait jusqu'à « fais ton lit » : il tire la couette et la lisse),

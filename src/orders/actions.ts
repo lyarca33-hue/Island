@@ -13,6 +13,8 @@ export interface ActionDef {
   /** Paramètres attendus : nom → description. */
   params: Record<string, string>;
   run(game: Game, args: Record<string, string>): boolean;
+  /** Le geste est fini (par défaut : plus rien ne bouge). */
+  done?(game: Game): boolean;
 }
 
 export const ACTIONS: ActionDef[] = [
@@ -475,9 +477,38 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     name: 'aller_piece',
-    description: 'Aller dans une pièce de la maison (pour l’instant, seulement la cuisine) : le perso s’arrête juste après l’entrée.',
-    params: { piece: 'cuisine' },
+    description: 'Aller dans une pièce de la maison : le perso s’arrête juste après l’entrée.',
+    params: { piece: 'cuisine, entrée, garage, salon, salle de bain ou chambre' },
     run: (g, a) => g.walkToRoom(a.piece),
+  },
+  {
+    name: 'monter_velo',
+    description: 'Aller au vélo du garage et monter dessus (mains vides) ; ensuite le joueur le conduit au clavier.',
+    params: {},
+    run: (g) => g.rideBike(),
+    // en selle, le perso reste en mouvement : l'action finit quand il est prêt à rouler
+    done: (g) => g.onBike,
+  },
+  {
+    name: 'descendre_velo',
+    description: 'Descendre du vélo : il reste debout là où il est.',
+    params: {},
+    run: (g) => g.getOffBike(),
+  },
+  {
+    name: 'sauter',
+    description: 'Sauter sur place.',
+    params: {},
+    run: (g) => g.jump(),
+  },
+  {
+    name: 'lancer',
+    description: 'Lancer devant soi l’objet tenu `objet` (pas une pile de livres ni un objet à deux mains).',
+    params: { objet: 'ref de l’objet tenu' },
+    run: (g, a) => {
+      const nom = a.objet ? g.describe().objets.find((o) => o.ref === a.objet)?.nom : undefined;
+      return g.throwItem(nom);
+    },
   },
   {
     name: 'asseoir',
@@ -642,7 +673,7 @@ export async function perform(game: Game, name: string, args: Record<string, str
     while (calm < 3) {
       await nextFrame();
       if (signal?.aborted) return { ok: false, report: 'interrompu' };
-      calm = game.idle ? calm + 1 : 0;
+      calm = (def.done ? def.done(game) : game.idle) ? calm + 1 : 0;
       if (++frames > MAX_FRAMES) return { ok: false, report: 'échec : trop long, action abandonnée' };
     }
     return { ok: true, report: `ok${notices.length ? ` (${notices.join(' ')})` : ''}` };

@@ -54,6 +54,8 @@ export interface TripoLook {
   scale?: V3;
   /** Rotation autour de Y (rad), puis décalage dans la fiche. */
   turn?: number;
+  /** Rotation (angles d'Euler XYZ, rad) appliquée avant `turn` : un ustensile couché, redressé comme sa fiche. */
+  tilt?: V3;
   at?: V3;
   /** Socle sous le modèle (m) : le four, plus bas que le plan de travail, monté dessus. */
   plinth?: number;
@@ -104,6 +106,12 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   'grille-pain': { model: 'grille-pain', turn: Math.PI / 2, parts: { levier: { from: 'levier', drop: 0.04 } } },
   poubelle: { model: 'poubelle' },
   chaise: { model: 'chaise-cuisine' },
+  // le couteau de chef, couché le long de X (pointe en -X, tranchant vers +Z), redressé comme la
+  // fiche : le manche en bas le long de +Y, le tranchant vers -Z
+  couteau: { model: 'couteau-chef', tilt: [Math.PI, 0, Math.PI / 2], at: [0.0135, 0.15, -0.006] },
+  // la spatule, couchée le long de X (manche en -X, la palette relevée vers +Y), redressée : le
+  // manche en bas le long de +Y, la palette à plat dans le plan XY
+  spatule: { model: 'spatule', tilt: [Math.PI / 2, Math.PI / 2, 0], at: [0, 0.15, -0.027] },
   // la table basse de Tripo, montée à hauteur de table : seuls les pieds s'allongent, le plateau garde son épaisseur
   table: { model: 'table-basse', turn: Math.PI / 2, stretch: [0.3, 0.37] },
 
@@ -116,7 +124,6 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   // un peu réduite : sur le meuble télé, l'écran arrive à hauteur des yeux du canapé
   television: { model: 'television', scale: [0.8, 0.8, 0.8], parts: { ecran: { from: 'ecran' } } },
   bibliotheque: { model: 'bibliotheque' },
-  coussin: { model: 'coussin' },
   telecommande: { model: 'telecommande' },
   reveil: { model: 'reveil' },
   sansevieria: { model: 'sansevieria' },
@@ -237,6 +244,7 @@ function bake(id: string, look: TripoLook, model: Model) {
     .makeTranslation(...(look.at ?? [0, 0, 0]))
     .multiply(new THREE.Matrix4().makeTranslation(0, look.plinth ?? 0, 0))
     .multiply(new THREE.Matrix4().makeRotationY(look.turn ?? 0))
+    .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(look.tilt ?? [0, 0, 0]))))
     .multiply(new THREE.Matrix4().makeScale(...(look.scale ?? [1, 1, 1])))
     .multiply(new THREE.Matrix4().makeTranslation(0, look.clip ? -s0 : 0, 0));
   const place = (g: THREE.BufferGeometry) => {

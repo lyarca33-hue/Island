@@ -172,7 +172,10 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "faire_lit", "objet": "<ref du lit>"} : faire le lit défait (tirer la couette, la lisser)
 - {"tache": "verrou", "fermer": true} : fermer à clé la porte de la salle de bain, de l'intérieur (« fermer » faux : la déverrouiller) ; le perso la déverrouille tout seul en sortant
 - {"tache": "reveil", "heure": 7.5} : régler le réveil de la chambre à 7 h 30 (à la demi-heure près) ; {"tache": "reveil", "couper": true} le coupe ; {"tache": "reveil", "arreter": true} arrête sa sonnerie ; {"tache": "reveil", "sonnerie": "cloche"} change la sonnerie (cloche, bip, mélodie ; "" : la suivante). Réglé, il sonne chaque jour et réveille le perso qui dort
-- {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (cuisine, salon, chambre, salle de bain, entrée, garage)
+- {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison : cuisine, entrée, garage, salon, salle de bain ou chambre
+- {"tache": "velo", "monter": true} : monter sur le vélo du garage (« monter » faux : en descendre)
+- {"tache": "sauter"} : sauter sur place
+- {"tache": "lancer", "objet": "<ref>"} : lancer un objet devant soi (« objet » facultatif : ce qu'on tient ; pas une pile ni un objet à deux mains)
 - {"tache": "manger", "objet": "<ref>"} : manger un aliment en entier : pomme, sandwich, pain, légumes ou morceaux coupés (« objet » facultatif ; il y en a dans le frigo, le perso ouvre la porte tout seul)
 - {"tache": "couper", "objet": "<ref>"} : couper en morceaux un aliment entier (pomme, pain, carotte, tomate, concombre ; sa fiche dit « coupable ») sur la planche à découper avec le couteau (« objet » facultatif : l'aliment tenu, sinon le plus proche). Le perso le prend, le pose sur la planche, prend le couteau, coupe et repose le couteau ; les morceaux restent sur la planche et se mangent
 - {"tache": "preparer", "plat": "<id du plat>"} : préparer un plat d'une recette ; le perso coupe et fait cuire ce qu'il faut, réunit les ingrédients sur la planche à découper et les assemble. Plats : "salade-composee" (tomate et concombre coupés, carotte en plus), "tartine-tomate" (pain et tomate coupés), "sandwich-steak" (pain coupé et steak cuit, tomate ou concombre en plus), "steak-pommes-de-terre" (steak et pomme de terre cuits). Le plat se mange comme le sandwich, ou se sert dans l'assiette pour un repas à table
@@ -294,6 +297,9 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
       sonnerie: typeof o.sonnerie === 'string' ? o.sonnerie : undefined,
     };
     case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
+    case 'velo': return { kind: 'velo', monter: o.monter !== false };
+    case 'sauter': return { kind: 'sauter_perso' };
+    case 'lancer': return { kind: 'lancer', ref: s('objet') || undefined };
     case 'manger': return { kind: 'manger', ref: s('objet') || undefined };
     case 'couper': return { kind: 'couper', ref: s('objet') || undefined };
     case 'preparer': return { kind: 'preparer', plat: s('plat') || undefined };
