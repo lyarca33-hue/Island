@@ -40,7 +40,7 @@ import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
 import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
-import { placeRuns, Room, WALL_H, WALL_T } from './room';
+import { lampLevel, placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, type Quality } from './postfx';
@@ -369,7 +369,10 @@ export interface HandActions {
   seated: boolean;
 }
 
-const SHADOW_TMP = new THREE.Vector3();
+/** Lumière d'ambiance de nuit (voir updateNightLight) : couleur, force à fond, et sa cible. */
+const NIGHT_COLOR = 0xffd2a0;
+const NIGHT_I = 3;
+const NIGHT_AT = new THREE.Vector3();
 const SLOT_TMP = new THREE.Vector3();
 const ON_INV = new THREE.Matrix4();
 const ON_BOX = new THREE.Box3();
@@ -689,9 +692,8 @@ export class Game {
     loadKit()
       .then((kit) => { for (const r of this.rooms) r.dress(kit); })
       .catch((e) => console.warn('kit de la maison non chargé', e));
-    // même nombre de lumières à ombre dans chaque pièce (pas de recompilation en changeant de pièce)
-    const most = (k: 'lamps' | 'windows') => Math.max(...this.rooms.map((r) => r.shadowCounts[k]));
-    for (const r of this.rooms) r.padShadows(most('lamps'), most('windows'));
+    // la nuit, une seule lumière d'ambiance, sans ombre, qui suit la pièce du perso
+    this.scene.add(this.nightLight);
     // les meubles (objets non portables) et les murs se contournent
     this.character.nav = this.buildNav();
     for (const item of this.items) if (item.def.door || item.def.drawer) this.doors.set(item, { open: 0, target: 0, then: null, reach: this.doorReach(item), keep: false });
@@ -1505,48 +1507,13 @@ export class Game {
     return this.tryPickUp(item, false);
   }
 
-  /** La pièce où est le perso ; dehors, celle dont l'interrupteur est le plus proche. */
-  private hereRoom(): Room {
-    const p = this.character.position;
-    return this.rooms.find((r) => r.contains(p))
-      ?? [...this.rooms].sort((a, b) => a.switchSpot().stand.distanceTo(p) - b.switchSpot().stand.distanceTo(p))[0];
-  }
-
-  /**
-   * Va à l'interrupteur de la pièce `room` (celle où est le perso, sans `room`) et allume (`on`)
-   * ou éteint ses lampes ; sans `on`, inverse.
-   */
-  switchLights(on?: boolean, running = false, room = this.hereRoom()): boolean {
-    if (this.moving) {
-      this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
-      return false;
-    }
-    const want = on ?? !room.lightsOn;
-    const { stand, face } = room.switchSpot();
-    this.character.approachThen(stand, face, () => {
-      room.setLights(want);
-      this.onNotice?.(want ? `Lumière allumée (${room.spec.name}).` : `Lumière éteinte (${room.spec.name}).`);
-    }, running);
-    return true;
-  }
-
-  /** Comme switchLights, pour la pièce nommée `name` (cuisine, salon, chambre, salle de bain). */
-  switchLightsIn(on?: boolean, name?: string, running = false): boolean {
-    const room = name ? this.rooms.find((r) => r.spec.name === name) : this.hereRoom();
-    if (!room) {
-      this.onNotice?.(`Il n’y a pas de pièce « ${name} ».`);
-      return false;
-    }
-    return this.switchLights(on, running, room);
-  }
-
   /** La pièce où est le perso (cuisine, salon, chambre, salle de bain), ou null dehors. */
   get roomName(): string | null {
     const p = this.character.position;
     return this.rooms.find((r) => r.contains(p))?.spec.name ?? null;
   }
 
-  /** Marche jusqu'à la pièce `name` : juste après l'entrée, devant l'interrupteur, tourné vers la pièce. */
+  /** Marche jusqu'à la pièce `name` : juste après l'entrée, tourné vers la pièce. */
   walkToRoom(name: string, running = false): boolean {
     const room = this.rooms.find((r) => r.spec.name === name);
     if (!room) {
@@ -1561,23 +1528,9 @@ export class Game {
       this.onNotice?.(`Tu déplaces : ${this.moving.item.name}. E pour lâcher.`);
       return false;
     }
-    const { x0, x1, z0, z1 } = room.rect;
-    this.character.approachThen(room.switchSpot().stand, new THREE.Vector3((x0 + x1) / 2, 0, (z0 + z1) / 2), () => {}, running);
+    const { stand, face } = room.entrySpot();
+    this.character.approachThen(stand, face, () => {}, running);
     return true;
-  }
-
-  /** L'interrupteur sous ce pixel (avant tout objet), et sa pièce. */
-  private switchAt(cx: number, cy: number): Room | null {
-    this.aim(cx, cy);
-    let best: { room: Room; d: number } | null = null;
-    for (const room of this.rooms) {
-      const d = room.switchHit(this.raycaster);
-      if (d !== null && (!best || d < best.d)) best = { room, d };
-    }
-    if (!best) return null;
-    const carried = this.character.carried;
-    const item = this.raycaster.intersectObjects(this.items.filter((i) => !carried.includes(i)).map((i) => i.object), true)[0];
-    return !item || item.distance > best.d ? best.room : null;
   }
 
   /** Marche jusqu'à l'objet `ref` (s'arrête devant lui). */
@@ -1602,15 +1555,8 @@ export class Game {
     const def = item.def.lamp!;
     const light = lightAllPasses(new THREE.PointLight(def.color, 0, def.range, 2));
     light.position.y = def.y;
-    // ombre gardée même éteinte (une lumière éteinte ne lit pas sa carte) : allumer ou éteindre ne
-    // change pas le nombre de lumières à ombre, donc ne recompile aucun matériau (voir scheduleShadows)
-    light.castShadow = true;
-    light.shadow.mapSize.set(256, 256);
-    light.shadow.camera.near = 0.05;
-    light.shadow.camera.far = def.range;
-    light.shadow.bias = -0.003;
-    light.shadow.autoUpdate = false;
-    light.shadow.needsUpdate = true;
+    // sans ombre : une ombre de lampe redessine la scène six fois, pour un effet à peine visible
+    // sous le soleil et la lumière d'ambiance
     item.object.add(light);
     const part = (name: string) => {
       const m = item.object.getObjectByName(name);
@@ -1630,7 +1576,6 @@ export class Game {
     if (!lamp) return;
     lamp.on = on;
     lamp.light.intensity = on ? item.def.lamp!.intensity : 0;
-    lamp.light.shadow.needsUpdate = on;
     // ampoule allumée au-dessus de 1 : le bloom la fait briller ; abat-jour éclairé par-dessous
     lamp.bulb?.color.setRGB(on ? 2.6 : 0.23, on ? 2.1 : 0.2, on ? 1.3 : 0.17);
     lamp.shade?.color.set(on ? 0xfff3d6 : 0xe9dcc0);
@@ -5191,12 +5136,6 @@ export class Game {
           return;
         }
       }
-      const hovered = e.buttons ? null : this.switchAt(e.clientX, e.clientY);
-      if (hovered) {
-        const r = el.getBoundingClientRect();
-        this.onHover?.({ name: 'interrupteur', grade: gradeName(1, false), condition: 1, state: hovered.lightsOn ? 'lumière allumée' : 'lumière éteinte', x: e.clientX - r.left, y: e.clientY - r.top });
-        return;
-      }
       const fixture = e.buttons ? null : this.fixtureAt(e.clientX, e.clientY);
       if (fixture) {
         const r = el.getBoundingClientRect();
@@ -5217,12 +5156,6 @@ export class Game {
     on(el, 'contextmenu', (e) => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      const sw = this.switchAt(e.clientX, e.clientY);
-      if (sw) {
-        const on = sw.lightsOn;
-        this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title: 'interrupteur', entries: [{ label: on ? 'Éteindre la lumière' : 'Allumer la lumière', run: () => this.switchLights(!on, false, sw) }] });
-        return;
-      }
       const fixture = this.fixtureAt(e.clientX, e.clientY);
       if (fixture) {
         const on = this.fixtureOn(fixture);
@@ -5242,11 +5175,6 @@ export class Game {
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
       this.onMenu?.(null);
-      const sw = this.switchAt(e.clientX, e.clientY);
-      if (sw) {
-        this.switchLights(undefined, e.shiftKey, sw);
-        return;
-      }
       const hit = this.hitAt(e.clientX, e.clientY);
       if (hit) {
         // un objet qu'on porte peut être traîné (glisser-déposer) : on attend de savoir si c'est un clic
@@ -5854,12 +5782,11 @@ export class Game {
     const inRoom = this.rooms.find((r) => r.contains(c.position));
     if (inRoom) this.activeRoom = inRoom;
     else if (this.activeRoom && !this.activeRoom.contains(c.position, 2 * WALL_T + 0.15)) this.activeRoom = null;
-    // les ombres des lampes et fenêtres restent à la dernière pièce occupée (dehors aussi)
-    this.shadowRoom = this.activeRoom ?? this.shadowRoom ?? this.rooms[0] ?? null;
     for (const r of this.rooms) {
       r.overcast = this.weather.cloud;
-      r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null, r === this.shadowRoom);
+      r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null);
     }
+    this.updateNightLight(dt);
     this.placeBubble();
     // saison dehors : herbe, neige, pétales, feuilles ou flocons ; dans une pièce, poussières dorées
     const look = seasonLook(this.clock.yearPos);
@@ -5896,38 +5823,45 @@ export class Game {
     return false;
   };
 
-  /** Pièce dont les lampes et les fenêtres font des ombres : celle du perso, gardée dehors. */
-  private shadowRoom: Room | null = null;
+  /**
+   * Lumière d'ambiance de nuit : chaude, sans ombre, au plafond de la pièce du perso (la dernière
+   * occupée quand il sort). Elle remplace les plafonniers : une seule lumière pour toute la maison.
+   */
+  private nightLight = lightAllPasses(new THREE.PointLight(NIGHT_COLOR, 0, 8, 1));
+  private nightRoom: Room | null = null;
+
+  /** Allume la lumière de nuit selon l'heure, et la fait glisser vers la pièce du perso. */
+  private updateNightLight(dt: number): void {
+    const room = (this.nightRoom = this.activeRoom ?? this.nightRoom ?? this.rooms[0] ?? null);
+    if (!room) return;
+    const { x0, x1, z0, z1 } = room.rect;
+    const l = this.nightLight;
+    NIGHT_AT.set((x0 + x1) / 2, WALL_H - 0.3, (z0 + z1) / 2);
+    // posée d'un coup la première fois, puis glissée : pas de saut de lumière en changeant de pièce
+    if (l.intensity === 0) l.position.copy(NIGHT_AT);
+    else l.position.lerp(NIGHT_AT, 1 - Math.exp(-4 * dt));
+    l.distance = Math.max(6, 0.9 * Math.hypot(x1 - x0, z1 - z0));
+    l.intensity = NIGHT_I * lampLevel(this.clock.solarHour);
+  }
+
   private shadowFrame = 0;
 
   /**
-   * Cartes d'ombre recalculées à tour de rôle plutôt que toutes à chaque image : chacune redessine
-   * tous les objets à sa portée (six fois pour une lampe), c'est le plus gros du travail d'une
-   * image. Dedans : lampes une image sur deux, fenêtres l'autre, soleil une sur trois (le toit et
-   * les murs l'arrêtent, il n'entre que par les fenêtres). Dehors : soleil à chaque image, lampes et
-   * fenêtres de la maison une sur huit (le perso n'y passe plus que de loin).
+   * Seul le soleil (ou la lune) fait des ombres : sa carte est recalculée à chaque image dehors,
+   * une image sur deux dans une pièce (le toit et les murs l'arrêtent, il n'entre que par les
+   * fenêtres). Les lumières des fenêtres, la lumière de nuit et les lampes n'en font pas.
    */
   private scheduleShadows(): void {
     const f = ++this.shadowFrame;
-    const inside = this.activeRoom !== null;
     this.sun.shadow.autoUpdate = false;
-    if (!inside || f % 3 === 0) this.sun.shadow.needsUpdate = true;
-    for (const r of this.rooms) {
-      for (const l of r.liveShadows) {
-        const turn = inside ? f % 2 === ((l as THREE.PointLight).isPointLight ? 0 : 1) : f % 8 === 0;
-        if (turn) l.shadow.needsUpdate = true;
-      }
-    }
+    if (this.activeRoom === null || f % 2 === 0) this.sun.shadow.needsUpdate = true;
     for (const [item, lamp] of this.lamps) {
-      // lampe cassée ou jetée : sa lumière reste dans la scène, éteinte (le nombre de lumières
-      // ne doit pas changer, voir addLampLight)
+      // lampe cassée ou jetée : sa lumière reste dans la scène, éteinte (le nombre de lumières ne
+      // doit pas changer : sinon three recompile tous les matériaux, une saccade)
       if (!item.object.parent && lamp.light.parent === item.object) {
         this.setLamp(item, false);
         this.scene.attach(lamp.light);
       }
-      if (!lamp.on) continue;
-      const near = !!this.activeRoom?.contains(lamp.light.getWorldPosition(SHADOW_TMP));
-      if (near ? f % 2 === 0 : f % 8 === 0) lamp.light.shadow.needsUpdate = true;
     }
   }
 
