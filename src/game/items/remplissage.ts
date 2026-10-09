@@ -39,7 +39,7 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
     [
       'lait', 'beurre', 'fromage', 'oeuf', 'oeuf', 'oeuf', 'yaourt', 'yaourt', 'creme', 'jambon', 'steak', 'poulet', 'saucisses',
       'salade', 'tomate', 'tomate', 'carotte', 'carotte', 'concombre', 'pomme', 'pomme', 'orange', 'citron', 'fraises',
-      'bouteille-eau', 'jus-orange', 'moutarde', 'ketchup', 'mayonnaise',
+      'raisin', 'poireau', 'bouteille-eau', 'jus-orange', 'moutarde', 'ketchup', 'mayonnaise',
     ],
   ],
   ['congelateur', 0, ['bac-glacons', 'pizza', 'frites', 'legumes-surgeles', 'lasagne']],
@@ -49,7 +49,7 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
     [
       'farine', 'sucre', 'levure', 'chocolat', 'confiture', 'miel', 'pate-tartiner', 'biscuits', 'chips', 'sauce-tomate', 'vinaigre',
       'paquet-pates', 'paquet-riz', 'brique-soupe', 'sachets-the', 'pomme-de-terre', 'pomme-de-terre', 'pomme-de-terre',
-      'oignon', 'oignon', 'ail', 'banane', 'banane',
+      'oignon', 'oignon', 'ail', 'banane', 'banane', 'poire', 'poire',
     ],
   ],
   // la chambre : la chemise pend déjà dans l'armoire (maison.ts) ; un livre dans chaque table de nuit
@@ -108,7 +108,8 @@ function mainColor(model: THREE.Object3D): number {
   let hex = NEUTRAL;
   model.traverse((o) => {
     const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.visible || mesh.name) return;
+    // (la pièce qui cuit est souvent tout l'aliment)
+    if (!mesh.isMesh || !mesh.visible || (mesh.name && mesh.name !== 'cuit')) return;
     const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshToonMaterial;
     if (!mat?.color || mat.colorWrite === false) return;
     if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();

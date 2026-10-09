@@ -35,7 +35,9 @@
     (textures réencodées en WebP par `tools/build_vrm_assets.py`, rien d'autre de modifié).
 - Aliments (`public/packs/nourriture.glb`, converti par `tools/build_pack_assets.mjs`) :
   [Ultimate Food Pack](https://quaternius.com/packs/ultimatefood.html) de [Quaternius](https://quaternius.com),
-  **CC0** (pomme, tomate, steak, pizza, œuf…, recolorés).
+  **CC0** (œuf au plat et pizza, recolorés).
+- Aliments texturés (`public/packs/aliments.glb`, 42 aliments) : modèles générés avec [Tripo](https://www.tripo3d.ai)
+  (licence d'usage commercial), allégés et regroupés par `tools/build_aliments_assets.mjs`.
 - Kit de la maison (`public/kit/maison.glb`) et meubles et objets des pièces
   (`public/models/cuisine.glb`, `salon.glb`, `chambre.glb`, `salle-de-bain.glb`, `entree.glb`, `garage.glb`) : modèles générés avec [Tripo](https://www.tripo3d.ai) (licence d'usage
   commercial), retouchés et regroupés par `tools/build_kit_assets.mjs` et `tools/build_cuisine_assets.mjs`.

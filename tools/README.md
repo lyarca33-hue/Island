@@ -141,3 +141,20 @@ node tools/build_cuisine_assets.mjs --src <dossier des modèles corrigés> --out
 for p in salon chambre salle-de-bain entree; do node tools/build_cuisine_assets.mjs --src <…>/$p --out public/models/$p.glb; done
 node tools/build_cuisine_assets.mjs --src <…>/garage --out public/models/garage.glb --skip porte-garage
 ```
+
+## `build_aliments_assets.mjs` : aliments Tripo
+
+Regroupe les aliments texturés générés avec Tripo (dossier `Assets/aliment/texture` du Bureau de
+Greg) en `public/packs/aliments.glb`, lu comme un pack (`src/game/packs/assets.ts`) : un nœud par
+aliment nommé comme dans `ALIMENTS` (« pomme », « pomme-de-terre »), couché comme celui du jeu (les
+longs le long de Z), à sa vraie taille, posé au sol et centré, une texture WebP 256 px, maillage
+allégé puis compressé (meshopt). Écrit aussi sa ligne dans `src/game/packs/manifest.ts`.
+`FOOD_LOOKS` (`src/game/items/interior.ts`) dit lequel habille quel aliment du jeu.
+
+```bash
+npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
+node tools/build_aliments_assets.mjs --src "<Bureau>/Assets/aliment/texture" --out public/packs/aliments.glb [--preview <dossier>]
+```
+
+Un nouvel aliment : ajouter son fichier à `ALIMENTS` (nom, taille, rotation), relancer, puis sa
+ligne dans `FOOD_LOOKS` et, s'il n'existe pas encore, sa fiche (`src/game/items/pantry.ts`).

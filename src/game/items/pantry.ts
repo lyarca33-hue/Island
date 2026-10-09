@@ -57,20 +57,20 @@ export const DRINK_EFFECTS: Record<string, { soif?: number; faim?: number; fatig
 };
 
 /** Épicerie : se range au garde-manger. */
-export const PANTRY_THINGS = ['farine', 'sucre', 'tablette de chocolat', 'confiture', 'miel', 'pâte à tartiner', 'sauce tomate', 'vinaigre', 'levure', 'biscuits', 'chips', 'oignon', 'ail', 'banane', 'pomme de terre', 'sachets de thé', ...FECULENT_PANTRY];
+export const PANTRY_THINGS = ['pain', 'baguette', 'poire', 'farine', 'sucre', 'tablette de chocolat', 'confiture', 'miel', 'pâte à tartiner', 'sauce tomate', 'vinaigre', 'levure', 'biscuits', 'chips', 'oignon', 'ail', 'banane', 'pomme de terre', 'sachets de thé', ...FECULENT_PANTRY];
 /** Frais et boissons : au frigo. */
-export const FRESH_THINGS = ['jambon', 'saucisses', 'poulet', 'poisson', 'yaourt', 'crème', 'salade', 'orange', 'fraises', 'citron', 'champignons', 'poivron', 'courgette', 'moutarde', 'ketchup', 'mayonnaise', "jus d'orange", 'soda', 'eau gazeuse', 'vin', 'feuilles de salade', 'rondelles de banane', "quartiers d'orange", 'rondelles de citron'];
+export const FRESH_THINGS = ['jambon', 'saucisses', 'poulet', 'poisson', 'yaourt', 'crème', 'salade', 'orange', 'fraises', 'citron', 'champignons', 'poivron', 'courgette', 'raisin', 'poireau', 'moutarde', 'ketchup', 'mayonnaise', "jus d'orange", 'soda', 'eau gazeuse', 'vin', 'feuilles de salade', 'rondelles de banane', "quartiers d'orange", 'rondelles de citron'];
 /** Surgelés : au congélateur. */
 export const FROZEN_FOOD = ['frites', 'pizza', 'légumes surgelés'];
 /** Cuisent à la poêle (en plus du steak). */
-export const PAN_FOOD = ['poulet', 'poisson', 'saucisses', 'champignons', 'poivron', 'courgette', 'oignon', 'légumes surgelés'];
+export const PAN_FOOD = ['poulet', 'poisson', 'saucisses', 'champignons', 'poivron', 'courgette', 'oignon', 'poireau', 'légumes surgelés'];
 /** Cuisent au four (et se réchauffent au micro-ondes). */
 export const OVEN_EXTRA = ['poulet', 'poisson', 'frites', 'pizza', 'légumes surgelés', 'courgette', 'poivron'];
 /** Fruits en plus qui se mixent. */
-export const MORE_FRUITS = ['banane', 'orange', 'fraises', 'rondelles de banane', "quartiers d'orange"];
+export const MORE_FRUITS = ['banane', 'orange', 'fraises', 'poire', 'raisin', 'rondelles de banane', "quartiers d'orange"];
 
 /** Noms au féminin, et au pluriel, des provisions (accord des messages). */
-export const PANTRY_FEMININE = ['farine', 'tablette de chocolat', 'confiture', 'pâte à tartiner', 'sauce tomate', 'moutarde', 'mayonnaise', 'levure', 'eau gazeuse', 'chips', 'salade', 'saucisses', 'crème', 'banane', 'orange', 'fraises', 'courgette', 'frites', 'pizza', 'feuilles de salade', 'rondelles de banane', 'rondelles de citron', 'liste de courses'];
+export const PANTRY_FEMININE = ['poire', 'baguette', 'farine', 'tablette de chocolat', 'confiture', 'pâte à tartiner', 'sauce tomate', 'moutarde', 'mayonnaise', 'levure', 'eau gazeuse', 'chips', 'salade', 'saucisses', 'crème', 'banane', 'orange', 'fraises', 'courgette', 'frites', 'pizza', 'feuilles de salade', 'rondelles de banane', 'rondelles de citron', 'liste de courses'];
 export const PANTRY_PLURAL = ['biscuits', 'chips', 'saucisses', 'fraises', 'champignons', 'frites', 'légumes surgelés', 'feuilles de salade', 'rondelles de banane', "quartiers d'orange", 'rondelles de citron'];
 
 /**
@@ -80,7 +80,7 @@ export const PANTRY_PLURAL = ['biscuits', 'chips', 'saucisses', 'fraises', 'cham
 export const STOCK: Record<string, number> = {
   farine: 1, sucre: 1, 'tablette de chocolat': 1, confiture: 1, miel: 1, 'pâte à tartiner': 1, 'sauce tomate': 1, vinaigre: 1, levure: 1, biscuits: 1, chips: 1,
   oignon: 2, ail: 1, salade: 1, poulet: 1, poisson: 1, jambon: 1, saucisses: 1, yaourt: 2, crème: 1,
-  banane: 2, orange: 2, fraises: 1, citron: 1, champignons: 1, poivron: 1, courgette: 1,
+  banane: 2, orange: 2, fraises: 1, citron: 1, champignons: 1, poivron: 1, courgette: 1, poire: 2, raisin: 1, poireau: 1, baguette: 1,
   moutarde: 1, ketchup: 1, mayonnaise: 1, "jus d'orange": 1, soda: 2, 'eau gazeuse': 1, vin: 1,
   frites: 1, pizza: 1, 'légumes surgelés': 1,
   pomme: 2, steak: 2, tomate: 1, carotte: 1, concombre: 1, 'pomme de terre': 2, pain: 1, "bouteille d'eau": 2, lasagne: 1, sandwich: 1,
@@ -259,6 +259,37 @@ export const PANTRY_ITEMS: ItemDef[] = [
   food('poivron', 'poivron', [0.08, 0.04], { food: { hunger: 6, bites: 3 }, cook: { seconds: 12, burn: 20, colors: [0xd8352a, 0xa83a2a, 0x2e2419] } }, () => group(cooked(mesh(new THREE.SphereGeometry(0.04, 14, 10).scale(1, 1.1, 1), 0xd8352a, 0, 0.044, 0)), cyl(0.006, 0.02, 0x4f8a3a, 0.095))),
   food('courgette', 'courgette', [0.04, 0.05], { food: { hunger: 6, bites: 3 }, cook: { seconds: 14, burn: 20, colors: [0x3f7a35, 0x7a9a3a, 0x2e2419] }, mouth: [0, 0.02, -0.09] }, () => group(cooked(mesh(new THREE.CapsuleGeometry(0.02, 0.15, 6, 12).rotateX(Math.PI / 2), 0x3f7a35, 0, 0.02, 0)))),
   // ——— sauces au frigo ———
+  // fruits et légumes en plus, et la baguette (modèles Tripo : interior.ts)
+  food('poire', 'poire', [0.1, 0.035], { food: { hunger: 9, bites: 3, color: 0xeee6b0 }, grip: 'cradle', gripPoint: [0, 0.04, 0.035], fragility: 6 }, () =>
+    group(mesh(new THREE.SphereGeometry(0.035, 14, 10), 0xc4cf5a, 0, 0.035, 0), mesh(new THREE.SphereGeometry(0.022, 12, 8), 0xc4cf5a, 0, 0.07, 0), cyl(0.003, 0.02, 0x6b4a2a, 0.098))),
+  food('raisin', 'raisin', [0.15, 0.05], { food: { hunger: 8, bites: 4, color: 0x6b3a6b }, grip: 'cradle', gripPoint: [0, 0.06, 0.05], fragility: 5 }, () => {
+    // une grappe : des grains en cône, la pointe en bas
+    const g = new THREE.Group();
+    for (let i = 0; i < 18; i++) {
+      const y = 0.015 + (i / 18) * 0.11, r = 0.012 + (y / 0.13) * 0.035, a = i * 2.4;
+      g.add(mesh(new THREE.SphereGeometry(0.012, 8, 6), 0x6b3a6b, Math.cos(a) * r * 0.8, y, Math.sin(a) * r * 0.8));
+    }
+    g.add(cyl(0.003, 0.03, 0x6b4a2a, 0.14));
+    return g;
+  }),
+  food('poireau', 'poireau', [0.03, 0.015], { food: { hunger: 5, bites: 3 }, cook: { seconds: 12, burn: 20, colors: [0xe8eccf, 0xc9b56a, 0x2e2419] }, gripPoint: [0, 0.015, 0.1], mouth: [0, 0.015, -0.15] }, () =>
+    // couché le long de Z : le blanc vers -Z, les feuilles vers +Z
+    group(cooked(mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.18, 10).rotateX(Math.PI / 2), 0xe8eccf, 0, 0.015, -0.06)), mesh(new THREE.ConeGeometry(0.03, 0.14, 6).rotateX(Math.PI / 2), 0x4f8a3a, 0, 0.02, 0.1))),
+  {
+    id: 'baguette',
+    name: 'baguette',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.03, 0.16],
+    mouth: [0, 0.035, -0.24],
+    food: { hunger: 30, bites: 6 },
+    cut: 'tranches-pain',
+    fragility: 10,
+    durability: 20,
+    breakWord: 'écrasé',
+    // couchée le long de Z
+    build: () => group(mesh(new THREE.CapsuleGeometry(0.03, 0.44, 6, 12).rotateX(Math.PI / 2).scale(1.65, 1, 1), 0xd39a52, 0, 0.03, 0)),
+  },
   food('moutarde', 'moutarde', [0.09, 0.03], { fragility: 3, breakWord: 'cassé' }, () => jar(0.03, 0.09, 0xd9b030, 0x2a2b2e, 0xf3efe4)),
   food('ketchup', 'ketchup', [0.18, 0.03], {}, () => squeeze(0xc0302a, 0xf3efe4)),
   food('mayonnaise', 'mayonnaise', [0.18, 0.03], {}, () => squeeze(0xf3e9b8, 0x3b6db3)),
