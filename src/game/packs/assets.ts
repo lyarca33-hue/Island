@@ -160,3 +160,12 @@ export function packModel<P extends PackId>(id: P, name: ModelName<P>, fit: Fit 
   }
   return g;
 }
+
+/** La texture du modèle `name` (sa première pièce peinte), si le pack est chargé : un état d'aliment (interior.ts). */
+export function packTexture<P extends PackId>(id: P, name: string): THREE.Texture | null {
+  let map: THREE.Texture | null = null;
+  loaded.get(id)?.get(name)?.traverse((o) => {
+    if (!map && o instanceof THREE.Mesh) map = (o.material as THREE.MeshToonMaterial).map ?? null;
+  });
+  return map;
+}
