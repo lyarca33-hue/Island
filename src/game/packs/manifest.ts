@@ -1,6 +1,7 @@
 /**
- * Boîte (largeur x, hauteur y, profondeur z, en m) de chaque modèle des packs de Quaternius,
- * posé au sol et centré. Fichier écrit par tools/build_pack_assets.mjs : ne pas modifier à la main.
+ * Boîte (largeur x, hauteur y, profondeur z, en m) de chaque modèle des packs (Quaternius, et les
+ * aliments Tripo), posé au sol et centré. Fichier écrit par tools/build_pack_assets.mjs et
+ * tools/build_aliments_assets.mjs : ne pas modifier à la main.
  */
 export const PACK_SIZES = {
   nourriture: {
@@ -19,6 +20,50 @@ export const PACK_SIZES = {
     "Pizza": [3.372, 0.161, 3.357],
     "Steak": [1.32, 0.34, 1.913],
     "Tomato": [0.752, 0.626, 0.752],
+  },
+  aliments: {
+    "ail": [0.06, 0.056, 0.059],
+    "baguette": [0.185, 0.102, 0.595],
+    "banane": [0.067, 0.116, 0.187],
+    "beurre": [0.109, 0.035, 0.061],
+    "carotte": [0.086, 0.08, 0.175],
+    "champignon": [0.055, 0.036, 0.06],
+    "chocolat": [0.157, 0.032, 0.069],
+    "citron": [0.08, 0.049, 0.052],
+    "concombre": [0.066, 0.059, 0.22],
+    "confiture": [0.099, 0.09, 0.1],
+    "courgette": [0.057, 0.053, 0.2],
+    "creme": [0.088, 0.09, 0.087],
+    "farine": [0.094, 0.18, 0.11],
+    "fraises": [0.12, 0.062, 0.084],
+    "fromage": [0.09, 0.07, 0.12],
+    "huile": [0.092, 0.28, 0.087],
+    "jambon": [0.103, 0.027, 0.11],
+    "ketchup": [0.072, 0.19, 0.069],
+    "lait": [0.079, 0.2, 0.081],
+    "mayonnaise": [0.071, 0.19, 0.071],
+    "miel": [0.1, 0.095, 0.099],
+    "moutarde": [0.09, 0.08, 0.09],
+    "oeuf": [0.045, 0.059, 0.046],
+    "oignon": [0.07, 0.08, 0.07],
+    "orange": [0.079, 0.079, 0.079],
+    "pain": [0.22, 0.119, 0.22],
+    "poire": [0.077, 0.11, 0.076],
+    "poireau": [0.147, 0.175, 0.32],
+    "poisson": [0.159, 0.037, 0.058],
+    "poivre": [0.073, 0.179, 0.073],
+    "poivron": [0.083, 0.09, 0.082],
+    "pomme": [0.079, 0.079, 0.079],
+    "pomme-de-terre": [0.09, 0.067, 0.067],
+    "poulet": [0.14, 0.078, 0.075],
+    "raisin": [0.102, 0.154, 0.117],
+    "salade": [0.118, 0.154, 0.157],
+    "saucisses": [0.15, 0.047, 0.078],
+    "sel": [0.068, 0.1, 0.068],
+    "steak": [0.15, 0.037, 0.095],
+    "tomate": [0.07, 0.052, 0.07],
+    "vinaigre": [0.156, 0.25, 0.157],
+    "yaourt": [0.07, 0.056, 0.07],
   },
 } as const satisfies Record<string, Record<string, readonly [number, number, number]>>;
 

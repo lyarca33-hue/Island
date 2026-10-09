@@ -116,4 +116,25 @@ export const ROOM_RIGS: Record<string, Rig> = {
     look: { model: 'caisse-outils', parts: { porte: { from: 'couvercle', pivot: [0, 0.175, -0.125], motion: { kind: 'turn', axis: 'x', angle: deg(-100) } } } },
     def: { door: deg(-100), doorAxis: 'x' },
   },
+  // les roues et le pédalier tournent sur leur axe (z) quand on roule (velo.ts) ; l'avant du vélo est vers -x
+  velo: {
+    look: {
+      model: 'velo',
+      parts: {
+        'roue-avant': { from: 'roue-avant', pivot: [-0.531, 0.312, 0] },
+        'roue-arriere': { from: 'roue-arriere', pivot: [0.546, 0.3, 0] },
+        pedalier: { from: 'pedalier', pivot: [0.087, 0.302, 0] },
+      },
+    },
+    def: {
+      bike: {
+        saddle: [0.36, 1.04, 0],
+        grip: [-0.23, 1.08, 0.29],
+        crank: [0.087, 0.302, 0],
+        // la manivelle gauche pend, la droite (hors du carter de chaîne) est en haut
+        pedals: [[-0.002, -0.147, 0.106], [0.002, 0.147, -0.213]],
+        wheel: 0.31,
+      },
+    },
+  },
 };

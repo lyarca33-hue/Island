@@ -15,6 +15,7 @@ import { gradeIndex, showWear } from './durability';
 import { basisRotation, Rig, solveTwoBone, twistForearm } from './ik';
 import { buildModel, hasLook } from './interior';
 import { forgetGhosts, mergeStaticParts } from './merge';
+import { buildFiller } from './remplissage';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
 function gripRotation(spec: GripSpec): THREE.Quaternion {
@@ -58,6 +59,8 @@ export class WorldItem {
 
   private closed: THREE.Object3D;
   private opened: THREE.Object3D | null = null;
+  /** Silhouette montrée à la place de l'objet rangé hors de vue (voir setStowed). */
+  private filler: THREE.Mesh | null = null;
 
   constructor(readonly def: ItemDef) {
     // le modèle du pack intérieur s'il habille cette fiche (interior.ts), sinon celui fait par programme
@@ -125,6 +128,23 @@ export class WorldItem {
     this.closed = model;
     this.object.add(model);
     showWear(this.object, this.condition);
+  }
+
+  /** Rangé derrière une porte ou dans un tiroir : seule sa silhouette se voit (remplissage.ts). */
+  get stowed(): boolean {
+    return !!this.filler?.visible;
+  }
+
+  /** Range l'objet hors de vue (sa silhouette à sa place) ou le montre. */
+  setStowed(stowed: boolean): void {
+    if (stowed === this.stowed) return;
+    if (stowed && !this.filler) {
+      this.filler = buildFiller(this.closed, this.box);
+      this.object.add(this.filler);
+    }
+    if (this.filler) this.filler.visible = stowed;
+    this.closed.visible = !stowed && !this.opened?.visible;
+    if (stowed && this.opened) this.opened.visible = false;
   }
 
   /** Montre le livre ouvert (lecture) ou fermé. */

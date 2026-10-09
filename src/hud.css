@@ -69,6 +69,8 @@
 .hud-icon:focus-visible, .act:focus-visible, .chat-mode:focus-visible, .chat-send:focus-visible, .hud-clock:focus-visible, .menu-section-title:focus-visible {
   outline: 2px solid var(--hud-honey); outline-offset: 1px;
 }
+.cam-slider { width: 96px; margin: 0 4px; accent-color: var(--hud-honey); cursor: ew-resize; }
+.cam-slider:focus-visible { outline: 2px solid var(--hud-honey); outline-offset: 2px; border-radius: 4px; }
 .hud-sep { width: 1px; height: 16px; margin: 0 3px; background: var(--hud-line-strong); }
 
 /* Panneau du menu */
@@ -320,6 +322,22 @@
 .inv-list button:hover, .inv-close:hover { border-color: var(--hud-honey); background: rgba(245, 190, 91, 0.15); }
 .inv-empty { margin: 4px 0; color: var(--hud-ink-2); }
 .inv-close { margin-top: 10px; }
+.inv-title { display: inline-flex; align-items: center; gap: 6px; }
+/* la grille de cases : un objet prend un rectangle de cases selon sa taille */
+.inv-cases { --inv-cell: 38px; width: auto; min-width: 200px; max-width: calc(100% - 2 * var(--hud-gap)); }
+.inv-grid { display: grid; gap: 3px; width: max-content; max-width: 100%; }
+.inv-cell { border-radius: 6px; background: rgba(255, 240, 215, 0.06); border: 1px solid var(--hud-line); }
+.inv-item {
+  background: #4a3a2b; color: var(--hud-ink);
+  position: relative; z-index: 1; margin: 0; padding: 2px; border-radius: 6px; border: 1px solid rgba(0, 0, 0, 0.25); overflow: hidden;
+  font: inherit; font-size: 9px; line-height: 1.05; text-align: center; hyphens: auto; overflow-wrap: anywhere; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.inv-item img { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); object-fit: contain; pointer-events: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+.inv-item:hover, .inv-item:focus-visible { outline: 2px solid var(--hud-honey); outline-offset: 0; }
+.inv-info { margin: 8px 0 0; min-height: 1.3em; font-size: 13px; color: var(--hud-ink-2); }
+.inv-info b { color: var(--hud-ink); }
+.ctx-icon { vertical-align: -3px; margin-right: 6px; }
 
 /* Livre de recettes (fenêtre en lisant le livre, ou dans le menu) */
 .recipe-skill { margin: 0 0 8px; color: var(--hud-ink-2); font-size: 13px; }
@@ -374,6 +392,7 @@
 @media (pointer: coarse) {
   :root { --hud-bar: 44px; --hud-ring: 40px; }
   .hud-icon { width: 38px; height: 38px; }
+  .cam-slider { width: 84px; }
   .chat-hint, .chat-mode .key, .act-keys, .act-info { display: none !important; }
   .act { padding: 0 12px; height: 36px; }
 }

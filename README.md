@@ -175,7 +175,6 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/kit.ts` | Le kit Tripo de la maison : enduit des murs, sol, toit, porte, fenêtre |
 | `src/game/items/tripo.ts` | Meubles et objets de la maison faits avec Tripo : modèle, pièces mobiles posées sur leur charnière |
 | `src/game/items/pieces.ts` | Fiches des meubles et objets du salon, de la chambre, de la salle de bain, de l'entrée et du garage |
-| `src/game/motes.ts` | Poussières de lumière qui flottent (ambiance) |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
 | `src/creator/vrm.ts` | Chargement des fichiers VRM (three-vrm), import d'un .vrm du joueur |

@@ -60,12 +60,14 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
   const [ready, setReady] = useState<Game | null>(null);
+  const [camAngle, setCamAngle] = useState(0);
+  useEffect(() => setCamAngle(ready?.cameraAngle ?? 0), [ready]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // les modèles dont sont faits des objets (aliments, meubles de la cuisine) : chargés avant de construire la maison
   const [packsReady, setPacksReady] = useState(false);
   useEffect(() => {
-    void Promise.all([preloadPacks(['nourriture']), loadTripo()]).then(() => setPacksReady(true));
+    void Promise.all([preloadPacks(['nourriture', 'aliments']), loadTripo()]).then(() => setPacksReady(true));
   }, []);
   const [held, setHeld] = useState<string | null>(null);
   const [can, setCan] = useState<HandActions>({ drink: false, eat: false, serve: false, dishes: false, cut: false, prepare: false, throw: false, moving: false, read: false, reading: false, recipes: false, book: null, seated: false });
@@ -201,12 +203,23 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           tools={
             <>
               <span className="hud-sep" />
-              <button className="hud-icon" onClick={() => game.current?.rotateCamera(-1)} aria-label="Tourner la caméra à gauche" title="Tourner la caméra à gauche">
-                <Icon name="rotateLeft" />
-              </button>
-              <button className="hud-icon" onClick={() => game.current?.rotateCamera(1)} aria-label="Tourner la caméra à droite" title="Tourner la caméra à droite">
-                <Icon name="rotateRight" />
-              </button>
+              <input
+                type="range"
+                className="cam-slider"
+                min={0}
+                max={360}
+                step={1}
+                value={Math.round(camAngle)}
+                onChange={(e) => {
+                  const deg = Number(e.target.value);
+                  game.current?.setCameraAngle(deg);
+                  setCamAngle(deg);
+                }}
+                // relâché : rendre le clavier au perso (ZQSD)
+                onPointerUp={(e) => e.currentTarget.blur()}
+                aria-label="Faire tourner la caméra"
+                title="Faire tourner la caméra autour du perso"
+              />
               <span className="hud-sep" />
               <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
                 <Icon name="eyeOff" />
