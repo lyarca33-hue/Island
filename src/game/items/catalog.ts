@@ -31,6 +31,11 @@ export interface ItemDef {
    */
   gripPoint?: [number, number, number];
   /**
+   * Silhouette quand l'objet est rangé hors de vue (remplissage.ts) : `cintre` (vêtement suspendu),
+   * `plie` (linge plié en pile) ; absent = une boîte ou un prisme à sa taille.
+   */
+  stowedAs?: 'cintre' | 'plie';
+  /**
    * Fragilité, de 1 (se brise presque à coup sûr si on le lance) à 10 (ne casse jamais).
    * Défaut : 5.
    */

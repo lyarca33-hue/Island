@@ -140,7 +140,7 @@ export class WorldItem {
   setStowed(stowed: boolean): void {
     if (stowed === this.stowed) return;
     if (stowed && !this.filler) {
-      this.filler = buildFiller(this.closed, this.box);
+      this.filler = buildFiller(this.closed, this.box, this.def.stowedAs);
       this.object.add(this.filler);
     }
     if (this.filler) this.filler.visible = stowed;
