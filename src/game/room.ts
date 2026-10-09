@@ -367,8 +367,12 @@ export class Room {
     const on = (w: WallName) => openings.filter((o) => o.wall === w);
     this.addWall('nord', x0 - WALL_T, x1 + WALL_T, on('nord'));
     this.addWall('sud', x0 - WALL_T, x1 + WALL_T, on('sud'));
-    this.addWall('ouest', z0, z1, on('ouest'));
-    this.addWall('est', z0, z1, on('est'));
+    // côté mitoyen, les murs est et ouest couvrent aussi le coin : abaissé en coupe, le mur nord ou
+    // sud ne laisse pas de fente entre le mur plein de la pièce et celui de la pièce voisine
+    const joined = new Set(spec.joined ?? []);
+    const za = z0 - (joined.has('nord') ? WALL_T : 0), zb = z1 + (joined.has('sud') ? WALL_T : 0);
+    this.addWall('ouest', za, zb, on('ouest'));
+    this.addWall('est', za, zb, on('est'));
     for (const o of windows) this.addWindow(this.wall(o.wall), o);
     for (const d of spec.doors) this.addDoorway(d);
 
@@ -774,7 +778,8 @@ export class Room {
         to.add(relief);
       };
       if (gable) {
-        const mid = (w.span[0] + w.span[1]) / 2;
+        // milieu du pignon : celui de la pièce (le mur peut couvrir un coin de plus d'un côté)
+        const mid = (z0 + z1) / 2;
         for (const s of [1, -1]) face(s, (flip) => {
           const c = flip ? b - mid : mid - a;
           return sheet.piece(c - gable.half, c + gable.half, WALL_H, WALL_H + gable.height, (u) => WALL_H + gable.height * (1 - Math.abs(u - c) / gable.half));
