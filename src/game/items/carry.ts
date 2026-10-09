@@ -62,6 +62,8 @@ export class WorldItem {
   private opened: THREE.Object3D | null = null;
   /** Silhouette montrée à la place de l'objet rangé hors de vue (voir setStowed). */
   private filler: THREE.Mesh | null = null;
+  /** Dernière couleur donnée au liquide, remise sur le modèle s'il est rhabillé. */
+  private liquidTint: THREE.ColorRepresentation | null = null;
 
   constructor(readonly def: ItemDef) {
     // le modèle du pack intérieur s'il habille cette fiche (interior.ts), sinon celui fait par programme
@@ -71,6 +73,9 @@ export class WorldItem {
     this.closed = model;
     this.object.add(model);
     this.object.name = def.id;
+    // le liquide à son niveau avant de mesurer l'objet : la colonne d'eau brute d'une bouteille fait
+    // 1 m de haut, la bouteille (et sa silhouette rangée au frigo) ferait 1 m aussi
+    if (def.fill) this.setLevel(def.startFull ? 1 : 0);
     this.box = new THREE.Box3().setFromObject(model);
     this.box.getSize(this.size);
     if (def.buildOpen) {
@@ -85,7 +90,6 @@ export class WorldItem {
     this.gripPoint = def.gripPoint ? vec(def.gripPoint) : new THREE.Vector3(0, this.size.y / 2, 0);
     const c = this.box.getCenter(new THREE.Vector3());
     this.holdPoint = GRIPS[this.grip].point === 'bottom' ? new THREE.Vector3(c.x, this.box.min.y, c.z) : this.gripPoint.clone();
-    if (def.fill) this.setLevel(def.startFull ? 1 : 0);
     this.contents = def.startFull ?? null;
     this.durability = this.maxDurability;
     if (def.dish) this.setDirty(false);
@@ -129,6 +133,13 @@ export class WorldItem {
     this.closed = model;
     this.object.add(model);
     showWear(this.object, this.condition);
+    // le nouveau modèle repart de zéro : niveau et couleur du liquide, vaisselle sale ou propre
+    // (sinon la colonne d'eau de la bouteille reprend sa hauteur brute, 1 m, et traverse le frigo)
+    if (this.def.fill) this.setLevel(this.level);
+    if (this.liquidTint !== null) this.setLiquidColor(this.liquidTint);
+    if (this.def.dish) this.setDirty(this.dirty);
+    const morsel = this.part('bouchee');
+    if (morsel) morsel.visible = false;
   }
 
   /** Rangé derrière une porte ou dans un tiroir : seule sa silhouette se voit (remplissage.ts). */
@@ -162,6 +173,7 @@ export class WorldItem {
 
   /** Couleur du liquide qu'il contient (café, eau). */
   setLiquidColor(color: THREE.ColorRepresentation): void {
+    this.liquidTint = color;
     const liquid = this.part('liquide') as THREE.Mesh | undefined;
     const m = liquid?.material as THREE.MeshToonMaterial | undefined;
     m?.color.set(color);

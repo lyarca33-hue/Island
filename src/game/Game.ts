@@ -3423,7 +3423,7 @@ export class Game {
       if (lamp) {
         lamp.visible = k > 0.02;
         const glow = item.part('lampe-lumiere') as THREE.PointLight | undefined;
-        if (glow) glow.intensity = 0.7 * k;
+        if (glow) glow.intensity = 0.4 * k;
       }
       const part = item.part('porte');
       if (part && drawer) part.position.z = k * drawer;

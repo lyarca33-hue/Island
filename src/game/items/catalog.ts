@@ -773,14 +773,15 @@ export const ITEMS: ItemDef[] = [
       );
       g.add(door);
       // la lampe du frigo, sous le dessus : allumée quand la porte s'ouvre (Game.tickDoors)
-      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.05), new THREE.MeshBasicMaterial({ color: 0xe8e2d0 }));
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.05), new THREE.MeshBasicMaterial({ color: 0xeef3f6 }));
       lamp.name = 'lampe';
       lamp.position.set(0, H - t - 0.06, zc - D / 2 + 0.12);
       lamp.visible = false;
       // sur tous les calques comme les autres lumières (sinon recompilation de chaque matériau à chaque image)
       // au milieu du frigo, décroissance douce et portée courte : tout l'intérieur éclairé pareil,
-      // sans tache brûlée près de la lampe ni lumière qui déborde sur le mur au-dessus
-      const glow = lightAllPasses(new THREE.PointLight(0xfff1dc, 0, FRIDGE_GLOW_RANGE, 1));
+      // sans tache brûlée près de la lampe ni lumière qui déborde sur le mur au-dessus ; blanc
+      // froid d'une LED de frigo, pas la lumière chaude d'une lampe
+      const glow = lightAllPasses(new THREE.PointLight(0xe6f0ff, 0, FRIDGE_GLOW_RANGE, 1));
       glow.name = 'lampe-lumiere';
       glow.position.set(0, (FRIDGE_SHELVES[1] + H) / 2, zc);
       g.add(lamp, glow);
