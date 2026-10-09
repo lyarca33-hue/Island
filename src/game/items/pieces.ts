@@ -88,8 +88,12 @@ export const PIECES_ITEMS: ItemDef[] = [
     slots: [...row(NIGHTSTAND_TOP, 0.5, 3, 0.04), ...row(0.151, 0.46, 2)],
   }),
   meuble('lampe-chevet', 'lampe de chevet', [0.19, 0.37, 0.19], 0xe9dcc0, { durability: 120 }),
-  // le cintre pend dans l'armoire
-  meuble('armoire', 'armoire', [0.95, 1.95, 0.58], 0x8a5a34, { durability: 400, slots: [[0, 1.25, 0], [-0.3, 0.02, 0.05], [0.3, 0.02, 0.05]] }),
+  // le cintre pend dans l'armoire, le linge plié en bas
+  meuble('armoire', 'armoire', [0.95, 1.95, 0.58], 0x8a5a34, {
+    durability: 400,
+    slots: [[0, 1.25, 0], [-0.3, 0.02, 0.05], [0.3, 0.02, 0.05]],
+    holds: ['chemise sur cintre', 'pull', 'serviette', 'coussin'],
+  }),
   // le réveil donne l'heure : ses aiguilles sont ajoutées sur le cadran (le modèle n'en a pas)
   {
     ...objet('reveil', 'réveil', [0.12, 0.18, 0.07], 0xb0302a, { fragility: 6, clock: true }),

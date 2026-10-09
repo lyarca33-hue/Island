@@ -27,6 +27,7 @@ import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDone
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
+import { START_CONTENTS } from './items/remplissage';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
 import { BATTERS, PREP_FEMININE, PREP_LIQUIDS, PREP_PLURAL, SPREAD_ON, SPREADS, STOVE_RECIPES, type StoveRecipe } from './items/prep';
 import { DRAINS, FECULENT_FEMININE, FECULENT_PLURAL, FECULENT_RECIPES, PACKETS, SAUCE_SERVINGS, SOUP_BROTH, SOUP_VEG, SOUPS, TOPPED } from './items/feculents';
@@ -189,8 +190,9 @@ const START_ON_WORKTOP: Array<[string, number, number, number]> = [];
 /** Posés au départ sur l'îlot : [id, x, z, rotation] dans le repère de l'îlot. */
 const START_ON_ISLAND: Array<[string, number, number, number]> = [];
 
-/** Rangés au départ dans un meuble : [id, meuble, place]. */
-const START_STORED: Array<[string, string, number]> = [];
+
+/** Tous les combien (s) revoir quels objets rangés se cachent derrière leur silhouette. */
+const STOW_EVERY = 0.2;
 
 /** Objets déjà usés au départ (part de durabilité restante), pour voir les grades. */
 const START_WEAR: Record<string, number> = {};
@@ -562,6 +564,12 @@ export class Game {
   private truckDay = -1;
   /** Une chaise glisse (tirée sans la saisir) : pas encore fini. */
   private sliding = false;
+  /** Objets rangés dans un meuble fermé mais montrés pour de vrai : on les sort, ou on vient de les ranger. */
+  private revealed = new Set<WorldItem>();
+  /** Place de départ de chaque objet portable : le meuble où il était rangé, sinon l'endroit où il était posé. */
+  private homes = new Map<WorldItem, { shelf: WorldItem | null; pos: THREE.Vector3; quat: THREE.Quaternion }>();
+  /** Temps (s) avant de revoir quels objets rangés se cachent (tickStowed). */
+  private stowClock = 0;
   /** Fenêtre « ce qu'il y a dedans » ouverte sur un meuble (null : la fermer). */
   onInventory: ((ref: string | null) => void) | null = null;
   /** Ingrédient dont on attend la cuisson (ordre « cuire »). */
@@ -718,16 +726,26 @@ export class Game {
       it.object.position.copy(this.spotWorld(where, i));
       it.object.rotation.y = where.object.rotation.y;
     }
-    for (const [id, holder, i] of START_STORED) {
-      const where = this.items.find((it) => it.def.id === holder);
+    // les meubles de rangement remplis (remplissage.ts) : chaque objet à la première place libre du dedans
+    for (const [holder, n, ids] of START_CONTENTS) {
+      const where = this.items.filter((it) => it.def.id === holder)[n];
       if (!where) continue;
-      const it = add(id);
-      const slot = this.slot(where, i);
-      it.object.position.copy(slot.pos);
-      it.object.quaternion.copy(slot.rot);
-      if (id === 'pastilles') this.tablets.set(it, TABLETS);
-      if (id === 'sachets-the') this.teaBoxes.set(it, TEA_BAGS);
+      for (const id of ids) {
+        const it = add(id);
+        const free = this.freeSlots(where, it).filter((i) => this.insideSlot(where, i));
+        if (!free.length) {
+          this.items.splice(this.items.indexOf(it), 1);
+          this.scene.remove(it.object);
+          continue;
+        }
+        const slot = this.slot(where, free[0]);
+        it.object.position.copy(slot.pos);
+        it.object.quaternion.copy(slot.rot);
+        if (id === 'pastilles') this.tablets.set(it, TABLETS);
+        if (id === 'sachets-the') this.teaBoxes.set(it, TEA_BAGS);
+      }
     }
+    this.tickStowed(0, true);
     const worktop = this.items.find((i) => i.def.id === 'plan-de-travail');
     if (worktop) {
       worktop.object.updateMatrixWorld(true);
@@ -752,6 +770,11 @@ export class Game {
     }
 
     for (const item of this.items) item.setCondition(START_WEAR[item.def.id] ?? 1);
+    // la place de chaque objet, où « Ranger » le ramène
+    for (const item of this.items) {
+      if (!item.def.portable) continue;
+      this.homes.set(item, { shelf: this.shelfOf(item)?.shelf ?? null, pos: item.object.position.clone(), quat: item.object.quaternion.clone() });
+    }
     // la maison de départ de cette version du jeu : la sauvegarde s'en sert pour reconnaître ce qui a été mangé ou cassé
     for (const item of this.items) this.placed[item.def.id] = (this.placed[item.def.id] ?? 0) + 1;
     // petites pièces (boutons, repères, chapeaux de brûleur…) sans ombre : quelques texels effacés
@@ -3216,6 +3239,11 @@ export class Game {
       // ce qui est rangé dans le tiroir glisse avec lui
       const inside = drawer && next !== d.open ? this.storedIn(item) : [];
       const before = this.openness(item);
+      // porte refermée : ce qu'on a sorti ou rangé redevient une silhouette
+      if (d.open > 0 && next === 0 && item.def.slots) {
+        for (const it of this.storedIn(item)) this.revealed.delete(it);
+        this.tickStowed(0, true);
+      }
       d.open = next;
       const k = this.openness(item);
       // la lampe du frigo s'allume avec la porte
@@ -3956,7 +3984,10 @@ export class Game {
     return { title: cap(shelf.name), open: !door || door.target === 1, items };
   }
 
-  /** Va ouvrir le meuble `ref` et montre ce qu'il contient (fenêtre d'inventaire). */
+  /**
+   * Va au meuble `ref` et montre ce qu'il contient (fenêtre d'inventaire), sans l'ouvrir : on choisit
+   * dans la fenêtre l'objet à sortir, et la porte s'ouvre alors sur lui (take).
+   */
   lookInside(ref?: string, running = false): boolean {
     const shelf = ref ? this.byRef(ref) : this.nearest((i) => !!i.def.cold);
     if (!shelf?.def.slots) {
@@ -3968,8 +3999,7 @@ export class Game {
       const n = this.storedIn(shelf);
       this.onNotice?.(n.length ? `Dans ${the(shelf.name)} : ${n.map((i) => i.name).join(', ')}.` : `${cap(the(shelf.name))} est vide.`);
     };
-    if (this.doors.has(shelf)) return this.withDoorOpen(shelf, show, running);
-    this.character.approachThen(this.frontOf(shelf), shelf.object.position, show, running);
+    this.character.approachThen(this.doors.has(shelf) ? this.doorStand(shelf) : this.frontOf(shelf), shelf.object.position, show, running);
     return true;
   }
 
@@ -4000,27 +4030,141 @@ export class Game {
     return rack ?? frozen ?? cold ?? wall ?? all.find((s) => !s.def.cold) ?? all[0];
   }
 
-  /** Range ce qu'on tient à sa place (meuble choisi par homeOf), un objet après l'autre. */
+  /** Range ce qu'on tient, un objet après l'autre (voir tidy). */
   storeAway(running = false): boolean {
     const c = this.character;
-    const held = c.held ?? c.heldItems[0];
-    if (!held) {
+    if (!c.heldItems.length) {
       this.onNotice?.('Rien en main à ranger.');
       return false;
     }
-    const home = this.homeOf(held);
-    if (!home) {
-      this.onNotice?.(held.dirty && held.def.dish ? `${cap(the(held.name))} est sale et le lave-vaisselle est plein (ou en marche) : lave-l${FEMININE.has(held.name) ? 'a' : 'e'} à l’évier.` : `Aucun meuble où ranger ${the(held.name)}.`);
+    return this.tidy(undefined, running);
+  }
+
+  /**
+   * Range l'objet `ref` (pris d'abord s'il est posé), sinon ce qu'on tient : sale, il va dans l'évier ;
+   * propre, il retourne à sa place (le meuble où il était rangé au départ, ou là où il était posé), et
+   * s'il n'en a pas, dans le meuble qui le prend (homeOf). Ce qu'on tient d'autre suit.
+   */
+  tidy(ref?: string, running = false): boolean {
+    const c = this.character;
+    const item = ref ? this.byRef(ref) : c.held ?? c.heldItems[0];
+    if (!item) {
+      this.onNotice?.(ref ? `Je ne trouve pas : ${ref}.` : 'Rien en main à ranger.');
       return false;
     }
-    // ce qui va au même meuble y part d'un coup ; le reste ensuite
-    const rest = c.heldItems.filter((h) => h !== held && this.homeOf(h) !== home);
-    const ok = this.storeIn(home, running);
-    if (ok && rest.length) {
-      const again = () => (this.character.idle && !this.character.busy ? this.storeAway(running) : requestAnimationFrame(again));
-      requestAnimationFrame(again);
+    if (!item.def.portable) {
+      this.onNotice?.(`On ne range pas : ${item.name}.`);
+      return false;
     }
+    if (!c.carried.includes(item)) {
+      if (this.atHome(item)) {
+        this.onNotice?.(`${cap(the(item.name))} est déjà à sa place.`);
+        return false;
+      }
+      if (!this.take(item, running)) return false;
+      this.whenHeld(item, () => this.tidy(this.ref(item), running));
+      return true;
+    }
+    // ce qu'on tient d'autre se range ensuite
+    const then = () => {
+      const again = () => {
+        if (!c.idle || c.busy) return void requestAnimationFrame(again);
+        if (c.heldItems.length) this.tidy(undefined, running);
+      };
+      if (!ref) requestAnimationFrame(again);
+    };
+    if (item.dirty) return this.dropInSink(item, running, then);
+    // la vaisselle encore mouillée sèche d'abord à l'égouttoir
+    const rack = item.def.dish && item.wet > 0 ? this.homeOf(item) : undefined;
+    if (rack?.def.rack) {
+      const ok = this.storeIn(rack, running, item);
+      if (ok) then();
+      return ok;
+    }
+    const home = this.homes.get(item);
+    const shelf = home?.shelf;
+    if (shelf && this.items.includes(shelf) && this.fits(shelf, item) && this.freeSlots(shelf, item).length) {
+      const ok = this.storeIn(shelf, running, item);
+      if (ok) then();
+      return ok;
+    }
+    if (home && !shelf && !this.items.some((i) => i !== item && !c.carried.includes(i) && i.object.position.distanceTo(home.pos) < 0.05)) {
+      const yaw = new THREE.Euler().setFromQuaternion(home.quat, 'YXZ').y;
+      c.approachThen(this.standNear(home.pos, Math.max(item.size.x, item.size.z)), home.pos, () => {
+        c.drop(home.pos.clone(), yaw, () => {
+          item.object.quaternion.copy(home.quat);
+          then();
+        }, !item.def.layFlat, item);
+      }, running);
+      return true;
+    }
+    const other = this.homeOf(item);
+    if (!other) {
+      this.onNotice?.(`Aucune place où ranger ${the(item.name)}.`);
+      return false;
+    }
+    const ok = this.storeIn(other, running, item);
+    if (ok) then();
     return ok;
+  }
+
+  /** L'objet posé est-il à sa place (celle du départ) ? */
+  private atHome(item: WorldItem): boolean {
+    const home = this.homes.get(item);
+    if (!home || item.dirty) return false;
+    return home.shelf ? this.shelfOf(item)?.shelf === home.shelf : item.object.position.distanceTo(home.pos) < 0.05;
+  }
+
+  /** Une fois l'objet `item` en main (on va le prendre), fait `then` ; abandonne si le perso s'arrête sans l'avoir. */
+  private whenHeld(item: WorldItem, then: () => void): void {
+    const c = this.character;
+    let frames = 0;
+    const check = () => {
+      frames++;
+      if (c.carried.includes(item)) {
+        if (c.idle && !c.busy) then();
+        else requestAnimationFrame(check);
+        return;
+      }
+      const opening = [...this.doors.values()].some((d) => d.then);
+      if (frames > 10 && c.idle && !c.busy && !opening) return;
+      if (frames < 60 * 30) requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }
+
+  /** Pose la vaisselle sale tenue au fond de l'évier, à une place libre, pour la laver plus tard. */
+  private dropInSink(item: WorldItem, running: boolean, then: () => void): boolean {
+    const c = this.character;
+    const sink = this.nearest((i) => !!i.def.wash?.dishes);
+    if (!sink) {
+      this.onNotice?.('Il n’y a pas d’évier.');
+      return false;
+    }
+    const o = sink.object;
+    o.updateMatrixWorld(true);
+    const flat = !!item.def.layFlat;
+    const spots = sink.def.wash!.dishes!.map((s) => {
+      const at = new THREE.Vector3(...s);
+      if (flat) at.z -= item.size.y / 2;
+      return at.applyMatrix4(o.matrixWorld);
+    });
+    // une place libre, sinon par-dessus ce qui y est déjà
+    const free = spots.find((at) => !this.items.some((i) => i !== item && !c.carried.includes(i) && p0(i.object.position).distanceTo(p0(at)) < 0.06));
+    const at = free ?? spots[0].clone().setY(spots[0].y + 0.04);
+    const yaw = o.rotation.y - (flat ? Math.PI / 2 : 0);
+    c.approachThen(this.frontOf(sink), o.position, () => {
+      c.drop(at, yaw, () => {
+        // un reste de boisson part dans l'évier
+        if (item.contents) {
+          item.setLevel(0);
+          item.contents = null;
+        }
+        this.onNotice?.(`${cap(the(item.name))} attend dans l’évier d’être lavé${FEMININE.has(item.name) ? 'e' : ''}.`);
+        then();
+      }, false, item);
+    }, running);
+    return true;
   }
 
   /** Met des glaçons (bac tenu) dans le récipient `ref` (posé, ou tenu dans l'autre main ; sinon le plus proche). */
@@ -4923,6 +5067,8 @@ export class Game {
     // un livre rangé se prend par l'avant du meuble
     const stored = this.shelfOf(item);
     const from = stored?.forward;
+    // rangé hors de vue : il apparaît à sa place quand la porte s'ouvre
+    if (stored && item.def.portable && this.insideSlot(stored.shelf, stored.slot)) this.reveal(item);
     if (!item.def.portable) this.onNotice?.(`On ne peut pas porter : ${item.name}.`);
     else if (this.closeBookThen(() => this.take(item, running))) return true;
     // dans le frigo fermé : on ouvre d'abord
@@ -4980,7 +5126,7 @@ export class Game {
   }
 
   /** Meuble où l'objet est rangé (et l'avant du meuble), ou null. */
-  private shelfOf(item: WorldItem): { shelf: WorldItem; forward: THREE.Vector3 } | null {
+  private shelfOf(item: WorldItem): { shelf: WorldItem; forward: THREE.Vector3; slot: number } | null {
     // appelé souvent (à chaque image pour la vaisselle mouillée, au survol, pendant les ordres) :
     // même calcul que slot(), sans allocation par place
     const p = item.object.position;
@@ -4989,9 +5135,10 @@ export class Game {
       if (!shelf.def.slots || shelf === item || shelf.object.position.distanceToSquared(p) > 4) continue;
       shelf.object.updateWorldMatrix(true, false);
       const out = shelf.def.drawer ? this.openness(shelf) * shelf.def.drawer : 0;
-      for (const [x, y, z] of shelf.def.slots) {
+      for (let i = 0; i < shelf.def.slots.length; i++) {
+        const [x, y, z] = shelf.def.slots[i];
         if (SLOT_TMP.set(x, y, z + out).applyMatrix4(shelf.object.matrixWorld).distanceToSquared(p) < 0.0004) {
-          return { shelf, forward: new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion) };
+          return { shelf, forward: new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.object.quaternion), slot: i };
         }
       }
     }
@@ -5002,6 +5149,37 @@ export class Game {
   private storedIn(shelf: WorldItem): WorldItem[] {
     const carried = this.character.carried;
     return this.items.filter((it) => it !== shelf && !carried.includes(it) && !this.flying.some((f) => f.item === it) && this.shelfOf(it)?.shelf === shelf);
+  }
+
+  /** La place n° `i` est dedans : derrière la porte ou dans le tiroir (pas sur le dessus de la table de nuit). */
+  private insideSlot(shelf: WorldItem, i: number): boolean {
+    return this.doors.has(shelf) && shelf.def.slots![i][1] < shelf.box.max.y - 0.03;
+  }
+
+  /**
+   * Les objets rangés dans un meuble fermé ne se dessinent pas : leur silhouette très simple les
+   * remplace (remplissage.ts). Sauf ceux qu'on sort ou qu'on vient de ranger (`revealed`), tant que la
+   * porte n'est pas refermée. Revu quelques fois par seconde ; `now` : tout de suite.
+   */
+  private tickStowed(dt: number, now = false): void {
+    this.stowClock -= dt;
+    if (this.stowClock > 0 && !now) return;
+    this.stowClock = STOW_EVERY;
+    const carried = new Set(this.character.carried);
+    const flying = new Set(this.flying.map((f) => f.item));
+    for (const it of this.items) {
+      if (!it.def.portable) continue;
+      const at = carried.has(it) || flying.has(it) ? null : this.shelfOf(it);
+      const inside = !!at && this.insideSlot(at.shelf, at.slot);
+      if (!inside && !carried.has(it)) this.revealed.delete(it);
+      it.setStowed(inside && !this.revealed.has(it));
+    }
+  }
+
+  /** Montre pour de vrai l'objet `item` rangé dans un meuble fermé : on le sort, ou on vient de l'y mettre. */
+  private reveal(item: WorldItem): void {
+    this.revealed.add(item);
+    item.setStowed(false);
   }
 
   /** Ce qu'on peut ranger dans ce meuble (sa fiche `holds`, sinon les livres). */
@@ -5040,6 +5218,8 @@ export class Game {
       return;
     }
     const { pos, rot } = this.slot(shelf, free[0]);
+    // posé pour de vrai, porte ouverte ; il ne devient silhouette qu'une fois la porte refermée
+    for (const it of hands.carried) this.revealed.add(it);
     if (hands.stacked) hands.storeTop(pos, rot, () => this.storeNext(shelf, item, both));
     else {
       // puis ce que tient l'autre main, si ça se range aussi ici
@@ -5287,7 +5467,7 @@ export class Game {
       if (can.reading) add('Fermer le livre', () => this.stopReading());
       if (can.throw) add(`Lancer : ${c.held!.name}`, () => this.throwItem());
       if (held.length && this.items.some((i) => i.def.bin)) add(`Jeter : ${c.held!.name}`, () => this.throwAway());
-      if (held.some((h) => this.homeOf(h))) add('Ranger à sa place', () => this.storeAway());
+      if (held.length) add('Ranger', () => this.storeAway());
       const tray = held.find((h) => h.name === 'bac à glaçons');
       const cup = held.find((h) => h !== tray && h.def.fill && !h.def.cookware && !h.def.mouth);
       if (tray && cup && !this.iced.has(cup)) add(`Glaçons dans ${the(cup.name)}`, () => this.addIce(this.ref(cup)));
@@ -5329,7 +5509,9 @@ export class Game {
     }
     // ranger ce qu'on tient
     if (item.def.slots && held.some((h) => this.fits(item, h))) add('Ranger ici ce que je tiens', () => this.storeIn(item, false));
-    if (item.def.slots && !program(item.def)) add('Regarder dedans', () => this.lookInside(ref));
+    // ranger l'objet à sa place (sale : dans l'évier)
+    if (item.def.portable && !c.carried.includes(item) && !this.atHome(item) && (item.dirty || this.homes.has(item) || this.homeOf(item))) add('Ranger', () => this.tidy(ref));
+    if (item.def.slots && (!program(item.def) || this.doors.has(item))) add('Regarder dedans', () => this.lookInside(ref));
     if (door && (door.target || door.open > 0) && !door.keep && !item.def.window) add('Laisser ouvert', () => this.keepOpen(ref));
     // essuyer au torchon la vaisselle mouillée posée là
     // la liste et le sac de courses
@@ -5742,6 +5924,7 @@ export class Game {
     this.tickHeat(dt);
     this.puffs.update(Math.max(0, dt));
     this.tickDoors(dt);
+    this.tickStowed(dt);
     this.tickAppliances(dt);
     this.tickEating();
     this.tickWash(dt);
