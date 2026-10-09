@@ -59,6 +59,30 @@ const BASIN_FLOOR = 0.67;
 const BASIN_Z = 0.08;
 const TAP: [number, number, number] = [0, 0.9, -0.03];
 
+/**
+ * Douche : le receveur (0,95 m de côté) dans le coin, la colonne accrochée au mur ouest (maison.ts) ;
+ * son pommeau, à 0,29 m du mur, est au-dessus du receveur, à 1,96 m du sol.
+ */
+const SHOWER_W = 0.95;
+const SHOWER_HEAD: [number, number, number] = [0.29 - SHOWER_W / 2 - 0.005, 1.96, 0];
+
+let steamTex: THREE.CanvasTexture | null = null;
+/** Bouffée de vapeur : un disque blanc flou. */
+function steamTexture(): THREE.CanvasTexture {
+  if (steamTex) return steamTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,0.9)');
+  gr.addColorStop(0.5, 'rgba(255,255,255,0.35)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 64, 64);
+  steamTex = new THREE.CanvasTexture(cv);
+  return steamTex;
+}
+
 // —— garage
 /** Établi : plateau et tablette du dessous. */
 export const BENCH_TOP = 0.913;
@@ -142,7 +166,44 @@ export const PIECES_ITEMS: ItemDef[] = [
   }),
   meuble('toilettes', 'toilettes', [0.38, 0.81, 0.52], 0xe6e4de, { movable: false, fragility: 7 }),
   meuble('porte-serviettes', 'porte-serviettes', [0.98, 0.98, 0.3], 0xa8adb2),
-  objet('serviette', 'serviette', [0.46, 0.46, 0.08], 0x3b78a8, { fragility: 1 }),
+  objet('serviette', 'serviette', [0.46, 0.46, 0.08], 0x3b78a8, { fragility: 1, bathTowel: true }),
+  // on y entre (ce n'est pas un obstacle) ; l'eau et la vapeur sont faites par le jeu, cachées au repos (Game.tickShower)
+  meuble('douche', 'douche', [SHOWER_W, 0.04, SHOWER_W], 0xeef0ee, {
+    movable: false,
+    fragility: 7,
+    shower: { seconds: 9, stand: [SHOWER_HEAD[0] + 0.24, 0], head: SHOWER_HEAD },
+    build: () => {
+      const g = block([SHOWER_W, 0.04, SHOWER_W], 0xeef0ee);
+      // des filets d'eau du pommeau au receveur
+      const rain = new THREE.Group();
+      rain.name = 'jet';
+      rain.visible = false;
+      const mat = new THREE.MeshBasicMaterial({ color: 0x9fcde6, transparent: true, opacity: 0.55, depthWrite: false });
+      const len = SHOWER_HEAD[1] - 0.04;
+      for (let i = 0; i < 14; i++) {
+        const a = i * 2.39, r = 0.03 + 0.07 * Math.sqrt(i / 14);
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.004, len, 5), mat);
+        m.position.set(SHOWER_HEAD[0] + Math.cos(a) * r * 1.6, 0.04 + len / 2, SHOWER_HEAD[2] + Math.sin(a) * r * 1.6);
+        m.userData.phase = i * 0.37;
+        m.raycast = () => {};
+        rain.add(m);
+      }
+      // la vapeur qui monte
+      const steam = new THREE.Group();
+      steam.name = 'vapeur';
+      steam.visible = false;
+      const puff = new THREE.SpriteMaterial({ map: typeof document === 'undefined' ? null : steamTexture(), color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
+      for (let i = 0; i < 10; i++) {
+        const m = new THREE.Sprite(puff);
+        m.userData.phase = i / 10;
+        // la vapeur ne se vise pas (un Sprite demande la caméra au rayon)
+        m.raycast = () => {};
+        steam.add(m);
+      }
+      g.add(rain, steam);
+      return g;
+    },
+  }),
   objet('verre-dents', 'verre à dents', [0.07, 0.1, 0.07], 0x8fb4c8, { fragility: 7 }),
   objet('brosse-dents', 'brosse à dents', [0.04, 0.17, 0.02], 0x3aa8d8, { fragility: 2 }),
   objet('savon-pain', 'savon', [0.05, 0.04, 0.08], 0xe7a6b4, { grip: 'cradle', fragility: 1, soap: true }),

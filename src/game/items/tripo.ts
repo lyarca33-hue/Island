@@ -115,6 +115,7 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   pull: { model: 'pull-plie' },
   cintre: { model: 'vetement-cintre' },
   lavabo: { model: 'lavabo' },
+  douche: { model: 'douche-receveur' },
   'porte-serviettes': { model: 'porte-serviettes' },
   serviette: { model: 'serviette-etendue' },
   'verre-dents': { model: 'verre-dents' },

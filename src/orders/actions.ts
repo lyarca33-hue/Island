@@ -408,6 +408,18 @@ export const ACTIONS: ActionDef[] = [
     run: (g) => g.wash(),
   },
   {
+    name: 'douche',
+    description: 'Prendre une douche (les mains doivent être libres) : l’hygiène remonte à fond. On en sort mouillé : se sécher ensuite avec la serviette.',
+    params: {},
+    run: (g) => g.takeShower(),
+  },
+  {
+    name: 'secher',
+    description: 'Se sécher avec la serviette (prise sur le porte-serviettes si on ne la tient pas). Mouillé et pas séché, le perso laisse des gouttes par terre.',
+    params: {},
+    run: (g) => g.dryOff(),
+  },
+  {
     name: 'toilettes',
     description: 'Aller aux toilettes : le perso lève le couvercle, s’assoit, la vessie se vide, puis il se relève et tire la chasse. Penser à se laver les mains ensuite.',
     params: {},

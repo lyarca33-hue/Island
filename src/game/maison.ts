@@ -246,12 +246,13 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
     // le porte-serviettes en face, la serviette sur sa barre du haut
     ['porte-serviettes', SALLE_DE_BAIN.x1 - 0.16, 0, BATH.sink, -Q],
     ['serviette', SALLE_DE_BAIN.x1 - 0.16, 0.5, BATH.sink, -Q],
+    // la douche dans le coin du fond (la colonne est accrochée au mur, voir decor)
+    ['douche', SALLE_DE_BAIN.x0 + 0.48, 0, SALLE_DE_BAIN.z0 + 0.48, 0],
     // le gel douche dans le coin de la douche
     ['gel-douche', SALLE_DE_BAIN.x0 + 0.1, 0.04, SALLE_DE_BAIN.z0 + 0.1, Q],
   ],
   decor: (room) => {
-    // la douche dans le coin du fond : le receveur au sol, la colonne au mur
-    lay(room, 'douche-receveur', SALLE_DE_BAIN.x0 + 0.48, SALLE_DE_BAIN.z0 + 0.48);
+    // la colonne de la douche au mur, au-dessus du receveur (un objet : on y entre)
     hang(room, 'ouest', SALLE_DE_BAIN.z0 + 0.48, 0.95, 'douche-colonne');
     lay(room, 'tapis-bain', SALLE_DE_BAIN.x0 + 0.5, SALLE_DE_BAIN.z0 + 1.3, 0, 0.5);
     // le miroir au-dessus du lavabo, le dérouleur à côté des toilettes

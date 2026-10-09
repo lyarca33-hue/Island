@@ -101,6 +101,9 @@ export type Intent =
   | { kind: 'glacons'; dans?: string }
   /** Se laver à l'évier : les mains, ou aussi le visage (toilette). */
   | { kind: 'laver'; visage: boolean }
+  /** Prendre une douche ; se sécher avec la serviette. */
+  | { kind: 'douche' }
+  | { kind: 'secher' }
   /** Aller aux toilettes (s'asseoir, se soulager, tirer la chasse) ; tirer la chasse. */
   | { kind: 'toilettes' }
   | { kind: 'chasse' }
@@ -814,6 +817,11 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       // les mains doivent être libres
       await freeHands(game, act);
       return act(intent.visage ? 'se_laver' : 'laver_mains');
+    case 'douche':
+      await freeHands(game, act);
+      return act('douche');
+    case 'secher':
+      return act('secher');
     case 'toilettes':
       await freeHands(game, act);
       return act('toilettes');

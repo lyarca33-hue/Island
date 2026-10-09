@@ -434,6 +434,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
   if (news !== undefined) return news;
   switch (verb) {
     case 'prendre': {
+      // « prends une douche »
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
       // « sors la poubelle », « sors le sac poubelle » : au conteneur dehors
       if (word.startsWith('sor') && (rest.some((x) => x.startsWith('poubelle')) || found.some((o) => o.nom === 'sac poubelle'))) return [{ kind: 'sortir_poubelle' }];
       // ceux qui traînent avant ceux qui sont rangés, puis les plus proches
@@ -526,6 +528,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
     case 'aller': {
       // « va aux toilettes », « va aux WC », « va faire pipi »
       if (rest.some((x) => ['toilettes', 'toilette', 'wc', 'pipi'].includes(x)) && !rest.includes('ta')) return [{ kind: 'toilettes' }];
+      // « va sous la douche »
+      if (rest.includes('douche')) return [{ kind: 'douche' }];
       // « va dans la cuisine »
       const room = roomIn(rest);
       if (room && !found.length) return [{ kind: 'piece', piece: room }];
@@ -679,6 +683,8 @@ function parseClause(verb: string, rest: string[], original: string, world: { en
       return !found.length || found.every((o) => o.nom === 'assiette') ? [{ kind: 'empiler' }] : null;
     case 'essuyer': {
       const { tool, rest: r } = withTool(rest, world.objets);
+      // « sèche-toi », « essuie-toi avec la serviette » : après la douche
+      if (rest.includes('serviette') || (word.startsWith('sech') && rest.some((x) => x === 'toi' || x === 'te') && !r.some((x) => x === 'mains' || x === 'main'))) return [{ kind: 'secher' }];
       // « essuie-toi les mains (avec le torchon) », « essuie-toi »
       if (r.some((x) => x === 'mains' || x === 'main') || (rest.some((x) => x === 'toi' || x === 'te') && !found.length)) return [{ kind: 'essuyer_mains' }];
       // « essuie la vaisselle (avec le torchon) », « sèche le bol », « essuie les verres »

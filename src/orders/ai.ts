@@ -162,6 +162,8 @@ Tâches possibles (réponds avec l'une d'elles) :
 - Les aliments vieillissent hors du frigo (« à manger vite », puis « périmé » : mal au ventre) ; un plat cuit refroidit (« froid » : le réchauffer au micro-ondes avec « cuire ») ; un plat préparé a des étoiles (★, meilleures avec la compétence cuisine, un plat assaisonné, chaud, frais). Le livre de recettes (dans la cuisine) se lit avec « lire »
 - Ustensiles : fouet, spatule, cuillère en bois et louche dans le pot à ustensiles ; saladier et râpe au placard ; œufs, lait, beurre, fromage au frigo
 - {"tache": "laver", "visage": true} : se laver à l'évier (« visage » faux : les mains seulement ; vrai : toilette, mains et visage). Fait remonter l'hygiène ; pose d'abord ce que le perso tient
+- {"tache": "douche"} : prendre une douche dans la salle de bain (hygiène à fond) ; le perso en sort mouillé
+- {"tache": "secher"} : se sécher avec la serviette (sur le porte-serviettes)
 - {"tache": "toilettes"} : aller aux toilettes (lever le couvercle, s'asseoir, se soulager, tirer la chasse) ; se laver les mains ensuite
 - {"tache": "chasse"} : tirer la chasse d'eau
 - {"tache": "piece", "piece": "cuisine"} : aller dans une pièce de la maison (pour l'instant, seulement la cuisine)
@@ -269,6 +271,8 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'laisser_ouvert': return s('objet') ? { kind: 'laisser_ouvert', ref: s('objet') } : null;
     case 'glacons': return { kind: 'glacons', dans: s('dans') || undefined };
     case 'laver': return { kind: 'laver', visage: o.visage !== false };
+    case 'douche': return { kind: 'douche' };
+    case 'secher': return { kind: 'secher' };
     case 'toilettes': return { kind: 'toilettes' };
     case 'chasse': return { kind: 'chasse' };
     case 'piece': return s('piece') ? { kind: 'piece', piece: s('piece') } : null;
