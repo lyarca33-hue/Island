@@ -116,7 +116,6 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   // un peu réduite : sur le meuble télé, l'écran arrive à hauteur des yeux du canapé
   television: { model: 'television', scale: [0.8, 0.8, 0.8], parts: { ecran: { from: 'ecran' } } },
   bibliotheque: { model: 'bibliotheque' },
-  coussin: { model: 'coussin' },
   telecommande: { model: 'telecommande' },
   reveil: { model: 'reveil' },
   sansevieria: { model: 'sansevieria' },

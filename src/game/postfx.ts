@@ -98,6 +98,8 @@ export class PostFx {
   private charRT: THREE.WebGLRenderTarget;
   /** Perso caché vu en transparence avec une aura (en jeu ; inutile dans le créateur). */
   private seeThrough: boolean;
+  /** Perso couché sous la couette : on ne le montre pas à travers (elle le cache pour de vrai). */
+  tucked = false;
   private charMat = new THREE.MeshBasicMaterial({ colorWrite: false, fog: false });
   private quad: THREE.Mesh;
   private quadScene = new THREE.Scene();
@@ -284,7 +286,9 @@ export class PostFx {
     this.renderCharacter();
     // bloom (et masque du perso caché, en alpha)
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
-    this.brightMat.uniforms.gap.value = this.seeThrough ? HIDDEN_GAP / (this.camera.far - this.camera.near) : 0;
+    const through = this.seeThrough && !this.tucked;
+    this.brightMat.uniforms.gap.value = through ? HIDDEN_GAP / (this.camera.far - this.camera.near) : 0;
+    this.finalMat.uniforms.seeThrough.value = through ? 1 : 0;
     this.pass(this.brightMat, this.brightRT);
     this.blur(this.brightRT, this.blurRT, 1);
     this.pass(this.finalMat, null);

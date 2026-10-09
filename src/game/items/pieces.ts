@@ -109,7 +109,6 @@ export const PIECES_ITEMS: ItemDef[] = [
   // posée sur le meuble télé, branchée : elle ne se déplace pas
   meuble('television', 'télé', [0.8, 0.7, 0.25], 0x222326, { movable: false, durability: 250 }),
   meuble('lampadaire', 'lampadaire', [0.81, 1.6, 0.78], 0xd8c09a),
-  objet('coussin', 'coussin', [0.45, 0.45, 0.22], 0xc9a032, { grip: 'chest', fragility: 1 }),
   objet('telecommande', 'télécommande', [0.08, 0.03, 0.2], 0x26272b),
 
   // —— chambre
@@ -122,7 +121,7 @@ export const PIECES_ITEMS: ItemDef[] = [
   meuble('armoire', 'armoire', [0.95, 1.95, 0.58], 0x8a5a34, {
     durability: 400,
     slots: [[0, 1.25, 0], [-0.3, 0.02, 0.05], [0.3, 0.02, 0.05]],
-    holds: ['chemise sur cintre', 'pull', 'serviette', 'coussin'],
+    holds: ['chemise sur cintre', 'pull', 'serviette'],
   }),
   // le réveil donne l'heure : ses aiguilles sont ajoutées sur le cadran (le modèle n'en a pas)
   {
