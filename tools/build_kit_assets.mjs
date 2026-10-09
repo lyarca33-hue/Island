@@ -29,7 +29,8 @@ const FICHIERS = [
   // quart de tour autour de x : le relief (y) passe en z, la plaque (z) passe en y
   { nom: 'mur', fichier: 'mur-enduit.glb', garde: 0.04, erreur: 0.004, matrice: [1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0.5, 0, 1] },
   { nom: 'sol', fichier: 'sol-cuisine_100cm.glb', garde: 1 },
-  { nom: 'toit', fichier: 'toit-pan-cuisine_660cm.glb', garde: 0.5, bas: true },
+  // quart de tour autour de y : les rangées de tuiles du modèle descendaient la pente, elles suivent le faîtage
+  { nom: 'toit', fichier: 'toit-pan-cuisine-2_660cm.glb', garde: 0.5, bas: true, matrice: [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1] },
   { nom: 'porte', fichier: 'porte-entree_205cm.glb', garde: 0.25 },
   { nom: 'fenetre', fichier: 'fenetre_115cm.glb', garde: 0.25 },
 ];
