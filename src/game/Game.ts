@@ -3,7 +3,7 @@
  * de l'horizon, quart de tour par quart de tour), lumière de jour, post-traitement HD-2D.
  *
  * Commandes : clic sur le sol pour y aller (Maj = courir), ZQSD / WASD / flèches,
- * molette pour zoomer, rotateCamera(±1) pour tourner d'un quart de tour. Clic sur un objet :
+ * molette pour zoomer, rotateCamera(±1) pour tourner d'un quart de tour, setCameraAngle(°) pour tourner librement. Clic sur un objet :
  * aller le prendre ; E : reposer l'objet tenu (ou prendre le plus proche).
  */
 import * as THREE from 'three';
@@ -422,7 +422,8 @@ export class Game {
   private motes: { points: THREE.Points; update: (t: number, center: THREE.Vector3, look: MotesLook) => void };
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
-  private quarter = 0;
+  /** Rotation voulue de la caméra autour du perso (radians, depuis la vue de départ). */
+  private turn = 0;
   private yaw = BASE_YAW;
   private zoom = 1;
   private keys = new Set<string>();
@@ -816,9 +817,24 @@ export class Game {
     await frame();
   }
 
-  /** Quart de tour de caméra (+1 ou -1). */
+  /** Quart de tour de caméra (+1 ou -1), calé sur le quart suivant. */
   rotateCamera(dir: 1 | -1): void {
-    this.quarter += dir;
+    const q = Math.PI / 2;
+    const at = this.turn / q;
+    // entre deux quarts (après le curseur) : on s'arrête sur le prochain dans le sens voulu
+    this.turn = (dir > 0 ? Math.floor(at + 1e-6) + 1 : Math.ceil(at - 1e-6) - 1) * q;
+  }
+
+  /** Angle de la caméra en degrés, 0 à 360 (curseur du HUD). */
+  get cameraAngle(): number {
+    const deg = (this.turn * 180) / Math.PI;
+    return ((deg % 360) + 360) % 360;
+  }
+
+  /** Place la caméra à l'angle voulu (degrés) par le plus court chemin : 359° → 0° ne refait pas un tour. */
+  setCameraAngle(deg: number): void {
+    const delta = ((((deg - this.cameraAngle) % 360) + 540) % 360) - 180;
+    this.turn += (delta * Math.PI) / 180;
   }
 
   /**
@@ -7054,7 +7070,7 @@ export class Game {
   }
 
   private updateCamera(dt: number): void {
-    const targetYaw = BASE_YAW + this.quarter * (Math.PI / 2);
+    const targetYaw = BASE_YAW + this.turn;
     this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * 8);
     const p = this.character.position;
     this.focus.lerp(new THREE.Vector3(p.x, FOCUS_HEIGHT, p.z), Math.min(1, dt * 5));
