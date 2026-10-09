@@ -16,6 +16,7 @@ import { basisRotation, Rig, solveTwoBone, twistForearm } from './ik';
 import { buildModel, hasLook } from './interior';
 import { forgetGhosts, mergeStaticParts } from './merge';
 import { buildFiller } from './remplissage';
+import { showSpoiled } from './foodstates';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
 function gripRotation(spec: GripSpec): THREE.Quaternion {
@@ -200,6 +201,12 @@ export class WorldItem {
 
   /** Taches de moisissure sur un aliment périmé (créées la première fois). */
   setMoldy(on: boolean): void {
+    // un aliment Tripo qui a sa texture périmée (foodstates.ts) la prend à la place des taches
+    let painted = false;
+    this.object.traverse((o) => {
+      if (o instanceof THREE.Mesh && showSpoiled(o.material as THREE.MeshToonMaterial, on)) painted = true;
+    });
+    if (painted) return;
     let spots = this.part('moisi');
     if (!spots && on) spots = this.addSpots('moisi', 0x7d8f5a, 9, 0.006);
     if (spots) spots.visible = on;

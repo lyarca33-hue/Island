@@ -19,9 +19,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createToonMaterial } from '../toon';
-import { packModel, packReady } from '../packs/assets';
+import { packModel, packReady, packTexture } from '../packs/assets';
 import type { ModelName, PackId } from '../packs/manifest';
 import type { ItemDef } from './catalog';
+import { setFoodMaps } from './foodstates';
 import { dressTripo, hasTripoLook } from './tripo';
 
 export const INTERIOR_URL = `${import.meta.env.BASE_URL}models/interior.glb`;
@@ -87,6 +88,8 @@ export const FOOD_LOOKS: Record<string, FoodLook> = {
   jambon: tripo('jambon', { fit: 'stretch' }),
   champignons: tripo('champignon'),
   creme: tripo('creme'),
+  // les morceaux coupés, découpés dans les modèles Tripo (tools/build_aliments_etats.mjs)
+  ...Object.fromEntries((['rondelles-carotte', 'rondelles-concombre', 'rondelles-banane', 'rondelles-citron', 'tranches-tomate', 'quartiers-pomme', 'quartiers-orange', 'tranches-pain', 'pain-grille'] as const).map((id) => [id, tripo(id)])),
   // les plats cuisinés et la vaisselle faits avec Tripo (pack `plats`, nommés comme la fiche, sauf mention)
   ...Object.fromEntries(
     ([
@@ -223,8 +226,20 @@ function dressFood(def: ItemDef, model: THREE.Object3D, look: FoodLook): THREE.O
   dressed.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const m = o.material as THREE.MeshToonMaterial;
-    if (look.pack === 'aliments' || look.pack === 'plats') {
-      // peint : la texture donne la couleur crue (ou cuite), la cuisson la teinte par-dessus (cooking.ts)
+    if (look.pack === 'aliments') {
+      // peint : la texture donne la couleur crue ; ses textures cuit, brûlé et périmé, s'il en a
+      // (foodstates.ts), sinon la cuisson teinte la texture crue (cooking.ts)
+      const state = (s: string) => packTexture('aliments', `${look.model}-${s}`) ?? undefined;
+      const maps = { cooked: def.cook ? state('cuit') : undefined, burnt: def.cook ? state('brule') : undefined, spoiled: state('perime') };
+      if (m.map && (maps.cooked || maps.spoiled)) setFoodMaps(m, { raw: m.map, ...maps });
+      if (def.cook) {
+        o.name = 'cuit';
+        if (!maps.cooked) m.userData.cookTint = true;
+      }
+      return;
+    }
+    if (look.pack === 'plats') {
+      // peint déjà cuit : la cuisson teinte la texture par-dessus, plus pâle cru (cooking.ts)
       if (def.cook) {
         o.name = 'cuit';
         m.userData.cookTint = look.cooked ? 'cuit' : true;
