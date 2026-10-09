@@ -386,6 +386,7 @@ const ALIASES: Record<string, string[]> = {
   parapluie: ['parapluie', 'parapluies', 'pepin'],
   'porte parapluies': ['parapluies'],
   'caisse a outils': ['caisse', 'outils', 'boite'],
+  'rangement a outils': ['ratelier', 'rateliers'],
   etagere: ['etagere', 'etageres'],
   velo: ['velo', 'velos', 'bicyclette', 'bicyclettes', 'bici', 'biclou'],
   'brosse a dents': ['brosse'],

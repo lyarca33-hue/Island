@@ -45,6 +45,18 @@ function row(y: number, w: number, n: number, z = 0): Array<[number, number, num
   return Array.from({ length: n }, (_, i): [number, number, number] => [-w / 2 + (w * (i + 0.5)) / n, y, z]);
 }
 
+// —— garage
+/**
+ * Rangement à outils, accroché à RACK_Y du sol : places du râteau et de la bêche (repère du meuble,
+ * base de l'outil). Les chevilles du modèle : dessus à 17 cm de son bas, milieu à z 4 cm ; le
+ * manche du râteau (5,5 cm devant l'axe du modèle, retourné) passe entre les chevilles de x -26 et
+ * -14 cm, sa barre à 146 cm de son bout ; la poignée de la bêche (dedans à 107 cm) sur celle de x 23 cm.
+ */
+export const RACK_Y = 1.32;
+const PEG_TOP = 0.17;
+const RAKE_SLOT: [number, number, number] = [-0.2, PEG_TOP - 1.46, 0.04 + 0.055];
+const SPADE_SLOT: [number, number, number] = [0.23, PEG_TOP - 1.07, 0.04 + 0.015];
+
 // —— salon
 /** Canapé et fauteuil : hauteur des coussins d'assise. */
 const SOFA_SEAT = 0.42;
@@ -328,6 +340,17 @@ export const PIECES_ITEMS: ItemDef[] = [
   objet('caisse-outils', 'caisse à outils', [0.45, 0.25, 0.26], 0x6a6d70, { grip: 'handle', gripPoint: [0, 0.25, 0], fragility: 8, durability: 200 }),
   objet('carton', 'carton', [0.45, 0.32, 0.36], 0xb88a58, { grip: 'twoHands', gripPoint: [0, 0.16, 0], fragility: 2 }),
   meuble('velo', 'vélo', [1.7, 1.12, 0.74], 0x26272b, { durability: 250 }),
+  // au mur du garage : le râteau pend par sa tête, posée sur les chevilles, le manche entre deux
+  // d'entre elles ; la bêche par sa poignée en D, enfilée sur une cheville. Retournés (dos au mur) :
+  // la tête du râteau et sa douille vers la pièce.
+  meuble('rangement-outils', 'rangement à outils', [1.0, 0.5, 0.3], 0xb08a5c, {
+    movable: false,
+    fragility: 10,
+    holds: ['râteau', 'bêche'],
+    slots: [RAKE_SLOT, SPADE_SLOT],
+    slotHolds: [['râteau'], ['bêche']],
+    slotTilt: [0, Math.PI, 0],
+  }),
   objet('beche', 'bêche', [0.23, 1.1, 0.12], 0x8a6440, { grip: 'pole', fragility: 9, durability: 300 }),
   objet('rateau', 'râteau', [0.45, 1.5, 0.2], 0x9a7a54, { grip: 'pole', fragility: 9, durability: 300 }),
 ];
