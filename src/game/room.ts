@@ -62,6 +62,8 @@ export const WIN_HIGH = 2.1;
 /** Kit Tripo (dress) : taille d'un carreau du kit posé (quatre carreaux de 40 cm), enfoncement de l'enduit dans le mur, épaisseur du toit (part du pan du kit). */
 const KIT_FLOOR = 0.8;
 const PLASTER_IN = 0.012;
+/** Ce que l'enduit dépasse au plus de la face du mur (relief de 2 cm, enfoncé de PLASTER_IN). */
+const PLASTER_OUT = 0.008;
 const KIT_ROOF_T = 0.8;
 /** Hauteur du plan de travail : le haut des meubles bas, le bas de la crédence. */
 const COUNTER_H = 0.9;
@@ -360,6 +362,9 @@ export class Room {
   private floor: THREE.Mesh;
   private roofPans: Array<{ mesh: THREE.Mesh; side: number; lx: number; slope: number }> = [];
   private windowParts: Array<{ o: Opening; w: Wall; meshes: THREE.Mesh[] }> = [];
+  /** Pignons (mur, hauteur, demi-largeur), et dessus des murs sous un pignon : cachés quand le toit se voit. */
+  private gables = new Map<WallName, { height: number; half: number }>();
+  private gableCaps: THREE.Mesh[] = [];
   private bulbMat = new THREE.MeshBasicMaterial({ color: 0x3a342c });
   /** Part de lumière des lampes en ce moment (0 à 1). */
   private lampK = 0;
@@ -831,6 +836,7 @@ export class Room {
     const gable = new THREE.ExtrudeGeometry(tri, { depth: WALL_T, bevelEnabled: false });
     for (const [w, x] of [['ouest', x0 - WALL_T], ['est', x1]] as const) {
       if (joined.has(w)) continue;
+      this.gables.set(w, { height: halfIn * tan, half: halfIn });
       const m = new THREE.Mesh(gable, this.wallMat);
       m.rotation.y = Math.PI / 2;
       m.position.set(x, WALL_H, zc);
@@ -868,37 +874,57 @@ export class Room {
     }
     this.floor.visible = false;
 
-    // murs : l'enduit sur chaque face des morceaux pleins, haut et bas (en coupe)
+    // murs : l'enduit sur chaque face des morceaux pleins, haut et bas (en coupe), et des pignons
     for (const w of this.walls) {
-      const [a, b] = w.span;
-      const sheet = new PlasterSheet(kit.mur, b - a, WALL_H);
+      // sous un pignon, l'enduit monte d'un seul tenant jusqu'au toit, coins compris
+      const gable = this.gables.get(w.name);
+      const ext = gable ? WALL_T : 0;
+      const a = w.span[0] - ext, b = w.span[1] + ext;
+      const sheet = new PlasterSheet(kit.mur, b - a, WALL_H + (gable?.height ?? 0));
       const alongX = w.n.x === 0;
       const along = alongX ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+      /** L'enduit d'une face (s = 1 côté pièce, -1 dehors) : `cut` le prend dans la plaque (u le long de la plaque). */
+      const face = (s: number, cut: (flip: boolean) => THREE.BufferGeometry | null, to: THREE.Object3D) => {
+        const out = new THREE.Vector3(w.n.x, 0, w.n.y).multiplyScalar(s);
+        // repère direct : si (le long du mur, haut, dehors) est retourné, on prend le mur à l'envers
+        const flip = along.clone().cross(new THREE.Vector3(0, 1, 0)).dot(out) < 0;
+        const geo = cut(flip);
+        if (!geo) return;
+        const x = flip ? along.clone().negate() : along;
+        const at = w.mid + (alongX ? out.z : out.x) * (WALL_T / 2 - PLASTER_IN);
+        const origin = alongX ? new THREE.Vector3(flip ? b : a, 0, at) : new THREE.Vector3(at, 0, flip ? b : a);
+        const relief = new THREE.Mesh(geo, this.wallMat);
+        relief.matrixAutoUpdate = false;
+        relief.matrix.makeBasis(x, new THREE.Vector3(0, 1, 0), out).setPosition(origin);
+        relief.castShadow = false;
+        relief.receiveShadow = true;
+        to.add(relief);
+      };
+      if (gable) {
+        const mid = (w.span[0] + w.span[1]) / 2;
+        for (const s of [1, -1]) face(s, (flip) => {
+          const c = flip ? b - mid : mid - a;
+          return sheet.piece(c - gable.half, c + gable.half, WALL_H, WALL_H + gable.height, (u) => WALL_H + gable.height * (1 - Math.abs(u - c) / gable.half));
+        }, this.roof);
+      }
       for (const group of [w.full, w.low]) {
         for (const piece of [...group.children]) {
-          if (!(piece instanceof THREE.Mesh) || piece.material !== this.wallMat) continue;
+          if (!(piece instanceof THREE.Mesh)) continue;
+          // le dessus du mur couvre aussi l'enduit ; sous un pignon, il se cache quand le toit se voit
+          if (piece.material === this.capMat) {
+            const k = (WALL_T + 2 * (PLASTER_OUT + 0.002)) / (WALL_T + 0.004);
+            if (alongX) piece.scale.z = k;
+            else piece.scale.x = k;
+            if (gable && group === w.full) this.gableCaps.push(piece);
+            continue;
+          }
+          if (piece.material !== this.wallMat) continue;
           const g = piece.geometry as THREE.BoxGeometry;
           const len = alongX ? g.parameters.width : g.parameters.depth;
           const uc = alongX ? piece.position.x : piece.position.z;
           const u0 = uc - len / 2, u1 = uc + len / 2;
           const y0 = piece.position.y - g.parameters.height / 2, y1 = piece.position.y + g.parameters.height / 2;
-          for (const s of [1, -1]) {
-            // face tournée vers la pièce (s = 1) ou vers le dehors ; le relief sort de la face
-            const out = new THREE.Vector3(w.n.x, 0, w.n.y).multiplyScalar(s);
-            // repère direct : si (le long du mur, haut, dehors) est retourné, on prend le mur à l'envers
-            const flip = along.clone().cross(new THREE.Vector3(0, 1, 0)).dot(out) < 0;
-            const geo = flip ? sheet.piece(b - u1, b - u0, y0, y1) : sheet.piece(u0 - a, u1 - a, y0, y1);
-            if (!geo) continue;
-            const x = flip ? along.clone().negate() : along;
-            const face = w.mid + (alongX ? out.z : out.x) * (WALL_T / 2 - PLASTER_IN);
-            const origin = alongX ? new THREE.Vector3(flip ? b : a, 0, face) : new THREE.Vector3(face, 0, flip ? b : a);
-            const relief = new THREE.Mesh(geo, this.wallMat);
-            relief.matrixAutoUpdate = false;
-            relief.matrix.makeBasis(x, new THREE.Vector3(0, 1, 0), out).setPosition(origin);
-            relief.castShadow = false;
-            relief.receiveShadow = true;
-            group.add(relief);
-          }
+          for (const s of [1, -1]) face(s, (flip) => (flip ? sheet.piece(b - u1, b - u0, y0, y1) : sheet.piece(u0 - a, u1 - a, y0, y1)), group);
         }
       }
     }
@@ -1148,6 +1174,8 @@ export class Room {
     }
     // toit : dehors (avec les murs pleins)
     this.roof.visible = !indoors;
+    // sous un pignon, le dessus du mur (plus sombre) ferait un trait entre le mur et le pignon
+    for (const c of this.gableCaps) c.visible = indoors;
     for (const l of this.leaves) {
       const near = Math.hypot(player.x - l.center.x, player.z - l.center.z) < DOOR_NEAR;
       if (!near) l.armed = true;

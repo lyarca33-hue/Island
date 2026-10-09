@@ -31,18 +31,33 @@ export function loadKit(): Promise<Kit> {
     .setMeshoptDecoder(MeshoptDecoder)
     .loadAsync(KIT_URL)
     .then((gltf) => {
-      const mats = new Map<THREE.Material, THREE.Material>();
+      const mats = new Map<THREE.Material | string, THREE.Material>();
       const kit = {} as Kit;
       for (const node of [...gltf.scene.children]) {
+        node.position.set(0, 0, 0);
+        node.updateMatrixWorld(true);
         node.traverse((o) => {
           if (!(o instanceof THREE.Mesh)) return;
           const m = o.material as THREE.MeshStandardMaterial;
-          if (!mats.has(m)) mats.set(m, createToonMaterial({ color: m.color, map: m.map, rimStrength: 0 }));
-          o.material = mats.get(m)!;
+          // tuiles du toit : creux assombris (couleurs aux sommets), sinon le cel shading les aplatit
+          const tiles = node.name === 'toit';
+          const key = tiles ? 'toit' : m;
+          if (!mats.has(key)) {
+            const t = createToonMaterial({ color: m.color, map: m.map, rimStrength: 0 });
+            t.vertexColors = tiles;
+            mats.set(key, t);
+          }
+          if (tiles) {
+            o.geometry = plain(o.geometry).applyMatrix4(o.matrixWorld);
+            o.position.set(0, 0, 0);
+            o.quaternion.identity();
+            o.scale.set(1, 1, 1);
+            shadeTiles(o.geometry);
+          }
+          o.material = mats.get(key)!;
           o.castShadow = o.receiveShadow = true;
         });
         node.removeFromParent();
-        node.position.set(0, 0, 0);
         node.updateMatrixWorld(true);
         kit[node.name as KitPiece] = node;
       }
@@ -59,6 +74,28 @@ export function kitParts(piece: THREE.Object3D): Array<{ geometry: THREE.BufferG
     if (o instanceof THREE.Mesh) out.push({ geometry: plain(o.geometry).applyMatrix4(o.matrixWorld), material: o.material as THREE.Material });
   });
   return out;
+}
+
+/** Tuiles : ombre des creux selon la hauteur (le dessus des tuiles clair, le fond des rangs sombre) et la pente. */
+const TILE_DARK = 0.45;
+
+function shadeTiles(g: THREE.BufferGeometry): void {
+  g.computeVertexNormals();
+  const p = g.getAttribute('position'), n = g.getAttribute('normal');
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < p.count; i++) {
+    lo = Math.min(lo, p.getY(i));
+    hi = Math.max(hi, p.getY(i));
+  }
+  // les tuiles occupent le haut du pan (le dessous est la volige) : creux à mi-hauteur, crêtes en haut
+  const base = lo + (hi - lo) * 0.5;
+  const col = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const h = THREE.MathUtils.smoothstep(p.getY(i), base, hi);
+    const k = (TILE_DARK + (1 - TILE_DARK) * h) * (0.7 + 0.3 * Math.max(0, n.getY(i)));
+    col.set([k, k, k], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
 }
 
 /** Copie en nombres simples (la compression meshopt rend des attributs quantifiés et entrelacés). */
@@ -122,9 +159,13 @@ export class PlasterSheet {
     this.index = new Uint32Array(index);
   }
 
-  /** Le morceau [u0, u1] × [y0, y1] : triangles dedans, ceux à cheval serrés sur le bord. */
-  piece(u0: number, u1: number, y0: number, y1: number): THREE.BufferGeometry | null {
+  /**
+   * Le morceau [u0, u1] × [y0, y1] : triangles dedans, ceux à cheval serrés sur le bord. `ceil(u)`
+   * abaisse le haut du morceau (le triangle d'un pignon).
+   */
+  piece(u0: number, u1: number, y0: number, y1: number, ceil?: (u: number) => number): THREE.BufferGeometry | null {
     const pos = this.pos, idx = this.index;
+    const top = (k: number) => Math.min(y1, ceil ? ceil(THREE.MathUtils.clamp(pos[k * 3], u0, u1)) : y1);
     const remap = new Map<number, number>();
     const out: number[] = [], index: number[] = [];
     const inside = (k: number) => pos[k * 3] >= u0 && pos[k * 3] <= u1 && pos[k * 3 + 1] >= y0 && pos[k * 3 + 1] <= y1;
@@ -132,7 +173,7 @@ export class PlasterSheet {
       let v = remap.get(k);
       if (v === undefined) {
         v = out.length / 3;
-        out.push(THREE.MathUtils.clamp(pos[k * 3], u0, u1), THREE.MathUtils.clamp(pos[k * 3 + 1], y0, y1), pos[k * 3 + 2]);
+        out.push(THREE.MathUtils.clamp(pos[k * 3], u0, u1), THREE.MathUtils.clamp(pos[k * 3 + 1], y0, Math.max(y0, top(k))), pos[k * 3 + 2]);
         remap.set(k, v);
       }
       return v;
@@ -144,6 +185,7 @@ export class PlasterSheet {
         const xs = [pos[a * 3], pos[b * 3], pos[c * 3]], ys = [pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1]];
         if (Math.max(...xs) < u0 || Math.min(...xs) > u1 || Math.max(...ys) < y0 || Math.min(...ys) > y1) continue;
       }
+      if (ceil && [a, b, c].every((k) => pos[k * 3 + 1] > top(k))) continue;
       index.push(vert(a), vert(b), vert(c));
     }
     if (!index.length) return null;
