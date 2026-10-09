@@ -21,10 +21,10 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
   // les placards hauts : la vaisselle de tous les jours à gauche, les verres et le saladier à droite
   ['placard-haut', 0, ['assiette', 'assiette', 'assiette', 'assiette', 'bol', 'bol', 'tasse', 'tasse']],
   ['placard-haut', 1, ['verre', 'verre', 'verre', 'verre', 'tasse', 'tasse', 'carafe']],
-  // sous l'évier : l'entretien, le moule et la râpe
-  ['placard', 0, ['pastilles', 'sacs-poubelle', 'spray', 'gants', 'moule', 'rape']],
+  // sous l'évier : l'entretien, le moule, la râpe et la pierre à pizza
+  ['placard', 0, ['pastilles', 'sacs-poubelle', 'spray', 'gants', 'moule', 'rape', 'pierre-pizza']],
   // sous le plan de travail, à côté de la gazinière : de quoi cuisiner
-  ['plan-de-travail', 0, ['planche', 'saladier']],
+  ['plan-de-travail', 0, ['planche', 'saladier', 'passoire', 'plat-four']],
   // au mur : le couteau à sa barre aimantée, les ustensiles à leurs crochets
   ['barre-couteaux', 0, ['couteau']],
   ['barre-ustensiles', 0, ['spatule', 'louche', 'fouet', 'cuillere-bois']],

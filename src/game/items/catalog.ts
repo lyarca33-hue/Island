@@ -432,7 +432,7 @@ const UTENSIL_HOOKS = [-1.5, -0.5, 0.5, 1.5].map((k) => k * UTENSIL_GAP);
 /** Plan de travail : largeur et profondeur du meuble (m), à la hauteur de l'évier (un placard bas Tripo). */
 const WORKTOP_W = 0.73;
 /** Ce qui se range sous le plan de travail, à côté de la gazinière : de quoi cuisiner. */
-const COOKWARE_CUPBOARD = ['poêle', 'casserole', 'planche à découper', 'saladier', 'moule à gâteau', 'fouet', 'spatule', 'cuillère en bois', 'louche', 'maniques', 'râpe'];
+const COOKWARE_CUPBOARD = ['poêle', 'casserole', 'planche à découper', 'saladier', 'moule à gâteau', 'fouet', 'spatule', 'cuillère en bois', 'louche', 'maniques', 'râpe', 'passoire', 'plat à four'];
 const WORKTOP_D = 0.55;
 /** Planche à découper : longueur, épaisseur, largeur (m). */
 const BOARD_W = 0.36;
@@ -1229,18 +1229,22 @@ export const ITEMS: ItemDef[] = [
     }
     return g;
   }),
-  pieces('pain-grille', 'pain grillé', { hunger: 30, bites: 5 }, () => {
-    // les tranches sorties du grille-pain : dorées, la croûte plus foncée
-    const g = new THREE.Group();
-    for (let i = 0; i < 5; i++) {
-      const s = new THREE.Group();
-      s.add(mesh(new THREE.BoxGeometry(0.075, 0.01, 0.065), 0x8a5a2b, 0, 0.005, 0));
-      s.add(mesh(new THREE.BoxGeometry(0.065, 0.011, 0.055), 0xd9a45c, 0, 0.0055, 0));
-      s.position.set(-0.04 + i * 0.02, i * 0.009, 0);
-      g.add(s);
-    }
-    return g;
-  }),
+  {
+    // coupé sur la planche : des croûtons (prep.ts)
+    cut: 'croutons',
+    ...pieces('pain-grille', 'pain grillé', { hunger: 30, bites: 5 }, () => {
+      // les tranches sorties du grille-pain : dorées, la croûte plus foncée
+      const g = new THREE.Group();
+      for (let i = 0; i < 5; i++) {
+        const s = new THREE.Group();
+        s.add(mesh(new THREE.BoxGeometry(0.075, 0.01, 0.065), 0x8a5a2b, 0, 0.005, 0));
+        s.add(mesh(new THREE.BoxGeometry(0.065, 0.011, 0.055), 0xd9a45c, 0, 0.0055, 0));
+        s.position.set(-0.04 + i * 0.02, i * 0.009, 0);
+        g.add(s);
+      }
+      return g;
+    }),
+  },
   pieces('rondelles-carotte', 'rondelles de carotte', { hunger: 6, bites: 3 }, () => disks(9, 0.015, 0.006, 0xe8792a, 0xf2a35a)),
   pieces('tranches-tomate', 'tranches de tomate', { hunger: 6, bites: 3 }, () => disks(4, 0.032, 0.008, 0xd8352a, 0xf07a5f)),
   pieces('rondelles-concombre', 'rondelles de concombre', { hunger: 5, bites: 3 }, () => disks(7, 0.021, 0.006, 0x3f7a35, 0xd9ecb0)),

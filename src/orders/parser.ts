@@ -248,7 +248,7 @@ const ALIASES: Record<string, string[]> = {
   // les plats des recettes
   'salade composee': ['salade', 'salades', 'crudites'],
   'tartine a la tomate': ['tartine', 'tartines'],
-  'sandwich au steak': ['sandwich', 'sandwichs', 'burger', 'hamburger'],
+  hamburger: ['hamburgers', 'burger', 'burgers', 'sandwich', 'sandwichs'],
   'steak aux pommes de terre': ['plat', 'steak', 'patates'],
   'salade verte': ['salade', 'salades'],
   'salade de fruits': ['salade', 'dessert'],
@@ -256,6 +256,18 @@ const ALIASES: Record<string, string[]> = {
   'hot dog': ['hotdog', 'hot'],
   'poulet frites': ['poulet', 'frites'],
   'poelee de legumes': ['poelee', 'legumes'],
+  'croque monsieur': ['croque', 'croques', 'croquemonsieur'],
+  bruschetta: ['bruschettas'],
+  'gratin de pates': ['gratin', 'gratins', 'macaronis', 'macaroni'],
+  'poulet roti': ['poulet', 'roti'],
+  'poire au chocolat': ['poire', 'poires'],
+  crumble: ['crumbles', 'tarte'],
+  'pain perdu': ['pains perdus'],
+  croutons: ['crouton'],
+  // la vaisselle en plus
+  passoire: ['passoires', 'egouttoir a pates'],
+  'plat a four': ['plat', 'plats', 'plat a gratin'],
+  'pierre a pizza': ['pierre', 'pierres'],
   // les provisions
   'tablette de chocolat': ['chocolat', 'chocolats', 'tablette'],
   'pate a tartiner': ['tartiner', 'nutella', 'pate'],
