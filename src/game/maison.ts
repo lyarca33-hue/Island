@@ -84,13 +84,14 @@ const Q = Math.PI / 2;
  * Décor fixe : le modèle Tripo `name` accroché au mur `wall` (à la place `u` le long du mur, son bas
  * à la hauteur `y`), dos au mur, décollé de `out` (m). Caché avec le mur quand il est abaissé.
  */
-function hang(room: Room, wall: WallName, u: number, y: number, name: string, out = 0): THREE.Object3D | null {
+function hang(room: Room, wall: WallName, u: number, y: number, name: string, out = 0, flip = false): THREE.Object3D | null {
   const m = tripoDecor(name);
   if (!m) return null;
-  const back = new THREE.Box3().setFromObject(m).min.z;
-  // l'avant du modèle (+Z) vers l'intérieur de la pièce (X du repère du mur)
-  m.rotation.y = Q;
-  m.position.x = -back + out;
+  const box = new THREE.Box3().setFromObject(m);
+  // l'avant du modèle (+Z) vers l'intérieur de la pièce (X du repère du mur) ; `flip` : retourné,
+  // l'avant contre le mur
+  m.rotation.y = flip ? Q + Math.PI : Q;
+  m.position.x = (flip ? box.max.z : -box.min.z) + out;
   const f = room.wallFrame(wall, u, y);
   f.add(m);
   room.wallGroup(wall).add(f);
@@ -143,7 +144,8 @@ export const ENTREE_SPEC: RoomSpec = {
   decor: (room) => {
     // au mur du garage, de part et d'autre de sa porte : le portemanteau et son manteau, le miroir
     hang(room, 'ouest', HALL.coat, 1.55, 'portemanteau');
-    hang(room, 'ouest', HALL.coat, 0.84, 'manteau-accroche', 0.03);
+    // le manteau accroché par le col : on en voit le dos, le devant (les boutons) contre le mur
+    hang(room, 'ouest', HALL.coat, 0.84, 'manteau-accroche', 0.03, true);
     const mirror = hang(room, 'ouest', HALL.mirror, 1.0, 'miroir-entree');
     // le cadre seul (Tripo n'a pas fait la glace) : une glace claire dedans
     if (mirror) {
