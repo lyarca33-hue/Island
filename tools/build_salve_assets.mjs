@@ -185,69 +185,237 @@ const LOTS = {
 
   // Port : poissons, fruits de mer et objets du quai (groupes G05 à G07), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
   port: {
-    '124_bitte-amarrage_50cm': { nom: 'bitte-amarrage', cm: 50, tri: 5000 },
-    '125_rouleau-corde_50cm': { nom: 'rouleau-corde', cm: 50, tri: 5000 },
-    '128_bouee-sauvetage_70cm': { nom: 'bouee-sauvetage', cm: 70, tri: 5000 },
-    '129_caisse-poissons_60cm': { nom: 'caisse-poissons', cm: 60, tri: 5000 },
-    '134_ancre_80cm': { nom: 'ancre', cm: 80, tri: 5000 },
-    '135_lanterne-bateau_30cm': { nom: 'lanterne-bateau', cm: 30, tri: 5000 },
-    '137_sardine_18cm': { nom: 'sardine', cm: 18, tri: 5000 },
-    '138_maquereau_30cm': { nom: 'maquereau', cm: 30, tri: 5000 },
-    '139_bar_40cm': { nom: 'bar', cm: 40, tri: 5000 },
-    '140_dorade_35cm': { nom: 'dorade', cm: 35, tri: 5000 },
-    '141_saumon_70cm': { nom: 'saumon', cm: 70, tri: 5000 },
-    '143_homard_40cm': { nom: 'homard', cm: 40, tri: 5000 },
-    '142_crabe_20cm': { nom: 'crabe', cm: 20, tri: 5000 },
-    '144_crevettes_12cm': { nom: 'crevettes', cm: 12, tri: 5000 },
-    '145_huitre_10cm': { nom: 'huitre', cm: 10, tri: 5000 },
-    '146_moules_14cm': { nom: 'moules', cm: 14, tri: 5000 },
+    '124_bitte-amarrage_50cm': { nom: 'bitte-amarrage', cm: 50, tri: 5000, permissive: true },
+    '125_rouleau-corde_50cm': { nom: 'rouleau-corde', cm: 50, tri: 5000, permissive: true },
+    '128_bouee-sauvetage_70cm': { nom: 'bouee-sauvetage', cm: 70, tri: 5000, permissive: true },
+    '129_caisse-poissons_60cm': { nom: 'caisse-poissons', cm: 60, tri: 5000, permissive: true },
+    '134_ancre_80cm': { nom: 'ancre', cm: 80, tri: 5000, permissive: true },
+    '135_lanterne-bateau_30cm': { nom: 'lanterne-bateau', cm: 30, tri: 5000, permissive: true },
+    '137_sardine_18cm': { nom: 'sardine', cm: 18, tri: 5000, permissive: true },
+    '138_maquereau_30cm': { nom: 'maquereau', cm: 30, tri: 5000, permissive: true },
+    '139_bar_40cm': { nom: 'bar', cm: 40, tri: 5000, permissive: true },
+    '140_dorade_35cm': { nom: 'dorade', cm: 35, tri: 5000, permissive: true },
+    '141_saumon_70cm': { nom: 'saumon', cm: 70, tri: 5000, permissive: true },
+    '143_homard_40cm': { nom: 'homard', cm: 40, tri: 5000, permissive: true },
+    '142_crabe_20cm': { nom: 'crabe', cm: 20, tri: 5000, permissive: true },
+    '144_crevettes_12cm': { nom: 'crevettes', cm: 12, tri: 5000, permissive: true },
+    '145_huitre_10cm': { nom: 'huitre', cm: 10, tri: 5000, permissive: true },
+    '146_moules_14cm': { nom: 'moules', cm: 14, tri: 5000, permissive: true },
   },
   // Poste et papiers (groupes G08 et G09), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
   poste: {
-    '150_sacoche-facteur_40cm': { nom: 'sacoche-facteur', cm: 40, tri: 5000 },
-    '151_colis_40cm': { nom: 'colis', cm: 40, tri: 5000 },
-    '154_tampon-poste_10cm': { nom: 'tampon-poste', cm: 10, tri: 5000 },
-    '155_balance-colis_35cm': { nom: 'balance-colis', cm: 35, tri: 5000 },
-    '159_bac-courrier_45cm': { nom: 'bac-courrier', cm: 45, tri: 5000 },
-    '160_casquette-facteur_25cm': { nom: 'casquette-facteur', cm: 25, tri: 5000 },
-    '156_carte-postale_15cm': { nom: 'carte-postale', cm: 15, tri: 5000 },
-    '157_enveloppe_22cm': { nom: 'enveloppe', cm: 22, tri: 5000 },
-    '175_sachet-graines_12cm': { nom: 'sachet-graines', cm: 12, tri: 5000 },
-    '241_journal-plie_30cm': { nom: 'journal-plie', cm: 30, tri: 5000 },
-    '242_magazine_28cm': { nom: 'magazine', cm: 28, tri: 5000 },
-    '244_marque-page-cuir_18cm': { nom: 'marque-page-cuir', cm: 18, tri: 5000 },
+    '150_sacoche-facteur_40cm': { nom: 'sacoche-facteur', cm: 40, tri: 5000, permissive: true },
+    '151_colis_40cm': { nom: 'colis', cm: 40, tri: 5000, permissive: true },
+    '154_tampon-poste_10cm': { nom: 'tampon-poste', cm: 10, tri: 5000, permissive: true },
+    '155_balance-colis_35cm': { nom: 'balance-colis', cm: 35, tri: 5000, permissive: true },
+    '159_bac-courrier_45cm': { nom: 'bac-courrier', cm: 45, tri: 5000, permissive: true },
+    '160_casquette-facteur_25cm': { nom: 'casquette-facteur', cm: 25, tri: 5000, permissive: true },
+    '156_carte-postale_15cm': { nom: 'carte-postale', cm: 15, tri: 5000, permissive: true },
+    '157_enveloppe_22cm': { nom: 'enveloppe', cm: 22, tri: 5000, permissive: true },
+    '175_sachet-graines_12cm': { nom: 'sachet-graines', cm: 12, tri: 5000, permissive: true },
+    '241_journal-plie_30cm': { nom: 'journal-plie', cm: 30, tri: 5000, permissive: true },
+    '242_magazine_28cm': { nom: 'magazine', cm: 28, tri: 5000, permissive: true },
+    '244_marque-page-cuir_18cm': { nom: 'marque-page-cuir', cm: 18, tri: 5000, permissive: true },
   },
   // Fleuriste : pots, vases et fleurs coupées (groupes G10 et G11), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
   fleuriste: {
-    '161_seau-a-fleurs_35cm': { nom: 'seau-a-fleurs', cm: 35, tri: 5000 },
-    '164_vase-verre_30cm': { nom: 'vase-verre', cm: 30, tri: 5000 },
-    '165_vase-ceramique_25cm': { nom: 'vase-ceramique', cm: 25, tri: 5000 },
-    '173_cactus-en-pot_25cm': { nom: 'cactus-en-pot', cm: 25, tri: 5000 },
-    '174_orchidee-en-pot_50cm': { nom: 'orchidee-en-pot', cm: 50, tri: 5000 },
-    '176_secateur_20cm': { nom: 'secateur', cm: 20, tri: 5000 },
-    '166_rose_45cm': { nom: 'rose', cm: 45, tri: 5000 },
-    '167_tournesol_80cm': { nom: 'tournesol', cm: 80, tri: 5000 },
-    '168_lys_60cm': { nom: 'lys', cm: 60, tri: 5000 },
-    '169_lavande-botte_40cm': { nom: 'lavande-botte', cm: 40, tri: 5000 },
-    '170_pivoine_45cm': { nom: 'pivoine', cm: 45, tri: 5000 },
-    '171_bouquet-emballe_50cm': { nom: 'bouquet-emballe', cm: 50, tri: 5000 },
+    '161_seau-a-fleurs_35cm': { nom: 'seau-a-fleurs', cm: 35, tri: 5000, permissive: true },
+    '164_vase-verre_30cm': { nom: 'vase-verre', cm: 30, tri: 5000, permissive: true },
+    '165_vase-ceramique_25cm': { nom: 'vase-ceramique', cm: 25, tri: 5000, permissive: true },
+    '173_cactus-en-pot_25cm': { nom: 'cactus-en-pot', cm: 25, tri: 5000, permissive: true },
+    '174_orchidee-en-pot_50cm': { nom: 'orchidee-en-pot', cm: 50, tri: 5000, permissive: true },
+    '176_secateur_20cm': { nom: 'secateur', cm: 20, tri: 5000, permissive: true },
+    '166_rose_45cm': { nom: 'rose', cm: 45, tri: 5000, permissive: true },
+    '167_tournesol_80cm': { nom: 'tournesol', cm: 80, tri: 5000, permissive: true },
+    '168_lys_60cm': { nom: 'lys', cm: 60, tri: 5000, permissive: true },
+    '169_lavande-botte_40cm': { nom: 'lavande-botte', cm: 40, tri: 5000, permissive: true },
+    '170_pivoine_45cm': { nom: 'pivoine', cm: 45, tri: 5000, permissive: true },
+    '171_bouquet-emballe_50cm': { nom: 'bouquet-emballe', cm: 50, tri: 5000, permissive: true },
   },
   // Ferme (groupe G12), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
   ferme: {
-    '187_seau-a-traire_30cm': { nom: 'seau-a-traire', cm: 30, tri: 5000 },
-    '188_bidon-a-lait_70cm': { nom: 'bidon-a-lait', cm: 70, tri: 5000 },
-    '193_cadre-de-ruche_45cm': { nom: 'cadre-de-ruche', cm: 45, tri: 5000 },
-    '194_panier-a-oeufs_25cm': { nom: 'panier-a-oeufs', cm: 25, tri: 5000 },
-    '195_sac-de-grain_60cm': { nom: 'sac-de-grain', cm: 60, tri: 5000 },
-    '198_gerbe-de-ble_60cm': { nom: 'gerbe-de-ble', cm: 60, tri: 5000 },
+    '187_seau-a-traire_30cm': { nom: 'seau-a-traire', cm: 30, tri: 5000, permissive: true },
+    '188_bidon-a-lait_70cm': { nom: 'bidon-a-lait', cm: 70, tri: 5000, permissive: true },
+    '193_cadre-de-ruche_45cm': { nom: 'cadre-de-ruche', cm: 45, tri: 5000, permissive: true },
+    '194_panier-a-oeufs_25cm': { nom: 'panier-a-oeufs', cm: 25, tri: 5000, permissive: true },
+    '195_sac-de-grain_60cm': { nom: 'sac-de-grain', cm: 60, tri: 5000, permissive: true },
+    '198_gerbe-de-ble_60cm': { nom: 'gerbe-de-ble', cm: 60, tri: 5000, permissive: true },
   },
   // Outillage de l'atelier (groupe G13), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
   outillage: {
-    '206_perceuse_25cm': { nom: 'perceuse', cm: 25, tri: 5000 },
-    '207_metre-pliant_25cm': { nom: 'metre-pliant', cm: 25, tri: 5000 },
-    '208_serre-joint_40cm': { nom: 'serre-joint', cm: 40, tri: 5000 },
-    '213_pot-vernis-pinceau_15cm': { nom: 'pot-vernis-pinceau', cm: 15, tri: 5000 },
-    '214_pot-de-peinture_20cm': { nom: 'pot-de-peinture', cm: 20, tri: 5000 },
+    '206_perceuse_25cm': { nom: 'perceuse', cm: 25, tri: 5000, permissive: true },
+    '207_metre-pliant_25cm': { nom: 'metre-pliant', cm: 25, tri: 5000, permissive: true },
+    '208_serre-joint_40cm': { nom: 'serre-joint', cm: 40, tri: 5000, permissive: true },
+    '213_pot-vernis-pinceau_15cm': { nom: 'pot-vernis-pinceau', cm: 15, tri: 5000, permissive: true },
+    '214_pot-de-peinture_20cm': { nom: 'pot-de-peinture', cm: 20, tri: 5000, permissive: true },
+  },
+  // Étals du marché (groupe G21), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  etals: {
+    '099_cagette-vide_50cm': { nom: 'cagette-vide', cm: 50, tri: 5000, permissive: true },
+    '100_cagette-pommes_50cm': { nom: 'cagette-pommes', cm: 50, tri: 10000, permissive: true },
+    '101_cagette-legumes_50cm': { nom: 'cagette-legumes', cm: 50, tri: 10000, permissive: true },
+    '102_balance-marche_40cm': { nom: 'balance-marche', cm: 40, tri: 5000, permissive: true },
+    '105_tonneau_90cm': { nom: 'tonneau', cm: 90, tri: 10000, permissive: true },
+  },
+  // Cour de ferme (groupe G22), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  cour: {
+    '185_botte-de-foin_100cm': { nom: 'botte-de-foin', cm: 100, tri: 5000, permissive: true },
+    '186_mangeoire_150cm': { nom: 'mangeoire', cm: 150, tri: 10000, permissive: true },
+    '189_brouette_150cm': { nom: 'brouette', cm: 150, tri: 10000, permissive: true },
+    '190_fourche_150cm': { nom: 'fourche', cm: 150, tri: 5000, permissive: true },
+    '191_epouvantail_180cm': { nom: 'epouvantail', cm: 180, tri: 10000, permissive: true },
+    '192_ruche_70cm': { nom: 'ruche', cm: 71, tri: 10000, permissive: true },
+  },
+  // Pêcheur (groupe G23), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  peche: {
+    '126_casier-a-homard_70cm': { nom: 'casier-a-homard', cm: 70, tri: 10000, permissive: true },
+    '127_filet-de-peche_80cm': { nom: 'filet-de-peche', cm: 80, tri: 5000, permissive: true },
+    '136_cire-de-pecheur_120cm': { nom: 'cire-de-pecheur', cm: 120, tri: 10000, permissive: true },
+  },
+  // Bois et bûcheron (groupe G24), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  bucheron: {
+    '210_planches-empilees_200cm': { nom: 'planches-empilees', cm: 200, tri: 10000, permissive: true },
+    '211_rondins-empiles_120cm': { nom: 'rondins-empiles', cm: 120, tri: 10000, permissive: true },
+    '212_billot-et-hache_80cm': { nom: 'billot-et-hache', cm: 80, tri: 10000, permissive: true },
+    '215_chaise-a-reparer_90cm': { nom: 'chaise-a-reparer', cm: 91, tri: 10000, permissive: true },
+  },
+  // Poste et gare (groupe G25), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  guichets: {
+    '147_boite-aux-lettres-poste_130cm': { nom: 'boite-aux-lettres-poste', cm: 130, tri: 10000, permissive: true },
+    '152_chariot-a-colis_110cm': { nom: 'chariot-a-colis', cm: 110, tri: 10000, permissive: true },
+    '158_distributeur-timbres_150cm': { nom: 'distributeur-timbres', cm: 150, tri: 10000, permissive: true },
+    '293_distributeur-billets_170cm': { nom: 'distributeur-billets', cm: 170, tri: 10000, permissive: true },
+    '296_urne_50cm': { nom: 'urne', cm: 50, tri: 5000, permissive: true },
+  },
+  // Meubles de boutique (groupe G26), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  mobilier: {
+    '163_table-fleuriste_90cm': { nom: 'table-fleuriste', cm: 150, tri: 10000, permissive: true },
+    '235_table-presentoir-livres_80cm': { nom: 'table-presentoir-livres', cm: 150, tri: 10000, permissive: true },
+    '239_fauteuil-club_90cm': { nom: 'fauteuil-club', cm: 90, tri: 10000, permissive: true },
+    '268_chariot-coiffure_80cm': { nom: 'chariot-coiffure', cm: 80, tri: 10000, permissive: true },
+    '281_chaise-de-bureau_95cm': { nom: 'chaise-de-bureau', cm: 95, tri: 10000, permissive: true },
+    '295_pupitre_120cm': { nom: 'pupitre', cm: 120, tri: 10000, permissive: true },
+  },
+  // Animalerie et plantes (groupe G27), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  animalerie: {
+    '172_monstera-en-pot_80cm': { nom: 'monstera-en-pot', cm: 80, tri: 10000, permissive: true },
+    '248_arbre-a-chat_140cm': { nom: 'arbre-a-chat', cm: 140, tri: 10000, permissive: true },
+    '255_cage-a-oiseau_60cm': { nom: 'cage-a-oiseau', cm: 60, tri: 10000, permissive: true },
+  },
+  // Parasols et plage (groupe G28), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  plage: {
+    '107_parasol-de-marche_250cm': { nom: 'parasol-de-marche', cm: 250, tri: 10000, permissive: true },
+    '298_transat_160cm': { nom: 'transat', cm: 160, tri: 10000, permissive: true },
+    '299_parasol-de-plage_220cm': { nom: 'parasol-de-plage', cm: 220, tri: 5000, permissive: true },
+  },
+  // Glacier et friandises (groupes G14 et G15), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  glacier: {
+    '229_pot-glace_15cm': { nom: 'pot-glace', cm: 15, tri: 5000, permissive: true },
+    '225_coupe-glacee_18cm': { nom: 'coupe-glacee', cm: 18, tri: 5000, permissive: true },
+    '224_cornet-2_20cm': { nom: 'cornet-2', cm: 20, tri: 5000, permissive: true },
+    '223_cornet-1_15cm': { nom: 'cornet-1', cm: 15, tri: 5000, permissive: true },
+    '226_esquimau_15cm': { nom: 'esquimau', cm: 15, tri: 5000, permissive: true },
+    '231_crepiere_45cm': { nom: 'crepiere', cm: 45, tri: 5000, permissive: true },
+    '230_gaufre_18cm': { nom: 'gaufre', cm: 18, tri: 5000, permissive: true },
+    '232_barbe-papa_30cm': { nom: 'barbe-papa', cm: 30, tri: 5000, permissive: true },
+    '227_cuillere-glace_20cm': { nom: 'cuillere-glace', cm: 20, tri: 5000, permissive: true },
+  },
+  // Librairie (groupe G16), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  librairie: {
+    '236_pile-livres_30cm': { nom: 'pile-livres', cm: 30, tri: 5000, permissive: true },
+    '238_globe_45cm': { nom: 'globe', cm: 45, tri: 5000, permissive: true },
+    '240_fichier_30cm': { nom: 'fichier', cm: 30, tri: 5000, permissive: true },
+    '240b_bac-fiches_34cm': { nom: 'bac-fiches', cm: 34, tri: 5000, permissive: true },
+    '237_lampe-banquier_40cm': { nom: 'lampe-banquier', cm: 40, tri: 5000, permissive: true },
+    '243_bougeoir_25cm': { nom: 'bougeoir', cm: 25, tri: 5000, permissive: true },
+    '243b_bougeoir-bas_20cm': { nom: 'bougeoir-bas', cm: 20, tri: 5000, permissive: true },
+  },
+  // Chats et chiens du vétérinaire (groupe G17), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  veterinaire: {
+    '247_panier-chat_50cm': { nom: 'panier-chat', cm: 50, tri: 5000, permissive: true },
+    '249_pelote_10cm': { nom: 'pelote', cm: 10, tri: 5000, permissive: true },
+    '250_litiere_50cm': { nom: 'litiere', cm: 50, tri: 5000, permissive: true },
+    '254_bocal-poisson_25cm': { nom: 'bocal-poisson', cm: 25, tri: 5000, permissive: true },
+    '256_croquettes-chien_40cm': { nom: 'croquettes-chien', cm: 40, tri: 5000, permissive: true },
+    '257_laisse_20cm': { nom: 'laisse', cm: 20, tri: 5000, permissive: true },
+  },
+  // Coiffeur (groupe G18), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  coiffeur: {
+    '270_cape-coiffure_30cm': { nom: 'cape-coiffure', cm: 30, tri: 5000, permissive: true },
+    '263_seche-cheveux_25cm': { nom: 'seche-cheveux', cm: 25, tri: 5000, permissive: true },
+    '265_peigne_20cm': { nom: 'peigne', cm: 20, tri: 5000, permissive: true },
+    '266_brosse-cheveux_23cm': { nom: 'brosse-cheveux', cm: 23, tri: 5000, permissive: true },
+    '267_flacon-soin_20cm': { nom: 'flacon-soin', cm: 20, tri: 5000, permissive: true },
+    '264_ciseaux_16cm': { nom: 'ciseaux', cm: 16, tri: 5000, permissive: true },
+  },
+  // Horloge de gare et poteau de barbier (groupe G19), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  enseignes: {
+    '291_horloge-gare_80cm': { nom: 'horloge-gare', cm: 80, tri: 5000, permissive: true },
+    '269_barbier-poteau_70cm': { nom: 'barbier-poteau', cm: 70, tri: 5000, permissive: true },
+  },
+  // Pharmacie (groupe G20), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  pharmacie: {
+    '278_stethoscope_60cm': { nom: 'stethoscope', cm: 60, tri: 5000, permissive: true },
+    '274_sirop_14cm': { nom: 'sirop', cm: 14, tri: 5000, permissive: true },
+    '275_bande_10cm': { nom: 'bande', cm: 10, tri: 5000, permissive: true },
+    '282_pot-creme_7cm': { nom: 'pot-creme', cm: 7, tri: 5000, permissive: true, err: 0.001 },
+    '273_boite-medicament_10cm': { nom: 'boite-medicament', cm: 10, tri: 5000, permissive: true },
+    '277_thermometre_13cm': { nom: 'thermometre', cm: 13, tri: 5000, permissive: true },
+  },
+  // Comptoirs et guichets (groupe G29), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  comptoirs: {
+    '076_passe-plat-chauffant_160cm': { nom: 'passe-plat-chauffant', cm: 160, tri: 10000, permissive: true },
+    '148_guichet-poste_200cm': { nom: 'guichet-poste', cm: 200, tri: 15000, permissive: true },
+    '271_comptoir-pharmacie_140cm': { nom: 'comptoir-pharmacie', cm: 140, tri: 15000, permissive: true },
+  },
+  // Grands étals et vitrines (groupe G30), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  presentoirs: {
+    '098_etal-de-marche_230cm': { nom: 'etal-de-marche', cm: 230, tri: 15000, permissive: true },
+    '130_etal-de-la-criee_200cm': { nom: 'etal-de-la-criee', cm: 200, tri: 15000, permissive: true },
+    '162_presentoir-a-gradins_150cm': { nom: 'presentoir-a-gradins', cm: 150, tri: 15000, permissive: true },
+    '222_vitrine-a-glaces_150cm': { nom: 'vitrine-a-glaces', cm: 150, tri: 15000, permissive: true },
+  },
+  // Grands rangements (groupe G31), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  rangements: {
+    '149_casier-de-tri_180cm': { nom: 'casier-de-tri', cm: 180, tri: 15000, permissive: true },
+    '233_bibliotheque-murale_240cm': { nom: 'bibliotheque-murale', cm: 240, tri: 15000, permissive: true },
+    '234_echelle-bibliotheque_230cm': { nom: 'echelle-bibliotheque', cm: 230, tri: 10000, permissive: true },
+    '272_etagere-pharmacie_200cm': { nom: 'etagere-pharmacie', cm: 200, tri: 15000, permissive: true },
+  },
+  // Salon de coiffure (groupe G32), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  salon: {
+    '259_fauteuil-coiffeur_110cm': { nom: 'fauteuil-coiffeur', cm: 110, tri: 15000, permissive: true },
+    '260_bac-a-shampoing_110cm': { nom: 'bac-a-shampoing', cm: 139, tri: 15000, permissive: true },
+    '261_coiffeuse-miroir_180cm': { nom: 'coiffeuse-miroir', cm: 180, tri: 15000, permissive: true },
+    '262_casque-sechoir_150cm': { nom: 'casque-sechoir', cm: 150, tri: 10000, permissive: true },
+  },
+  // Tables de travail (groupe G33), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  tables: {
+    '209_etabli-menuisier_200cm': { nom: 'etabli-menuisier', cm: 200, tri: 15000, permissive: true },
+    '245_table-veterinaire_85cm': { nom: 'table-veterinaire', cm: 85, tri: 15000, permissive: true },
+    '279_table-examen_190cm': { nom: 'table-examen', cm: 190, tri: 15000, permissive: true },
+    '280_bureau-medecin_100cm': { nom: 'bureau-medecin', cm: 100, tri: 15000, permissive: true },
+  },
+  // Vélo, triporteur et scooter (groupe G34), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  deuxroues: {
+    '153_velo-facteur_180cm': { nom: 'velo-facteur', cm: 180, tri: 15000, permissive: true },
+    '228_triporteur-glaces_200cm': { nom: 'triporteur-glaces', cm: 200, tri: 15000, permissive: true },
+    '287_scooter_180cm': { nom: 'scooter', cm: 180, tri: 10000, permissive: true },
+  },
+  // Charrette et remorque (groupe G35), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  charrettes: {
+    '106_charrette-a-bras_200cm': { nom: 'charrette-a-bras', cm: 200, tri: 15000, permissive: true },
+    '197_remorque-agricole_300cm': { nom: 'remorque-agricole', cm: 300, tri: 15000, permissive: true },
+  },
+  // Voitures (groupe G36), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  voitures: {
+    '284_voiture-citadine_360cm': { nom: 'voiture-citadine', cm: 360, tri: 15000, permissive: true },
+    '286_taxi_400cm': { nom: 'taxi', cm: 400, tri: 15000, permissive: true },
+  },
+  // Tracteur et camionnette (groupe G37), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  engins: {
+    '196_tracteur_300cm': { nom: 'tracteur', cm: 300, tri: 15000, permissive: true },
+    '285_camionnette_380cm': { nom: 'camionnette', cm: 380, tri: 15000, permissive: true },
   },
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
