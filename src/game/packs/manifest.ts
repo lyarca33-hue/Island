@@ -497,6 +497,24 @@ export const PACK_SIZES = {
     "camionnette": [3.8, 2.686, 2.343],
     "tracteur": [2.999, 2.397, 2.265],
   },
+  cabanes: {
+    "cabane-pecheur": [4, 3.663, 3.19],
+    "cabine-de-plage": [1.389, 2.5, 1.823],
+    "kiosque-glaces": [3.001, 4.25, 2.968],
+    "poulailler": [2.004, 2.36, 1.73],
+  },
+  monuments: {
+    "moulin-a-vent": [4.729, 9.998, 6.074],
+    "phare": [5.768, 12, 5.549],
+  },
+  train: {
+    "locomotive": [5.998, 3.566, 3.138],
+    "wagon-voyageurs": [6.999, 3.348, 3.822],
+  },
+  utilitaires: {
+    "bus": [9, 3.933, 3.775],
+    "camion-pompier": [6.997, 4.407, 3.777],
+  },
 } as const satisfies Record<string, Record<string, readonly [number, number, number]>>;
 
 export type PackId = keyof typeof PACK_SIZES;

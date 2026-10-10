@@ -417,6 +417,29 @@ const LOTS = {
     '196_tracteur_300cm': { nom: 'tracteur', cm: 300, tri: 15000, permissive: true },
     '285_camionnette_380cm': { nom: 'camionnette', cm: 380, tri: 15000, permissive: true },
   },
+  // Cabanes du bord de mer (groupe G38), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension ;
+  // texture 2048 : venues en 8192, on en fait le tour à pied et les planches restent nettes
+  cabanes: {
+    '132_cabane-pecheur_400cm': { nom: 'cabane-pecheur', cm: 400, tri: 15000, permissive: true, tex: 2048 },
+    '184_poulailler_200cm': { nom: 'poulailler', cm: 236, tri: 15000, permissive: true, tex: 2048 },
+    '221_kiosque-glaces_300cm': { nom: 'kiosque-glaces', cm: 425, tri: 15000, permissive: true, tex: 2048 },
+    '300_cabine-de-plage_250cm': { nom: 'cabine-de-plage', cm: 250, tri: 15000, permissive: true, tex: 2048 },
+  },
+  // Phare et moulin (groupe G39), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  monuments: {
+    '131_phare_1200cm': { nom: 'phare', cm: 1200, tri: 30000, permissive: true, err: 0.001 },
+    '199_moulin-a-vent_1000cm': { nom: 'moulin-a-vent', cm: 1000, tri: 15000, permissive: true },
+  },
+  // Locomotive et wagon (groupe G40), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  train: {
+    '288_locomotive_600cm': { nom: 'locomotive', cm: 600, tri: 15000, permissive: true },
+    '289_wagon-voyageurs_700cm': { nom: 'wagon-voyageurs', cm: 700, tri: 15000, permissive: true },
+  },
+  // Bus et camion de pompiers (groupe G41), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  utilitaires: {
+    '283_bus_900cm': { nom: 'bus', cm: 900, tri: 15000, permissive: true },
+    '297_camion-pompier_700cm': { nom: 'camion-pompier', cm: 700, tri: 15000, permissive: true },
+  },
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
 const texSize = (o) => o.tex ?? (o.cm < 30 ? 512 : 1024);
