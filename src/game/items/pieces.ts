@@ -324,7 +324,8 @@ export const PIECES_ITEMS: ItemDef[] = [
   // —— entrée
   // dehors, au bord du chemin : plantée dans le sol
   meuble('boite-lettres', 'boîte aux lettres', [0.32, 1.37, 0.43], 0x4f6a52, { movable: false }),
-  meuble('porte-parapluies', 'porte-parapluies', [0.21, 0.5, 0.21], 0x34507a, { durability: 150, slots: [[0, 0.02, 0]] }),
+  // la place du parapluie un peu au-dessus du fond : posé au ras du sol, le perso le lâcherait devant lui (Character.drop)
+  meuble('porte-parapluies', 'porte-parapluies', [0.21, 0.5, 0.21], 0x34507a, { durability: 150, slots: [[0, 0.05, 0]], holds: ['parapluie'] }),
   objet('parapluie', 'parapluie', [0.12, 0.72, 0.14], 0xf1ece0, { grip: 'pole', fragility: 3 }),
   objet('chaussure', 'chaussure', [0.23, 0.12, 0.25], 0x6a4026, { fragility: 1 }),
   objet('chausson', 'chausson', [0.12, 0.1, 0.25], 0xe8b4c0, { fragility: 1 }),
@@ -336,7 +337,7 @@ export const PIECES_ITEMS: ItemDef[] = [
     table: 'comptoir',
     slots: [...row(BENCH_TOP, 1.3, 5, 0.05), ...row(BENCH_SHELF, 1.2, 3)],
   }),
-  meuble('etagere-garage', 'étagère', [0.9, 1.8, 0.4], 0xb58a5a, { slots: RACK_SHELVES.flatMap((y) => row(y, 0.8, 3)) }),
+  meuble('etagere-garage', 'étagère', [0.9, 1.8, 0.4], 0xb58a5a, { slots: RACK_SHELVES.flatMap((y) => row(y, 0.8, 3)), holds: ['carton', 'caisse à outils'] }),
   objet('caisse-outils', 'caisse à outils', [0.45, 0.25, 0.26], 0x6a6d70, { grip: 'handle', gripPoint: [0, 0.25, 0], fragility: 8, durability: 200 }),
   objet('carton', 'carton', [0.45, 0.32, 0.36], 0xb88a58, { grip: 'twoHands', gripPoint: [0, 0.16, 0], fragility: 2 }),
   meuble('velo', 'vélo', [1.7, 1.12, 0.74], 0x26272b, { durability: 250 }),

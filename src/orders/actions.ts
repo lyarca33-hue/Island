@@ -199,6 +199,12 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.waitCooked(a.objet),
   },
   {
+    name: 'attendre_ebullition',
+    description: 'Attendre que l’eau de la casserole `objet`, sur un feu allumé, bouille.',
+    params: { objet: 'ref de la casserole' },
+    run: (g, a) => g.waitBoil(a.objet),
+  },
+  {
     name: 'verser',
     description: 'Verser le contenu du récipient tenu (bouteille d’eau, tasse, casserole) dans `dans` : un autre récipient (posé, ou tenu dans l’autre main), ou la bouilloire (de l’eau seulement, pour la remplir). Sans `dans` : l’autre main, sinon le récipient le plus proche.',
     params: {},
@@ -546,6 +552,45 @@ export const ACTIONS: ActionDef[] = [
     description: 'Verser la préparation du saladier tenu (œufs battus, pâte à crêpes) dans la poêle `poele` (sinon celle sur le feu) : une omelette, ou une crêpe à la fois.',
     params: {},
     run: (g, a) => g.pourBatter(a.poele),
+  },
+  {
+    name: 'poser_libre',
+    description: 'Poser l’objet tenu `objet` devant soi sur le meuble (`sur`, sinon celui qui est devant), à une place libre (pas sur ce qui y est déjà posé).',
+    params: {},
+    run: (g, a) => {
+      const nom = a.objet ? g.describe().objets.find((o) => o.ref === a.objet)?.nom : undefined;
+      return g.dropClear(nom, a.sur);
+    },
+  },
+  {
+    name: 'verser_feculent',
+    description: 'Verser le paquet de pâtes ou de riz tenu dans la casserole `objet`, dont l’eau bout.',
+    params: { objet: 'ref de la casserole' },
+    run: (g, a) => g.pourStarch(a.objet),
+  },
+  {
+    name: 'soupe',
+    description: 'Mettre le légume tenu (coupé : rondelles de carotte, tranches de tomate ; ou poireau, pomme de terre…) dans l’eau de la casserole `objet` : une soupe, qui cuit sur le feu.',
+    params: { objet: 'ref de la casserole' },
+    run: (g, a) => g.addToSoup(a.objet),
+  },
+  {
+    name: 'verser_soupe',
+    description: 'Verser la brique de soupe tenue dans la casserole vide `objet`, pour la réchauffer.',
+    params: { objet: 'ref de la casserole' },
+    run: (g, a) => g.pourSoup(a.objet),
+  },
+  {
+    name: 'garnir',
+    description: 'Mettre le beurre ou la sauce tomate tenus sur les pâtes ou le riz cuits et égouttés de `objet` (casserole, passoire, assiette).',
+    params: { objet: 'ref de ce qui contient les pâtes ou le riz' },
+    run: (g, a) => g.topStarch(a.objet),
+  },
+  {
+    name: 'chocolat',
+    description: 'Mettre un carré de la tablette de chocolat tenue dans la tasse `objet` d’eau chaude (chocolat chaud) ou de lait (lait au chocolat).',
+    params: {},
+    run: (g, a) => g.addChocolate(a.objet),
   },
   {
     name: 'remuer',

@@ -39,8 +39,33 @@ const cooked = <T extends THREE.Mesh>(m: T): T => {
   return m;
 };
 
+/**
+ * Le jus du mixeur prend le nom de ses fruits : un seul fruit, son jus (ou son smoothie pour la
+ * banane et les fraises) ; plusieurs, un smoothie s'il y a de la banane ou des fraises, sinon un jus
+ * de fruits.
+ */
+const JUICE_OF: Record<string, string> = {
+  pomme: 'jus de pomme', 'quartiers de pomme': 'jus de pomme', poire: 'jus de poire', raisin: 'jus de raisin',
+  orange: "jus d'orange", "quartiers d'orange": "jus d'orange", banane: 'smoothie à la banane', 'rondelles de banane': 'smoothie à la banane', fraises: 'smoothie aux fraises',
+};
+export function juiceFor(fruits: string[]): string {
+  const kinds = new Set(fruits.map((f) => JUICE_OF[f] ?? 'jus de fruits'));
+  if (kinds.size === 1) return [...kinds][0];
+  return [...kinds].some((k) => k.startsWith('smoothie')) ? 'smoothie' : 'jus de fruits';
+}
+/** Tout ce que le mixeur peut donner. */
+export const JUICES = ['jus de fruits', 'jus de pomme', 'jus de poire', 'jus de raisin', "jus d'orange", 'smoothie', 'smoothie à la banane', 'smoothie aux fraises'];
+
 /** Couleur de chaque boisson (le verre où on la verse prend cette couleur). */
 export const DRINK_COLORS: Record<string, THREE.ColorRepresentation> = {
+  'jus de pomme': 0xe8c25a,
+  'jus de poire': 0xe9e0a0,
+  'jus de raisin': 0x6b2a4a,
+  smoothie: 0xe89a7a,
+  'smoothie à la banane': 0xf2e2a0,
+  'smoothie aux fraises': 0xe86a7a,
+  'chocolat chaud': 0x6b3a22,
+  'lait au chocolat': 0xa0704a,
   "jus d'orange": 0xf5a623,
   soda: 0x5a2e1c,
   'eau gazeuse': 0xcfe9f2,
@@ -54,6 +79,13 @@ export const DRINK_EFFECTS: Record<string, { soif?: number; faim?: number; fatig
   'eau gazeuse': { soif: 15 },
   vin: {},
   lait: { faim: 4 },
+  // les smoothies sont épais : ils nourrissent plus qu'un jus (en plus de JUICE_HUNGER)
+  smoothie: { faim: 6 },
+  'smoothie à la banane': { faim: 8 },
+  'smoothie aux fraises': { faim: 6 },
+  // le chocolat : un peu de faim, et de quoi se réchauffer (Game : le corps)
+  'chocolat chaud': { faim: 8, fatigue: 3 },
+  'lait au chocolat': { faim: 8 },
 };
 
 /** Épicerie : se range au garde-manger. */

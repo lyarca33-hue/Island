@@ -41,7 +41,7 @@ export const RECIPES: Recipe[] = [
   {
     dish: 'salade-fruits',
     needs: ['rondelles de banane', "quartiers d'orange"],
-    extras: ['fraises', 'quartiers de pomme'],
+    extras: ['fraises', 'quartiers de pomme', 'poire', 'raisin'],
     bonus: 6,
     on: 'assiette',
     words: ['salade de fruits', 'salade fruits', 'dessert'],
@@ -139,6 +139,13 @@ export const RECIPES: Recipe[] = [
     words: ['croque monsieur', 'croque', 'croques'],
   },
   {
+    dish: 'croque-madame',
+    needs: ['croque-monsieur', 'œuf au plat'],
+    bonus: 6,
+    on: 'assiette',
+    words: ['croque madame'],
+  },
+  {
     dish: 'bruschetta',
     needs: ['pain grillé', 'tranches de tomate'],
     extras: ['ail'],
@@ -153,6 +160,14 @@ export const RECIPES: Recipe[] = [
     bonus: 10,
     on: 'assiette',
     words: ['gratin de pates', 'gratin pates', 'gratin', 'macaronis', 'macaroni'],
+  },
+  {
+    dish: 'gratin-dauphinois',
+    needs: ['pomme de terre', 'fromage râpé'],
+    extras: ['ail', 'oignon'],
+    bonus: 10,
+    on: 'assiette',
+    words: ['gratin dauphinois', 'dauphinois', 'gratin de pommes de terre', 'gratin de patates'],
   },
   {
     dish: 'poulet-roti',
@@ -383,6 +398,17 @@ export const DISHES: ItemDef[] = [
   dish('gratin-pates', 'gratin de pâtes', { hunger: 70, bites: 6, color: 0xe8a33a }, () =>
     // le plat à gratin, les pâtes dorées dessus
     group(mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.045, 20).scale(0.85, 1, 1), 0xb0603a, 0, 0.0225, 0))),
+  dish('croque-madame', 'croque-madame', { hunger: 80, bites: 6, color: 0xd9a45c }, () => {
+    const g = new THREE.Group();
+    slice(g, 0);
+    g.add(mesh(new THREE.BoxGeometry(0.08, 0.008, 0.07), 0xe8a0a0, 0, 0.016, 0));
+    slice(g, 0.02, 0.05);
+    g.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.005, 16), 0xf4f1e6, 0, 0.037, 0));
+    g.add(mesh(new THREE.SphereGeometry(0.013, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xf2b632, 0, 0.039, 0));
+    return g;
+  }),
+  dish('gratin-dauphinois', 'gratin dauphinois', { hunger: 65, bites: 6, color: 0xe6cf8a }, () =>
+    group(mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.045, 20).scale(0.85, 1, 1), 0xe6cf8a, 0, 0.0225, 0))),
   dish('poulet-roti', 'poulet rôti', { hunger: 90, bites: 8, color: 0xc8803a }, () =>
     group(mesh(new THREE.SphereGeometry(0.07, 14, 10).scale(0.75, 0.5, 1), 0xc8803a, 0, 0.035, 0))),
   dish('poire-chocolat', 'poire au chocolat', { hunger: 25, bites: 3, color: 0x6b3a22 }, () =>

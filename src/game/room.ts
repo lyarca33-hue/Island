@@ -1235,6 +1235,8 @@ export const KITCHEN: RoomSpec = {
     ['machine-a-cafe', 'tiroir', 0, -0.12],
     ['bouilloire', 'placard', -0.15, -0.12],
     ['micro-ondes', 'plan-de-travail', 0.1, -0.06],
+    // le livre de recettes debout contre le mur, à gauche du micro-ondes : le lire ouvre la liste des recettes
+    ['livre-recettes', 'plan-de-travail', -0.27, -0.2, Math.PI / 2],
     // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier
     ['grille-pain', 'lave-vaisselle', -0.15, -0.14],
     ['egouttoir', 'lave-vaisselle', 0.145, 0],
@@ -1242,6 +1244,8 @@ export const KITCHEN: RoomSpec = {
     // le pain sur la table : la miche, et la baguette en travers
     ['pain', 'table', -0.2, 0.08],
     ['baguette', 'table', 0.12, -0.1, Math.PI / 2],
+    // l'éponge à côté de l'évier
+    ['eponge', 'placard', 0.16, 0.06],
   ],
   items: [
     // les placards hauts, au mur au-dessus des plans de travail (le haut au ras de la fenêtre)
@@ -1256,5 +1260,9 @@ export const KITCHEN: RoomSpec = {
     ['table', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z, 0],
     ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z - 0.5, 0],
     ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z + 0.5, Math.PI],
+    // le ménage, dans le coin à côté de la porte de l'entrée : le seau et sa serpillière, le balai
+    ['seau', ROOM.x0 + 0.24, 0, ROOM.z1 - 0.24, 0],
+    ['serpilliere', ROOM.x0 + 0.24, 0.02, ROOM.z1 - 0.24, 0],
+    ['balai', ROOM.x0 + 0.55, 0, ROOM.z1 - 0.14, 0],
   ],
 };

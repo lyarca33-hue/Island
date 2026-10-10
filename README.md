@@ -215,7 +215,10 @@ Pas de clip animé pour le ménage : comme pour couper ou verser, les bras sont 
 au-dessus d'un point du sol ou d'un meuble, et l'outil suit la main (`src/game/items/chores.ts`
 pour les gestes, `Carry.chore` dans `carry.ts` pour les bras, `chorefx.ts` pour la poussière,
 la mousse et le nuage du spray). Chaque geste va prendre son outil tout seul (et pose celui
-d'avant), puis passe dans la pièce où est le perso :
+d'avant). Les gestes du sol vont de carré sale en carré sale dans la pièce où est le perso
+(la saleté de `salissure.ts`, plus les éclats, miettes et flaques), et chaque coup nettoie sous
+la tête de l'outil, jusqu'à ce que la pièce soit propre ; épousseter ou frotter un meuble lui
+enlève sa poussière et sa crasse :
 
 | Geste | Outil | Console |
 | --- | --- | --- |
@@ -360,8 +363,8 @@ Cuisine (`src/game/items/kitchen.ts`), alignée de l'autre côté de la machine 
 (le micro-ondes posé dessus), four, lave-vaisselle, meuble à tiroir et poubelle. Leurs dessus font
 plan de travail (on y pose ce qu'on tient).
 - Clic mains vides sur un meuble qui a un inventaire (frigo, placard, tiroir, armoire, barres au
-  mur, bibliothèque…) : son inventaire à cases s'ouvre ; un clic sur un objet de la grille ouvre la
-  porte et le sort. Porte restée ouverte : un clic la ferme. Le couvercle de la poubelle s'ouvre au
+  mur, bibliothèque…) : le perso ouvre sa porte (ou son tiroir) et son inventaire à cases s'ouvre ; un
+  clic sur un objet de la grille le sort. La porte se referme quand on s'éloigne ; porte ouverte, un clic la ferme. Le couvercle de la poubelle s'ouvre au
   clic. Objet en main, clic sur le meuble : le perso ouvre et range (placard :
   tasse, assiette, bouteille, pomme ; tiroir : couverts, lettre ; four et micro-ondes : steak, pomme de terre, pain, sandwich ;
   lave-vaisselle : tasse, assiette, couverts). Ce qui est dans le tiroir sort et rentre avec lui.

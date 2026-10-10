@@ -98,10 +98,17 @@ export const FOOD_LOOKS: Record<string, FoodLook> = {
       'crumble', 'pain-perdu', 'croutons', 'moule', 'plat-four', 'passoire', 'pierre-pizza', 'theiere', 'sachets-the', 'maniques', 'sac-poubelle',
     ] as const).map((id) => [id, plat(id)]),
   ),
+  'omelette-fromage': plat('omelette'),
+  'omelette-jambon': plat('omelette'),
+  'omelette-champignons': plat('omelette'),
+  'croque-madame': plat('croque-monsieur'),
+  'gratin-dauphinois': plat('gratin-pates'),
   'pates-beurre': plat('pates'),
   'salade-verte': plat('feuilles-salade'),
   'sandwich-jambon': plat('sandwich'),
   'sandwich-steak': plat('hamburger'),
+  // le livre de recettes de la cuisine : debout, la couverture vers la pièce (le dos vers -z, comme les livres du jeu)
+  'livre-recettes': plat('livre-recettes', { turn: [0, -Math.PI / 2, 0] }),
   // la brique et le sachet : à la boîte du jeu
   'jus-orange': plat('jus-orange', { fit: 'stretch' }),
   'legumes-surgeles': plat('legumes-surgeles', { fit: 'stretch' }),
