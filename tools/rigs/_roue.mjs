@@ -20,7 +20,7 @@ for (const p of node.getMesh().listPrimitives()) {
 const u = axis === 'z' ? 0 : 2, k = axis === 'z' ? 2 : 0;
 const ylo = Math.min(...pts.map(p => p[1]));
 const out = {};
-for (const h of [0.03, 0.06, 0.1]) {
+for (const h of (process.env.H || "0.03,0.06,0.1").split(",").map(Number)) {
   const band = pts.filter(p => p[1] <= ylo + h);
   const a = Math.min(...band.map(p => p[u])), c = Math.max(...band.map(p => p[u]));
   const w = (c - a) / 2, R = (w * w + h * h) / (2 * h);
