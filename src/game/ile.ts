@@ -11,7 +11,8 @@
  *   est au ras de l'eau, c'est la seule façon d'avoir des falaises sans relief sous les pieds du
  *   perso ; vue de la caméra de départ, la paroi fait le fond du décor. À l'est, une côte rocheuse
  *   basse (une marche de roche d'1,5 m). Les trois se fondent les unes dans les autres.
- * - Autour de la maison, une pelouse tondue (bandes claires et foncées) ; ailleurs, l'herbe libre.
+ * - L'herbe façon animé : trois aplats de vert aux bords nets, des touffes de brins dessinées et
+ *   quelques fleurs ; autour de la maison, une pelouse tondue (bandes claires et foncées).
  * - La mer : un grand plan opaque dont la couleur dit la profondeur (turquoise au bord, bleu
  *   profond au large, le sable qui transparaît dans les premiers centimètres), avec l'écume du
  *   rivage, des vagues qui arrivent sur la plage et l'écume au pied des rochers. Plus agitée par
@@ -23,7 +24,6 @@
  * sable, routes et haut des rochers ; jamais les parois), sol plus sombre quand il est mouillé.
  */
 import * as THREE from 'three';
-import { grassTexture } from './ground';
 import { createToonMaterial } from './toon';
 
 /** Demi-côté du carré où l'on marche (m), plat à y = 0 (voir Game : GROUND_HALF - 14). */
@@ -298,6 +298,78 @@ function paint(w: number, h: number, base: string, seed: number, draw: Painter, 
   return tex;
 }
 
+/**
+ * Herbe façon animé : touffes de brins pointus dessinées une à une (un trait sombre à la base, une
+ * pointe claire), sur un fond uni, en gris (valeurs brutes, pas sRGB) : la couleur vient des aplats
+ * du shader. Quelques fleurs jaunes et roses, elles, en couleur. Une répétition couvre 4 m.
+ */
+function animeGrassTexture(): THREE.CanvasTexture {
+  return paint(512, 512, 'rgb(204,204,204)', 101, (g, s, rand) => {
+    const blade = (x: number, y: number, h: number, lean: number, w: number, shade: number) => {
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        const bx = x + dx * s, by = y + dy * s;
+        if (bx < -30 || bx > s + 30 || by < -30 || by > s + 30) continue;
+        g.fillStyle = `rgb(${shade},${shade},${shade})`;
+        g.beginPath();
+        g.moveTo(bx - w, by);
+        g.quadraticCurveTo(bx + lean * 0.3, by - h * 0.6, bx + lean, by - h);
+        g.quadraticCurveTo(bx + lean * 0.4 + w * 0.3, by - h * 0.5, bx + w, by);
+        g.closePath();
+        g.fill();
+      }
+    };
+    // grandes nappes un peu plus sombres et plus claires, à bords nets
+    for (let i = 0; i < 26; i++) {
+      const x = rand() * s, y = rand() * s, r = 18 + rand() * 40, v = rand() < 0.5 ? 188 : 218;
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        g.fillStyle = `rgb(${v},${v},${v})`;
+        g.beginPath();
+        g.ellipse(x + dx * s, y + dy * s, r, r * 0.6, rand() * 3, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    // touffes : 3 à 5 brins, d'abord leur ombre (sombre), puis le brin, puis sa pointe claire
+    const tufts: Array<[number, number]> = [];
+    for (let i = 0; i < 170; i++) tufts.push([rand() * s, rand() * s]);
+    tufts.sort((a, b) => a[1] - b[1]);
+    for (const [x, y] of tufts) {
+      const n = 4 + Math.floor(rand() * 3), h = 24 + rand() * 20;
+      for (let k = 0; k < n; k++) {
+        const ox = (k - (n - 1) / 2) * 5 + (rand() - 0.5) * 3, lean = (k - (n - 1) / 2) * 6 + (rand() - 0.5) * 8;
+        blade(x + ox + 2.5, y + 2, h * 0.9, lean, 4.2, 140);
+        blade(x + ox, y, h, lean, 3.6, 172 + Math.floor(rand() * 25));
+        blade(x + ox + lean * 0.55, y - h * 0.55, h * 0.45, lean * 0.45, 2, 248);
+      }
+    }
+    // petites fleurs (en couleur : le shader les garde telles quelles)
+    for (let i = 0; i < 9; i++) {
+      const x = 10 + rand() * (s - 20), y = 10 + rand() * (s - 20);
+      const petal = rand() < 0.6 ? 'rgb(255,226,92)' : 'rgb(255,170,200)';
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2;
+        g.fillStyle = petal;
+        g.beginPath();
+        g.arc(x + Math.cos(a) * 4.5, y + Math.sin(a) * 4.5, 3.8, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = 'rgb(255,140,60)';
+      g.beginPath();
+      g.arc(x, y, 2.6, 0, Math.PI * 2);
+      g.fill();
+    }
+  }, false);
+}
+
+/** Bruit doux en gris (valeurs brutes), pour les grandes nappes de couleur de l'herbe. */
+function toneTexture(): THREE.CanvasTexture {
+  return paint(256, 256, 'rgb(128,128,128)', 111, (g, s, rand) => {
+    for (let i = 0; i < 70; i++) {
+      const v = rand() < 0.5 ? '255,255,255' : '0,0,0';
+      blot(g, s, s, rand() * s, rand() * s, 20 + rand() * 50, `rgba(${v},${0.25 + rand() * 0.25})`);
+    }
+  }, false);
+}
+
 /** Sable : beige chaud, taches claires et sombres, petits grains et rides laissées par le vent. */
 function sandTexture(): THREE.CanvasTexture {
   return paint(512, 512, '#e6d2a0', 41, (g, s, rand) => {
@@ -541,24 +613,28 @@ function worldVaryings(sh: THREE.WebGLProgramParametersWithUniforms, u: IslandUn
 function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
   // ombrage fondu : les paliers nets feraient des bandes sur les pentes de la plage
   const mat = createToonMaterial({ color: 0xffffff, rimStrength: 0, soft: true });
-  const tex = { uGrassTex: { value: grassTexture() }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() } };
+  const tex = { uGrassTex: { value: animeGrassTexture() }, uTone: { value: toneTexture() }, uG0: { value: new THREE.Color('#4a9f33') }, uG1: { value: new THREE.Color('#6cc540') }, uG2: { value: new THREE.Color('#a2dc50') }, uLawn: { value: new THREE.Color('#74cc45') }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() } };
   mat.onBeforeCompile = (sh) => {
     worldVaryings(sh, u);
     Object.assign(sh.uniforms, tex);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassTex; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassTex; uniform sampler2D uTone; uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform vec3 uLawn; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt;')
       .replace(
         '#include <map_fragment>',
         `vec2 xz = vIleW.xz;
          vec4 sp = texture2D(uSplat, ileMap(xz));
-         // herbe : texture de 8 m, grandes taches plus ou moins vertes pour casser la répétition
-         vec3 grass = texture2D(uGrassTex, xz / 8.0).rgb;
-         float macro = texture2D(uGrassTex, xz / 61.0 + 0.37).g * 0.6 + texture2D(uGrassTex, xz / 23.0).r * 0.4;
-         grass *= mix(0.86, 1.1, smoothstep(0.25, 0.6, macro));
-         // pelouse tondue : bandes de 1,2 m un peu plus claires et plus foncées, herbe plus verte
+         // herbe façon animé : trois aplats de vert aux bords nets (grandes nappes), et les touffes dessinées
+         float tone = texture2D(uTone, xz / 48.0).r * 0.65 + texture2D(uTone, xz / 17.0 + vec2(0.31, 0.77)).r * 0.35;
+         vec3 tc = mix(uG0, uG1, smoothstep(0.42, 0.45, tone));
+         tc = mix(tc, uG2, smoothstep(0.6, 0.63, tone));
+         vec4 det = texture2D(uGrassTex, xz / 4.0);
+         float fl = step(0.2, max(abs(det.r - det.g), abs(det.g - det.b)));
+         vec3 grass = tc * (0.32 + 0.85 * det.g);
+         // pelouse tondue : bandes nettes de 1,2 m, un vert plus franc
          float stripe = step(0.5, fract((xz.x + xz.y * 0.02) / 2.4));
-         vec3 lawn = grass * mix(0.88, 1.1, stripe) * vec3(0.92, 1.06, 0.88);
+         vec3 lawn = uLawn * mix(0.9, 1.08, stripe) * (0.45 + 0.7 * det.g);
          grass = mix(grass, lawn, sp.a) * uGrass;
+         grass = mix(grass, pow(det.rgb, vec3(2.2)), fl * (1.0 - sp.a) * (1.0 - step(0.2, uSnow)));
          vec3 sand = texture2D(uSand, xz / 6.0).rgb;
          // sable mouillé près de l'eau
          sand *= mix(1.0, 0.72, smoothstep(${(SEA_LEVEL + 0.35).toFixed(2)}, ${(SEA_LEVEL + 0.02).toFixed(2)}, vIleW.y));
@@ -569,7 +645,7 @@ function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
          float slope = 1.0 - vIleN.y;
          float rockW = max(sp.g, smoothstep(0.28, 0.45, slope));
          // bords nets mais ébouriffés : la part de chaque sol, bousculée par le grain de l'herbe
-         float tuft = (texture2D(uGrassTex, xz / 1.9).g - texture2D(uGrassTex, xz / 5.3 + 0.21).g) * 2.5;
+         float tuft = (texture2D(uTone, xz / 1.3).r - texture2D(uTone, xz / 3.1 + 0.21).r) * 1.6;
          float sandW = smoothstep(0.4, 0.6, sp.r + tuft) * step(0.02, sp.r);
          float dirtW = smoothstep(0.35, 0.6, sp.b + tuft) * step(0.02, sp.b);
          vec3 col = mix(grass, sand, sandW);
