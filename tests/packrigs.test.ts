@@ -45,6 +45,19 @@ describe('pièces mobiles des modèles des packs', () => {
     expect(lid.rotation.z).toBeCloseTo(-Math.PI / 2);
   });
 
+  it("une roue se découpe ronde : le garde-boue au-dessus, hors du rayon, reste en place", () => {
+    // un triangle sur l'axe de la roue (centre 0,3 m), un autre plus haut que son rayon
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0.25, 0.5, 0.05, 0.25, 0.5, 0, 0.35, 0.5, -0.05, 0.62, 0.5, 0.05, 0.62, 0.5, 0, 0.7, 0.5], 3));
+    const src = new THREE.Group();
+    src.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial()));
+    const out = cutRig(src, { parts: { roue: { boxes: [[[-1, -1, 0.3], [1, 1, 1]]], round: { r: 0.3, axis: 'z' }, pivot: [0, 0.3, 0], motion: { kind: 'turn', axis: 'z', angle: -2 * Math.PI } } } });
+    const wheel = out.getObjectByName('roue')!;
+    expect((wheel.children[0] as THREE.Mesh).geometry.getAttribute('position').count).toBe(3);
+    const rest = out.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh;
+    expect(rest.geometry.getAttribute('position').count).toBe(3);
+  });
+
   it("un filet d'eau pousse de rien à toute sa taille, et n'est pas là à 0", () => {
     const jet = new THREE.Group();
     poseMotion(jet, { kind: 'grow', axis: 'y' }, 0);

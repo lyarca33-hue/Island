@@ -45,6 +45,11 @@ export interface PackPart {
   /** Sauf ceux qui tombent dans ces boîtes. */
   not?: Box[];
   /**
+   * Seulement ceux à moins de `r` de l'axe `axis` passant par `pivot` : une roue ronde, sans le garde-boue ;
+   * sans axe, à moins de `r` du pivot : une boule, sans sa monture.
+   */
+  round?: { r: number; axis?: 'x' | 'y' | 'z' };
+  /**
    * Seulement les triangles dont la texture, au centre, a cette luminosité (`min`, `max`, de 0 à 1)
    * ou au moins cette saturation (`sat`) : la vitre claire d'une lanterne sans son cadre, les
    * légumes vifs sans le bol.
@@ -115,6 +120,39 @@ const PIANO_FIRES: Array<{ at: V3; z: number }> = [
   { at: [-0.35, 0.8, 0.5], z: 0.55 },
   { at: [0.2, 0.8, 0.5], z: 0.65 },
 ];
+
+/** Roue (centre `at`, rayon `r`) qui tourne sur son essieu `axis`, entre `w` (le long de l'essieu) : un tour par période. */
+const wheel = (at: V3, r: number, w: [number, number], axis: 'x' | 'z' = 'z'): PackPart => ({
+  boxes: [axis === 'z' ? [[-9, -9, w[0]], [9, 9, w[1]]] : [[w[0], -9, -9], [w[1], 9, 9]]],
+  round: { r, axis },
+  pivot: at,
+  motion: { kind: 'turn', axis, angle: -2 * Math.PI },
+  play: 'loop',
+  period: 1,
+});
+/** Les quatre roues d'un véhicule (devant à +X), les deux côtés à ±`side`. */
+const wheels4 = (back: [number, number, number], front: [number, number, number], side: [number, number]): Record<string, PackPart> => ({
+  'roue-ar': wheel([back[0], back[1], 0], back[2], [side[0], side[1]]),
+  'roue-ar-2': wheel([back[0], back[1], 0], back[2], [-side[1], -side[0]]),
+  'roue-av': wheel([front[0], front[1], 0], front[2], [side[0], side[1]]),
+  'roue-av-2': wheel([front[0], front[1], 0], front[2], [-side[1], -side[0]]),
+});
+/** Une glace qui se mange : elle rapetisse vers le haut de son cornet (`y`), puis n'est plus là. */
+const eaten = (y: number): PackPart => ({ boxes: [[[-1, y, -1], [1, 1, 1]]], pivot: [0, y, 0], motion: { kind: 'shrink', to: 0.3 }, play: 'hold' });
+/** Une bougie allumée : sa flamme au bout de la mèche (`y`). */
+const candle = (y: number): PackRig => ({
+  parts: { 'flamme-0': { make: { shape: 'flamme', radius: 0.007, height: 0.028 }, pivot: [0, y, 0], motion: { kind: 'grow', axis: 'y' }, play: 'loop', period: 0.5 } },
+  def: { lamp: { y: y + 0.02, color: 0xffd6a0, intensity: 0.3, range: 2.5 } },
+});
+/** Horloge de gare : aiguilles sur ses deux cadrans (devant +Z, derrière -Z), centre à 0,37 m. */
+const stationHand = (length: number, width: number, back: boolean): PackPart => ({
+  make: { shape: 'aiguille', length, width, color: 0x1d1f1c, yaw: back ? Math.PI : 0 },
+  pivot: [0, 0.37, back ? -0.204 : 0.204],
+  motion: { kind: 'spin', axis: [0, 0, back ? -1 : 1], angle: -2 * Math.PI },
+  play: 'hold',
+});
+/** Balance du marché : le cadran est à +X (centre à 0,19 m), son aiguille est peinte : un fond neuf la couvre. */
+const SCALE_AT: V3 = [0.081, 0.19, 0];
 
 /** Les modèles des packs qui ont une pièce qui bouge ou s'allume. */
 export const PACK_RIGS: { [P in PackId]?: Partial<Record<ModelName<P>, PackRig>> } = {
@@ -462,6 +500,126 @@ export const PACK_RIGS: { [P in PackId]?: Partial<Record<ModelName<P>, PackRig>>
     },
   },
 
+  glacier: {
+    'barbe-papa': { parts: { boule: eaten(0.11) } },
+    'cornet-1': { inside: true, parts: { glace: eaten(0.088), fond: { make: { shape: 'disque', radius: 0.03, color: 0xd99a4e }, pivot: [0, 0.09, 0] } } },
+    'cornet-2': { inside: true, parts: { glace: eaten(0.09), fond: { make: { shape: 'disque', radius: 0.035, color: 0xd99a4e }, pivot: [0, 0.092, 0] } } },
+    'coupe-glacee': { inside: true, parts: { glace: eaten(0.1), fond: { make: { shape: 'disque', radius: 0.05, color: 0xa9cdd6 }, pivot: [0, 0.098, 0] } } },
+    esquimau: { parts: { glace: eaten(0.035) } },
+    // se mange en trois bouchées, du bout +X vers l'autre
+    gaufre: { parts: { gaufre: { boxes: [ALL], pivot: [-0.09, 0, 0], motion: { kind: 'reel', axis: 'x', sizes: [1, 1, 0.66, 0.66, 0.33, 0.33, 0.001] }, play: 'hold' } } },
+    // le couvercle s'enlève et se pose à côté
+    'pot-glace': { inside: true, parts: { couvercle: { boxes: [[[-1, 0.097, -1], [1, 1, 1]]], motion: { kind: 'path', points: [[0, 0, 0], [0, 0.05, 0], [0.12, 0.0, 0]] }, play: 'once' } } },
+  },
+  librairie: {
+    bougeoir: candle(0.248),
+    'bougeoir-bas': candle(0.198),
+    // la boule tourne sur elle-même ; la monture reste (et les calottes des pôles, rondes)
+    globe: { parts: { boule: { boxes: [ALL], round: { r: 0.152 }, pivot: [0, 0.274, 0.012], motion: { kind: 'turn', axis: 'y', angle: 2 * Math.PI }, play: 'once' } } },
+    // l'abat-jour vert s'éclaire
+    'lampe-banquier': {
+      parts: { 'abat-jour': { boxes: [[[-1, 0.3, -1], [1, 1, 1]]], motion: { kind: 'glow', color: 0x2f7a3a }, play: 'hold' } },
+      def: { lamp: { y: 0.28, color: 0xfff0c0, intensity: 0.5, range: 3 } },
+    },
+  },
+  etals: {
+    // le plateau descend sous le poids, l'aiguille tourne sur le cadran (à +X)
+    'balance-marche': {
+      parts: {
+        plateau: { boxes: [[[-1, 0.33, -1], [1, 1, 1]]], motion: { kind: 'slide', axis: 'y', distance: -0.012 }, play: 'hold' },
+        cadran: { make: { shape: 'cadran', radius: 0.062, color: 0xf0dfb4, yaw: deg(90) }, pivot: SCALE_AT },
+        aiguille: { make: { shape: 'aiguille', length: 0.055, width: 0.005, color: 0x1d1f1c, yaw: deg(90) }, pivot: SCALE_AT, motion: { kind: 'spin', axis: [1, 0, 0], angle: -2 * Math.PI * 0.9 }, play: 'hold' },
+      },
+    },
+  },
+  enseignes: {
+    // le cylindre rayé tourne entre ses deux montants
+    'barbier-poteau': { parts: { cylindre: { boxes: [[[-0.06, 0.15, -0.07], [0.08, 0.565, 0.07]]], pivot: [0.01, 0, 0], motion: { kind: 'turn', axis: 'y', angle: -2 * Math.PI }, play: 'loop', period: 3 } } },
+    'horloge-gare': {
+      parts: {
+        'aiguille-heures': stationHand(0.12, 0.018, false),
+        'aiguille-minutes': stationHand(0.18, 0.011, false),
+        'aiguille-heures-2': stationHand(0.12, 0.018, true),
+        'aiguille-minutes-2': stationHand(0.18, 0.011, true),
+      },
+    },
+  },
+  salon: {
+    // la douchette coule dans le bac
+    'bac-a-shampoing': { parts: { eau: { make: { shape: 'jet', radius: 0.01, length: 0.16, color: WATER, opacity: 0.8 }, pivot: [-0.36, 1.1, -0.01], motion: { kind: 'grow', axis: 'y' }, play: 'hold' } } },
+    // le casque descend sur la tête du client
+    'casque-sechoir': { parts: { casque: { boxes: [[[-1, 1.18, -1], [1, 2, 1]]], motion: { kind: 'slide', axis: 'y', distance: -0.1 }, play: 'once' } } },
+  },
+  coiffeur: {
+    // la lame du dessus s'ouvre autour de la vis
+    ciseaux: { parts: { lame: { boxes: [[[-1, 0.012, -1], [1, 1, 1]]], pivot: [0, 0, 0.005], motion: { kind: 'turn', axis: 'y', angle: deg(20) }, play: 'swing', period: 0.6 } } },
+    // la pompe s'enfonce
+    'flacon-soin': { parts: { pompe: { boxes: [[[-1, 0.15, -1], [1, 1, 1]]], motion: { kind: 'slide', axis: 'y', distance: -0.012 }, play: 'once' } } },
+  },
+  pharmacie: {
+    'pot-creme': { inside: true, parts: { couvercle: { boxes: [[[-1, 0.051, -1], [1, 1, 1]]], motion: { kind: 'path', points: [[0, 0, 0], [0, 0.03, 0], [0.07, 0.0, 0]] }, play: 'once' } } },
+    sirop: { inside: true, parts: { bouchon: { boxes: [[[-1, 0.1, -1], [1, 1, 1]]], motion: { kind: 'path', points: [[0, 0, 0], [0, 0.04, 0], [0.07, -0.1, 0]] }, play: 'once' } } },
+  },
+  plage: {
+    'parasol-de-marche': { parts: { toile: { boxes: [[[-2, 1.85, -2], [2, 3, 2]]], not: [[[-0.05, 1.85, -0.05], [0.05, 2.5, 0.05]]], pivot: [0, 2.3, 0], motion: { kind: 'fold', to: 0.08 }, play: 'hold' } } },
+    'parasol-de-plage': { parts: { toile: { boxes: [[[-2, 1.62, -2], [2, 3, 2]]], not: [[[-0.04, 1.62, -0.04], [0.04, 2.2, 0.04]]], pivot: [0, 2.1, 0], motion: { kind: 'fold', to: 0.08 }, play: 'hold' } } },
+  },
+  cour: {
+    brouette: { parts: { roue: wheel([0.39, 0.16, 0], 0.165, [-0.08, 0.08]) } },
+    // le toit se soulève et se pose de côté
+    ruche: { parts: { toit: { boxes: [[[-1, 0.63, -1], [1, 1, 1]]], motion: { kind: 'path', points: [[0, 0, 0], [0, 0.15, 0], [0.5, 0.05, 0]] }, play: 'once' } } },
+  },
+  guichets: {
+    'chariot-a-colis': {
+      parts: {
+        roue: wheel([-0.07, 0.075, 0], 0.078, [0.08, 0.3]),
+        'roue-2': wheel([-0.07, 0.075, 0], 0.078, [-0.3, -0.08]),
+      },
+    },
+  },
+  presentoirs: {
+    // le couvercle vitré coulisse vers l'arrière
+    'vitrine-a-glaces': { parts: { couvercle: { boxes: [[[-1, 0.62, -1], [1, 2, 1]]], motion: { kind: 'slide', axis: 'x', distance: -0.15 }, play: 'once' } } },
+  },
+  charrettes: {
+    'charrette-a-bras': {
+      parts: {
+        roue: wheel([-0.5, 0.26, 0], 0.265, [0.4, 0.7]),
+        'roue-2': wheel([-0.5, 0.26, 0], 0.265, [-0.7, -0.4]),
+      },
+    },
+    'remorque-agricole': { parts: wheels4([-0.94, 0.33, 0.335], [0.09, 0.31, 0.315], [0.4, 1]) },
+  },
+  deuxroues: {
+    scooter: { parts: { 'roue-ar': wheel([-0.58, 0.183, 0], 0.188, [-0.1, 0.1]), 'roue-av': wheel([0.635, 0.182, 0], 0.188, [-0.1, 0.1]) } },
+    'velo-facteur': {
+      parts: {
+        'roue-ar': wheel([-0.54, 0.3, 0], 0.3, [-0.06, 0.06]),
+        'roue-av': wheel([0.59, 0.3, 0], 0.3, [-0.06, 0.06]),
+      },
+    },
+    'triporteur-glaces': {
+      parts: {
+        roue: wheel([0, 0.28, -0.13], 0.285, [0.44, 0.6], 'x'),
+        'roue-2': wheel([0, 0.28, -0.13], 0.285, [-0.6, -0.44], 'x'),
+      },
+    },
+  },
+  voitures: {
+    taxi: { parts: wheels4([-1.065, 0.305, 0.305], [1.13, 0.315, 0.315], [0.3, 1]) },
+    'voiture-citadine': { parts: wheels4([-0.975, 0.29, 0.295], [1.09, 0.3, 0.305], [0.3, 0.9]) },
+  },
+  engins: {
+    camionnette: { parts: wheels4([-1.023, 0.4, 0.415], [0.95, 0.4, 0.415], [0.5, 1.3]) },
+    tracteur: {
+      parts: {
+        'roue-ar': wheel([-0.865, 0.66, 0], 0.7, [0.5, 1.2]),
+        'roue-ar-2': wheel([-0.865, 0.66, 0], 0.7, [-1.2, -0.5]),
+        'roue-av': wheel([0.9, 0.39, 0], 0.395, [0.55, 1.1]),
+        'roue-av-2': wheel([0.9, 0.39, 0], 0.395, [-1.1, -0.55]),
+      },
+    },
+  },
 };
 
 /** Le rig du modèle `name` du pack `id`, s'il en a un. */

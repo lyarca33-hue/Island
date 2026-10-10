@@ -214,6 +214,13 @@ function texOk(px: ImageData, u: number, v: number, f: NonNullable<PackPart['tex
  * Les triangles d'une géométrie sans index (repère du modèle) dont le centre passe le test (et, avec
  * `tex`, dont la texture au centre passe le filtre).
  */
+/** `c` est à moins de `round.r` de l'axe passant par `at` (ou de `at`, sans axe). */
+function nearAxis(c: THREE.Vector3, at: THREE.Vector3, round: NonNullable<PackPart['round']>): boolean {
+  const d = c.clone().sub(at);
+  if (round.axis) d[round.axis] = 0;
+  return d.length() <= round.r;
+}
+
 function pick(g: THREE.BufferGeometry, keep: (c: THREE.Vector3) => boolean, tex?: { px: ImageData; f: NonNullable<PackPart['tex']> }): [THREE.BufferGeometry, THREE.BufferGeometry] {
   const pos = g.getAttribute('position');
   const uv = g.getAttribute('uv');
@@ -325,7 +332,8 @@ export function cutRig(src: THREE.Object3D, rig: PackRig): THREE.Group {
     g.position.copy(pivot);
     if (part.boxes) {
       for (const p of pieces) {
-        const keep = (c: THREE.Vector3) => part.boxes!.some((b) => inBox(c, b)) && !(part.not ?? []).some((b) => inBox(c, b));
+        const keep = (c: THREE.Vector3) =>
+          part.boxes!.some((b) => inBox(c, b)) && !(part.not ?? []).some((b) => inBox(c, b)) && (!part.round || nearAxis(c, pivot, part.round));
         const px = part.tex ? pixelsOf((p.mat as THREE.MeshToonMaterial).map) : null;
         const [mine, rest] = pick(p.g, keep, px ? { px, f: part.tex! } : undefined);
         p.g = rest;
