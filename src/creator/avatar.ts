@@ -13,7 +13,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYER_CHARACTER } from '../game/postfx';
 import { ACCESSORY_BY_ID, SLOTS, type AccSlot, type BackFit, type HeadFit, type NeckFit } from './accessories';
 import { paintedFace, patternedCloth, type WornPattern } from './looks';
-import { defaultRecipe, importedOf, type Body, type Recipe } from './recipe';
+import { DEFAULT_BODY, defaultRecipe, importedOf, type Body, type Recipe } from './recipe';
+import { FaceSculpt } from './faceshape';
 import { loadVrm } from './vrm';
 
 type Part = 'face' | 'hair' | 'body';
@@ -324,12 +325,19 @@ export class Avatar {
   /** Expressions du visage porté (celui du modèle « visage »). */
   readonly expressions: VRMExpressionManager | null;
   private faceVrm: VRM | null = null;
+  /** Curseurs du visage (null : visage qui n'est pas un visage VRoid). */
+  private sculpt: FaceSculpt | null = null;
   private hairSprings: VRMSpringBoneManager | null = null;
   private head: THREE.Object3D | null;
   private legLength = 0;
   private restTop = 1.5;
   private restHeadY = 1.4;
-  private body: Body = { height: 1, head: 1, legs: 1, build: 1 };
+  private body: Body = { ...DEFAULT_BODY };
+  /** Os de la poitrine (J_Sec_…_Bust1) : absents des modèles masculins. */
+  private bust: THREE.Object3D[] = [];
+  /** Longueurs du torse et du cou au repos (taille du perso). */
+  private torsoLength = 0;
+  private neckLength = 0;
   private tinted = new Map<Tintable, { color: THREE.Color; shade: THREE.Color | null; map: THREE.Texture | null; shadeMap: THREE.Texture | null }>();
   private others: VRM[] = [];
   /** Maillages retirés (visage, coiffure ou cuir chevelu remplacés) : libérés avec le perso. */
@@ -364,6 +372,7 @@ export class Avatar {
       this.faceVrm = faceVrm;
     }
     this.expressions = (this.faceVrm ?? base).expressionManager ?? null;
+    this.sculpt = FaceSculpt.from(meshes(base, 'face'), this.head);
 
     // coiffure d'un autre modèle : ses os de mèches (HairJoint-…) et leurs ressorts viennent avec
     if (r.hair !== r.outfit) {
@@ -446,6 +455,12 @@ export class Avatar {
     const y = (n: Parameters<typeof h.getRawBoneNode>[0]) => h.getRawBoneNode(n)?.getWorldPosition(new THREE.Vector3()).y ?? 0;
     this.legLength = y('leftUpperLeg') - y('leftFoot');
     this.restHeadY = y('head');
+    this.torsoLength = y('neck') - y('spine');
+    this.neckLength = y('head') - y('neck');
+    this.bust = [];
+    this.base.scene.traverse((o) => {
+      if (/^J_Sec_[LR]_Bust1$/.test(o.name)) this.bust.push(o);
+    });
     // haut du crâne (sans la coiffure, qui peut monter haut) : boîte du visage, os appliqués
     const face = new THREE.Box3();
     for (const m of meshes(this.base, 'face')) {
@@ -625,7 +640,8 @@ export class Avatar {
   /** Taille approximative (m), du sol au sommet du crâne. */
   get height(): number {
     const b = this.body;
-    return (this.restTop + (this.restTop - this.restHeadY) * (b.head - 1) + this.legLength * (b.legs - 1)) * b.height;
+    const top = this.restTop + (this.restTop - this.restHeadY) * (b.head - 1);
+    return (top + this.legLength * (b.legs - 1) + this.torsoLength * (b.torso - 1) + this.neckLength * (b.neck - 1)) * b.height;
   }
 
   /** Os de la tête (cadrage « visage » du créateur). */
@@ -636,6 +652,7 @@ export class Avatar {
   /** Proportions et couleurs (rapide, sans rechargement). */
   applyLook(r: Recipe): void {
     this.applyBody(r.body);
+    this.sculpt?.apply(r.faceShape);
     this.applyColors(r);
     this.applyAccessories(r);
   }
@@ -643,18 +660,43 @@ export class Avatar {
   private applyBody(b: Body): void {
     this.body = { ...b };
     const h = this.base.humanoid;
-    const raw = (n: Parameters<typeof h.getRawBoneNode>[0]) => h.getRawBoneNode(n);
     this.root.scale.setScalar(b.height);
-    raw('head')?.scale.setScalar(b.head);
-    // jambes : on étire la cuisse (le tibia suit), le pied garde sa forme
+    // échelle voulue de chaque os dans le repère du corps ; l'os reçoit le rapport à celle de son
+    // parent (os VRoid sans rotation au repos : les axes locaux sont ceux du corps). X = largeur
+    // (et longueur des bras, tendus à l'horizontale), Y = hauteur, Z = épaisseur.
+    const want = new Map<THREE.Object3D, THREE.Vector3>();
+    const set = (bone: THREE.Object3D | null | undefined, x: number, y: number, z: number) => {
+      if (bone) want.set(bone, new THREE.Vector3(x, y, z));
+    };
+    const raw = (n: Parameters<typeof h.getRawBoneNode>[0]) => h.getRawBoneNode(n);
+    const upper = raw('upperChest');
+    set(raw('hips'), b.hips, 1, b.hips);
+    set(raw('spine'), b.waist, b.torso, b.waist);
+    // carrure : buste élargi ; le cou et les épaules gardent leur épaisseur (mais s'écartent)
+    set(raw('chest'), upper ? (b.waist + b.build) / 2 : b.build, b.torso, upper ? (b.waist + b.build) / 2 : b.build);
+    set(upper, b.build, b.torso, b.build);
+    set(raw('neck'), 1, b.neck, 1);
+    set(raw('head'), b.head, b.head, b.head);
     for (const side of ['left', 'right'] as const) {
-      raw(`${side}UpperLeg`)?.scale.set(1, b.legs, 1);
-      raw(`${side}Foot`)?.scale.set(1, 1 / b.legs, 1);
+      set(raw(`${side}Shoulder`), b.shoulders, 1, 1);
+      set(raw(`${side}UpperArm`), b.arms, b.armSize, b.armSize);
+      set(raw(`${side}LowerArm`), b.arms, b.armSize, b.armSize);
+      set(raw(`${side}Hand`), b.hands, b.hands, b.hands);
+      // jambes : on étire la cuisse et le tibia, le pied garde sa hauteur
+      set(raw(`${side}UpperLeg`), b.thighs, b.legs, b.thighs);
+      set(raw(`${side}LowerLeg`), 1, b.legs, 1);
+      set(raw(`${side}Foot`), b.feet, 1, b.feet);
     }
-    // carrure : buste élargi, cou et épaules gardent leur épaisseur (mais s'écartent)
-    const chest = raw('upperChest') ?? raw('chest');
-    chest?.scale.set(b.build, 1, b.build);
-    for (const n of ['neck', 'leftShoulder', 'rightShoulder'] as const) raw(n)?.scale.set(1 / b.build, 1, 1 / b.build);
+    for (const bone of this.bust) set(bone, b.bust, b.bust, b.bust);
+    const one = new THREE.Vector3(1, 1, 1);
+    const worldOf = (o: THREE.Object3D | null): THREE.Vector3 => {
+      for (let p = o; p && p !== this.base.scene; p = p.parent) {
+        const w = want.get(p);
+        if (w) return w;
+      }
+      return one;
+    };
+    for (const [bone, w] of want) bone.scale.copy(w).divide(worldOf(bone.parent));
     // les pieds restent au sol
     this.base.scene.position.y = this.legLength * (b.legs - 1);
   }
