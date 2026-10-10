@@ -298,13 +298,14 @@ export const UPKEEP_ITEMS: ItemDef[] = [
       return g;
     },
   },
-  // formes provisoires en attendant les modèles Tripo de Greg (fil « Prompts Tripo du ménage »)
+  // formes de secours avant le chargement des modèles Tripo (menage.glb, tripo.ts)
   {
     id: 'aspirateur',
     name: 'aspirateur',
     portable: true,
     grip: 'pole',
-    gripPoint: [0, 1.0, 0],
+    // la poignée en boucle au-dessus du bloc moteur (modèle Tripo)
+    gripPoint: [0, 1.1, -0.04],
     fragility: 6,
     durability: 200,
     vacuums: true,

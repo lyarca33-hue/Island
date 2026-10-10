@@ -257,11 +257,11 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
   items: [
     // les toilettes au fond, sous la fenêtre ; le lavabo contre le mur ouest, après la douche
     ['toilettes', BATH.toilet, 0, SALLE_DE_BAIN.z0 + 0.27, 0],
-    // la brosse des WC debout à côté de la cuvette
-    ['brosse-wc', BATH.toilet + 0.34, 0, SALLE_DE_BAIN.z0 + 0.14, 0],
     ['papier-toilette', BATH.toilet, 0.805, SALLE_DE_BAIN.z0 + 0.09, 0],
     // à droite de la cuvette, par terre : le pot de la brosse WC et le gel WC
     ['support-brosse-wc', BATH.toilet + 0.34, 0, SALLE_DE_BAIN.z0 + 0.14, 0],
+    // la brosse rangée dans son pot (la place du support)
+    ['brosse-wc', BATH.toilet + 0.34, 0.02, SALLE_DE_BAIN.z0 + 0.14, 0],
     ['gel-wc', BATH.toilet + 0.52, 0, SALLE_DE_BAIN.z0 + 0.12, 0],
     // le porte-papier au mur, à droite des toilettes : on y accroche le rouleau
     ['derouleur', BATH.toilet + 0.4, 0.66, SALLE_DE_BAIN.z0 + 0.035, 0],

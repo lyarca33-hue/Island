@@ -177,8 +177,8 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   rateau: { model: 'rateau' },
   'rangement-outils': { model: 'rangement-outils' },
 
-  // —— le ménage et le linge (menage.glb, menage.ts). Le pack porte aussi aspirateur, plumeau,
-  // brosse-wc et gant-porte pour les objets des gestes de ménage (PR « Animations de ménage »).
+  // —— le ménage et le linge (menage.glb, menage.ts ; upkeep.ts pour les outils des gestes). Le pack
+  // porte aussi un gant seul (gant-porte), pas encore utilisé.
   balai: { model: 'balai' },
   serpilliere: { model: 'serpilliere' },
   seau: { model: 'seau' },
@@ -196,6 +196,9 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   'nettoyant-sol': { model: 'nettoyant-sol' },
   'support-brosse-wc': { model: 'support-brosse-wc' },
   'chariot-menage': { model: 'chariot-menage' },
+  aspirateur: { model: 'aspirateur' },
+  plumeau: { model: 'plumeau' },
+  'brosse-wc': { model: 'brosse-wc' },
   'machine-a-laver': { model: 'machine-laver', parts: { porte: { from: 'porte', pivot: WASHER_HINGE } } },
   'seche-linge': { model: 'seche-linge', parts: { porte: { from: 'porte', pivot: DRYER_HINGE } } },
 };
