@@ -91,7 +91,11 @@ pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pi�
   rouge, et le perso la déverrouille en sortant ;
 - l'**entrée** : le portemanteau et son manteau, le miroir, les chaussures, le porte-parapluies, une
   lettre sous la porte, la boîte aux lettres dehors ;
-- le **garage** : l'établi et sa caisse à outils, l'étagère, des cartons, le vélo, la bêche et le râteau.
+- le **garage** : l'établi et sa caisse à outils, l'étagère, des cartons, le vélo, la bêche et le râteau, et le coin
+  ménage : la machine à laver et le sèche-linge (leur hublot s'ouvre), le chariot de ménage avec ses
+  produits, la pelle et la balayette, la tête de loup. Le gel WC et le support de brosse sont à côté
+  des toilettes ; le balai, le seau, la serpillière, le spray et les gants prennent leur modèle Tripo
+  (`src/game/items/menage.ts`, `public/models/menage.glb`).
 
 Tapis, colonne de douche, miroirs et portemanteau sont du décor fixe (`decor`) ; le reste se prend ou se pousse.
 La télé, retirée avec l'ancienne maison, n'est pas encore rebranchée. La vessie baisse : en dessous de 18, le perso est
@@ -177,6 +181,7 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 | `src/game/kit.ts` | Le kit Tripo de la maison : enduit des murs, sol, toit, porte, fenêtre |
 | `src/game/items/tripo.ts` | Meubles et objets de la maison faits avec Tripo : modèle, pièces mobiles posées sur leur charnière |
 | `src/game/items/pieces.ts` | Fiches des meubles et objets du salon, de la chambre, de la salle de bain, de l'entrée et du garage |
+| `src/game/items/menage.ts` | Fiches du ménage et du linge faits avec Tripo : produits, chariot, machine à laver, sèche-linge |
 | `src/App.tsx` | Interface React : map (créateur depuis le menu) |
 | `src/creator/catalog.ts` | Liste des 12 persos de base (tenue, coiffure, genre) |
 | `src/creator/vrm.ts` | Chargement des fichiers VRM (three-vrm), import d'un .vrm du joueur |

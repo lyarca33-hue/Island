@@ -18,11 +18,12 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { createToonMaterial } from '../toon';
+import { DRYER_HINGE, WASHER_HINGE } from './menage';
 import { poseMotion, ROOM_RIGS, type Motion } from './rigs';
 import { type ShadeZone, unshadeMaterial } from './unshade';
 
 /** Les fichiers de modèles, un par pièce (public/models/<pièce>.glb). */
-export const TRIPO_PACKS = ['cuisine', 'salon', 'chambre', 'salle-de-bain', 'entree', 'garage'];
+export const TRIPO_PACKS = ['cuisine', 'salon', 'chambre', 'salle-de-bain', 'entree', 'garage', 'menage'];
 export const TRIPO_URL = `${import.meta.env.BASE_URL}models/cuisine.glb`;
 const packUrl = (pack: string) => `${import.meta.env.BASE_URL}models/${pack}.glb`;
 
@@ -175,6 +176,31 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   beche: { model: 'beche' },
   rateau: { model: 'rateau' },
   'rangement-outils': { model: 'rangement-outils' },
+
+  // —— le ménage et le linge (menage.glb, menage.ts ; upkeep.ts pour les outils des gestes). Le pack
+  // porte aussi un gant seul (gant-porte), pas encore utilisé.
+  balai: { model: 'balai' },
+  serpilliere: { model: 'serpilliere' },
+  seau: { model: 'seau' },
+  // le bec du modèle vers -X : tourné vers l'avant (+Z), comme celui du jeu
+  spray: { model: 'spray', turn: Math.PI / 2 },
+  // la paire couchée en long selon X : en long selon Z, comme celle du jeu
+  gants: { model: 'gants-menage', turn: Math.PI / 2 },
+  pelle: { model: 'pelle' },
+  balayette: { model: 'balayette' },
+  'raclette-vitres': { model: 'raclette-vitres' },
+  'brosse-recurer': { model: 'brosse-recurer' },
+  'tete-de-loup': { model: 'tete-de-loup' },
+  'liquide-vaisselle': { model: 'liquide-vaisselle' },
+  'gel-wc': { model: 'gel-wc' },
+  'nettoyant-sol': { model: 'nettoyant-sol' },
+  'support-brosse-wc': { model: 'support-brosse-wc' },
+  'chariot-menage': { model: 'chariot-menage' },
+  aspirateur: { model: 'aspirateur' },
+  plumeau: { model: 'plumeau' },
+  'brosse-wc': { model: 'brosse-wc' },
+  'machine-a-laver': { model: 'machine-laver', parts: { porte: { from: 'porte', pivot: WASHER_HINGE } } },
+  'seche-linge': { model: 'seche-linge', parts: { porte: { from: 'porte', pivot: DRYER_HINGE } } },
 };
 
 /** Les modèles chargés : chaque pièce (nœud) avec sa géométrie dans le repère du modèle. */

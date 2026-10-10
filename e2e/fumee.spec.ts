@@ -36,7 +36,7 @@ test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info
     const g = (window as unknown as { game: Jeu }).game;
     const d = g.describe();
     const loaded = performance.getEntriesByType('resource').map((e) => e.name);
-    const tripo = ['cuisine', 'salon', 'chambre', 'salle-de-bain', 'entree', 'garage'].every((p) => loaded.some((n) => n.endsWith(`models/${p}.glb`)));
+    const tripo = ['cuisine', 'salon', 'chambre', 'salle-de-bain', 'entree', 'garage', 'menage'].every((p) => loaded.some((n) => n.endsWith(`models/${p}.glb`)));
     return { pieces: g.rooms.length, objets: d.objets.length, perso: d.perso, tripo };
   });
   expect(etat.pieces).toBe(6);
