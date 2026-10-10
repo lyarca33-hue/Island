@@ -308,6 +308,60 @@ const LOTS = {
     '298_transat_160cm': { nom: 'transat', cm: 160, tri: 10000, permissive: true },
     '299_parasol-de-plage_220cm': { nom: 'parasol-de-plage', cm: 220, tri: 5000, permissive: true },
   },
+  // Glacier et friandises (groupes G14 et G15), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  glacier: {
+    '229_pot-glace_15cm': { nom: 'pot-glace', cm: 15, tri: 5000, permissive: true },
+    '225_coupe-glacee_18cm': { nom: 'coupe-glacee', cm: 18, tri: 5000, permissive: true },
+    '224_cornet-2_20cm': { nom: 'cornet-2', cm: 20, tri: 5000, permissive: true },
+    '223_cornet-1_15cm': { nom: 'cornet-1', cm: 15, tri: 5000, permissive: true },
+    '226_esquimau_15cm': { nom: 'esquimau', cm: 15, tri: 5000, permissive: true },
+    '231_crepiere_45cm': { nom: 'crepiere', cm: 45, tri: 5000, permissive: true },
+    '230_gaufre_18cm': { nom: 'gaufre', cm: 18, tri: 5000, permissive: true },
+    '232_barbe-papa_30cm': { nom: 'barbe-papa', cm: 30, tri: 5000, permissive: true },
+    '227_cuillere-glace_20cm': { nom: 'cuillere-glace', cm: 20, tri: 5000, permissive: true },
+  },
+  // Librairie (groupe G16), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  librairie: {
+    '236_pile-livres_30cm': { nom: 'pile-livres', cm: 30, tri: 5000, permissive: true },
+    '238_globe_45cm': { nom: 'globe', cm: 45, tri: 5000, permissive: true },
+    '240_fichier_30cm': { nom: 'fichier', cm: 30, tri: 5000, permissive: true },
+    '240b_bac-fiches_34cm': { nom: 'bac-fiches', cm: 34, tri: 5000, permissive: true },
+    '237_lampe-banquier_40cm': { nom: 'lampe-banquier', cm: 40, tri: 5000, permissive: true },
+    '243_bougeoir_25cm': { nom: 'bougeoir', cm: 25, tri: 5000, permissive: true },
+    '243b_bougeoir-bas_20cm': { nom: 'bougeoir-bas', cm: 20, tri: 5000, permissive: true },
+  },
+  // Chats et chiens du vétérinaire (groupe G17), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  veterinaire: {
+    '247_panier-chat_50cm': { nom: 'panier-chat', cm: 50, tri: 5000, permissive: true },
+    '249_pelote_10cm': { nom: 'pelote', cm: 10, tri: 5000, permissive: true },
+    '250_litiere_50cm': { nom: 'litiere', cm: 50, tri: 5000, permissive: true },
+    '254_bocal-poisson_25cm': { nom: 'bocal-poisson', cm: 25, tri: 5000, permissive: true },
+    '256_croquettes-chien_40cm': { nom: 'croquettes-chien', cm: 40, tri: 5000, permissive: true },
+    '257_laisse_20cm': { nom: 'laisse', cm: 20, tri: 5000, permissive: true },
+  },
+  // Coiffeur (groupe G18), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  coiffeur: {
+    '270_cape-coiffure_30cm': { nom: 'cape-coiffure', cm: 30, tri: 5000, permissive: true },
+    '263_seche-cheveux_25cm': { nom: 'seche-cheveux', cm: 25, tri: 5000, permissive: true },
+    '265_peigne_20cm': { nom: 'peigne', cm: 20, tri: 5000, permissive: true },
+    '266_brosse-cheveux_23cm': { nom: 'brosse-cheveux', cm: 23, tri: 5000, permissive: true },
+    '267_flacon-soin_20cm': { nom: 'flacon-soin', cm: 20, tri: 5000, permissive: true },
+    '264_ciseaux_16cm': { nom: 'ciseaux', cm: 16, tri: 5000, permissive: true },
+  },
+  // Horloge de gare et poteau de barbier (groupe G19), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  enseignes: {
+    '291_horloge-gare_80cm': { nom: 'horloge-gare', cm: 80, tri: 5000, permissive: true },
+    '269_barbier-poteau_70cm': { nom: 'barbier-poteau', cm: 70, tri: 5000, permissive: true },
+  },
+  // Pharmacie (groupe G20), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  pharmacie: {
+    '278_stethoscope_60cm': { nom: 'stethoscope', cm: 60, tri: 5000, permissive: true },
+    '274_sirop_14cm': { nom: 'sirop', cm: 14, tri: 5000, permissive: true },
+    '275_bande_10cm': { nom: 'bande', cm: 10, tri: 5000, permissive: true },
+    '282_pot-creme_7cm': { nom: 'pot-creme', cm: 7, tri: 5000, permissive: true, err: 0.001 },
+    '273_boite-medicament_10cm': { nom: 'boite-medicament', cm: 10, tri: 5000, permissive: true },
+    '277_thermometre_13cm': { nom: 'thermometre', cm: 13, tri: 5000, permissive: true },
+  },
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
 const texSize = (o) => o.tex ?? (o.cm < 30 ? 512 : 1024);
