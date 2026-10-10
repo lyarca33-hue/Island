@@ -3006,7 +3006,7 @@ export class Game {
     if (item.def.wash) {
       // le miroir monte du fond du lavabo, au-dessus de la cuve
       const depth = Math.abs(fwd.x) > Math.abs(fwd.z) ? b.max.x - b.min.x : b.max.z - b.min.z;
-      return mid.addScaledVector(fwd, -depth / 2 + 0.06).setY(Math.min(1.45, b.max.y - 0.28));
+      return mid.addScaledVector(fwd, -depth / 2 + 0.06).setY(Math.min(1.5, b.max.y - 0.2));
     }
     return mid.addScaledVector(fwd, 0.02).setY(THREE.MathUtils.clamp(mid.y, 0.9, 1.45));
   }
