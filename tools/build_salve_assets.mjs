@@ -183,6 +183,72 @@ const LOTS = {
     'kiwi_7cm': { nom: 'kiwi', cm: 7, tri: 5000 },
   },
 
+  // Port : poissons, fruits de mer et objets du quai (groupes G05 à G07), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
+  port: {
+    '124_bitte-amarrage_50cm': { nom: 'bitte-amarrage', cm: 50, tri: 5000 },
+    '125_rouleau-corde_50cm': { nom: 'rouleau-corde', cm: 50, tri: 5000 },
+    '128_bouee-sauvetage_70cm': { nom: 'bouee-sauvetage', cm: 70, tri: 5000 },
+    '129_caisse-poissons_60cm': { nom: 'caisse-poissons', cm: 60, tri: 5000 },
+    '134_ancre_80cm': { nom: 'ancre', cm: 80, tri: 5000 },
+    '135_lanterne-bateau_30cm': { nom: 'lanterne-bateau', cm: 30, tri: 5000 },
+    '137_sardine_18cm': { nom: 'sardine', cm: 18, tri: 5000 },
+    '138_maquereau_30cm': { nom: 'maquereau', cm: 30, tri: 5000 },
+    '139_bar_40cm': { nom: 'bar', cm: 40, tri: 5000 },
+    '140_dorade_35cm': { nom: 'dorade', cm: 35, tri: 5000 },
+    '141_saumon_70cm': { nom: 'saumon', cm: 70, tri: 5000 },
+    '143_homard_40cm': { nom: 'homard', cm: 40, tri: 5000 },
+    '142_crabe_20cm': { nom: 'crabe', cm: 20, tri: 5000 },
+    '144_crevettes_12cm': { nom: 'crevettes', cm: 12, tri: 5000 },
+    '145_huitre_10cm': { nom: 'huitre', cm: 10, tri: 5000 },
+    '146_moules_14cm': { nom: 'moules', cm: 14, tri: 5000 },
+  },
+  // Poste et papiers (groupes G08 et G09), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
+  poste: {
+    '150_sacoche-facteur_40cm': { nom: 'sacoche-facteur', cm: 40, tri: 5000 },
+    '151_colis_40cm': { nom: 'colis', cm: 40, tri: 5000 },
+    '154_tampon-poste_10cm': { nom: 'tampon-poste', cm: 10, tri: 5000 },
+    '155_balance-colis_35cm': { nom: 'balance-colis', cm: 35, tri: 5000 },
+    '159_bac-courrier_45cm': { nom: 'bac-courrier', cm: 45, tri: 5000 },
+    '160_casquette-facteur_25cm': { nom: 'casquette-facteur', cm: 25, tri: 5000 },
+    '156_carte-postale_15cm': { nom: 'carte-postale', cm: 15, tri: 5000 },
+    '157_enveloppe_22cm': { nom: 'enveloppe', cm: 22, tri: 5000 },
+    '175_sachet-graines_12cm': { nom: 'sachet-graines', cm: 12, tri: 5000 },
+    '241_journal-plie_30cm': { nom: 'journal-plie', cm: 30, tri: 5000 },
+    '242_magazine_28cm': { nom: 'magazine', cm: 28, tri: 5000 },
+    '244_marque-page-cuir_18cm': { nom: 'marque-page-cuir', cm: 18, tri: 5000 },
+  },
+  // Fleuriste : pots, vases et fleurs coupées (groupes G10 et G11), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
+  fleuriste: {
+    '161_seau-a-fleurs_35cm': { nom: 'seau-a-fleurs', cm: 35, tri: 5000 },
+    '164_vase-verre_30cm': { nom: 'vase-verre', cm: 30, tri: 5000 },
+    '165_vase-ceramique_25cm': { nom: 'vase-ceramique', cm: 25, tri: 5000 },
+    '173_cactus-en-pot_25cm': { nom: 'cactus-en-pot', cm: 25, tri: 5000 },
+    '174_orchidee-en-pot_50cm': { nom: 'orchidee-en-pot', cm: 50, tri: 5000 },
+    '176_secateur_20cm': { nom: 'secateur', cm: 20, tri: 5000 },
+    '166_rose_45cm': { nom: 'rose', cm: 45, tri: 5000 },
+    '167_tournesol_80cm': { nom: 'tournesol', cm: 80, tri: 5000 },
+    '168_lys_60cm': { nom: 'lys', cm: 60, tri: 5000 },
+    '169_lavande-botte_40cm': { nom: 'lavande-botte', cm: 40, tri: 5000 },
+    '170_pivoine_45cm': { nom: 'pivoine', cm: 45, tri: 5000 },
+    '171_bouquet-emballe_50cm': { nom: 'bouquet-emballe', cm: 50, tri: 5000 },
+  },
+  // Ferme (groupe G12), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
+  ferme: {
+    '187_seau-a-traire_30cm': { nom: 'seau-a-traire', cm: 30, tri: 5000 },
+    '188_bidon-a-lait_70cm': { nom: 'bidon-a-lait', cm: 70, tri: 5000 },
+    '193_cadre-de-ruche_45cm': { nom: 'cadre-de-ruche', cm: 45, tri: 5000 },
+    '194_panier-a-oeufs_25cm': { nom: 'panier-a-oeufs', cm: 25, tri: 5000 },
+    '195_sac-de-grain_60cm': { nom: 'sac-de-grain', cm: 60, tri: 5000 },
+    '198_gerbe-de-ble_60cm': { nom: 'gerbe-de-ble', cm: 60, tri: 5000 },
+  },
+  // Outillage de l'atelier (groupe G13), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement
+  outillage: {
+    '206_perceuse_25cm': { nom: 'perceuse', cm: 25, tri: 5000 },
+    '207_metre-pliant_25cm': { nom: 'metre-pliant', cm: 25, tri: 5000 },
+    '208_serre-joint_40cm': { nom: 'serre-joint', cm: 40, tri: 5000 },
+    '213_pot-vernis-pinceau_15cm': { nom: 'pot-vernis-pinceau', cm: 15, tri: 5000 },
+    '214_pot-de-peinture_20cm': { nom: 'pot-de-peinture', cm: 20, tri: 5000 },
+  },
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
 const texSize = (o) => o.tex ?? (o.cm < 30 ? 512 : 1024);
