@@ -11,10 +11,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from '../toon';
 import { poseMotion } from '../items/rigs';
 import { PACK_SIZES, type ModelName, type PackId } from './manifest';
-import { packRigOf, type Box, type Make, type PackRig } from './rigs';
+import { packRigOf, type Box, type Make, type PackPart, type PackRig } from './rigs';
 
 export const packUrl = (id: PackId) => `${import.meta.env.BASE_URL}packs/${id}.glb`;
 
@@ -197,19 +198,23 @@ function pixelsOf(tex: THREE.Texture | null): ImageData | null {
   return pixels.get(img)!;
 }
 
-/** Luminosité (0 à 1) de la texture au point uv. */
-function lumaAt(px: ImageData, u: number, v: number): number {
+/** La texture au point uv passe-t-elle le filtre (luminosité, saturation) ? */
+function texOk(px: ImageData, u: number, v: number, f: NonNullable<PackPart['tex']>): boolean {
   const x = Math.min(px.width - 1, Math.max(0, Math.floor((u - Math.floor(u)) * px.width)));
   const y = Math.min(px.height - 1, Math.max(0, Math.floor((v - Math.floor(v)) * px.height)));
   const o = (y * px.width + x) * 4;
-  return (0.2126 * px.data[o] + 0.7152 * px.data[o + 1] + 0.0722 * px.data[o + 2]) / 255;
+  const [r, g, b] = [px.data[o], px.data[o + 1], px.data[o + 2]];
+  const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  const hi = Math.max(r, g, b);
+  const sat = hi ? (hi - Math.min(r, g, b)) / hi : 0;
+  return luma >= (f.min ?? 0) && luma <= (f.max ?? 1) && sat >= (f.sat ?? 0);
 }
 
 /**
  * Les triangles d'une géométrie sans index (repère du modèle) dont le centre passe le test (et, avec
- * `bright`, dont la texture est assez claire au centre).
+ * `tex`, dont la texture au centre passe le filtre).
  */
-function pick(g: THREE.BufferGeometry, keep: (c: THREE.Vector3) => boolean, bright?: { px: ImageData; min: number }): [THREE.BufferGeometry, THREE.BufferGeometry] {
+function pick(g: THREE.BufferGeometry, keep: (c: THREE.Vector3) => boolean, tex?: { px: ImageData; f: NonNullable<PackPart['tex']> }): [THREE.BufferGeometry, THREE.BufferGeometry] {
   const pos = g.getAttribute('position');
   const uv = g.getAttribute('uv');
   const yes: number[] = [], no: number[] = [];
@@ -218,10 +223,10 @@ function pick(g: THREE.BufferGeometry, keep: (c: THREE.Vector3) => boolean, brig
     c.set(0, 0, 0);
     for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, t * 3 + k));
     let ok = keep(c.divideScalar(3));
-    if (ok && bright && uv) {
+    if (ok && tex && uv) {
       const u = (uv.getX(t * 3) + uv.getX(t * 3 + 1) + uv.getX(t * 3 + 2)) / 3;
       const w = (uv.getY(t * 3) + uv.getY(t * 3 + 1) + uv.getY(t * 3 + 2)) / 3;
-      ok = lumaAt(bright.px, u, w) >= bright.min;
+      ok = texOk(tex.px, u, w, tex.f);
     }
     (ok ? yes : no).push(t);
   }
@@ -242,8 +247,8 @@ function made(m: Make): THREE.Mesh {
   if (m.shape === 'jet') {
     const g = new THREE.CylinderGeometry(m.radius * (m.up ? 0.8 : 1), m.radius * (m.up ? 1 : 0.8), m.length, 8, 1, true).translate(0, (m.up ? 1 : -1) * (m.length / 2), 0);
     const mat = createToonMaterial({ color: m.color, rimStrength: 0 });
-    mat.transparent = true;
     mat.opacity = m.opacity ?? 0.75;
+    mat.transparent = mat.opacity < 1;
     return new THREE.Mesh(g, mat);
   }
   if (m.shape === 'flamme') {
@@ -254,6 +259,19 @@ function made(m: Make): THREE.Mesh {
   }
   // (en anneaux : la surface peut onduler)
   if (m.shape === 'disque') return new THREE.Mesh(new THREE.RingGeometry(0, m.radius, 32, 8).rotateX(-Math.PI / 2), createToonMaterial({ color: m.color, rimStrength: 0 }));
+  if (m.shape === 'volume') {
+    const mat = createToonMaterial({ color: m.color, rimStrength: 0 });
+    return new THREE.Mesh(new THREE.CylinderGeometry(m.top, m.bottom, m.height, 24).translate(0, m.height / 2, 0), mat);
+  }
+  if (m.shape === 'couronne') {
+    const n = Math.max(8, Math.round((2 * Math.PI * m.radius) / 0.025));
+    const one = new THREE.ConeGeometry(m.height * 0.3, m.height, 6).translate(0, m.height / 2, 0);
+    const all = Array.from({ length: n }, (_, i) => one.clone().translate(m.radius * Math.cos((2 * Math.PI * i) / n), 0, m.radius * Math.sin((2 * Math.PI * i) / n)));
+    const mat = createToonMaterial({ color: 0x6fa8ff, rimStrength: 0 });
+    mat.emissive.set(0x2a5cff);
+    return new THREE.Mesh(mergeGeometries(all), mat);
+  }
+  if (m.shape === 'bouton') return new THREE.Mesh(new THREE.CylinderGeometry(m.radius, m.radius, m.depth, 16).rotateX(Math.PI / 2).translate(0, 0, m.depth / 2).rotateY(m.yaw), createToonMaterial({ color: m.color, rimStrength: 0 }));
   if (m.shape === 'cadran') return new THREE.Mesh(new THREE.CircleGeometry(m.radius, 32).rotateY(m.yaw), createToonMaterial({ color: m.color, rimStrength: 0 }));
   // l'aiguille, de l'axe vers midi (un peu en arrière de l'axe), à 4 mm devant le cadran
   const g = new THREE.BoxGeometry(m.width, m.length, 0.004).translate(0, m.length * 0.42, 0.004).rotateY(m.yaw);
@@ -292,7 +310,14 @@ export function cutRig(src: THREE.Object3D, rig: PackRig): THREE.Group {
   });
   const out = new THREE.Group();
   const side = rig.inside ? THREE.DoubleSide : THREE.FrontSide;
-  for (const p of pieces) p.mat.side = side;
+  for (const p of pieces) {
+    p.mat.side = side;
+    if (rig.opacity !== undefined) {
+      p.mat.transparent = true;
+      p.mat.opacity = rig.opacity;
+      p.mat.depthWrite = false;
+    }
+  }
   for (const [partName, part] of Object.entries(rig.parts)) {
     const g = new THREE.Group();
     g.name = partName;
@@ -301,8 +326,8 @@ export function cutRig(src: THREE.Object3D, rig: PackRig): THREE.Group {
     if (part.boxes) {
       for (const p of pieces) {
         const keep = (c: THREE.Vector3) => part.boxes!.some((b) => inBox(c, b)) && !(part.not ?? []).some((b) => inBox(c, b));
-        const px = part.bright !== undefined ? pixelsOf((p.mat as THREE.MeshToonMaterial).map) : null;
-        const [mine, rest] = pick(p.g, keep, px ? { px, min: part.bright! } : undefined);
+        const px = part.tex ? pixelsOf((p.mat as THREE.MeshToonMaterial).map) : null;
+        const [mine, rest] = pick(p.g, keep, px ? { px, f: part.tex! } : undefined);
         p.g = rest;
         if (!mine.getAttribute('position').count) continue;
         mine.translate(-pivot.x, -pivot.y, -pivot.z);
@@ -324,7 +349,15 @@ export function cutRig(src: THREE.Object3D, rig: PackRig): THREE.Group {
     mesh.castShadow = mesh.receiveShadow = true;
     out.add(mesh);
   }
+  // les pièces posées sur une autre la suivent
+  for (const [partName, part] of Object.entries(rig.parts)) {
+    const host = part.on && out.getObjectByName(part.on);
+    const g = out.getObjectByName(partName);
+    if (host && g) host.attach(g);
+  }
   // au repos
-  for (const g of out.children) if (g.userData.motion) poseMotion(g, g.userData.motion, 0);
+  out.traverse((g) => {
+    if (g.userData.motion) poseMotion(g, g.userData.motion, 0);
+  });
   return out;
 }

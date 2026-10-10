@@ -39,6 +39,10 @@ export type Motion =
   | { kind: 'wave'; along: Axis; push: Axis; amp: number; waves: number }
   /** Tourne de `angle` (rad) autour d'un axe quelconque (vecteur) : les aiguilles d'un cadran de biais. */
   | { kind: 'spin'; axis: [number, number, number]; angle: number }
+  /** Se remplit : monte depuis son axe (sa base), et s'élargit de la part `from` de sa largeur à toute (verre évasé). Caché à 0. */
+  | { kind: 'fill'; from: number }
+  /** Se mange : rapetisse vers son axe jusqu'à la part `to` de sa taille, puis disparaît à 1 (0 : entier, tel que modélisé). */
+  | { kind: 'shrink'; to: number }
   /** Change de taille le long de l'axe, depuis son axe, en suivant ces tailles (parts de la sienne) de 0 à 1 : la corde du puits. */
   | { kind: 'reel'; axis: Axis; sizes: number[] }
   /** Suit un chemin : décalages (m) depuis sa place, joints en ligne droite de 0 à 1 (le seau du puits). */
@@ -58,7 +62,14 @@ export function poseMotion(part: THREE.Object3D, motion: Motion, k: number): voi
     part.visible = t > 0;
   } else if (motion.kind === 'glow') glow(part, motion.color, t);
   else if (motion.kind === 'spin') part.quaternion.setFromAxisAngle(new THREE.Vector3(...motion.axis).normalize(), t * motion.angle);
-  else if (motion.kind === 'reel') part.scale[motion.axis] = Math.max(along(motion.sizes, t), 1e-3);
+  else if (motion.kind === 'fill') {
+    part.scale.y = Math.max(t, 1e-3);
+    part.scale.x = part.scale.z = THREE.MathUtils.lerp(motion.from, 1, t);
+    part.visible = t > 0;
+  } else if (motion.kind === 'shrink') {
+    part.scale.setScalar(THREE.MathUtils.lerp(1, motion.to, t));
+    part.visible = t < 1;
+  } else if (motion.kind === 'reel') part.scale[motion.axis] = Math.max(along(motion.sizes, t), 1e-3);
   else if (motion.kind === 'path') {
     const rest = (part.userData.rest ??= part.position.clone()) as THREE.Vector3;
     const n = motion.points.length - 1;
