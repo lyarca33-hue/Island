@@ -671,7 +671,7 @@ function choreClause(verb: string, said: string[], found: WorldObject[]): Intent
   if (rest.some((x) => ['dents', 'dent', 'cheveux', 'mains', 'main', 'visage', 'toi', 'te', 'moi', 'dos'].includes(x))) return verb === 'recurer' ? null : undefined;
   // « fais le ménage », « fais un peu de ménage dans le salon », « nettoie le ménage » : tout ce qui est sale
   if (rest.includes('menage') || rest.includes('menages')) return whole();
-  if (has(GLASS_WORDS) && verb !== 'balayer' && verb !== 'aspirer') return [{ kind: 'vitres', ...(piece ? where : rest.some((x) => x.startsWith('miroir') || x.startsWith('glace')) ? { piece: 'salle de bain' } : {}) }];
+  if (has(GLASS_WORDS) && verb !== 'balayer' && verb !== 'aspirer') return [{ kind: 'vitres', ...(rest.some((x) => x.startsWith('miroir') || x.startsWith('glace')) ? { ref: 'miroir' } : where) }];
   switch (verb) {
     case 'cafe':
       // « fais la poussière », « fais les sols »

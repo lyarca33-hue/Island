@@ -302,6 +302,30 @@ export const ACTIONS: ActionDef[] = [
     run: (g, a) => g.cleanSurface(a.objet),
   },
   {
+    name: 'aspirer',
+    description: 'Passer l’aspirateur sur le sol de la pièce où est le perso (il va le chercher) : poussière, miettes.',
+    params: {},
+    run: (g) => g.vacuumFloor(),
+  },
+  {
+    name: 'depoussierer',
+    description: 'Faire la poussière au plumeau ou au chiffon sur le meuble `objet` (facultatif : le plus poussiéreux).',
+    params: {},
+    run: (g, a) => g.dustFurniture(a.objet || undefined),
+  },
+  {
+    name: 'frotter',
+    description: 'Frotter un sanitaire sale `objet` (facultatif : le plus sale) : toilettes à la brosse WC, lavabo, douche, évier à l’éponge.',
+    params: {},
+    run: (g, a) => g.scrubSurface(a.objet || undefined),
+  },
+  {
+    name: 'vitres',
+    description: 'Laver les vitres de la pièce où est le perso, ou le miroir du lavabo (`objet` « miroir »).',
+    params: {},
+    run: (g, a) => g.washWindows(a.objet || undefined),
+  },
+  {
     name: 'gants',
     description: 'Enfiler (etat « mettre », les gants pris au placard) ou enlever (« enlever ») les gants de ménage : ils protègent les mains à la vaisselle ; on ne mange pas avec.',
     params: { etat: '« mettre » ou « enlever »' },

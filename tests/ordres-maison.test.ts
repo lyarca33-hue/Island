@@ -139,7 +139,7 @@ describe('le ménage, pièce par pièce', () => {
     ['passe le chiffon sur la table basse', [{ kind: 'poussiere', ref: 'table-basse' }]],
     ['fais les vitres', [{ kind: 'vitres' }]],
     ['nettoie les carreaux du salon', [{ kind: 'vitres', piece: 'salon' }]],
-    ['nettoie le miroir', [{ kind: 'vitres', piece: 'salle de bain' }]],
+    ['nettoie le miroir', [{ kind: 'vitres', ref: 'miroir' }]],
     ['nettoie les toilettes', [{ kind: 'nettoyer', ref: 'toilettes' }]],
     ['frotte les wc', [{ kind: 'nettoyer', ref: 'toilettes' }]],
     ['récure la douche', [{ kind: 'nettoyer', ref: 'douche' }]],

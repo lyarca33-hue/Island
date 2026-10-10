@@ -118,9 +118,13 @@ Tâches possibles (réponds avec l'une d'elles) :
 - {"tache": "essuyer", "objet": "<ref>"} : essuyer les miettes de la table avec l'éponge (« objet » facultatif)
 - {"tache": "empiler"} : empiler les assiettes propres (prendre celle du dessous emporte la pile)
 - {"tache": "essuyer_sol"} : essuyer les petites flaques d'eau par terre avec l'éponge
-- {"tache": "serpillere"} : passer la serpillière (dans le seau) sur les flaques, même grosses
-- {"tache": "balayer"} : balayer les éclats de verre et les miettes par terre avec le balai (marcher sur des éclats coupe)
-- {"tache": "nettoyer", "objet": "<ref>"} : nettoyer au spray et à l'éponge une surface tachée par la cuisine (« objet » facultatif)
+- {"tache": "serpillere", "piece": "<pièce>"} : passer la serpillière (dans le seau) sur les flaques, même grosses, et les traces de pas (« piece » facultatif : celle du perso)
+- {"tache": "balayer", "piece": "<pièce>"} : balayer les éclats de verre, les miettes et la poussière par terre avec le balai (marcher sur des éclats coupe ; « piece » facultatif)
+- {"tache": "aspirateur", "piece": "<pièce>"} : passer l'aspirateur par terre (« piece » facultatif)
+- {"tache": "poussiere", "objet": "<ref>", "piece": "<pièce>"} : faire la poussière d'un meuble, sinon de tous les meubles poussiéreux de la pièce ou de la maison
+- {"tache": "vitres", "objet": "miroir", "piece": "<pièce>"} : laver les vitres de la pièce, ou le miroir du lavabo (« objet » « miroir »)
+- {"tache": "nettoyer", "objet": "<ref>"} : nettoyer un meuble sale avec le bon geste : spray et éponge (plan de travail, gazinière), brosse ou éponge (toilettes, lavabo, douche, évier), plumeau (meubles poussiéreux) (« objet » facultatif)
+- {"tache": "menage", "piece": "<pièce>"} : faire tout le ménage (balai, serpillière, sanitaires, poussière) de la pièce, sinon de toute la maison
 - {"tache": "gants", "mettre": true} : enfiler les gants de ménage (« mettre » faux pour les enlever) ; ils protègent les mains à la vaisselle
 - {"tache": "sortir_poubelle"} : sortir le sac de la poubelle au conteneur dehors
 - {"tache": "sac_neuf", "objet": "<ref>"} : remettre un sac neuf dans la poubelle
@@ -258,8 +262,12 @@ function toIntent(o: Record<string, unknown>): Intent | 'fini' | 'manque' | null
     case 'essuyer': return { kind: 'essuyer', ref: s('objet') || undefined };
     case 'empiler': return { kind: 'empiler' };
     case 'essuyer_sol': return { kind: 'essuyer_sol' };
-    case 'serpillere': return { kind: 'serpillere' };
-    case 'balayer': return { kind: 'balayer' };
+    case 'serpillere': return { kind: 'serpillere', piece: s('piece') || undefined };
+    case 'balayer': return { kind: 'balayer', piece: s('piece') || undefined };
+    case 'aspirateur': return { kind: 'aspirateur', piece: s('piece') || undefined };
+    case 'poussiere': return { kind: 'poussiere', ref: s('objet') || undefined, piece: s('piece') || undefined };
+    case 'vitres': return { kind: 'vitres', ref: s('objet') || undefined, piece: s('piece') || undefined };
+    case 'menage': return { kind: 'menage', piece: s('piece') || undefined };
     case 'nettoyer': return { kind: 'nettoyer', ref: s('objet') || undefined };
     case 'gants': return { kind: 'gants', mettre: o.mettre !== false };
     case 'sortir_poubelle': return { kind: 'sortir_poubelle' };

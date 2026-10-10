@@ -93,10 +93,30 @@ dans cette liste part au modèle de chat (s'il est réglé), qui choisit les ges
 | fais la vaisselle au lave-vaisselle, lave les verres au lave-vaisselle, remplis le lave-vaisselle, mets une pastille, lance le lave-vaisselle | au lave-vaisselle |
 | vide le lave-vaisselle, range le lave-vaisselle, vide l'égouttoir | la vaisselle propre à sa place |
 | essuie la vaisselle, sèche les assiettes | au torchon |
-| essuie la table, nettoie le plan de travail, nettoie la gazinière, essuie la flaque | nettoyer |
-| balaie, passe le balai, passe la serpillière, enfile / enlève les gants | ménage |
+| essuie la table, nettoie le plan de travail, nettoie la gazinière, essuie la flaque, nettoie par terre | nettoyer |
+| enfile / enlève les gants | gants de ménage |
 | vide la poubelle, sors la poubelle, descends la poubelle, mets un sac neuf | poubelle |
 | ouvre / ferme le robinet, bouche l'évier, enlève le bouchon | évier |
+
+## Le ménage
+
+Chaque geste va chercher son outil (balai, serpillière et seau, aspirateur, plumeau ou chiffon,
+brosse WC, éponge, spray). Une pièce nommée : le perso y va d'abord ; sinon il travaille là où il est.
+
+| Ordre | Ce que fait le perso |
+| --- | --- |
+| fais le ménage, fais un peu de ménage, fais le grand ménage, nettoie la maison, nettoie tout | toutes les pièces sales, la sienne d'abord : balai, serpillière, sanitaires, poussière des meubles |
+| fais le ménage dans le salon, nettoie la salle de bain, nettoie la sdb, lave la cuisine, nettoie la pièce | la même chose dans une seule pièce |
+| balaie, balaie la cuisine, passe le balai, passe un coup de balai dans l'entrée | balai (éclats, miettes, poussière) |
+| passe l'aspirateur, passe un coup d'aspi dans la chambre, aspire le salon, aspire le canapé | aspirateur |
+| passe la serpillière (dans le salon), lave le sol, nettoie le carrelage de la cuisine, fais les sols | serpillière (flaques, traces de pas, boue) |
+| fais la poussière (dans la chambre), dépoussière les meubles, dépoussière la bibliothèque, passe le chiffon sur la table basse | plumeau ou chiffon, sur les meubles poussiéreux |
+| fais les vitres, nettoie les carreaux du salon, nettoie le miroir | vitres de la pièce, miroir du lavabo |
+| nettoie les toilettes, frotte les WC, récure la douche, lave la baignoire, astique le lavabo | frotter le sanitaire (brosse WC, éponge) |
+| nettoie la table basse, nettoie le canapé | le bon geste pour ce meuble (chiffon, aspirateur, spray) |
+
+Les fautes passent aussi sur ces mots (« fait le menag », « passe l'aspirtaeur »). « Lave tout » et
+« brosse-toi les dents » partent à l'IA.
 
 ## Salon et chambre
 
