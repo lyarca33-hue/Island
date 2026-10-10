@@ -154,6 +154,18 @@ const stationHand = (length: number, width: number, back: boolean): PackPart => 
 /** Balance du marché : le cadran est à +X (centre à 0,19 m), son aiguille est peinte : un fond neuf la couvre. */
 const SCALE_AT: V3 = [0.081, 0.19, 0];
 
+/** Porte d'une cabane sur sa face +X (`x`), entre `z` (charnière au bord +Z) et du sol à `top` : s'ouvre vers dehors. */
+const hutDoor = (x: [number, number], z: [number, number], y: [number, number], hinge: number): PackPart => ({
+  boxes: [[[x[0], y[0], z[0]], [x[1], y[1], z[1]]]],
+  pivot: [hinge, 0, z[1]],
+  motion: { kind: 'turn', axis: 'y', angle: deg(-100) },
+  play: 'once',
+});
+/** La tête d'un animal (devant à +X) qui baisse pour brouter ou picorer, autour du cou (`neck`). */
+const graze = (box: Box, neck: V3, angle: number, period = 1.6): PackPart => ({ boxes: [box], pivot: neck, motion: { kind: 'turn', axis: 'z', angle: deg(-angle) }, play: 'swing', period });
+/** Un bateau qui tangue sur l'eau, roulis autour de sa quille (le long de Z). */
+const ROLL: PackRig = { parts: { coque: { boxes: [ALL], pivot: [0, 0.4, 0], motion: { kind: 'turn', axis: 'z', rest: deg(-3), angle: deg(6) }, play: 'swing', period: 4 } } };
+
 /** Les modèles des packs qui ont une pièce qui bouge ou s'allume. */
 export const PACK_RIGS: { [P in PackId]?: Partial<Record<ModelName<P>, PackRig>> } = {
   ville: {
@@ -619,6 +631,70 @@ export const PACK_RIGS: { [P in PackId]?: Partial<Record<ModelName<P>, PackRig>>
         'roue-av-2': wheel([0.9, 0.39, 0], 0.395, [-1.1, -0.55]),
       },
     },
+  },
+  utilitaires: {
+    bus: { parts: wheels4([-2.21, 0.63, 0.63], [2.53, 0.64, 0.64], [1.0, 2]) },
+    'camion-pompier': { parts: wheels4([-1.55, 0.65, 0.65], [1.635, 0.66, 0.66], [1.0, 2]) },
+  },
+  train: {
+    locomotive: {
+      parts: {
+        roue: wheel([-1.49, 0.5, 0], 0.48, [0.8, 1.6]),
+        'roue-2': wheel([-1.49, 0.5, 0], 0.48, [-1.6, -0.8]),
+        'roue-3': wheel([-0.13, 0.5, 0], 0.48, [0.8, 1.6]),
+        'roue-4': wheel([-0.13, 0.5, 0], 0.48, [-1.6, -0.8]),
+        'roue-5': wheel([1.4, 0.32, 0], 0.3, [0.8, 1.6]),
+        'roue-6': wheel([1.4, 0.32, 0], 0.3, [-1.6, -0.8]),
+      },
+    },
+    'wagon-voyageurs': {
+      parts: {
+        ...wheels4([-2.75, 0.33, 0.3], [-1.96, 0.33, 0.3], [0.8, 1.9]),
+        'roue-ar-3': wheel([1.5, 0.33, 0], 0.3, [0.8, 1.9]),
+        'roue-ar-4': wheel([1.5, 0.33, 0], 0.3, [-1.9, -0.8]),
+        'roue-av-3': wheel([2.3, 0.33, 0], 0.3, [0.8, 1.9]),
+        'roue-av-4': wheel([2.3, 0.33, 0], 0.3, [-1.9, -0.8]),
+      },
+    },
+  },
+  cabanes: {
+    'cabane-pecheur': { inside: true, parts: { porte: hutDoor([1.4, 1.8], [-0.5, 0.59], [0.05, 2.3], 1.6) } },
+    'cabine-de-plage': { inside: true, parts: { porte: hutDoor([0.47, 0.75], [-0.39, 0.24], [0.05, 1.5], 0.6) } },
+    // la trappe des poules, en haut de l'échelle
+    poulailler: { inside: true, parts: { trappe: hutDoor([0.38, 0.6], [-0.2, 0.19], [1.0, 1.66], 0.5) } },
+  },
+  monuments: {
+    // les ailes, de chaque côté de la tour, tournent sur l'arbre (le long de X)
+    'moulin-a-vent': {
+      parts: {
+        ailes: { boxes: [[[1.2, 4, -4], [3, 10.5, 4]]], pivot: [1.7, 7.03, 0], motion: { kind: 'turn', axis: 'x', angle: -2 * Math.PI }, play: 'loop', period: 8 },
+        'ailes-2': { boxes: [[[-3, 4, -4], [-1.2, 10.5, 4]]], pivot: [-1.7, 7.03, 0], motion: { kind: 'turn', axis: 'x', angle: -2 * Math.PI }, play: 'loop', period: 8 },
+      },
+    },
+    // les vitres de la lanterne s'éclairent la nuit
+    phare: {
+      parts: { lanterne: { boxes: [[[-1.2, 9.5, -1.2], [1.2, 10.8, 1.2]]], tex: { min: 0.6 }, motion: { kind: 'glow', color: WARM }, play: 'hold' } },
+      def: { lamp: { y: 10.2, color: 0xffe2a8, intensity: 2, range: 30 } },
+    },
+  },
+  bateaux: {
+    'bateau-peche-bleu': ROLL,
+    'bateau-peche-rouge': ROLL,
+  },
+  betail: {
+    vache: { inside: true, parts: { tete: graze([[0.72, 0.85, -1], [2, 2, 1]], [0.75, 1.2, 0], 40) } },
+    mouton: { inside: true, parts: { tete: graze([[0.32, 0.35, -1], [1, 1, 1]], [0.35, 0.6, 0], 35) } },
+    chevre: { inside: true, parts: { tete: graze([[0.12, 0.42, -1], [1, 1, 1]], [0.14, 0.55, 0], 35) } },
+    cochon: { inside: true, parts: { tete: graze([[0.3, 0.15, -1], [1, 1, 1]], [0.3, 0.35, 0], 18) } },
+  },
+  oiseaux: {
+    poule: { inside: true, parts: { tete: graze([[0.06, 0.25, -1], [1, 1, 1]], [0.07, 0.27, 0], 55, 0.8) } },
+    coq: { inside: true, parts: { tete: graze([[0.05, 0.32, -1], [1, 1, 1]], [0.06, 0.34, 0], 55, 0.8) } },
+    pigeon: { inside: true, parts: { tete: graze([[0.06, 0.18, -1], [1, 1, 1]], [0.07, 0.19, 0], 50, 0.8) } },
+  },
+  petitsanimaux: {
+    // la queue remue
+    chien: { parts: { queue: { boxes: [[[-1, 0.18, -1], [-0.24, 1, 1]]], pivot: [-0.24, 0.27, 0], motion: { kind: 'turn', axis: 'y', rest: deg(-25), angle: deg(50) }, play: 'swing', period: 0.4 } } },
   },
 };
 
