@@ -4,8 +4,8 @@ import { ACC_COLORS, ACCESSORIES, ACCESSORY_BY_ID, SLOTS, type AccSlot } from '.
 import { CreatorScene, type Framing } from './CreatorScene';
 import { EXPRESSIONS } from './expressions';
 import {
-  BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, defaultRecipe, EYE_COLORS, FANTASY_SKINS, HAIR_COLORS, importedOf, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
-  SKIN_TONES, withImported, withPiece, type Body, type Clothes, type Recipe,
+  BODY_GROUPS, BODY_RANGE, CLOTH_COLORS, DEFAULT_BODY, DEFAULT_FACE, FACE_RANGE, defaultRecipe, EYE_COLORS, FANTASY_SKINS, HAIR_COLORS, importedOf, NAMES, NO_CLOTHES, randomRecipe, sanitizeRecipe,
+  SKIN_TONES, withImported, withPiece, type Body, type Clothes, type FaceShape, type Recipe,
 } from './recipe';
 import { BLUSH_COLORS, BROW_COLORS, FACE_MARKS, LIP_COLORS, MARK_COLORS, NO_MAKEUP, PATTERNS, SHADOW_COLORS, type Makeup } from './looks';
 import { listImported, removeImported, type ImportedModel } from './imported';
@@ -145,6 +145,7 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
     if (own === id) setRecipe((r) => withPiece(r, 'outfit', defaultRecipe(r.gender).outfit));
   };
   const setBody = (k: keyof Body, v: number) => setRecipe((r) => ({ ...r, body: { ...r.body, [k]: v } }));
+  const setFace = (k: keyof FaceShape, v: number) => setRecipe((r) => ({ ...r, faceShape: { ...DEFAULT_FACE, ...r.faceShape, [k]: v } }));
   const setCloth = (k: keyof Clothes, c: string | null) => setRecipe((r) => ({ ...r, clothes: { ...NO_CLOTHES, ...r.clothes, [k]: c } }));
   const setAcc = (slot: AccSlot, id: string | null, color?: string) =>
     setRecipe((r) => {
@@ -305,6 +306,11 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
                 ))}
               </div>
               <p className="hint">Les yeux, la bouche et les expressions viennent avec le visage.</p>
+              <h3>Forme du visage</h3>
+              {(Object.keys(FACE_RANGE) as Array<keyof FaceShape>).map((k) => (
+                <Slider key={k} label={FACE_RANGE[k][2]} value={recipe.faceShape?.[k] ?? DEFAULT_FACE[k]} min={FACE_RANGE[k][0]} max={FACE_RANGE[k][1]}
+                  reset={DEFAULT_FACE[k]} onChange={(v) => setFace(k, v)} />
+              ))}
               <h3>Joues roses</h3>
               <Swatches colors={BLUSH_COLORS} value={recipe.makeup?.blush ?? null} none="Aucune" onChange={(c) => setMakeup({ blush: c })} />
               <h3>Fard à paupières</h3>
@@ -364,10 +370,14 @@ export function Creator({ initial, onDone }: { initial: Recipe | null; onDone: (
           )}
           {tab === 'corps' && (
             <>
-              <h3>Proportions</h3>
-              {(Object.keys(BODY_RANGE) as Array<keyof Body>).map((k) => (
-                <Slider key={k} label={BODY_RANGE[k][2]} value={recipe.body[k]} min={BODY_RANGE[k][0]} max={BODY_RANGE[k][1]}
-                  reset={DEFAULT_BODY[k]} onChange={(v) => setBody(k, v)} />
+              {BODY_GROUPS.map(([title, keys]) => (
+                <div key={title}>
+                  <h3>{title}</h3>
+                  {keys.map((k) => (
+                    <Slider key={k} label={BODY_RANGE[k][2]} value={recipe.body[k]} min={BODY_RANGE[k][0]} max={BODY_RANGE[k][1]}
+                      reset={DEFAULT_BODY[k]} onChange={(v) => setBody(k, v)} />
+                  ))}
+                </div>
               ))}
               <p className="hint">Double-clic sur un curseur : valeur d’origine.</p>
             </>

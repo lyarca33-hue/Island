@@ -17,6 +17,43 @@ export interface Body {
   legs: number;
   /** Largeur du buste et des épaules. */
   build: number;
+  /** Écart des épaules (les bras s'écartent). */
+  shoulders: number;
+  /** Tour de taille. */
+  waist: number;
+  /** Largeur des hanches. */
+  hips: number;
+  /** Volume de la poitrine. */
+  bust: number;
+  /** Longueur du cou. */
+  neck: number;
+  /** Longueur du torse (du bassin au cou). */
+  torso: number;
+  /** Longueur des bras. */
+  arms: number;
+  /** Épaisseur des bras. */
+  armSize: number;
+  /** Épaisseur des cuisses. */
+  thighs: number;
+  /** Taille des mains. */
+  hands: number;
+  /** Taille des pieds. */
+  feet: number;
+}
+
+/**
+ * Forme du visage, VRoid façon : chaque nombre déforme une zone du visage (1 = d'origine,
+ * sauf les oreilles pointues : 0 = rondes). Absente des anciennes recettes.
+ */
+export interface FaceShape {
+  eyeSize: number;
+  eyeSpacing: number;
+  eyeHeight: number;
+  faceWidth: number;
+  chin: number;
+  mouthSize: number;
+  mouthHeight: number;
+  ears: number;
 }
 
 export interface Recipe {
@@ -37,6 +74,8 @@ export interface Recipe {
   eyeColor: string | null;
   skinTone: string | null;
   body: Body;
+  /** Forme du visage (curseurs). Absente des anciennes recettes. */
+  faceShape?: FaceShape;
   /** Couleurs des vêtements (null = d'origine). Absent des anciennes recettes. */
   clothes?: Clothes;
   /** Accessoire porté par emplacement (chapeau, lunettes...). Absent des anciennes recettes. */
@@ -69,7 +108,9 @@ export const NAMES: Record<Gender, string[]> = {
   m: ['Caleb', 'Hugo', 'Kenji', 'Louis', 'Tom', 'Ryo', 'Nathan', 'Sacha', 'Haruto', 'Gabin', 'Léo', 'Malo', 'Ren', 'Arthur', 'Noé', 'Yanis', 'Kaito', 'Basile'],
 };
 
-export const DEFAULT_BODY: Body = { height: 1, head: 1, legs: 1, build: 1 };
+export const DEFAULT_BODY: Body = {
+  height: 1, head: 1, legs: 1, build: 1, shoulders: 1, waist: 1, hips: 1, bust: 1, neck: 1, torso: 1, arms: 1, armSize: 1, thighs: 1, hands: 1, feet: 1,
+};
 
 /** Bornes des curseurs du corps. */
 export const BODY_RANGE: Record<keyof Body, [number, number, string]> = {
@@ -77,6 +118,38 @@ export const BODY_RANGE: Record<keyof Body, [number, number, string]> = {
   head: [0.88, 1.15, 'Tête'],
   legs: [0.92, 1.08, 'Jambes'],
   build: [0.88, 1.15, 'Carrure'],
+  shoulders: [0.88, 1.15, 'Épaules'],
+  waist: [0.85, 1.15, 'Tour de taille'],
+  hips: [0.9, 1.15, 'Hanches'],
+  bust: [0.75, 1.35, 'Poitrine'],
+  neck: [0.8, 1.3, 'Cou'],
+  torso: [0.92, 1.08, 'Torse'],
+  arms: [0.92, 1.08, 'Longueur des bras'],
+  armSize: [0.85, 1.2, 'Épaisseur des bras'],
+  thighs: [0.85, 1.2, 'Cuisses'],
+  hands: [0.85, 1.2, 'Mains'],
+  feet: [0.85, 1.2, 'Pieds'],
+};
+
+/** Curseurs du corps par rubrique du créateur. */
+export const BODY_GROUPS: Array<[string, Array<keyof Body>]> = [
+  ['Silhouette', ['height', 'build', 'shoulders', 'bust', 'waist', 'hips']],
+  ['Longueurs', ['head', 'neck', 'torso', 'arms', 'legs']],
+  ['Détails', ['armSize', 'thighs', 'hands', 'feet']],
+];
+
+export const DEFAULT_FACE: FaceShape = { eyeSize: 1, eyeSpacing: 1, eyeHeight: 1, faceWidth: 1, chin: 1, mouthSize: 1, mouthHeight: 1, ears: 0 };
+
+/** Bornes des curseurs du visage. */
+export const FACE_RANGE: Record<keyof FaceShape, [number, number, string]> = {
+  eyeSize: [0.8, 1.25, 'Taille des yeux'],
+  eyeSpacing: [0.85, 1.2, 'Écart des yeux'],
+  eyeHeight: [0.8, 1.2, 'Hauteur des yeux'],
+  faceWidth: [0.88, 1.12, 'Largeur des joues'],
+  chin: [0.75, 1.35, 'Menton'],
+  mouthSize: [0.75, 1.3, 'Largeur de la bouche'],
+  mouthHeight: [0.8, 1.2, 'Hauteur de la bouche'],
+  ears: [0, 1, 'Oreilles pointues'],
 };
 
 /** Teintes de peau : multipliées à la texture d'origine (blanc = inchangé). */
@@ -103,6 +176,7 @@ export function defaultRecipe(gender: Gender = 'f'): Recipe {
     eyeColor: null,
     skinTone: null,
     body: { ...DEFAULT_BODY },
+    faceShape: { ...DEFAULT_FACE },
     clothes: { ...NO_CLOTHES },
     accessories: {},
     makeup: { ...NO_MAKEUP, marks: [] },
@@ -139,11 +213,10 @@ export function randomRecipe(): Recipe {
     hairColor: Math.random() < 0.5 ? null : pick(HAIR_COLORS),
     eyeColor: Math.random() < 0.5 ? null : pick(EYE_COLORS),
     skinTone: Math.random() < 0.6 ? null : pick(SKIN_TONES.slice(1)),
-    body: {
-      height: around(...(BODY_RANGE.height.slice(0, 2) as [number, number])),
-      head: around(...(BODY_RANGE.head.slice(0, 2) as [number, number])),
-      legs: around(...(BODY_RANGE.legs.slice(0, 2) as [number, number])),
-      build: around(...(BODY_RANGE.build.slice(0, 2) as [number, number])),
+    body: Object.fromEntries((Object.keys(DEFAULT_BODY) as Array<keyof Body>).map((k) => [k, around(BODY_RANGE[k][0], BODY_RANGE[k][1])])) as unknown as Body,
+    faceShape: {
+      ...(Object.fromEntries((Object.keys(DEFAULT_FACE) as Array<keyof FaceShape>).map((k) => [k, around(FACE_RANGE[k][0], FACE_RANGE[k][1])])) as unknown as FaceShape),
+      ears: Math.random() < 0.15 ? 0.6 + Math.random() * 0.4 : 0,
     },
     clothes: { top: cloth(), bottom: cloth(), shoes: cloth() },
     accessories,
@@ -172,6 +245,18 @@ export function withPiece(r: Recipe, piece: 'outfit' | 'face' | 'hair', id: stri
   return { ...r, outfit: parts.outfit, face: parts.face, hair: parts.hair, [piece]: id };
 }
 
+/** Nombres lus d'une recette : manquants remis par défaut, hors bornes ramenés dedans. */
+function numbers<T extends object>(raw: unknown, base: T, range: Record<keyof T, [number, number, string]>): T {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const out = { ...base } as Record<string, number>;
+  for (const k of Object.keys(base)) {
+    const v = r[k];
+    const [lo, hi] = range[k as keyof T];
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.min(hi, Math.max(lo, v));
+  }
+  return out as T;
+}
+
 /** Recette lue d'un fichier ou du stockage : complétée et corrigée (anciennes versions, ids inconnus). */
 export function sanitizeRecipe(raw: unknown): Recipe | null {
   const r = raw as Partial<Recipe> | null;
@@ -190,7 +275,8 @@ export function sanitizeRecipe(raw: unknown): Recipe | null {
     hairColor: color(r.hairColor),
     eyeColor: color(r.eyeColor),
     skinTone: color(r.skinTone),
-    body: { ...DEFAULT_BODY, ...(r.body ?? {}) },
+    body: numbers(r.body, DEFAULT_BODY, BODY_RANGE),
+    faceShape: numbers(r.faceShape, DEFAULT_FACE, FACE_RANGE),
     clothes: { top: color(r.clothes?.top), bottom: color(r.clothes?.bottom), shoes: color(r.clothes?.shoes) },
     accessories: Object.fromEntries(
       SLOTS.flatMap(([slot]) => {
