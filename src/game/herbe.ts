@@ -1,6 +1,6 @@
 /**
- * Touffes d'herbe en 3D façon Genshin : des brins pointus, plus clairs à la pointe, qui ondulent au
- * vent. Une grille fixe de touffes suit la caméra (pas de 0,25 m) ; chaque touffe tire sa place, sa
+ * Touffes d'herbe en 3D façon Zelda / Genshin : des brins pointus, dorés à la pointe, qui ondulent
+ * au vent (des vagues claires traversent le pré), et quelques fleurs blanches et roses. Une grille fixe de touffes suit la caméra (pas de 0,25 m) ; chaque touffe tire sa place, sa
  * taille et son angle d'un hasard attaché à sa case du monde, donc l'herbe ne « glisse » pas quand
  * la grille se déplace. Le shader lit le relief, les sols (pas d'herbe sur le sable, la roche, les
  * routes ni dans la maison) et la couleur du sol en dessous, pour que la touffe s'y fonde.
@@ -12,9 +12,12 @@ import { createToonMaterial } from './toon';
 const STEP = 0.25;
 const COUNT = 200;
 /** Brins par touffe, hauteur et largeur d'un brin (m). */
-const BLADES = 5;
-const BLADE_H = 0.32;
+const BLADES = 6;
+const BLADE_H = 0.38;
 const BLADE_W = 0.045;
+/** Pointe dorée au soleil, reflet clair des brins couchés par le vent (GLSL). */
+const GOLD = 'vec3(0.9, 0.98, 0.4)';
+const SHEEN = 'vec3(0.9, 0.97, 0.7)';
 
 export interface GrassInputs {
   /** Relief (m), sols (sable, roche, terre), « pas d'herbe » (routes, maison), bruit doux. */
@@ -61,9 +64,23 @@ function tuftGeometry(): THREE.InstancedBufferGeometry {
     h.push(0, 0, 0.5, 0.5, 1);
     idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2, base + 2, base + 3, base + 4);
   }
+  // tête de fleur (cachée sauf sur les touffes fleuries) : une étoile de 5 pétales, à plat, au-dessus
+  const flower: number[] = new Array(h.length).fill(0);
+  const c0 = pos.length / 3, top = 0.9;
+  pos.push(0, top, 0);
+  h.push(1);
+  flower.push(1);
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2, r = k % 2 ? 0.035 : 0.1;
+    pos.push(Math.cos(a) * r, top, Math.sin(a) * r);
+    h.push(1);
+    flower.push(1);
+    idx.push(c0, c0 + 1 + k, c0 + 1 + ((k + 1) % 10));
+  }
   const g = new THREE.InstancedBufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('aH', new THREE.Float32BufferAttribute(h, 1));
+  g.setAttribute('aFlower', new THREE.Float32BufferAttribute(flower, 1));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length).fill(0).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
   g.setIndex(idx);
   const cells = new Float32Array(COUNT * COUNT * 2);
@@ -96,7 +113,7 @@ export function createGrass(o: GrassInputs): Grass {
       .replace(
         '#include <common>',
         `#include <common>
-         attribute vec2 aCell; attribute float aH;
+         attribute vec2 aCell; attribute float aH; attribute float aFlower;
          uniform vec2 uOrigin; uniform vec2 uFocus; uniform float uWind; uniform float uFar; uniform float uTime; uniform float uSnow;
          uniform sampler2D uHeight; uniform sampler2D uSplat; uniform sampler2D uMask; uniform sampler2D uTone;
          uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform vec3 uGrass;
@@ -126,24 +143,36 @@ export function createGrass(o: GrassInputs): Grass {
          float size = smoothstep(0.55, 0.3, bare) * edge * (1.0 - uSnow) * (0.7 + 0.6 * hash(cell + 3.1));
          // pente raide (falaises) : pas d'herbe
          size *= smoothstep(0.55, 0.75, objectNormal.y);
-         // vue de loin : brins plus courts (ils scintilleraient, plus fins qu'un pixel)
-         size *= 1.0 - 0.75 * uFar;
+         // vue de loin : plus de brins (ils scintilleraient, plus fins qu'un pixel) ; le sol suffit
+         size *= 1.0 - uFar;
          float ang = hash(cell + 41.1) * 6.2832;
          float c = cos(ang), s = sin(ang);
          vec2 local = mat2(c, -s, s, c) * position.xz * (0.8 + 0.5 * hash(cell + 9.7));
-         // vent : une houle lente qui traverse le pré, plus des rafales
+         // vent : une houle lente qui traverse le pré, plus des rafales ; là où passe la rafale, les
+         // brins se couchent et leur revers clair attrape la lumière (les vagues argentées de Zelda)
          float gust = texture2D(uTone, base / 30.0 + vec2(uTime * 0.04, uTime * 0.025)).r;
+         float wave = smoothstep(0.55, 0.75, texture2D(uTone, base / 22.0 - vec2(uTime * 0.05, uTime * 0.03)).r);
          float sway = sin(uTime * 1.8 + base.x * 0.5 + base.y * 0.3) * 0.5 + 0.5;
-         float bend = aH * aH * (0.03 + (0.06 * sway + 0.12 * gust) * (0.3 + uWind)) * size;
-         vec3 transformed = vec3(base.x + local.x * size + bend * 0.9, gh(base) + position.y * ${BLADE_H.toFixed(2)} * size * (1.0 - 0.15 * gust * uWind), base.y + local.y * size + bend * 0.4);
-         // la couleur du sol sous la touffe (comme le terrain), plus claire vers la pointe
+         float bend = aH * aH * (0.03 + (0.06 * sway + 0.12 * gust + 0.12 * wave) * (0.3 + uWind)) * size;
+         // une touffe sur 25 porte une fleur ; les autres replient la tête de fleur à rien
+         float fl = hash(cell + 5.5);
+         float bloom = step(fl, 0.04) * (1.0 - uSnow) * step(0.3, size);
+         vec2 spread = aFlower > 0.5 ? position.xz * bloom * (1.0 + uFar * 1.5) : local * size;
+         vec3 transformed = vec3(base.x + spread.x + bend * 0.9, gh(base) + position.y * ${BLADE_H.toFixed(2)} * max(size, bloom * 0.7) * (1.0 - 0.15 * gust * uWind), base.y + spread.y + bend * 0.4);
+         // la couleur du sol sous la touffe (comme le terrain), dorée vers la pointe
          float tone = texture2D(uTone, base / 48.0).r * 0.65 + texture2D(uTone, base / 17.0 + vec2(0.31, 0.77)).r * 0.35;
          vec3 ground = mix(uG0, uG1, smoothstep(0.25, 0.55, tone));
          ground = mix(ground, uG2, smoothstep(0.58, 0.85, tone) * 0.7);
          ground *= 0.94 + 0.12 * texture2D(uTone, base / 2.2).r;
          vec3 sunDir = normalize(vec3(-0.45, 0.75, -0.5));
          float shade = clamp(1.0 + (dot(objectNormal, sunDir) - sunDir.y) * 1.8, 0.6, 1.25);
-         vGrassCol = mix(ground * mix(0.9, 1.0, uFar), mix(ground, uG2, mix(0.55, 0.15, uFar)) * mix(1.12, 1.03, uFar), aH) * uGrass * shade;`,
+         vec3 tip = mix(ground, ${GOLD}, mix(0.6, 0.2, uFar)) * mix(1.12, 1.03, uFar);
+         vec3 col = mix(ground * mix(0.92, 1.0, uFar), tip, aH);
+         col = mix(col, ${SHEEN}, wave * aH * 0.45);
+         // les fleurs : blanches ou roses
+         vec3 petal = hash(cell + 8.8) < 0.65 ? vec3(1.0, 0.98, 0.9) : vec3(1.0, 0.42, 0.62);
+         // (après la teinte de saison, qui verdirait les pétales)
+         vGrassCol = mix(col * uGrass, petal, aFlower) * shade;`,
       );
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGrassCol; uniform float uWet;')
@@ -162,7 +191,7 @@ export function createGrass(o: GrassInputs): Grass {
   return {
     mesh,
     follow(x, z, wind, zoom) {
-      u.uFar.value = 1 - THREE.MathUtils.smoothstep(zoom, 0.25, 0.55);
+      u.uFar.value = 1 - THREE.MathUtils.smoothstep(zoom, 0.3, 0.5);
       u.uFocus.value.set(x, z);
       u.uOrigin.value.set(Math.floor(x / STEP) - COUNT / 2, Math.floor(z / STEP) - COUNT / 2);
       u.uWind.value = wind;

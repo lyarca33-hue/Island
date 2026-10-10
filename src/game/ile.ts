@@ -12,7 +12,7 @@
  *   est au ras de l'eau, c'est la seule façon d'avoir des falaises sans relief sous les pieds du
  *   perso ; vue de la caméra de départ, la paroi fait le fond du décor. À l'est, une côte rocheuse
  *   basse (une marche de roche d'1,5 m). Les trois se fondent les unes dans les autres.
- * - L'herbe façon Genshin : de grandes nappes de vert franc sur le sol et des touffes de brins en
+ * - L'herbe façon Zelda / Genshin : de grandes nappes de vert franc sur le sol et des touffes de brins en
  *   3D qui ondulent au vent (herbe.ts) ; pas de touffes sur les routes ni dans la maison.
  * - La mer : un grand plan opaque dont la couleur dit la profondeur (turquoise au bord, bleu
  *   profond au large, le sable qui transparaît dans les premiers centimètres), avec l'écume du
@@ -573,7 +573,7 @@ function worldVaryings(sh: THREE.WebGLProgramParametersWithUniforms, u: IslandUn
 }
 
 /** Les trois verts de l'herbe (sol et touffes) : profond, vif, vert-jaune au soleil. */
-const GREENS: [THREE.Color, THREE.Color, THREE.Color] = [new THREE.Color('#3f9a3c'), new THREE.Color('#6cc23f'), new THREE.Color('#b4dd55')];
+const GREENS: [THREE.Color, THREE.Color, THREE.Color] = [new THREE.Color('#3f9a2e'), new THREE.Color('#74c535'), new THREE.Color('#c4e85a')];
 
 /** Bruit doux partagé par le sol et les touffes (les mêmes nappes de couleur). */
 let toneTex: THREE.CanvasTexture | null = null;
@@ -630,6 +630,9 @@ function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
          vec3 grass = mix(uG0, uG1, smoothstep(0.25, 0.55, tone));
          grass = mix(grass, uG2, smoothstep(0.58, 0.85, tone) * 0.7);
          grass *= 0.94 + 0.12 * texture2D(uTone, xz / 2.2).r;
+         // les vagues claires du vent, comme sur les touffes (se voient surtout de loin)
+         float wave = smoothstep(0.55, 0.75, texture2D(uTone, xz / 22.0 - vec2(uTime * 0.05, uTime * 0.03)).r);
+         grass = mix(grass, vec3(0.9, 0.97, 0.7), wave * 0.18);
          grass *= uGrass;
          vec3 sand = texture2D(uSand, xz / 6.0).rgb;
          // sable mouillé près de l'eau
