@@ -613,28 +613,30 @@ function worldVaryings(sh: THREE.WebGLProgramParametersWithUniforms, u: IslandUn
 function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
   // ombrage fondu : les paliers nets feraient des bandes sur les pentes de la plage
   const mat = createToonMaterial({ color: 0xffffff, rimStrength: 0, soft: true });
-  const tex = { uGrassTex: { value: animeGrassTexture() }, uTone: { value: toneTexture() }, uG0: { value: new THREE.Color('#4a9f33') }, uG1: { value: new THREE.Color('#6cc540') }, uG2: { value: new THREE.Color('#a2dc50') }, uLawn: { value: new THREE.Color('#74cc45') }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() } };
+  const tripoGrass = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}ile/herbe.webp`);
+  tripoGrass.colorSpace = THREE.SRGBColorSpace;
+  tripoGrass.wrapS = tripoGrass.wrapT = THREE.RepeatWrapping;
+  tripoGrass.anisotropy = 8;
+  const tex = { uTripoGrass: { value: tripoGrass }, uGrassTex: { value: animeGrassTexture() }, uTone: { value: toneTexture() }, uG0: { value: new THREE.Color('#4a9f33') }, uG1: { value: new THREE.Color('#6cc540') }, uG2: { value: new THREE.Color('#a2dc50') }, uLawn: { value: new THREE.Color('#74cc45') }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() } };
   mat.onBeforeCompile = (sh) => {
     worldVaryings(sh, u);
     Object.assign(sh.uniforms, tex);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uGrassTex; uniform sampler2D uTone; uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform vec3 uLawn; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uTripoGrass; uniform sampler2D uGrassTex; uniform sampler2D uTone; uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform vec3 uLawn; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt;')
       .replace(
         '#include <map_fragment>',
         `vec2 xz = vIleW.xz;
          vec4 sp = texture2D(uSplat, ileMap(xz));
-         // herbe façon animé : trois aplats de vert aux bords nets (grandes nappes), et les touffes dessinées
+         // herbe : la tuile Tripo (3 m), tirée deux fois à des échelles et décalages différents,
+         // mêlées par grandes nappes pour que la répétition ne se voie pas
          float tone = texture2D(uTone, xz / 48.0).r * 0.65 + texture2D(uTone, xz / 17.0 + vec2(0.31, 0.77)).r * 0.35;
-         vec3 tc = mix(uG0, uG1, smoothstep(0.42, 0.45, tone));
-         tc = mix(tc, uG2, smoothstep(0.6, 0.63, tone));
-         vec4 det = texture2D(uGrassTex, xz / 4.0);
-         float fl = step(0.2, max(abs(det.r - det.g), abs(det.g - det.b)));
-         vec3 grass = tc * (0.32 + 0.85 * det.g);
-         // pelouse tondue : bandes nettes de 1,2 m, un vert plus franc
+         vec2 ruv = mat2(0.8, -0.6, 0.6, 0.8) * xz;
+         vec3 g1 = texture2D(uTripoGrass, xz / 3.0).rgb;
+         vec3 g2 = texture2D(uTripoGrass, ruv / 3.7 + 0.41).rgb;
+         vec3 grass = mix(g1, g2, smoothstep(0.45, 0.55, tone));
+         // pelouse tondue : bandes de 1,2 m un peu plus claires et plus foncées
          float stripe = step(0.5, fract((xz.x + xz.y * 0.02) / 2.4));
-         vec3 lawn = uLawn * mix(0.9, 1.08, stripe) * (0.45 + 0.7 * det.g);
-         grass = mix(grass, lawn, sp.a) * uGrass;
-         grass = mix(grass, pow(det.rgb, vec3(2.2)), fl * (1.0 - sp.a) * (1.0 - step(0.2, uSnow)));
+         grass = mix(grass, grass * mix(0.9, 1.08, stripe), sp.a) * uGrass;
          vec3 sand = texture2D(uSand, xz / 6.0).rgb;
          // sable mouillé près de l'eau
          sand *= mix(1.0, 0.72, smoothstep(${(SEA_LEVEL + 0.35).toFixed(2)}, ${(SEA_LEVEL + 0.02).toFixed(2)}, vIleW.y));
