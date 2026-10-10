@@ -162,7 +162,8 @@ export function captureGame(a: SaveAccess): GameSave {
  * Remet la partie sauvée dans un jeu tout neuf (juste construit). Chaque objet sauvé reprend un
  * objet du même genre déjà là, dans l'ordre ; ceux qui manquent sont créés (plats cuisinés, sacs
  * livrés…), ceux de la maison de départ qui manquent à la sauvegarde retirés (mangés, cassés,
- * jetés) ; ce qu'une mise à jour a ajouté à la maison depuis reste à sa place (GameSave.placed).
+ * jetés) ; ce qu'une mise à jour a ajouté à la maison depuis reste à sa place, ce qu'elle en a retiré
+ * disparaît de la partie (GameSave.placed).
  */
 export function applyGame(a: SaveAccess, s: GameSave): void {
   const pool = new Map<string, WorldItem[]>();
@@ -171,7 +172,16 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
     list.push(it);
     pool.set(it.def.id, list);
   }
+  // ce qu'une mise à jour a retiré de la maison de départ (les habits de l'armoire) : autant d'objets
+  // de ce genre en moins dans la partie, les derniers sauvés (ceux de départ venus en dernier)
+  const total = new Map<string, number>();
+  for (const saved of s.items) total.set(saved.id, (total.get(saved.id) ?? 0) + 1);
+  const seen = new Map<string, number>();
   for (const saved of s.items) {
+    const n = seen.get(saved.id) ?? 0;
+    seen.set(saved.id, n + 1);
+    const retired = s.placed ? Math.max(0, (s.placed[saved.id] ?? 0) - (a.placed[saved.id] ?? 0)) : 0;
+    if (n >= total.get(saved.id)! - retired) continue;
     const it = pool.get(saved.id)?.shift() ?? a.add(saved.id);
     if (!it) continue; // objet disparu du jeu depuis la sauvegarde
     it.object.position.fromArray(saved.p);
