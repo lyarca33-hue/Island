@@ -579,7 +579,7 @@ export class Game {
    * Saleté de la maison (sols, meubles, sanitaires), branchée par le module de salissure : les gestes
    * de ménage lui disent où ils passent. Absente, ils nettoient les miettes, flaques et taches.
    */
-  dirt: DirtHooks | null = null;
+  dirtHooks: DirtHooks | null = null;
   /** Vaisselle tenue à l'image d'avant : posée, elle tinte. */
   private carriedDishes = new Set<WorldItem>();
   /** Pas : où était le perso à l'image d'avant, chemin fait depuis le dernier pas (m). */
@@ -2653,7 +2653,7 @@ export class Game {
         running,
         onStroke: (head) => {
           sweepNear(head, 0.35);
-          this.dirt?.cleanAt?.(head, 0.4, 'sweep');
+          this.dirtHooks?.cleanAt?.(head, 0.4, 'sweep');
         },
         onSpot: (spot) => {
           sweepNear(spot, 0.5);
@@ -2702,7 +2702,7 @@ export class Game {
         running,
         onStroke: (head) => {
           wipeNear(head, 0.3);
-          this.dirt?.cleanAt?.(head, 0.45, 'mop');
+          this.dirtHooks?.cleanAt?.(head, 0.45, 'mop');
         },
         onSpot: (spot) => {
           this.wearItem(mop, 1 + wipeNear(spot, MOP_REACH));
@@ -2726,7 +2726,7 @@ export class Game {
         running,
         onStroke: (head) => {
           suck(head, 0.35);
-          this.dirt?.cleanAt?.(head, 0.45, 'vacuum');
+          this.dirtHooks?.cleanAt?.(head, 0.45, 'vacuum');
         },
         onSpot: (spot) => {
           suck(spot, 0.6);
@@ -2743,7 +2743,7 @@ export class Game {
    */
   dustFurniture(ref?: string, running = false): boolean {
     const c = this.character;
-    const target = ref ? this.byRef(ref) : (this.dirt?.dustiest?.() ?? this.nearest((i) => this.hasTop(i) && !c.carried.includes(i)));
+    const target = ref ? this.byRef(ref) : (this.dirtHooks?.dustiest?.() ?? this.nearest((i) => this.hasTop(i) && !c.carried.includes(i)));
     if (!target) return this.notice('Il n’y a rien à épousseter ici.');
     if (!this.hasTop(target)) return this.notice(`${cap(the(target.name))} n’a pas de dessus à épousseter.`);
     const plumeau = (d: ItemDef) => !!d.dusts;
@@ -2756,9 +2756,9 @@ export class Game {
         seconds: 3.6,
         running,
         stand: this.frontOf(target),
-        onStroke: (head) => this.dirt?.cleanAt?.(head, 0.3, kind),
+        onStroke: (head) => this.dirtHooks?.cleanAt?.(head, 0.3, kind),
         onSpot: () => {
-          this.dirt?.cleanItem?.(target, kind);
+          this.dirtHooks?.cleanItem?.(target, kind);
           this.wearItem(tool, 1);
         },
         done: () => this.onNotice?.(`${cap(the(target.name))} est épousseté${agree(target.name)}.`),
@@ -2774,7 +2774,7 @@ export class Game {
   scrubSurface(ref?: string, running = false): boolean {
     const c = this.character;
     const scrubbable = (i: WorldItem) => !!(i.def.toilet || i.def.wash || i.def.window || i.def.shower || i.def.table || i.def.id === 'plan-de-travail' || /miroir|baignoire|lavabo|douche/.test(i.def.id));
-    const target = ref ? this.byRef(ref) : (this.dirt?.grimiest?.() ?? this.nearest((i) => scrubbable(i) && !c.carried.includes(i)));
+    const target = ref ? this.byRef(ref) : (this.dirtHooks?.grimiest?.() ?? this.nearest((i) => scrubbable(i) && !c.carried.includes(i)));
     if (!target || !scrubbable(target)) return this.notice(ref ? `On ne frotte pas ${the(this.byRef(ref)?.name ?? ref)}.` : 'Rien à frotter ici.');
     const vertical = !!target.def.window || /miroir/.test(target.def.id);
     if (target.def.toilet) {
@@ -2784,9 +2784,9 @@ export class Game {
           seconds: 4,
           running,
           stand: this.frontOf(target),
-          onStroke: (head) => this.dirt?.cleanAt?.(head, 0.25, 'brush'),
+          onStroke: (head) => this.dirtHooks?.cleanAt?.(head, 0.25, 'brush'),
           onSpot: () => {
-            this.dirt?.cleanItem?.(target, 'brush');
+            this.dirtHooks?.cleanItem?.(target, 'brush');
             this.wearItem(brush, 1);
             this.soilHands('toilettes');
           },
@@ -2801,13 +2801,13 @@ export class Game {
         seconds: 4,
         running,
         stand: this.frontOf(target),
-        onStroke: (head) => this.dirt?.cleanAt?.(head, 0.25, vertical ? 'wipeUp' : 'scrub'),
+        onStroke: (head) => this.dirtHooks?.cleanAt?.(head, 0.25, vertical ? 'wipeUp' : 'scrub'),
         onSpot: () => {
           if (this.crumbs.has(target)) {
             this.crumbs.get(target)!.removeFromParent();
             this.crumbs.delete(target);
           }
-          this.dirt?.cleanItem?.(target, vertical ? 'wipeUp' : 'scrub');
+          this.dirtHooks?.cleanItem?.(target, vertical ? 'wipeUp' : 'scrub');
           this.wearItem(rag, 1);
           this.soilHands('ménage');
         },
@@ -2873,9 +2873,9 @@ export class Game {
           seconds: 4,
           running,
           stand: pane.stand,
-          onStroke: (head) => this.dirt?.cleanAt?.(head, 0.3, 'wipeUp'),
+          onStroke: (head) => this.dirtHooks?.cleanAt?.(head, 0.3, 'wipeUp'),
           onSpot: () => {
-            if (mirror) this.dirt?.cleanItem?.(mirror, 'wipeUp');
+            if (mirror) this.dirtHooks?.cleanItem?.(mirror, 'wipeUp');
             this.wearItem(rag, 1);
           },
           done: () => void next(),
@@ -2915,7 +2915,7 @@ export class Game {
   private choreSpots(dirty: THREE.Vector3[], kind: ChoreKind): THREE.Vector3[] {
     const p = this.character.position;
     const room = this.rooms.find((r) => r.contains(p));
-    const pts = [...dirty.map(p0), ...(this.dirt?.floorSpots?.(room ?? null, kind) ?? []).map(p0)];
+    const pts = [...dirty.map(p0), ...(this.dirtHooks?.floorSpots?.(room ?? null, kind) ?? []).map(p0)];
     if (!pts.length && room) {
       const { x0, x1, z0, z1 } = room.rect;
       for (let x = x0 + 0.7; x < x1 - 0.5; x += 1.1) for (let z = z0 + 0.7; z < z1 - 0.5; z += 1.1) {
@@ -3069,7 +3069,7 @@ export class Game {
         if (!this.items.includes(sponge) || !c.chore(sponge, 'scrub', top, { seconds: 3, onDone: () => {
           g.removeFromParent();
           this.grime.delete(target);
-          this.dirt?.cleanItem?.(target, 'scrub');
+          this.dirtHooks?.cleanItem?.(target, 'scrub');
           this.wearItem(sponge, 2);
           this.soilHands('ménage');
           this.onNotice?.(`${cap(the(target.name))} est propre et brille.`);
