@@ -12,6 +12,7 @@ import { Puppet } from '../creator/puppet';
 import type { VRMHumanBoneName } from '@pixiv/three-vrm';
 import type { Recipe } from '../creator/recipe';
 import { Carry, type Side, type WorldItem } from './items/carry';
+import type { ChoreKind } from './items/chores';
 import { isTwoHanded } from './items/grips';
 import { Rig } from './items/ik';
 import type { Nav } from './nav';
@@ -337,6 +338,27 @@ export class Character {
   /** Une main est-elle en train de prendre, poser ou ranger ? */
   get busy(): boolean {
     return !!this.carries && (this.carries.right.busy || this.carries.left.busy);
+  }
+
+  /**
+   * Fait le ménage avec l'outil tenu `item` (voir items/chores.ts) autour du point `at()` ; le
+   * manche se tient à deux mains si l'autre est libre. Faux si le perso ne peut pas (assis,
+   * couché, mains occupées à autre chose).
+   */
+  chore(item: WorldItem, kind: ChoreKind, at: () => THREE.Vector3, opts: { seconds?: number; onStroke?: (head: THREE.Vector3) => void; onDone?: () => void } = {}): boolean {
+    const hand = this.handOf(item);
+    if (!hand || this.seat || this.bed || this.pushing || this.washing || this.ride) return false;
+    return hand.chore(kind, at, { ...opts, two: this.otherFree(hand) });
+  }
+
+  /** Le geste de ménage en cours, s'il y en a un, et la main qui le fait. */
+  get choring(): { kind: ChoreKind; hand: Carry } | null {
+    if (!this.carries) return null;
+    for (const s of SIDES_) {
+      const kind = this.carries[s].choring;
+      if (kind) return { kind, hand: this.carries[s] };
+    }
+    return null;
   }
 
   /** L'autre main que `hand` est-elle libre ? */

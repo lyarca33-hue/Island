@@ -269,6 +269,12 @@ export interface ItemDef {
   sweeps?: boolean;
   /** Serpillière : essuie d'un coup les grandes flaques. */
   mops?: boolean;
+  /** Aspirateur : avale la poussière et les miettes du sol (geste en va-et-vient, voir chores.ts). */
+  vacuums?: boolean;
+  /** Plumeau : époussette le dessus des meubles. */
+  dusts?: boolean;
+  /** Brosse des WC : frotte la cuvette. */
+  scrubsBowl?: boolean;
   /** Conteneur dehors : on y jette les sacs poubelle ; le camion le vide chaque matin. */
   outdoor?: boolean;
   /** Spray nettoyant : avec l'éponge, nettoie le plan de travail et la gazinière sales. */

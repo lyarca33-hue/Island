@@ -209,6 +209,28 @@ Les modèles (`public/vrm/`, 29 Mo pour 12 persos) sont produits par `tools/buil
 d'animations : `idle`, `walk`, `run`, `agree` (oui), `headShake` (non), `sad_pose`,
 `sneak_pose`. Toute animation Mixamo ajoutée à ce fichier sera jouable par tous les persos.
 
+### Le ménage
+
+Pas de clip animé pour le ménage : comme pour couper ou verser, les bras sont placés par calcul
+au-dessus d'un point du sol ou d'un meuble, et l'outil suit la main (`src/game/items/chores.ts`
+pour les gestes, `Carry.chore` dans `carry.ts` pour les bras, `chorefx.ts` pour la poussière,
+la mousse et le nuage du spray). Chaque geste va prendre son outil tout seul (et pose celui
+d'avant), puis passe dans la pièce où est le perso :
+
+| Geste | Outil | Console |
+| --- | --- | --- |
+| Balayer : coups courts de côté, la brosse se soulève au retour, les deux mains sur le manche | balai | `game.sweepFloor()` |
+| Passer la serpillière : en huit devant soi | serpillière | `game.mopFloor()` |
+| Passer l'aspirateur : va-et-vient, le moteur ronronne | aspirateur (entrée) | `game.vacuumFloor()` |
+| Épousseter le dessus d'un meuble | plumeau (placard sous l'évier), sinon chiffon | `game.dustFurniture('table')` |
+| Frotter en petits cercles : table, évier, lavabo, douche | éponge | `game.scrubSurface('lavabo')` |
+| Brosser la cuvette | brosse WC (à côté des toilettes) | `game.scrubSurface('toilettes')` |
+| Laver les vitres de la pièce, ou le miroir | chiffon | `game.washWindows()`, `game.washWindows('miroir')` |
+| Vaporiser puis frotter un plan taché | spray et éponge | `game.cleanSurface()` |
+
+L'aspirateur, le plumeau, le chiffon et la brosse WC sont des formes provisoires, en attendant les
+modèles Tripo. `game.spawn('aspirateur')` fait apparaître un objet devant le perso.
+
 ## Les objets
 
 Les meubles et appareils de la cuisine sont habillés par les modèles Tripo (`tripo.ts`) ; la

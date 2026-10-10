@@ -17,6 +17,7 @@ import { buildModel, hasLook } from './interior';
 import { forgetGhosts, mergeStaticParts } from './merge';
 import { buildFiller } from './remplissage';
 import { showSpoiled } from './foodstates';
+import { CHORES, choreAmount, type ChoreKind, type ChoreStyle } from './chores';
 
 /** Orientation de l'objet dans la prise (repère de la main, ou du buste à deux mains). */
 function gripRotation(spec: GripSpec): THREE.Quaternion {
@@ -326,9 +327,9 @@ export class WorldItem {
   }
 }
 
-type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let' | 'cut' | 'pour';
+type Phase = 'idle' | 'reach' | 'lift' | 'hold' | 'lower' | 'release' | 'add' | 'store' | 'drink' | 'eat' | 'open' | 'read' | 'close' | 'throw' | 'brace' | 'push' | 'unbrace' | 'let' | 'cut' | 'pour' | 'chore';
 
-const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.9, store: 0.9, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45, cut: 2.6, pour: 2.4 };
+const DURATION: Record<Phase, number> = { idle: 0, reach: 0.6, lift: 0.6, hold: 0, lower: 0.6, release: 0.5, add: 0.9, store: 0.9, drink: 2.4, eat: 1.8, open: 0.7, read: 0, close: 0.6, throw: 0.95, brace: 0.5, push: 0, unbrace: 0.4, let: 0.45, cut: 2.6, pour: 2.4, chore: 0 };
 /** Temps pour qu'un objet ajouté à la pile y trouve sa place (s) : la main l'y ramène (moitié de DURATION.add). */
 const STACK_BLEND = 0.45;
 /** Nombre maximal d'objets empilés sur celui qu'on tient. */
@@ -420,6 +421,8 @@ const ARM_REST: Record<Side, { dir: THREE.Vector3; hinge: THREE.Vector3; fingers
 };
 const PALM_REST = new THREE.Vector3(0, -1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
+const UP_ = new THREE.Vector3(0, 1, 0);
+const Z_ = new THREE.Vector3(0, 0, 1);
 /** Les bras approchent leur cible en douceur au-delà de cette part de leur longueur (voir solveTwoBone). */
 const ARM_SOFT = 0.9;
 const LEG_DIR = new THREE.Vector3(0, -1, 0);
@@ -534,6 +537,23 @@ export class Carry {
   private swing: { reach: THREE.Vector3; pole: THREE.Vector3 } | null = null;
   /** Pose de l'objet dans la main au moment où elle le touche (voir SETTLE). */
   private contact: { pos: THREE.Vector3; rot: THREE.Quaternion } | null = null;
+  /**
+   * Geste de ménage en cours (voir chores.ts) : le point visé (monde), sa durée (s), l'autre main
+   * sur le manche, l'appel à chaque coup ; puis, recalculés à chaque image, la tête de l'outil
+   * (monde) et l'orientation qu'il prend.
+   */
+  private choreNow: {
+    kind: ChoreKind;
+    style: ChoreStyle;
+    at: () => THREE.Vector3;
+    seconds: number;
+    two: boolean;
+    onStroke: ((head: THREE.Vector3) => void) | null;
+    strokes: number;
+    head: THREE.Vector3;
+    rot: THREE.Quaternion | null;
+    hold: THREE.Vector3;
+  } | null = null;
 
   /** `side` : la main qui tient l'objet (une prise à deux mains prend aussi l'autre). */
   constructor(rig: Rig, readonly side: Side = 'right') {
@@ -756,6 +776,44 @@ export class Carry {
     return true;
   }
 
+  /**
+   * Fait le ménage avec l'outil tenu (balai, serpillière, aspirateur, plumeau, éponge, spray,
+   * brosse) : le geste `kind` (chores.ts) se répète `seconds` secondes autour du point `at()`
+   * (monde : le sol sous la tête du balai, le dessus du meuble, la vitre). `two` : l'autre main,
+   * libre, tient le manche plus bas. `onStroke` à chaque coup, avec la tête de l'outil (monde) ;
+   * `onDone` une fois l'outil revenu en main.
+   */
+  chore(kind: ChoreKind, at: () => THREE.Vector3, opts: { seconds?: number; two?: boolean; onStroke?: (head: THREE.Vector3) => void; onDone?: () => void } = {}): boolean {
+    if (!this.item || this.phase !== 'hold' || this.stack.length) return false;
+    const style = CHORES[kind];
+    const seconds = Math.max(2 * style.ease + style.beat, opts.seconds ?? 2 * style.ease + 3 * style.beat);
+    this.choreNow = { kind, style, at, seconds, two: !!opts.two && !!style.pole, onStroke: opts.onStroke ?? null, strokes: 0, head: at().clone(), rot: null, hold: new THREE.Vector3() };
+    this.target.copy(at());
+    this.start('chore', opts.onDone);
+    return true;
+  }
+
+  /** Le geste de ménage en cours (ou null). */
+  get choring(): ChoreKind | null {
+    return this.phase === 'chore' ? (this.choreNow?.kind ?? null) : null;
+  }
+
+  /** Tête de l'outil de ménage en plein geste (monde), pour la poussière, la mousse ou le bruit. */
+  get choreHead(): THREE.Vector3 | null {
+    return this.phase === 'chore' && this.choreNow ? this.choreNow.head.clone() : null;
+  }
+
+  /** Point visé par le geste de ménage en cours (monde). */
+  get choreAim(): THREE.Vector3 | null {
+    return this.phase === 'chore' && this.choreNow ? this.choreNow.at() : null;
+  }
+
+  /** Part du geste de ménage : 0 outil tenu normalement, 1 en plein geste. */
+  get choreAmount(): number {
+    const c = this.choreNow;
+    return this.phase === 'chore' && c ? choreAmount(c.style, this.t, c.seconds) : 0;
+  }
+
   /** Part du geste « verser » : 0 tenu normalement, 1 incliné au-dessus (fondu au début et à la fin). */
   get pouring(): number {
     if (this.phase !== 'pour') return 0;
@@ -798,12 +856,19 @@ export class Carry {
     this.contact = null;
   }
 
+  /** Durée de la phase en cours (s) ; 0 : elle dure jusqu'à ce qu'on en change. */
+  private get length(): number {
+    return this.phase === 'chore' ? (this.choreNow?.seconds ?? 0) : DURATION[this.phase];
+  }
+
   private advance(dt: number): void {
-    if (!DURATION[this.phase]) return;
+    if (!this.length) return;
     this.t += dt;
-    if (this.t < DURATION[this.phase]) return;
-    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', cut: 'hold', pour: 'hold', drink: 'hold', eat: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
+    if (this.phase === 'chore') this.strokeTick();
+    if (this.t < this.length) return;
+    const next: Partial<Record<Phase, Phase>> = { reach: 'lift', lift: 'hold', lower: 'release', release: 'idle', add: 'hold', store: 'hold', cut: 'hold', pour: 'hold', chore: 'hold', drink: 'hold', eat: 'hold', open: 'read', close: 'hold', throw: 'idle', brace: 'push', unbrace: 'idle', let: 'idle' };
     const n = next[this.phase]!;
+    if (this.phase === 'chore') this.choreNow = null;
     if (this.phase === 'lower' && this.item) {
       // l'objet quitte la main : on part de sa pose en main pour le fondu vers le sol
       this.heldPos.copy(this.item.object.position);
@@ -857,6 +922,8 @@ export class Carry {
       // au-dessus de la planche, le buste se penche un peu
       case 'cut': return { w: 1, r: 0, c: this.cutAmount() };
       case 'pour': return { w: 1, r: 0, c: 0.5 * this.pouring };
+      // ménage : le buste se penche vers la tête de l'outil, plus ou moins selon le geste
+      case 'chore': return { w: 1, r: 0, c: (this.choreNow?.style.lean ?? 0) * this.choreAmount };
       // l'objet s'est brisé en main : le bras retombe
       case 'let': return { w: 1 - k, r: 0, c: 0 };
       case 'throw': return { w: 1 - ease(THREE.MathUtils.clamp((this.t - THROW_SWING) / (DURATION.throw - THROW_SWING), 0, 1)), r: 0, c: 0 };
@@ -895,6 +962,8 @@ export class Carry {
     const root = this.rig.vrm.scene;
     root.updateMatrixWorld(true);
     const scale = root.getWorldScale(new THREE.Vector3()).y;
+    // ménage : on se penche vers la tête de l'outil (là où elle était à l'image d'avant)
+    if (this.phase === 'chore' && this.choreNow) this.target.copy(this.choreNow.head);
     const bent = c > 0 ? this.crouch(c, scale, this.reachesTarget ? this.side : null) : 0;
     // lecture : la tête se penche vers le livre
     const open = this.openAmount();
@@ -923,6 +992,9 @@ export class Carry {
     } else {
       const spec = this.bracing ? GRIPS[this.braceGrip] : this.phase === 'read' ? GRIPS.read : this.spec();
       hands = this.pose(spec, r, scale);
+      // ménage : les bras quittent la prise pour le geste (fondu au début et à la fin)
+      const k = this.choreAmount;
+      if (k > 0) for (const side of this.chorePose(spec, scale, k)) if (!hands.includes(side)) hands.push(side);
     }
     // penché en avant, la main libre pend au lieu de partir en arrière avec le buste
     const hang = THREE.MathUtils.clamp(bent / 60, 0, 1);
@@ -935,6 +1007,127 @@ export class Carry {
     }
     root.updateMatrixWorld(true);
     if (this.phase === 'throw' && this.item && this.t >= THROW_RELEASE) this.release();
+  }
+
+  /** Un coup de plus du geste de ménage : Game nettoie un peu sous la tête de l'outil. */
+  private strokeTick(): void {
+    const c = this.choreNow;
+    if (!c?.onStroke) return;
+    // les coups comptent une fois l'outil en place, jusqu'à ce qu'il reparte
+    const n = Math.floor(Math.max(0, Math.min(this.t, c.seconds - c.style.ease) - c.style.ease) / c.style.beat);
+    while (c.strokes < n) {
+      c.strokes++;
+      c.onStroke(c.head.clone());
+    }
+  }
+
+  /**
+   * Bras du geste de ménage (voir chores.ts), par-dessus la prise normale déjà posée : fondu `k`
+   * entre les deux. Renvoie les mains utilisées.
+   */
+  private chorePose(spec: GripSpec, scale: number, k: number): Side[] {
+    const c = this.choreNow!;
+    const item = this.item!;
+    const rig = this.rig;
+    const style = c.style;
+    const side = this.side;
+    const other: Side = side === 'right' ? 'left' : 'right';
+    // repère de la zone : vers la gauche du perso, le haut, devant lui (au sol)
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chestRot).setY(0).normalize();
+    const left = new THREE.Vector3(1, 0, 0).applyQuaternion(this.chestRot).setY(0).normalize();
+    const zone = (v: [number, number, number]) => left.clone().multiplyScalar(v[0]).addScaledVector(UP_, v[1]).addScaledVector(fwd, v[2]);
+    const t = Math.max(0, this.t - style.ease);
+    const head = c.at().add(zone(style.stroke(t)).multiplyScalar(1));
+    c.head.copy(head);
+    const sides: Side[] = [side];
+    const before = new Map<THREE.Object3D, THREE.Quaternion>();
+    const keep = (s: Side) => {
+      for (const n of this.armNodes[s]) before.set(n, n.quaternion.clone());
+    };
+    keep(side);
+    const shoulder = rig.worldPos(rig.node(`${side}UpperArm`)!);
+    const len = this.armLength(side);
+    const hold = mirror(vec(spec.hold), side).multiplyScalar(scale);
+    c.hold.copy(hold);
+    const rest = ARM_REST[side];
+    if (style.pole) {
+      // la tête au sol ; le manche monte vers la main, qui en tient le haut
+      const reach = vec(flip(style.pole.reach, side)).multiplyScalar(len).applyQuaternion(this.chestRot);
+      const want = shoulder.clone().add(reach);
+      const d = want.sub(head).normalize();
+      const stick = item.gripPoint.y - item.box.min.y;
+      const top = head.clone().addScaledVector(d, stick);
+      const axis = style.pole.head === 'across' ? left.clone() : fwd.clone();
+      const rot = basisRotation(UP_, Z_, d, axis);
+      c.rot = rot;
+      const handRot = rot.clone().multiply(gripRotation(spec).invert());
+      this.reachArm(side, top, handRot, hold, vec(flip([-0.55, -0.45, -0.6], side)), spec.right);
+      if (c.two) {
+        // l'autre main plus bas sur le manche, paume contre lui, doigts refermés autour
+        keep(other);
+        sides.push(other);
+        const at = head.clone().addScaledVector(d, stick * style.pole.lower);
+        const out = left.clone().multiplyScalar(other === 'left' ? 1 : -1);
+        out.addScaledVector(d, -out.dot(d)).normalize();
+        const palm = out.clone().negate();
+        const fingers = new THREE.Vector3().crossVectors(d, palm).normalize();
+        if (fingers.dot(fwd) < 0) fingers.negate();
+        const otherRest = ARM_REST[other];
+        const rot2 = basisRotation(otherRest.fingers, PALM_REST, fingers, palm);
+        const hold2 = mirror(vec(spec.hold), other).multiplyScalar(scale);
+        this.reachArm(other, at.addScaledVector(out, 0.03 * scale), rot2, hold2, vec(flip([-0.5, -0.75, -0.25], other)), sided(GRIPS.pole, other).right);
+      }
+    } else if (style.wand) {
+      // le bout de l'outil (plumeau, brosse) sur le point visé, la main au manche
+      const d = zone(style.wand).normalize();
+      const up = item.gripPoint.y < (item.box.min.y + item.box.max.y) / 2 ? 1 : -1;
+      const tip = up > 0 ? item.box.max.y : item.box.min.y;
+      const reach = Math.abs(tip - item.gripPoint.y) * 0.85;
+      const grip = head.clone().addScaledVector(d, -reach);
+      const sideways = new THREE.Vector3().crossVectors(d, UP_);
+      if (sideways.lengthSq() < 1e-4) sideways.copy(left);
+      const rot = basisRotation(UP_, Z_, d.clone().multiplyScalar(up), new THREE.Vector3().crossVectors(sideways, d).normalize());
+      c.rot = rot;
+      const handRot = rot.clone().multiply(gripRotation(spec).invert());
+      this.reachArm(side, grip, handRot, hold, vec(flip([-0.6, -0.7, -0.3], side)), spec.right);
+    } else if (style.flat) {
+      // éponge ou chiffon à plat sous la paume : sur un dessus, ou contre une vitre
+      const down = style.flat === 'down';
+      const n = down ? UP_.clone() : fwd.clone().negate();
+      const palmAt = head.clone().addScaledVector(n, item.size.y + 0.012);
+      const fingers = down ? fwd.clone().addScaledVector(left, side === 'right' ? 0.35 : -0.35).normalize() : UP_.clone().addScaledVector(left, side === 'right' ? 0.3 : -0.3).normalize();
+      const handRot = basisRotation(rest.fingers, PALM_REST, fingers, n.clone().negate());
+      c.rot = basisRotation(UP_, Z_, n, down ? fwd : UP_);
+      const center = mirror(new THREE.Vector3(-0.065, -0.03, 0.005).multiplyScalar(scale), side);
+      c.hold.copy(center);
+      this.reachArm(side, palmAt, handRot, center, vec(flip([-0.6, -0.7, -0.3], side)), { ...spec.right, curl: 18, index: 14, thumb: 10 });
+    } else {
+      // spray : la main là où le dit le geste, le flacon debout, la buse vers la surface
+      const aim = c.at().sub(head).setY(0).normalize();
+      if (aim.lengthSq() < 0.5) aim.copy(fwd);
+      c.rot = basisRotation(UP_, Z_, UP_, aim);
+      const handRot = basisRotation(rest.fingers, PALM_REST, left.clone().multiplyScalar(side === 'right' ? 1 : -1).addScaledVector(fwd, 0.3).normalize(), aim.clone().negate().addScaledVector(left, side === 'right' ? -0.4 : 0.4).normalize());
+      // l'index presse la gâchette à chaque coup
+      const u = (t % style.beat) / style.beat;
+      const press = u < 0.3 ? Math.sin((Math.PI * u) / 0.3) : 0;
+      this.reachArm(side, head, handRot, hold, vec(flip([-0.6, -0.6, -0.4], side)), { ...spec.right, index: THREE.MathUtils.lerp(30, 70, press) });
+    }
+    // fondu entre la prise normale (ou la pose animée, pour l'autre main) et le geste
+    if (k < 1) for (const [n, q] of before) n.quaternion.copy(q.slerp(n.quaternion, k));
+    return sides;
+  }
+
+  /** Amène la paume de `side` (point `hold` de la main) en `palm`, orientée `handRot`, le coude vers `pole` (repère du buste). */
+  private reachArm(side: Side, palm: THREE.Vector3, handRot: THREE.Quaternion, hold: THREE.Vector3, pole: THREE.Vector3, hand: HandSpec): void {
+    const rig = this.rig;
+    const upper = rig.node(`${side}UpperArm`)!, lower = rig.node(`${side}LowerArm`)!, handNode = rig.node(`${side}Hand`)!;
+    const rest = ARM_REST[side];
+    const wrist = palm.clone().sub(hold.clone().applyQuaternion(handRot));
+    solveTwoBone(rig, upper, lower, handNode, wrist, pole.normalize().applyQuaternion(this.chestRot), rest.dir, rest.hinge, ARM_SOFT);
+    twistForearm(rig, lower, handNode, handRot);
+    this.palms[side] = palm.clone();
+    this.handRots[side] = handRot.clone();
+    this.curl(side, hand, 1);
   }
 
   /** Position de la main pendant le lancer : en arrière, puis le fouetté vers l'avant. */
@@ -1323,6 +1516,7 @@ export class Carry {
       }
       // le point saisi de l'objet va au centre de la prise
       pos.sub(this.pointFor(spec).applyQuaternion(rot));
+      this.chorePlace(pos, rot);
     }
     const o = item.object;
     if ((this.phase === 'lift' || this.phase === 'lower') && !this.blendPose) {
@@ -1352,6 +1546,29 @@ export class Carry {
       o.quaternion.copy(rot);
     }
     this.placeStack(o.position, o.quaternion, false);
+  }
+
+  /**
+   * Ménage : l'outil prend l'orientation du geste (le manche vers la tête au sol, l'éponge à plat
+   * sous la paume…), calé sur la main telle qu'elle est arrivée (fondu avec la prise normale).
+   */
+  private chorePlace(pos: THREE.Vector3, rot: THREE.Quaternion): void {
+    const c = this.choreNow, k = this.choreAmount, item = this.item!;
+    if (!c?.rot || k <= 0) return;
+    const rig = this.rig;
+    const hand = `${this.side}Hand` as const;
+    const palm = rig.worldPos(rig.raw(hand)!).add(c.hold.clone().applyQuaternion(rig.worldRot(rig.node(hand)!)));
+    const at = new THREE.Vector3();
+    if (c.style.flat) {
+      // le dessous de l'éponge contre la surface, le dessus sous la paume
+      const n = new THREE.Vector3(0, 1, 0).applyQuaternion(c.rot);
+      const mid = item.box.getCenter(new THREE.Vector3()).setY(item.box.max.y);
+      at.copy(palm).addScaledVector(n, -0.012).sub(mid.applyQuaternion(c.rot));
+    } else {
+      at.copy(palm).sub(item.gripPoint.clone().applyQuaternion(c.rot));
+    }
+    pos.lerp(at, k);
+    rot.slerp(c.rot, k);
   }
 
   /** Repère qui porte l'objet : l'os de la main, ou le buste entre les deux paumes. */

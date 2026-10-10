@@ -53,10 +53,10 @@ const SASH_H = 0.7;
 /** Rouleau de sacs poubelle neuf : nombre de sacs. */
 export const BAGS_PER_ROLL = 10;
 
-/** Ce qui se range au placard en plus (sous l'évier, en vrai) : les sacs, le spray, les gants. */
-export const UPKEEP_CUPBOARD = ['sacs poubelle', 'spray nettoyant', 'gants de ménage'];
+/** Ce qui se range au placard en plus (sous l'évier, en vrai) : les sacs, le spray, les gants, le chiffon et le plumeau. */
+export const UPKEEP_CUPBOARD = ['sacs poubelle', 'spray nettoyant', 'gants de ménage', 'chiffon', 'plumeau'];
 /** Noms au féminin, au pluriel (accord des messages). */
-export const UPKEEP_FEMININE = ['barre à couteaux', 'horloge', 'fenêtre', 'maniques', 'serpillière'];
+export const UPKEEP_FEMININE = ['barre à couteaux', 'horloge', 'fenêtre', 'maniques', 'serpillière', 'brosse WC'];
 export const UPKEEP_PLURAL = ['crochets', 'maniques', 'sacs poubelle', 'gants de ménage'];
 /** Stock voulu (liste de courses) : un rouleau de sacs, un spray. */
 export const UPKEEP_STOCK: Record<string, number> = { 'sacs poubelle': 1, 'spray nettoyant': 1 };
@@ -297,6 +297,78 @@ export const UPKEEP_ITEMS: ItemDef[] = [
       g.add(mesh(new THREE.TorusGeometry(0.15, 0.006, 6, 20, Math.PI), 0x9aa3ab, 0, 0.28, 0));
       return g;
     },
+  },
+  // formes provisoires en attendant les modèles Tripo de Greg (fil « Prompts Tripo du ménage »)
+  {
+    id: 'aspirateur',
+    name: 'aspirateur',
+    portable: true,
+    grip: 'pole',
+    gripPoint: [0, 1.0, 0],
+    fragility: 6,
+    durability: 200,
+    vacuums: true,
+    // aspirateur balai : la brosse large au sol, le bloc moteur et son réservoir sur le manche, la poignée en haut
+    build: () => group(
+      box(0.3, 0.05, 0.11, 0x3a3d42, 0, 0.025, 0.01),
+      box(0.26, 0.012, 0.02, 0xc23b2b, 0, 0.012, 0.065),
+      cyl(0.018, 0.08, 0x3a3d42, 0.09),
+      stick(0.95, 0x9aa3ab),
+      cyl(0.055, 0.24, 0xd9442f, 0.36, 0, -0.035, 16),
+      cyl(0.045, 0.13, 0xbfe3f2, 0.3, 0, -0.035, 16),
+      box(0.05, 0.12, 0.04, 0x2e3135, 0, 1.0, -0.02),
+    ),
+  },
+  {
+    id: 'plumeau',
+    name: 'plumeau',
+    portable: true,
+    grip: 'utensil',
+    gripPoint: [0, 0.07, 0],
+    fragility: 10,
+    durability: 90,
+    dusts: true,
+    // manche en bois, plumes grises en houppe au bout
+    build: () => {
+      const g = group(cyl(0.011, 0.3, 0x8a5a33, 0.15, 0, 0, 10));
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2;
+        const f = mesh(new THREE.ConeGeometry(0.035, 0.18, 6), i % 2 ? 0x8d8a86 : 0xb8b2aa, Math.cos(a) * 0.025, 0.37, Math.sin(a) * 0.025);
+        f.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35);
+        g.add(f);
+      }
+      g.add(mesh(new THREE.SphereGeometry(0.05, 10, 8), 0xa29d96, 0, 0.36, 0));
+      return g;
+    },
+  },
+  {
+    id: 'chiffon',
+    name: 'chiffon',
+    portable: true,
+    grip: 'loose',
+    gripPoint: [0.07, 0.006, 0.05],
+    // microfibre : essuie les meubles, les vitres et les miroirs (comme l'éponge, sans mouiller)
+    wipes: true,
+    fragility: 10,
+    durability: 80,
+    breakWord: 'déchiré',
+    build: () => group(box(0.18, 0.01, 0.15, 0x4f9fd8, 0, 0.005, 0), box(0.181, 0.0105, 0.02, 0x3c7fb0, 0, 0.005, 0.06)),
+  },
+  {
+    id: 'brosse-wc',
+    name: 'brosse WC',
+    portable: true,
+    grip: 'fist',
+    gripPoint: [0, 0.36, 0],
+    fragility: 8,
+    durability: 120,
+    scrubsBowl: true,
+    // la brosse en bas (rangée tête en bas dans son pot), le manche blanc vers le haut
+    build: () => group(
+      mesh(new THREE.SphereGeometry(0.045, 10, 8), 0x5d6670, 0, 0.05, 0),
+      cyl(0.008, 0.36, 0xf3f3f3, 0.24, 0, 0, 8),
+      box(0.03, 0.05, 0.02, 0xf3f3f3, 0, 0.42),
+    ),
   },
   {
     id: 'sacs-poubelle',
