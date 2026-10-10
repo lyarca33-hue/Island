@@ -451,6 +451,52 @@ export const PACK_SIZES = {
     "stethoscope": [0.6, 0.216, 0.326],
     "thermometre": [0.022, 0.015, 0.13],
   },
+  comptoirs: {
+    "comptoir-pharmacie": [0.741, 1.4, 0.929],
+    "guichet-poste": [0.968, 1.706, 2],
+    "passe-plat-chauffant": [0.564, 1.037, 1.6],
+  },
+  presentoirs: {
+    "etal-de-la-criee": [1.176, 1.514, 2],
+    "etal-de-marche": [1.278, 2.3, 2.178],
+    "presentoir-a-gradins": [0.749, 1.5, 0.786],
+    "vitrine-a-glaces": [0.796, 1.25, 1.5],
+  },
+  rangements: {
+    "bibliotheque-murale": [0.796, 2.4, 1.123],
+    "casier-de-tri": [0.73, 1.8, 0.863],
+    "echelle-bibliotheque": [0.951, 2.3, 0.762],
+    "etagere-pharmacie": [0.774, 2, 0.93],
+  },
+  salon: {
+    "bac-a-shampoing": [1.39, 1.101, 0.791],
+    "casque-sechoir": [0.586, 1.5, 0.515],
+    "coiffeuse-miroir": [0.51, 1.8, 0.729],
+    "fauteuil-coiffeur": [0.744, 1.1, 0.696],
+  },
+  tables: {
+    "bureau-medecin": [0.519, 1, 0.567],
+    "etabli-menuisier": [1.017, 1.309, 2],
+    "table-examen": [1.9, 1.198, 0.802],
+    "table-veterinaire": [0.659, 0.85, 0.61],
+  },
+  deuxroues: {
+    "scooter": [1.8, 1.044, 0.769],
+    "triporteur-glaces": [1.211, 2, 1.18],
+    "velo-facteur": [1.8, 1.178, 0.787],
+  },
+  charrettes: {
+    "charrette-a-bras": [2, 0.858, 1.168],
+    "remorque-agricole": [3, 1.16, 1.505],
+  },
+  voitures: {
+    "taxi": [4, 1.826, 1.623],
+    "voiture-citadine": [3.6, 1.389, 1.375],
+  },
+  engins: {
+    "camionnette": [3.8, 2.686, 2.343],
+    "tracteur": [2.999, 2.397, 2.265],
+  },
 } as const satisfies Record<string, Record<string, readonly [number, number, number]>>;
 
 export type PackId = keyof typeof PACK_SIZES;

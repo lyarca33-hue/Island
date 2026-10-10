@@ -362,6 +362,61 @@ const LOTS = {
     '273_boite-medicament_10cm': { nom: 'boite-medicament', cm: 10, tri: 5000, permissive: true },
     '277_thermometre_13cm': { nom: 'thermometre', cm: 13, tri: 5000, permissive: true },
   },
+  // Comptoirs et guichets (groupe G29), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  comptoirs: {
+    '076_passe-plat-chauffant_160cm': { nom: 'passe-plat-chauffant', cm: 160, tri: 10000, permissive: true },
+    '148_guichet-poste_200cm': { nom: 'guichet-poste', cm: 200, tri: 15000, permissive: true },
+    '271_comptoir-pharmacie_140cm': { nom: 'comptoir-pharmacie', cm: 140, tri: 15000, permissive: true },
+  },
+  // Grands étals et vitrines (groupe G30), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  presentoirs: {
+    '098_etal-de-marche_230cm': { nom: 'etal-de-marche', cm: 230, tri: 15000, permissive: true },
+    '130_etal-de-la-criee_200cm': { nom: 'etal-de-la-criee', cm: 200, tri: 15000, permissive: true },
+    '162_presentoir-a-gradins_150cm': { nom: 'presentoir-a-gradins', cm: 150, tri: 15000, permissive: true },
+    '222_vitrine-a-glaces_150cm': { nom: 'vitrine-a-glaces', cm: 150, tri: 15000, permissive: true },
+  },
+  // Grands rangements (groupe G31), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  rangements: {
+    '149_casier-de-tri_180cm': { nom: 'casier-de-tri', cm: 180, tri: 15000, permissive: true },
+    '233_bibliotheque-murale_240cm': { nom: 'bibliotheque-murale', cm: 240, tri: 15000, permissive: true },
+    '234_echelle-bibliotheque_230cm': { nom: 'echelle-bibliotheque', cm: 230, tri: 10000, permissive: true },
+    '272_etagere-pharmacie_200cm': { nom: 'etagere-pharmacie', cm: 200, tri: 15000, permissive: true },
+  },
+  // Salon de coiffure (groupe G32), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  salon: {
+    '259_fauteuil-coiffeur_110cm': { nom: 'fauteuil-coiffeur', cm: 110, tri: 15000, permissive: true },
+    '260_bac-a-shampoing_110cm': { nom: 'bac-a-shampoing', cm: 139, tri: 15000, permissive: true },
+    '261_coiffeuse-miroir_180cm': { nom: 'coiffeuse-miroir', cm: 180, tri: 15000, permissive: true },
+    '262_casque-sechoir_150cm': { nom: 'casque-sechoir', cm: 150, tri: 10000, permissive: true },
+  },
+  // Tables de travail (groupe G33), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  tables: {
+    '209_etabli-menuisier_200cm': { nom: 'etabli-menuisier', cm: 200, tri: 15000, permissive: true },
+    '245_table-veterinaire_85cm': { nom: 'table-veterinaire', cm: 85, tri: 15000, permissive: true },
+    '279_table-examen_190cm': { nom: 'table-examen', cm: 190, tri: 15000, permissive: true },
+    '280_bureau-medecin_100cm': { nom: 'bureau-medecin', cm: 100, tri: 15000, permissive: true },
+  },
+  // Vélo, triporteur et scooter (groupe G34), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  deuxroues: {
+    '153_velo-facteur_180cm': { nom: 'velo-facteur', cm: 180, tri: 15000, permissive: true },
+    '228_triporteur-glaces_200cm': { nom: 'triporteur-glaces', cm: 200, tri: 15000, permissive: true },
+    '287_scooter_180cm': { nom: 'scooter', cm: 180, tri: 10000, permissive: true },
+  },
+  // Charrette et remorque (groupe G35), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  charrettes: {
+    '106_charrette-a-bras_200cm': { nom: 'charrette-a-bras', cm: 200, tri: 15000, permissive: true },
+    '197_remorque-agricole_300cm': { nom: 'remorque-agricole', cm: 300, tri: 15000, permissive: true },
+  },
+  // Voitures (groupe G36), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  voitures: {
+    '284_voiture-citadine_360cm': { nom: 'voiture-citadine', cm: 360, tri: 15000, permissive: true },
+    '286_taxi_400cm': { nom: 'taxi', cm: 400, tri: 15000, permissive: true },
+  },
+  // Tracteur et camionnette (groupe G37), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  engins: {
+    '196_tracteur_300cm': { nom: 'tracteur', cm: 300, tri: 15000, permissive: true },
+    '285_camionnette_380cm': { nom: 'camionnette', cm: 380, tri: 15000, permissive: true },
+  },
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
 const texSize = (o) => o.tex ?? (o.cm < 30 ? 512 : 1024);
