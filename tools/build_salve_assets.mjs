@@ -121,6 +121,41 @@ const LOTS = {
     'pince_20cm': { nom: 'pince', cm: 20, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
     'cle-molette_25cm': { nom: 'cle-molette', cm: 25, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
   },
+  // n° 071 à 097 de la salve (Tripo a appelé le passe-plat 076 « présentoir à cartes »), plus un sac kraft à emporter
+  restaurant: {
+    // ——— cuisine ———
+    'de+cuisinière+en+acier+inoxydable': { nom: 'piano-cuisson', cm: 160, tri: 15000 },
+    'de+hotte+aspirante+de+cuisine': { nom: 'hotte-pro', cm: 160, tri: 10000 },
+    'de+double+lavabo': { nom: 'plonge', cm: 160, tri: 15000 },
+    'table+de+préparation+en+acier+inoxydable+3d': { nom: 'plan-inox', cm: 180, tri: 10000 },
+    'de+réfrigérateur+en+acier+inoxydable': { nom: 'frigo-pro', cm: 200, tri: 15000 },
+    'de+marmite': { nom: 'marmite', cm: 45, tri: 10000 },
+    'de+poêle+wok': { nom: 'wok', cm: 40, tri: 5000 },
+    // ——— bar et salle ———
+    'de+comptoir+de+bar+de+café': { nom: 'comptoir-bar', cm: 300, tri: 15000 },
+    'de+machine+à+expresso': { nom: 'machine-expresso', cm: 80, tri: 10000 },
+    'de+moulin+à+café': { nom: 'moulin-cafe', cm: 50, tri: 5000 },
+    'de+tabouret+de+bar': { nom: 'tabouret-bar', cm: 75, tri: 5000 },
+    'de+table+ronde+en+marbre': { nom: 'table-bistrot', cm: 75, tri: 5000 },
+    'de+chaise+de+bistrot+classique': { nom: 'chaise-bistrot', cm: 85, tri: 10000 },
+    'de+parasol+de+café': { nom: 'parasol-terrasse', cm: 250, tri: 10000 },
+    'de+tableau+noir+en+forme+de+a': { nom: 'ardoise-menu', cm: 100, tri: 5000 },
+    'de+présentoir+à+cartes+de+restaurant': { nom: 'passe-plat', cm: 160, tri: 10000 },
+    'de+plateau+de+service+rond': { nom: 'plateau-serveur', cm: 35, tri: 5000 },
+    // ——— table ———
+    'de+tasse+à+expresso': { nom: 'tasse-expresso', cm: 8, tri: 5000 },
+    'de+verre+à+vin': { nom: 'verre-vin', cm: 20, tri: 5000 },
+    'de+bouteille+de+vin': { nom: 'bouteille-vin', cm: 30, tri: 5000 },
+    'de+sucrier': { nom: 'sucrier', cm: 10, tri: 5000 },
+    'de+salière': { nom: 'saliere', cm: 10, tri: 5000 },
+    'de+porte-serviettes': { nom: 'distributeur-serviettes', cm: 14, tri: 5000 },
+    'de+sac+en+papier+kraft': { nom: 'sac-emporter', cm: 35, tri: 5000 },
+    // ——— plats ———
+    'de+moules+et+frites': { nom: 'moules-frites', cm: 28, tri: 10000 },
+    'de+quiche': { nom: 'quiche', cm: 24, tri: 10000 },
+    "d'un+plat+de+légumes": { nom: 'ratatouille', cm: 20, tri: 5000 },
+    "d'un+bol+de+soupe": { nom: 'soupe-poisson', cm: 16, tri: 5000 },
+  },
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
 const texSize = (o) => o.tex ?? (o.cm < 30 ? 512 : 1024);
