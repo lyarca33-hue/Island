@@ -666,10 +666,11 @@ export class Salissure {
     if (!d) return 0;
     const s = clamp01(strength);
     const before = d.dust + d.grime;
-    d.dust = d.dust * (1 - 0.9 * s);
-    d.grime = d.grime * (1 - 0.8 * s);
-    if (d.dust < 0.02) d.dust = 0;
-    if (d.grime < 0.02) d.grime = 0;
+    d.dust = d.dust * (1 - 0.95 * s);
+    d.grime = d.grime * (1 - 0.9 * s);
+    // un fond qui reste ne se voit pas : propre
+    if (d.dust < 0.08) d.dust = 0;
+    if (d.grime < 0.08) d.grime = 0;
     return before - d.dust - d.grime;
   }
 

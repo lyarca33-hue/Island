@@ -2808,7 +2808,7 @@ export class Game {
         this.salissure.cleanItem(target);
         this.wearItem(sponge, 2);
         this.soilHands('ménage');
-        this.onNotice?.(`${cap(the(target.name))} est propre et brille.`);
+        this.onNotice?.(`${cap(the(target.name))} ${target.name.endsWith('s') ? 'sont propres et brillent' : 'est propre et brille'}.`);
       })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
     };
     c.approachThen(this.frontOf(target), mid, () => {

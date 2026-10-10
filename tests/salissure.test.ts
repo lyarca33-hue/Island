@@ -91,3 +91,13 @@ describe('salissure : les mots', () => {
     expect(itemDirtWords({ dust: 0, grime: 0.3 }, false)[0]).toMatch(/sale/);
   });
 });
+
+describe('salissure : les meubles', () => {
+  it('un coup d’éponge rend propre un meuble très sale', () => {
+    const s = new Salissure([]);
+    const item = { def: { id: 'toilettes', portable: false } } as never;
+    expect(s.soilItem(item, 0.66, 'crasse')).toBe(true);
+    s.cleanItem(item);
+    expect(s.levelOf(item)).toEqual({ dust: 0, grime: 0 });
+  });
+});
