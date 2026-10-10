@@ -28,6 +28,7 @@ const PRICES: Record<string, number> = {
   couteau: 1990, carafe: 900, theiere: 1800, saladier: 1200, moule: 1100, poele: 2500, casserole: 2200, planche: 900, plateau: 1200,
   fouet: 450, spatule: 350, 'cuillere-bois': 250, louche: 450, rape: 650, 'bac-glacons': 300, eponge: 120, torchon: 400, maniques: 600,
   savon: 220, chaise: 3500, tabouret: 2500, caisse: 1500, balai: 1200, seau: 900, serpilliere: 800, gants: 350,
+  aspirateur: 8900, plumeau: 600, chiffon: 300, 'brosse-wc': 700,
 };
 
 /** Toujours en rayon maison, cassé ou pas : ce qui s'use ou se perd. */

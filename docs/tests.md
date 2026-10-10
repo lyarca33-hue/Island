@@ -17,6 +17,7 @@ Ils vérifient les règles du jeu qui ne dessinent rien, en une ou deux secondes
 | `tests/freshness.test.ts` | Fraîcheur, chaleur, étoiles et compétence cuisine (`src/game/items/freshness.ts`) |
 | `tests/recipes.test.ts` | Recettes et plats (`src/game/items/recipes.ts`) : chaque recette a son plat et inversement, mots normalisés, modèles 3D qui se construisent |
 | `tests/parser.test.ts` | Ordres en français compris sans IA (`src/orders/parser.ts`) : « prends la tasse », « fais-toi un café », « assieds-toi », plusieurs ordres à la suite, ordre incompris → `null` |
+| `tests/chores.test.ts` | Gestes de ménage (`src/game/items/chores.ts`) : chaque geste tient son outil d'une seule façon, la tête de l'outil reste près du point visé (au sol pour les manches), mise en place et retour en douceur, chaque outil du catalogue a son geste |
 | `tests/salissure.test.ts` | Saleté de la maison (`src/game/salissure.ts`) : poussière qui tombe (plus le long des murs), balai et serpillière, empreintes de boue rapportées du dehors, carré le plus sale, sauvegarde |
 | `tests/ordres-maison.test.ts` | Les ordres tapés essayés sur la vraie maison (`tests/fixtures/maison.json`, refait par `node tools/dump_maison.mjs`) : pièces, pluriels, noms composés, formes polies, fautes de frappe, vélo, et les ordres inconnus qui partent à l'IA au lieu d'un contresens |
 
