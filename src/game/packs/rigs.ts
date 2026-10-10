@@ -103,6 +103,7 @@ const WELL_PATH: V3[] = [[0, 0, 0], [0, 0, 0.52], [0, -0.95, 0.52], [0, 0, 0.52]
 const WATER = 0x9fd4ff;
 const COFFEE = 0x4a2a16;
 const WINE = 0x6e1027;
+const MILK = 0xf7f5ee;
 
 /** Bouton qui tourne d'un quart de tour sur son axe `axis` (vers l'avant de l'appareil), allumé à 1. */
 const knob = (box: Box, pivot: V3, axis: 'x' | 'z'): PackPart => ({ boxes: [box], pivot, motion: { kind: 'turn', axis, angle: deg(-90) }, play: 'hold' });
@@ -380,6 +381,87 @@ export const PACK_RIGS: { [P in PackId]?: Partial<Record<ModelName<P>, PackRig>>
       parts: { jet: { make: { shape: 'jet', radius: 0.006, length: 0.25, color: WINE, opacity: 1, up: true }, pivot: [0, 0.3, 0], motion: { kind: 'grow', axis: 'y' }, play: 'hold' } },
     },
   },
+  outillage: {
+    // quatre lames de 25 cm empilées (4 mm chacune), dépliées bout à bout : chaque lame tourne d'un
+    // demi-tour sur la charnière qui la tient à la précédente (alternativement à droite et à gauche)
+    'metre-pliant': {
+      parts: {
+        'lame-1': { boxes: [[[-1, 0.004, -1], [1, 0.008, 1]]], pivot: [0.125, 0.004, 0], motion: { kind: 'turn', axis: 'z', angle: -Math.PI }, play: 'once' },
+        'lame-2': { boxes: [[[-1, 0.008, -1], [1, 0.012, 1]]], on: 'lame-1', pivot: [-0.125, 0.008, 0], motion: { kind: 'turn', axis: 'z', angle: Math.PI }, play: 'once' },
+        'lame-3': { boxes: [[[-1, 0.012, -1], [1, 1, 1]]], on: 'lame-2', pivot: [0.125, 0.012, 0], motion: { kind: 'turn', axis: 'z', angle: -Math.PI }, play: 'once' },
+      },
+    },
+    // le mandrin et le foret tournent sur leur axe (la perceuse est tournée de biais : axe mesuré)
+    perceuse: {
+      parts: { foret: { boxes: [[[0.04, 0.2, -0.08], [0.07, 0.26, -0.045]]], pivot: [0.045, 0.226, -0.05], motion: { kind: 'spin', axis: [0.482, 0, -0.876], angle: 2 * Math.PI }, play: 'loop', period: 0.2 } },
+    },
+    // le pinceau posé sur le pot se soulève (le perso le prend pour vernir)
+    'pot-vernis-pinceau': {
+      parts: {
+        pinceau: { boxes: [[[-1, 0.1, -1], [1, 1, 1]], [[-0.062, 0.097, -1], [0.062, 0.1, 0.056]], [[-1, 0.07, -1], [-0.062, 1, 1]], [[0.04, 0.07, -1], [1, 1, 1]], [[-1, 0.07, 0.04], [1, 1, 1]]], motion: { kind: 'path', points: [[0, 0, 0], [0, 0.08, 0]] }, play: 'once' },
+        // la surface du vernis, sous le pinceau (le modèle a un trou là où il touchait)
+        vernis: { make: { shape: 'disque', radius: 0.026, color: 0xd6a646 }, pivot: [-0.008, 0.097, 0.004] },
+      },
+    },
+    // la mâchoire mobile (avec sa poignée) glisse sur la barre vers la mâchoire fixe, au bout (-Z)
+    'serre-joint': {
+      parts: { machoire: { boxes: [[[-0.045, -1, -0.06], [1, 1, 0.13]]], motion: { kind: 'slide', axis: 'z', distance: -0.12 }, play: 'once' } },
+    },
+  },
+  ferme: {
+    // le bouchon se soulève, le lait coule dedans d'en haut
+    'bidon-a-lait': {
+      inside: true,
+      parts: {
+        couvercle: { boxes: [[[-1, 0.625, -1], [1, 1, 1]]], motion: { kind: 'path', points: [[0, 0, 0], [0, 0.08, 0], [0.12, 0.1, 0]] }, play: 'once' },
+        jet: { make: { shape: 'jet', radius: 0.012, length: 0.35, color: MILK, opacity: 1 }, pivot: [0, 0.95, 0], motion: { kind: 'grow', axis: 'y' }, play: 'hold' },
+      },
+    },
+    // le lait monte dans le seau (1 : plein)
+    'seau-a-traire': {
+      parts: { liquide: { make: { shape: 'volume', bottom: 0.062, top: 0.092, height: 0.17, color: MILK }, pivot: [0, 0.014, 0], motion: { kind: 'fill', from: 0.8 }, play: 'hold' } },
+    },
+  },
+  fleuriste: {
+    // les deux lames tournent sur le boulon (x 0,02) : ouvertes au repos, fermées à 1
+    secateur: {
+      parts: {
+        'lame-haut': { boxes: [[[0.025, -1, -1], [1, 1, 0.0005]]], pivot: [0.02, 0.014, 0], motion: { kind: 'turn', axis: 'y', rest: deg(14), angle: deg(-14) }, play: 'once' },
+        'lame-bas': { boxes: [[[0.025, -1, 0.0005], [1, 1, 1]]], pivot: [0.02, 0.014, 0], motion: { kind: 'turn', axis: 'y', rest: deg(-14), angle: deg(14) }, play: 'once' },
+      },
+    },
+    // l'eau monte dans le vase, rendu translucide
+    'vase-verre': {
+      opacity: 0.5,
+      parts: { liquide: { make: { shape: 'volume', bottom: 0.04, top: 0.052, height: 0.15, color: WATER }, pivot: [0, 0.02, 0], motion: { kind: 'fill', from: 0.8 }, play: 'hold' } },
+    },
+  },
+  poste: {
+    // le plateau descend un peu sous le colis
+    'balance-colis': {
+      parts: { plateau: { boxes: [[[-1, 0.104, -1], [1, 1, 1]]], motion: { kind: 'slide', axis: 'y', distance: -0.008 }, play: 'hold' } },
+    },
+  },
+  port: {
+    // demi-coquille déjà ouverte : la chair disparaît quand on la mange (1 : mangée)
+    huitre: {
+      inside: true,
+      parts: {
+        chair: { boxes: [[[-0.035, 0.008, -0.03], [0.032, 1, 0.026]]], pivot: [0, 0.012, 0], motion: { kind: 'shrink', to: 0.3 }, play: 'hold' },
+        // le fond nacré de la coquille, sous la chair (le modèle n'en a pas)
+        nacre: { make: { shape: 'disque', radius: 0.03, color: 0xd9cfc4 }, pivot: [-0.002, 0.009, -0.002] },
+      },
+    },
+    // la flamme au milieu du verre, le verre s'éclaire
+    'lanterne-bateau': {
+      parts: {
+        lumiere: { boxes: [[[-0.06, 0.06, -0.06], [0.06, 0.15, 0.06]]], tex: { min: 0.5 }, motion: { kind: 'glow', color: WARM }, play: 'hold' },
+        'flamme-0': { make: { shape: 'flamme', radius: 0.008, height: 0.03 }, pivot: [0, 0.09, 0], motion: { kind: 'grow', axis: 'y' }, play: 'loop', period: 0.5 },
+      },
+      def: { lamp: { y: 0.1, color: 0xffd6a0, intensity: 0.4, range: 3 } },
+    },
+  },
+
 };
 
 /** Le rig du modèle `name` du pack `id`, s'il en a un. */
