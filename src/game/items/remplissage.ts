@@ -58,6 +58,8 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
   // la chambre : un livre dans chaque table de nuit (l'armoire n'a que ses habits en silhouette, pieces.ts)
   ['table-de-nuit', 0, ['livre-vert']],
   ['table-de-nuit', 1, ['livre-ocre']],
+  // le livre de recettes, debout dans la bibliothèque du salon : le lire ouvre la liste des recettes
+  ['bibliotheque', 0, ['livre-recettes']],
 ];
 
 /** Couleur d'une silhouette quand l'objet n'a qu'une texture qu'on ne peut pas lire (neutre, carton). */

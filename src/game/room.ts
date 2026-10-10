@@ -1226,8 +1226,6 @@ export const KITCHEN: RoomSpec = {
     ['machine-a-cafe', 'tiroir', 0, -0.12],
     ['bouilloire', 'placard', -0.15, -0.12],
     ['micro-ondes', 'plan-de-travail', 0.1, -0.06],
-    // le livre de recettes debout contre le mur, à gauche du micro-ondes : le lire ouvre la liste des recettes
-    ['livre-recettes', 'plan-de-travail', -0.27, -0.2, Math.PI / 2],
     // sur le lave-vaisselle : le grille-pain au fond à gauche, l'égouttoir contre l'évier
     ['grille-pain', 'lave-vaisselle', -0.15, -0.14],
     ['egouttoir', 'lave-vaisselle', 0.145, 0],

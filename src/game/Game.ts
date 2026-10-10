@@ -6558,9 +6558,9 @@ export class Game {
     item.setStowed(false);
   }
 
-  /** Ce qu'on peut ranger dans ce meuble (sa fiche `holds`, sinon les livres). */
+  /** Ce qu'on peut ranger dans ce meuble (sa fiche `holds`, sinon les livres, livre de recettes compris). */
   private fits(shelf: WorldItem, item: WorldItem): boolean {
-    return shelf.def.holds ? shelf.def.holds.includes(item.name) : item.def.stack === 'livre';
+    return shelf.def.holds ? shelf.def.holds.includes(item.name) : item.def.stack === 'livre' || !!item.def.buildOpen;
   }
 
   /** Va devant le meuble (ouvre sa porte s'il en a une) et y range, un par un, les objets tenus. */
@@ -7712,8 +7712,8 @@ export class Game {
     }
     const ref = this.ref(item);
     const foods = this.foodsAt(item);
-    // le livre de recettes : le prendre et l'ouvrir (une main libre)
-    if (item.def.id === 'livre-recettes' && !c.carried.includes(item) && !this.shelfOf(item)) add('Lire les recettes', () => this.chain([() => this.take(item, false), () => this.read()]));
+    // le livre de recettes : le prendre (posé, ou dans la bibliothèque) et l'ouvrir (une main libre)
+    if (item.def.id === 'livre-recettes' && !c.carried.includes(item)) add('Lire les recettes', () => this.chain([() => this.take(item, false), () => this.read()]));
     if (egg && (item.def.mixes || item.def.cookware?.holds.includes('œuf au plat'))) add(`Casser l’œuf dans ${the(item.name)}`, () => this.crackEgg(ref));
     if (dry && item.def.mixes) add(`Verser ${the(dry.name)} dedans`, () => this.addToBowl(ref));
     if (tool && item.def.mixes && this.mixes.get(item)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(ref));
