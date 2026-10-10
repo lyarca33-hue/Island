@@ -5,13 +5,14 @@
  * posé au sol et centré, à sa vraie taille.
  *  - ville (10 octobre, n° 001 à 044) : la place, les rues, le parc, les devantures et les enseignes ;
  *  - boulangerie (10 octobre, n° 045 à 070) : fournil, boutique, pains et pâtisseries.
+ *  - atelier (10 octobre, n° 200 à 205) : les 6 outils à main, séparés d'une seule génération Tripo.
  *
  * Allégés sans perte visible dans le jeu :
  *  - Tripo les livre à ~95 000 triangles ; ils passent sous le plafond prévu par la salve
  *    (2 000 à 15 000 selon la taille) avec meshoptimizer, sans dépasser l'erreur permise (MAX_ERR) ;
  *  - seules la texture de couleur et la forme servent au cel shading du jeu (toonOf ne garde que
  *    `map`) : relief (normal map) et rugosité/métal, deux PNG/JPEG 2048 sur trois, sont retirés ;
- *  - la couleur, PNG 2048, devient un WebP 1024 (512 pour un objet de moins de 30 cm).
+ *  - la couleur, PNG 2048, devient un WebP 1024 (512 pour un objet de moins de 30 cm, sauf texture partagée).
  *
  *   npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
  *   node tools/build_salve_assets.mjs --lot ville --src "<Bureau>/Assets/ville" [--preview <dossier>]
@@ -110,10 +111,25 @@ const LOTS = {
     'de+pain': { nom: 'pain-mie', cm: 28, tri: 5000 },
     'de+pain+multigrains+rond': { nom: 'pain-cereales', cm: 25, tri: 5000 },
   },
+  // n° 200 à 205 : une seule génération Tripo de 6 outils, déjà séparés, couchés et mis à l'échelle
+  // (tripo/modeles/test-groupe-outils/) ; ils gardent leur texture commune en 1024
+  atelier: {
+    'marteau_30cm': { nom: 'marteau', cm: 30, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
+    'scie_60cm': { nom: 'scie', cm: 60, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
+    'rabot_18cm': { nom: 'rabot', cm: 18, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
+    'tournevis_20cm': { nom: 'tournevis', cm: 20, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
+    'pince_20cm': { nom: 'pince', cm: 20, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
+    'cle-molette_25cm': { nom: 'cle-molette', cm: 25, tri: 5000, tex: 1024, permissive: true, err: 0.0005 },
+  },
 };
-/** Côté de la texture de couleur (WebP), selon la plus grande dimension du modèle. */
-const texSize = (cm) => (cm < 30 ? 512 : 1024);
-/** Erreur permise au simplificateur (part de la taille du modèle, uv et normales comprises). */
+/** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
+const texSize = (o) => o.tex ?? (o.cm < 30 ? 512 : 1024);
+/**
+ * Erreur permise au simplificateur (part de la taille du modèle, uv et normales comprises).
+ * `o.permissive` : le maillage est coupé en morceaux par ses coutures d'uv (outils séparés d'une
+ * génération groupée) et ne descend pas sans laisser le simplificateur passer les coutures ; on
+ * serre alors l'erreur (`o.err`) pour garder les dents de la scie.
+ */
 const MAX_ERR = 0.003;
 /**
  * Poids des uv et des normales dans l'erreur : sans eux, l'allègement étire la texture sur les
@@ -123,7 +139,7 @@ const UV_WEIGHT = 2;
 const NORMAL_WEIGHT = 0.5;
 
 /** Allège une primitive en tenant compte de sa forme, de ses uv et de ses normales. */
-function simplifyPrim(p, ratio) {
+function simplifyPrim(p, ratio, err, flags) {
   const pos = p.getAttribute('POSITION'), uv = p.getAttribute('TEXCOORD_0'), nor = p.getAttribute('NORMAL');
   const n = pos.getCount(), v = [];
   const positions = new Float32Array(n * 3), attrs = new Float32Array(n * 5);
@@ -135,7 +151,7 @@ function simplifyPrim(p, ratio) {
   const indices = new Uint32Array(p.getIndices().getArray());
   const target = Math.floor((indices.length * ratio) / 3) * 3;
   const weights = [UV_WEIGHT, UV_WEIGHT, NORMAL_WEIGHT, NORMAL_WEIGHT, NORMAL_WEIGHT];
-  const [out] = MeshoptSimplifier.simplifyWithAttributes(indices, positions, 3, attrs, 5, weights, null, target, MAX_ERR, []);
+  const [out] = MeshoptSimplifier.simplifyWithAttributes(indices, positions, 3, attrs, 5, weights, null, target, err, flags);
   p.getIndices().setArray(n > 65535 ? out : new Uint16Array(out));
   compactPrimitive(p);
 }
@@ -188,7 +204,7 @@ async function fix(file, o) {
     mat.setNormalTexture(null).setMetallicRoughnessTexture(null).setOcclusionTexture(null).setEmissiveTexture(null).setMetallicFactor(0).setRoughnessFactor(1);
     const t = mat.getBaseColorTexture();
     if (t && !t.getURI().endsWith('.webp')) {
-      const webp = await sharp(Buffer.from(t.getImage())).resize(texSize(o.cm), texSize(o.cm), { fit: 'inside', withoutEnlargement: true }).removeAlpha().webp({ quality: 90 }).toBuffer();
+      const webp = await sharp(Buffer.from(t.getImage())).resize(texSize(o), texSize(o), { fit: 'inside', withoutEnlargement: true }).removeAlpha().webp({ quality: 90 }).toBuffer();
       t.setImage(new Uint8Array(webp)).setMimeType('image/webp').setURI(`${o.nom}.webp`);
     }
   }
@@ -202,7 +218,7 @@ async function fix(file, o) {
   await doc.transform(prune(), dedup(), join({ keepMeshes: true, keepNamed: true }), weld());
   // allègement : jusqu'à la cible, sans dépasser l'erreur permise
   const ratio = Math.min(1, o.tri / tris(doc));
-  for (const p of top.getMesh().listPrimitives()) simplifyPrim(p, ratio);
+  for (const p of top.getMesh().listPrimitives()) simplifyPrim(p, ratio, o.err ?? MAX_ERR, o.permissive ? ['Permissive'] : []);
   await doc.transform(prune());
   const d = doc;
   if (PREVIEW) {
