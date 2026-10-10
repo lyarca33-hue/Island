@@ -2,12 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { groundKind, heightAt, SEA_LEVEL, WALK_HALF, WAYS, wayAt } from '../src/game/ile';
 
 describe("l'île", () => {
-  it('le carré où l’on marche est plat, à y = 0, et hors de l’eau', () => {
-    for (let x = -WALK_HALF; x <= WALK_HALF; x += 0.5) {
-      for (let z = -WALK_HALF; z <= WALK_HALF; z += 0.5) {
+  it('le terrain de la maison est plat, à y = 0', () => {
+    for (let x = -17; x <= 16; x += 0.5) {
+      for (let z = -14; z <= 10; z += 0.5) {
         if (heightAt(x, z) !== 0) throw new Error(`relief en (${x}, ${z}) : ${heightAt(x, z)}`);
       }
     }
+  });
+
+  it('ailleurs, le carré où l’on marche a des collines, toujours hors de l’eau', () => {
+    let top = 0;
+    for (let x = -WALK_HALF; x <= WALK_HALF; x += 0.5) {
+      for (let z = -WALK_HALF; z <= WALK_HALF; z += 0.5) {
+        const h = heightAt(x, z);
+        if (h < 0) throw new Error(`creux en (${x}, ${z}) : ${h}`);
+        top = Math.max(top, h);
+      }
+    }
+    expect(top).toBeGreaterThan(3);
   });
 
   it('au sud, la plage descend dans la mer juste après le bord', () => {

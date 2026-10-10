@@ -11,7 +11,7 @@ import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF } from './ground';
-import { createIsland, type Island } from './ile';
+import { createIsland, heightAt, type Island } from './ile';
 import { moveButton } from './items/buttons';
 import { loadInterior } from './items/interior';
 import { loadKit } from './kit';
@@ -503,6 +503,8 @@ export class Game {
   private bags = new Map<WorldItem, string[]>();
   private ground: THREE.Mesh;
   private island: Island;
+  /** Hauteur du relief sous le perso (voir updateCamera). */
+  private lift = new THREE.Group();
   /** Sauter, grimper sur un meuble (mouvements.ts). */
   private mouvements: Mouvements;
   /** Le vélo : monter, rouler, descendre (velo.ts). */
@@ -749,7 +751,10 @@ export class Game {
       },
       wear: (bike, meters) => this.wearItem(bike, meters * WEAR_RIDE, false),
     });
-    this.scene.add(this.character.root);
+    // le perso dans un calque qui suit le relief de l'île (à 0 dans la maison) : sa propre hauteur
+    // reste celle des sauts et des meubles où il grimpe
+    this.lift.add(this.character.root);
+    this.scene.add(this.lift);
 
     this.marker = new THREE.Mesh(
       new THREE.RingGeometry(0.22, 0.3, 32).rotateX(-Math.PI / 2),
@@ -811,6 +816,9 @@ export class Game {
       const room = new Room(spec, (id) => this.items.find((i) => i.def.id === id)?.object.position);
       this.rooms.push(room);
       this.scene.add(room.group);
+      // pas de touffes d'herbe qui traversent le sol des pièces
+      const m = 0.3;
+      this.island.clearGrass(spec.rect.x0 - m, spec.rect.x1 + m, spec.rect.z0 - m, spec.rect.z1 + m);
     }
     // un calque de saleté par sol, posé dans la pièce (caché tant que c'est propre)
     this.salissure = new Salissure(this.rooms.map((r) => ({ name: r.spec.name, rect: r.rect })));
@@ -7626,7 +7634,8 @@ export class Game {
   /** Point du sol sous un pixel de l'écran (ou null). */
   private groundPoint(cx: number, cy: number): THREE.Vector3 | null {
     this.aim(cx, cy);
-    const hit = this.raycaster.intersectObject(this.ground, false)[0];
+    // dehors, le relief de l'île ; le plan invisible du sol en dernier recours
+    const hit = this.raycaster.intersectObject(this.island.terrain, false)[0] ?? this.raycaster.intersectObject(this.ground, false)[0];
     if (!hit) return null;
     // un clic sur un mur : au pied du mur, dans la pièce
     let point = hit.point, distance = hit.distance;
@@ -7771,7 +7780,7 @@ export class Game {
     const w = this.weather;
     w.update(this.clock, dt, (dt * this.clock.speed) / 3600);
     this.island.setSeason(look.grass, Math.max(look.snow, w.cover), w.wet);
-    this.island.update(dt, Math.max(w.rain, w.cloud * 0.4));
+    this.island.update(dt, Math.max(w.rain, w.cloud * 0.4), this.focus.x, this.focus.z, this.zoom);
     this.rainView.copy(toCamera);
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
@@ -9105,7 +9114,8 @@ export class Game {
     const targetYaw = BASE_YAW + this.turn;
     this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * 8);
     const p = this.character.position;
-    this.focus.lerp(new THREE.Vector3(p.x, FOCUS_HEIGHT, p.z), Math.min(1, dt * 5));
+    this.lift.position.y = heightAt(p.x, p.z);
+    this.focus.lerp(new THREE.Vector3(p.x, FOCUS_HEIGHT + this.lift.position.y, p.z), Math.min(1, dt * 5));
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
     const aspect = w / h;
     // portrait (téléphone) : vue plus haute pour garder assez de largeur

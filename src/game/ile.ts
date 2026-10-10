@@ -2,8 +2,9 @@
  * L'île autour de la maison : la pelouse, la plage, les falaises, la mer et les routes, tout fait
  * par le jeu (relief, textures peintes par programme, eau animée), sans modèle à charger.
  *
- * - Le terrain où l'on marche (le carré de ±WALK_HALF m) reste plat, à y = 0 : le perso, la
- *   navigation et les meubles n'ont rien à savoir du relief. Le relief commence juste au-delà.
+ * - Le terrain où l'on marche a des collines (de larges bosses, jusqu'à 4 à 5 m), sauf le terrain
+ *   de la maison, plat à y = 0. Le perso suit le relief (Game : le calque `lift`), les clics
+ *   dehors touchent le relief. Elles s'effacent avant la côte.
  * - Au sud et au sud-ouest, la plage : une bande de sable dans le carré, qui descend doucement
  *   dans la mer passé le bord (on marche jusqu'au bord de l'eau). Au nord et au nord-ouest, les
  *   falaises : au bord du carré, une paroi de roche monte de 7 à 11 m par paliers, une bande
@@ -11,8 +12,8 @@
  *   est au ras de l'eau, c'est la seule façon d'avoir des falaises sans relief sous les pieds du
  *   perso ; vue de la caméra de départ, la paroi fait le fond du décor. À l'est, une côte rocheuse
  *   basse (une marche de roche d'1,5 m). Les trois se fondent les unes dans les autres.
- * - L'herbe façon animé : trois aplats de vert aux bords nets, des touffes de brins dessinées et
- *   quelques fleurs ; autour de la maison, une pelouse tondue (bandes claires et foncées).
+ * - L'herbe façon Genshin : de grandes nappes de vert franc sur le sol et des touffes de brins en
+ *   3D qui ondulent au vent (herbe.ts) ; pas de touffes sur les routes ni dans la maison.
  * - La mer : un grand plan opaque dont la couleur dit la profondeur (turquoise au bord, bleu
  *   profond au large, le sable qui transparaît dans les premiers centimètres), avec l'écume du
  *   rivage, des vagues qui arrivent sur la plage et l'écume au pied des rochers. Plus agitée par
@@ -24,6 +25,7 @@
  * sable, routes et haut des rochers ; jamais les parois), sol plus sombre quand il est mouillé.
  */
 import * as THREE from 'three';
+import { createGrass } from './herbe';
 import { createToonMaterial } from './toon';
 
 /** Demi-côté du carré où l'on marche (m), plat à y = 0 (voir Game : GROUND_HALF - 14). */
@@ -32,8 +34,6 @@ export const WALK_HALF = 46;
 export const SEA_LEVEL = -0.18;
 /** Demi-côté couvert par le relief (m) : au-delà, la mer est profonde et cache le fond. */
 const RELIEF_HALF = 70;
-/** Demi-côté du carré intérieur tout plat, fait d'un seul quadrilatère. */
-const FLAT_HALF = 43;
 /** Pas de la grille du relief (m). */
 const CELL = 0.5;
 
@@ -94,10 +94,36 @@ function stepped(t: number, steps: number): number {
   return Math.min(1, (i + smooth(0.3, 0.8, s - i)) / steps) * 0.8 + THREE.MathUtils.clamp(t, 0, 1) * 0.2;
 }
 
+/** Demi-côtés du terrain de la maison, tout plat (centre -0,5 ; -2), puis la pente qui s'y raccorde. */
+const LOT = { cx: -0.5, cz: -2, hx: 17, hz: 13, blend: 9 };
+
+/** Part des collines au point (x, z) : 0 sur le terrain de la maison et près de la côte, 1 ailleurs. */
+function hillShare(x: number, z: number, d: number): number {
+  const px = Math.max(Math.abs(x - LOT.cx) - LOT.hx, 0), pz = Math.max(Math.abs(z - LOT.cz) - LOT.hz, 0);
+  return smooth(0, LOT.blend, Math.hypot(px, pz)) * (1 - smooth(-14, -5, d));
+}
+
+/**
+ * Collines où l'on marche : de larges bosses douces (jusqu'à 4 à 5 m), plus une grande colline au
+ * nord-est et une butte au sud-ouest qui se voient de la caméra de départ.
+ */
+function hills(x: number, z: number): number {
+  const n = fbm(x * 0.032 + 3.1, z * 0.032 - 1.7, 41);
+  let h = Math.max(0, n - 0.34) * 9;
+  const bump = (cx: number, cz: number, r: number, top: number) => {
+    const t = Math.hypot(x - cx, z - cz) / r;
+    return t < 1 ? top * (1 - t * t) ** 2 : 0;
+  };
+  h += bump(24, -24, 17, 5) + bump(-27, 22, 13, 3);
+  return h;
+}
+
 /** Hauteur du sol de l'île au point (x, z) (m) ; sous SEA_LEVEL, c'est la mer. */
 export function heightAt(x: number, z: number): number {
   const d = edgeDistance(x, z);
-  if (d <= 0.15) return 0;
+  const share = hillShare(x, z, d);
+  const inland = share > 0 ? hills(x, z) * share : 0;
+  if (d <= 0.15) return inland;
   const k = coastKind(x, z);
   // bruits le long de la côte : le bord avance et recule, les parois sont plus ou moins hautes
   const n = fbm(x * 0.06, z * 0.06, 11);
@@ -204,7 +230,7 @@ export const WAYS: Way[] = [
 ];
 
 /** Hauteur au-dessus du sol de chaque revêtement : la route passe sur l'allée et le chemin là où ils la rejoignent. */
-const WAY_LIFT = { chemin: 0.008, allee: 0.012, route: 0.018 } as const;
+const WAY_LIFT = { chemin: 0.03, allee: 0.04, route: 0.05 } as const;
 
 function wayCurve(w: Way): THREE.CatmullRomCurve3 {
   return new THREE.CatmullRomCurve3(w.points.map(([x, z]) => new THREE.Vector3(x, 0, z)), w.closed, 'centripetal');
@@ -232,26 +258,30 @@ function wayGeometry(w: Way, repeat: number): THREE.BufferGeometry {
   const len = curve.getLength();
   const n = Math.max(2, Math.ceil(len / 0.8));
   const pts = curve.getSpacedPoints(n);
+  // en travers, quatre bandes : le ruban épouse le relief des collines
+  const across = 4, row = across + 1;
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (let i = 0; i <= n; i++) {
     const p = pts[i];
     const t = curve.getTangentAt(Math.min(i / n, 1)).setY(0).normalize();
     const side = new THREE.Vector3(-t.z, 0, t.x).multiplyScalar(w.width / 2);
-    const y = WAY_LIFT[w.kind];
-    pos.push(p.x - side.x, y, p.z - side.z, p.x + side.x, y, p.z + side.z);
     // longueur pile multiple d'une répétition : la route qui fait le tour se referme sans raccord
     const v = (i / n) * Math.max(1, Math.round(len / repeat));
-    uv.push(0, v, 1, v);
-    if (i < n) {
-      const a = i * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    for (let k = 0; k <= across; k++) {
+      const f = k / across, x = p.x + side.x * (2 * f - 1), z = p.z + side.z * (2 * f - 1);
+      pos.push(x, heightAt(x, z) + WAY_LIFT[w.kind], z);
+      uv.push(f, v);
+      if (i < n && k < across) {
+        const a = i * row + k;
+        idx.push(a, a + 1, a + row, a + 1, a + row + 1, a + row);
+      }
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array((n + 1) * 2).fill([0, 1, 0]).flat(), 3));
   g.setIndex(idx);
+  g.computeVertexNormals();
   return g;
 }
 
@@ -296,68 +326,6 @@ function paint(w: number, h: number, base: string, seed: number, draw: Painter, 
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 8;
   return tex;
-}
-
-/**
- * Herbe façon animé : touffes de brins pointus dessinées une à une (un trait sombre à la base, une
- * pointe claire), sur un fond uni, en gris (valeurs brutes, pas sRGB) : la couleur vient des aplats
- * du shader. Quelques fleurs jaunes et roses, elles, en couleur. Une répétition couvre 4 m.
- */
-function animeGrassTexture(): THREE.CanvasTexture {
-  return paint(512, 512, 'rgb(204,204,204)', 101, (g, s, rand) => {
-    const blade = (x: number, y: number, h: number, lean: number, w: number, shade: number) => {
-      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-        const bx = x + dx * s, by = y + dy * s;
-        if (bx < -30 || bx > s + 30 || by < -30 || by > s + 30) continue;
-        g.fillStyle = `rgb(${shade},${shade},${shade})`;
-        g.beginPath();
-        g.moveTo(bx - w, by);
-        g.quadraticCurveTo(bx + lean * 0.3, by - h * 0.6, bx + lean, by - h);
-        g.quadraticCurveTo(bx + lean * 0.4 + w * 0.3, by - h * 0.5, bx + w, by);
-        g.closePath();
-        g.fill();
-      }
-    };
-    // grandes nappes un peu plus sombres et plus claires, à bords nets
-    for (let i = 0; i < 26; i++) {
-      const x = rand() * s, y = rand() * s, r = 18 + rand() * 40, v = rand() < 0.5 ? 188 : 218;
-      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-        g.fillStyle = `rgb(${v},${v},${v})`;
-        g.beginPath();
-        g.ellipse(x + dx * s, y + dy * s, r, r * 0.6, rand() * 3, 0, Math.PI * 2);
-        g.fill();
-      }
-    }
-    // touffes : 3 à 5 brins, d'abord leur ombre (sombre), puis le brin, puis sa pointe claire
-    const tufts: Array<[number, number]> = [];
-    for (let i = 0; i < 170; i++) tufts.push([rand() * s, rand() * s]);
-    tufts.sort((a, b) => a[1] - b[1]);
-    for (const [x, y] of tufts) {
-      const n = 4 + Math.floor(rand() * 3), h = 24 + rand() * 20;
-      for (let k = 0; k < n; k++) {
-        const ox = (k - (n - 1) / 2) * 5 + (rand() - 0.5) * 3, lean = (k - (n - 1) / 2) * 6 + (rand() - 0.5) * 8;
-        blade(x + ox + 2.5, y + 2, h * 0.9, lean, 4.2, 140);
-        blade(x + ox, y, h, lean, 3.6, 172 + Math.floor(rand() * 25));
-        blade(x + ox + lean * 0.55, y - h * 0.55, h * 0.45, lean * 0.45, 2, 248);
-      }
-    }
-    // petites fleurs (en couleur : le shader les garde telles quelles)
-    for (let i = 0; i < 9; i++) {
-      const x = 10 + rand() * (s - 20), y = 10 + rand() * (s - 20);
-      const petal = rand() < 0.6 ? 'rgb(255,226,92)' : 'rgb(255,170,200)';
-      for (let k = 0; k < 5; k++) {
-        const a = (k / 5) * Math.PI * 2;
-        g.fillStyle = petal;
-        g.beginPath();
-        g.arc(x + Math.cos(a) * 4.5, y + Math.sin(a) * 4.5, 3.8, 0, Math.PI * 2);
-        g.fill();
-      }
-      g.fillStyle = 'rgb(255,140,60)';
-      g.beginPath();
-      g.arc(x, y, 2.6, 0, Math.PI * 2);
-      g.fill();
-    }
-  }, false);
 }
 
 /** Bruit doux en gris (valeurs brutes), pour les grandes nappes de couleur de l'herbe. */
@@ -543,10 +511,10 @@ function bakeMaps(): { height: THREE.DataTexture; splat: THREE.DataTexture } {
   return { height, splat };
 }
 
-/** Grille du relief : la couronne entre le carré plat et le bord, plus un seul quadrilatère au milieu. */
+/** Grille du relief, sur toute l'île (collines comprises). */
 function terrainGeometry(): THREE.BufferGeometry {
   const n = Math.round((2 * RELIEF_HALF) / CELL);
-  const pos = new Float32Array((n + 1) * (n + 1) * 3 + 12);
+  const pos = new Float32Array((n + 1) * (n + 1) * 3);
   for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
     const x = -RELIEF_HALF + i * CELL, z = -RELIEF_HALF + j * CELL;
     const k = (j * (n + 1) + i) * 3;
@@ -556,17 +524,11 @@ function terrainGeometry(): THREE.BufferGeometry {
   }
   const idx: number[] = [];
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const x = -RELIEF_HALF + (i + 0.5) * CELL, z = -RELIEF_HALF + (j + 0.5) * CELL;
-    if (Math.abs(x) < FLAT_HALF && Math.abs(z) < FLAT_HALF) continue;
     const a = j * (n + 1) + i, b = a + 1, c = a + n + 1, d = c + 1;
     // tout au fond, sous l'eau opaque : rien à dessiner
     if (Math.max(pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1], pos[d * 3 + 1]) < -3) continue;
     idx.push(a, c, b, b, c, d);
   }
-  // le milieu, plat : un quadrilatère (ses bords tombent sur des sommets de la grille, tous à y = 0)
-  const q = (n + 1) * (n + 1);
-  pos.set([-FLAT_HALF, 0, -FLAT_HALF, FLAT_HALF, 0, -FLAT_HALF, -FLAT_HALF, 0, FLAT_HALF, FLAT_HALF, 0, FLAT_HALF], q * 3);
-  idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setIndex(idx);
@@ -610,33 +572,65 @@ function worldVaryings(sh: THREE.WebGLProgramParametersWithUniforms, u: IslandUn
   sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\n${MAP_GLSL}`);
 }
 
+/** Les trois verts de l'herbe (sol et touffes) : profond, vif, vert-jaune au soleil. */
+const GREENS: [THREE.Color, THREE.Color, THREE.Color] = [new THREE.Color('#3f9a3c'), new THREE.Color('#6cc23f'), new THREE.Color('#b4dd55')];
+
+/** Bruit doux partagé par le sol et les touffes (les mêmes nappes de couleur). */
+let toneTex: THREE.CanvasTexture | null = null;
+const tone = () => (toneTex ??= toneTexture());
+
+/** Pas d'herbe (rouge à 1) : sous les routes et chemins ; les pièces s'y ajoutent (clearGrass). */
+const MASK_SIZE = 512;
+function grassMask(): { tex: THREE.DataTexture; clear(x0: number, x1: number, z0: number, z1: number): void } {
+  const n = MASK_SIZE, data = new Uint8Array(n * n);
+  const cell = (2 * RELIEF_HALF) / n;
+  const clearDisc = (x: number, z: number, r: number) => {
+    const i0 = Math.floor((x - r + RELIEF_HALF) / cell), i1 = Math.ceil((x + r + RELIEF_HALF) / cell);
+    const j0 = Math.floor((z - r + RELIEF_HALF) / cell), j1 = Math.ceil((z + r + RELIEF_HALF) / cell);
+    for (let j = Math.max(0, j0); j <= Math.min(n - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(n - 1, i1); i++) {
+      const cx = (i + 0.5) * cell - RELIEF_HALF, cz = (j + 0.5) * cell - RELIEF_HALF;
+      if ((cx - x) ** 2 + (cz - z) ** 2 < r * r) data[j * n + i] = 255;
+    }
+  };
+  for (const w of WAYS) {
+    const c = wayCurve(w);
+    for (const p of c.getSpacedPoints(Math.ceil(c.getLength() / 0.3))) clearDisc(p.x, p.z, w.width / 2 + 0.15);
+  }
+  const tex = new THREE.DataTexture(data, n, n, THREE.RedFormat, THREE.UnsignedByteType);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return {
+    tex,
+    clear(x0, x1, z0, z1) {
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+        const cx = (i + 0.5) * cell - RELIEF_HALF, cz = (j + 0.5) * cell - RELIEF_HALF;
+        if (cx > x0 && cx < x1 && cz > z0 && cz < z1) data[j * n + i] = 255;
+      }
+      tex.needsUpdate = true;
+    },
+  };
+}
+
 function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
   // ombrage fondu : les paliers nets feraient des bandes sur les pentes de la plage
   const mat = createToonMaterial({ color: 0xffffff, rimStrength: 0, soft: true });
-  const tripoGrass = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}ile/herbe.webp`);
-  tripoGrass.colorSpace = THREE.SRGBColorSpace;
-  tripoGrass.wrapS = tripoGrass.wrapT = THREE.RepeatWrapping;
-  tripoGrass.anisotropy = 8;
-  const tex = { uTripoGrass: { value: tripoGrass }, uGrassTex: { value: animeGrassTexture() }, uTone: { value: toneTexture() }, uG0: { value: new THREE.Color('#4a9f33') }, uG1: { value: new THREE.Color('#6cc540') }, uG2: { value: new THREE.Color('#a2dc50') }, uLawn: { value: new THREE.Color('#74cc45') }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() } };
+  const tex = { uTone: { value: tone() }, uG0: { value: GREENS[0] }, uG1: { value: GREENS[1] }, uG2: { value: GREENS[2] }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() } };
   mat.onBeforeCompile = (sh) => {
     worldVaryings(sh, u);
     Object.assign(sh.uniforms, tex);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uTripoGrass; uniform sampler2D uGrassTex; uniform sampler2D uTone; uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform vec3 uLawn; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uTone; uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt;')
       .replace(
         '#include <map_fragment>',
         `vec2 xz = vIleW.xz;
          vec4 sp = texture2D(uSplat, ileMap(xz));
-         // herbe : la tuile Tripo (3 m), tirée deux fois à des échelles et décalages différents,
-         // mêlées par grandes nappes pour que la répétition ne se voie pas
+         // herbe façon Genshin : de grandes nappes de vert franc fondues les unes dans les autres
+         // (vert profond, vert vif, vert-jaune au soleil), un grain fin à peine visible
          float tone = texture2D(uTone, xz / 48.0).r * 0.65 + texture2D(uTone, xz / 17.0 + vec2(0.31, 0.77)).r * 0.35;
-         vec2 ruv = mat2(0.8, -0.6, 0.6, 0.8) * xz;
-         vec3 g1 = texture2D(uTripoGrass, xz / 3.0).rgb;
-         vec3 g2 = texture2D(uTripoGrass, ruv / 3.7 + 0.41).rgb;
-         vec3 grass = mix(g1, g2, smoothstep(0.45, 0.55, tone));
-         // pelouse tondue : bandes de 1,2 m un peu plus claires et plus foncées
-         float stripe = step(0.5, fract((xz.x + xz.y * 0.02) / 2.4));
-         grass = mix(grass, grass * mix(0.9, 1.08, stripe), sp.a) * uGrass;
+         vec3 grass = mix(uG0, uG1, smoothstep(0.25, 0.55, tone));
+         grass = mix(grass, uG2, smoothstep(0.58, 0.85, tone) * 0.7);
+         grass *= 0.94 + 0.12 * texture2D(uTone, xz / 2.2).r;
+         grass *= uGrass;
          vec3 sand = texture2D(uSand, xz / 6.0).rgb;
          // sable mouillé près de l'eau
          sand *= mix(1.0, 0.72, smoothstep(${(SEA_LEVEL + 0.35).toFixed(2)}, ${(SEA_LEVEL + 0.02).toFixed(2)}, vIleW.y));
@@ -653,6 +647,9 @@ function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
          vec3 col = mix(grass, sand, sandW);
          col = mix(col, dirt, dirtW);
          col = mix(col, rock, rockW);
+         // modelé des collines : les pentes face au soleil s'éclairent, les autres foncent (à plat : rien)
+         vec3 sunDir = normalize(vec3(-0.45, 0.75, -0.5));
+         col *= clamp(1.0 + (dot(normalize(vIleN), sunDir) - sunDir.y) * 1.8, 0.6, 1.25);
          // sol mouillé : plus sombre ; neige : l'herbe blanchit d'abord, jamais les parois
          col *= 1.0 - 0.25 * uWet;
          float flat_ = 1.0 - smoothstep(0.3, 0.42, slope);
@@ -669,6 +666,10 @@ function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
 function wayMaterial(u: IslandUniforms, map: THREE.Texture, cutout: boolean): THREE.MeshToonMaterial {
   const mat = createToonMaterial({ color: 0xffffff, map, rimStrength: 0 });
   if (cutout) mat.alphaTest = 0.5;
+  // toujours devant le relief, que la grille du terrain coupe un peu entre ses sommets
+  mat.polygonOffset = true;
+  mat.polygonOffsetFactor = -2;
+  mat.polygonOffsetUnits = -8;
   mat.onBeforeCompile = (sh) => {
     worldVaryings(sh, u);
     sh.fragmentShader = sh.fragmentShader.replace(
@@ -743,8 +744,12 @@ function seaMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
 
 export interface Island {
   root: THREE.Group;
-  /** Avance l'eau (dt en s) ; `rough` : mer agitée (0 à 1, pluie et vent). */
-  update(dt: number, rough: number): void;
+  /** Le relief : le jeu y lance ses rayons pour savoir où l'on clique dehors. */
+  terrain: THREE.Mesh;
+  /** Avance l'eau et l'herbe (dt en s) ; `rough` : mer agitée et vent (0 à 1) ; (x, z) : le point regardé ; zoom de la caméra. */
+  update(dt: number, rough: number, x: number, z: number, zoom: number): void;
+  /** Pas d'herbe dans ce rectangle (une pièce de la maison). */
+  clearGrass(x0: number, x1: number, z0: number, z1: number): void;
   /** Teinte de l'herbe, part de neige (0 à 1), sol mouillé (0 à 1). */
   setSeason(grass: [number, number, number], snow: number, wet: number): void;
 }
@@ -768,6 +773,10 @@ export function createIsland(): Island {
   terrain.receiveShadow = true;
   root.add(terrain);
 
+  const mask = grassMask();
+  const grass = createGrass({ height, splat, mask: mask.tex, tone: tone(), colors: GREENS, mapHalf: RELIEF_HALF, shared: u });
+  root.add(grass.mesh);
+
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600).rotateX(-Math.PI / 2), seaMaterial(u));
   sea.position.y = SEA_LEVEL;
   sea.name = 'mer';
@@ -785,11 +794,14 @@ export function createIsland(): Island {
   let rough = 0;
   return {
     root,
-    update(dt, r) {
+    terrain,
+    update(dt, r, x, z, zoom) {
       u.uTime.value = (u.uTime.value + dt) % 10000;
       rough += (r - rough) * Math.min(1, dt * 0.5);
       u.uRough.value = rough;
+      grass.follow(x, z, rough, zoom);
     },
+    clearGrass: mask.clear,
     setSeason(grass, snow, wet) {
       u.uGrass.value.setRGB(grass[0], grass[1], grass[2]);
       u.uSnow.value = snow;
