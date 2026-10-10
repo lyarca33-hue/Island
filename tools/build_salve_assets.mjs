@@ -155,7 +155,34 @@ const LOTS = {
     'de+quiche': { nom: 'quiche', cm: 24, tri: 10000 },
     "d'un+plat+de+légumes": { nom: 'ratatouille', cm: 20, tri: 5000 },
     "d'un+bol+de+soupe": { nom: 'soupe-poisson', cm: 16, tri: 5000 },
+  },  // Marché : groupes G01 à G04 de la salve, séparés objet par objet (tripo/modeles/G0x_*/) avant l'allègement
+  marche: {
+    // ——— sacs, trousses et valises (G01) ———
+    'trousse-secours_30cm': { nom: 'trousse-secours', cm: 30, tri: 5000 },
+    'trousse-veto_30cm': { nom: 'trousse-veto', cm: 30, tri: 5000 },
+    'valise_70cm': { nom: 'valise', cm: 70, tri: 5000 },
+    'caisse-transport_50cm': { nom: 'caisse-transport', cm: 50, tri: 10000 },
+    'sac-toile_45cm': { nom: 'sac-toile', cm: 45, tri: 5000 },
+    'panier-osier_40cm': { nom: 'panier-osier', cm: 40, tri: 5000 },
+    // ——— légumes (G02) ———
+    'potiron_35cm': { nom: 'potiron', cm: 35, tri: 5000 },
+    'aubergine_20cm': { nom: 'aubergine', cm: 20, tri: 5000 },
+    'brocoli_18cm': { nom: 'brocoli', cm: 18, tri: 5000 },
+    'chou_22cm': { nom: 'chou', cm: 22, tri: 5000 },
+    'radis-botte_25cm': { nom: 'radis-botte', cm: 25, tri: 5000 },
+    'haricots-verts_15cm': { nom: 'haricots-verts', cm: 15, tri: 5000 },
+    // ——— fruits (G03, G04) ———
+    'mais_22cm': { nom: 'mais', cm: 22, tri: 5000 },
+    'pasteque_35cm': { nom: 'pasteque', cm: 35, tri: 5000 },
+    'melon_18cm': { nom: 'melon', cm: 18, tri: 5000 },
+    'ananas_30cm': { nom: 'ananas', cm: 30, tri: 5000 },
+    'avocat_11cm': { nom: 'avocat', cm: 11, tri: 5000 },
+    'pasteque-tranche_25cm': { nom: 'pasteque-tranche', cm: 25, tri: 5000 },
+    'cerises_8cm': { nom: 'cerises', cm: 8, tri: 5000 },
+    'peche_8cm': { nom: 'peche', cm: 8, tri: 5000 },
+    'kiwi_7cm': { nom: 'kiwi', cm: 7, tri: 5000 },
   },
+
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
 const texSize = (o) => o.tex ?? (o.cm < 30 ? 512 : 1024);
