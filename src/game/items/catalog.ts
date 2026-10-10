@@ -16,6 +16,7 @@ import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
 import { UPKEEP_ITEMS } from './upkeep';
 import { LIFE_ITEMS } from './life';
 import { FECULENT_ITEMS } from './feculents';
+import { MENAGE_ITEMS } from './menage';
 import { PIECES_ITEMS } from './pieces';
 
 export interface ItemDef {
@@ -1519,6 +1520,8 @@ export const ITEMS: ItemDef[] = [
   ...FECULENT_ITEMS,
   // le salon, la chambre, la salle de bain, l'entrée et le garage, faits avec Tripo (pieces.ts)
   ...PIECES_ITEMS,
+  // le ménage et le linge faits avec Tripo : pelle, produits, chariot, machine à laver… (menage.ts)
+  ...MENAGE_ITEMS,
 ];
 
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));

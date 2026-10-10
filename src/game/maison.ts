@@ -7,6 +7,7 @@
  * Deux pièces voisines ont chacune leur mur, dos à dos (2 × WALL_T entre les deux intérieurs).
  */
 import * as THREE from 'three';
+import { CART_SHELVES } from './items/menage';
 import { DOOR, ROOM, SALON_PASS, tiles, toon, WALL_T, WIN_HIGH, type Rect, type Room, type RoomSpec, type WallName } from './room';
 import { tripoDecor } from './items/tripo';
 import { BENCH_TOP, CONSOLE_TOP, NIGHTSTAND_TOP, RACK_Y } from './items/pieces';
@@ -79,6 +80,8 @@ const empty = { runs: [] };
 
 /** Quart de tour : l'avant d'un meuble (+Z) tourné vers +X (rotation de π/2), vers -X (-π/2), vers -Z (π). */
 const Q = Math.PI / 2;
+/** Chariot de ménage du garage, contre le mur ouest : son milieu (z). */
+const CART_Z = 1.15;
 
 /**
  * Décor fixe : le modèle Tripo `name` accroché au mur `wall` (à la place `u` le long du mur, son bas
@@ -181,6 +184,19 @@ export const GARAGE_SPEC: RoomSpec = {
     ['carton', GARAGE.x0 + 0.24, 0, GARAGE.z0 + 1.7, Q],
     // au fond, à droite de l'établi : le rangement à outils (le râteau et la bêche y pendent, remplissage.ts)
     ['rangement-outils', GARAGE.x0 + 4.0, RACK_Y, GARAGE.z0 + 0.15, 0],
+    // le coin linge contre le mur ouest, sous la fenêtre : la machine à laver et le sèche-linge côte à côte
+    ['machine-a-laver', GARAGE.x0 + 0.33, 0, -0.25, Q],
+    ['seche-linge', GARAGE.x0 + 0.33, 0, 0.4, Q],
+    // le chariot de ménage à côté, ses produits sur le plateau du haut, la balayette au milieu
+    ['chariot-menage', GARAGE.x0 + 0.3, 0, CART_Z, Q],
+    ['nettoyant-sol', GARAGE.x0 + 0.3, CART_SHELVES[0], CART_Z + 0.19, Q],
+    ['liquide-vaisselle', GARAGE.x0 + 0.3, CART_SHELVES[0], CART_Z + 0.06, Q],
+    ['brosse-recurer', GARAGE.x0 + 0.3, CART_SHELVES[0], CART_Z - 0.06, Q],
+    ['raclette-vitres', GARAGE.x0 + 0.3, CART_SHELVES[0], CART_Z - 0.19, Q],
+    ['balayette', GARAGE.x0 + 0.3, CART_SHELVES[1], CART_Z, Q],
+    // la pelle et la tête de loup debout au pied du chariot
+    ['pelle', GARAGE.x0 + 0.25, 0, CART_Z + 0.52, Q],
+    ['tete-de-loup', GARAGE.x0 + 0.16, 0, CART_Z + 0.78, 0],
     // le vélo garé le long du mur de l'entrée (un peu en retrait du mur sud : de quoi le sortir en reculant)
     ['velo', GARAGE.x1 - 0.6, 0, 1.4, Q],
   ],
@@ -240,6 +256,9 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
     // les toilettes au fond, sous la fenêtre ; le lavabo contre le mur ouest, après la douche
     ['toilettes', BATH.toilet, 0, SALLE_DE_BAIN.z0 + 0.27, 0],
     ['papier-toilette', BATH.toilet, 0.805, SALLE_DE_BAIN.z0 + 0.09, 0],
+    // à droite de la cuvette, par terre : le pot de la brosse WC et le gel WC
+    ['support-brosse-wc', BATH.toilet + 0.34, 0, SALLE_DE_BAIN.z0 + 0.14, 0],
+    ['gel-wc', BATH.toilet + 0.52, 0, SALLE_DE_BAIN.z0 + 0.12, 0],
     // le porte-papier au mur, à droite des toilettes : on y accroche le rouleau
     ['derouleur', BATH.toilet + 0.4, 0.66, SALLE_DE_BAIN.z0 + 0.035, 0],
     ['lavabo', SALLE_DE_BAIN.x0 + 0.37, 0, BATH.sink, Q],

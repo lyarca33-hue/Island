@@ -127,7 +127,7 @@ node tools/build_kit_assets.mjs --src <dossier des modèles retouchés> --out pu
 
 ## `build_cuisine_assets.mjs` : meubles et objets Tripo d'une pièce
 
-Regroupe les modèles d'une pièce (cuisine, salon, chambre, salle de bain, entrée, garage) générés avec Tripo (licence d'usage commercial), déjà corrigés
+Regroupe les modèles d'une pièce (cuisine, salon, chambre, salle de bain, entrée, garage, et le ménage) générés avec Tripo (licence d'usage commercial), déjà corrigés
 (1 unité = 1 m, posés au sol, avant vers +z, un atlas WebP, pièces mobiles en nœuds nommés : voir
 `tripo/modeles/<pièce>/README.md` dans les fichiers du projet), en un seul `public/models/<pièce>.glb` :
 un nœud par modèle nommé comme son fichier sans la taille (`placard-bas`), ses pièces mobiles en
@@ -140,6 +140,8 @@ node tools/build_cuisine_assets.mjs --src <dossier des modèles corrigés> --out
 # une par pièce ; au garage, la porte basculante est déjà dans le kit
 for p in salon chambre salle-de-bain entree; do node tools/build_cuisine_assets.mjs --src <…>/$p --out public/models/$p.glb; done
 node tools/build_cuisine_assets.mjs --src <…>/garage --out public/models/garage.glb --skip porte-garage
+# le ménage et le linge (balai, seau, chariot, machine à laver…), placés dans plusieurs pièces
+node tools/build_cuisine_assets.mjs --src <…>/menage --out public/models/menage.glb
 ```
 
 ## `build_aliments_assets.mjs` : aliments Tripo
