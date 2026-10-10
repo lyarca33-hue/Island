@@ -26,11 +26,10 @@ export function RecipeBook({ game, inline, onClose }: { game: Game; inline?: boo
     const intent: Intent | null = e.plat ? { kind: 'preparer', plat: e.plat } : BOOK_RECIPES.includes(e.name) ? { kind: 'recette', nom: e.name } : null;
     if (!intent || busy) return;
     setBusy(e.name);
-    // le livre tenu (on le lit) : reposé d'abord sur le plan de travail, pour l'y retrouver
+    // le livre tenu (on le lit) : remis d'abord à sa place dans la bibliothèque
     const w = game.describe();
     const book = w.objets.find((o) => o.nom === 'livre de recettes' && w.enMain.includes(o.ref));
-    const counter = w.objets.filter((o) => o.nom === 'plan de travail').sort((a, b) => a.distance - b.distance)[0];
-    const first: Intent[] = book && counter ? [{ kind: 'poser', ref: book.ref, sur: counter.ref, libre: true }] : [];
+    const first: Intent[] = book ? [{ kind: 'ranger_place', ref: book.ref }] : [];
     const r = await runIntents(game, [...first, intent], () => {});
     setBusy(null);
     game.onNotice?.(r.ok ? `${e.name.charAt(0).toUpperCase()}${e.name.slice(1)} : c’est fait.` : r.message);
