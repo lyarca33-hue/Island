@@ -362,22 +362,22 @@ const LOTS = {
     '273_boite-medicament_10cm': { nom: 'boite-medicament', cm: 10, tri: 5000, permissive: true },
     '277_thermometre_13cm': { nom: 'thermometre', cm: 13, tri: 5000, permissive: true },
   },
-  // Comptoirs et guichets (groupe G29), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  // Comptoirs et guichets (groupe G29 ; guichet et comptoir refaits à leur vraie longueur en G42), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
   comptoirs: {
     '076_passe-plat-chauffant_160cm': { nom: 'passe-plat-chauffant', cm: 160, tri: 10000, permissive: true },
     '148_guichet-poste_200cm': { nom: 'guichet-poste', cm: 200, tri: 15000, permissive: true },
-    '271_comptoir-pharmacie_140cm': { nom: 'comptoir-pharmacie', cm: 140, tri: 15000, permissive: true },
+    '271_comptoir-pharmacie_200cm': { nom: 'comptoir-pharmacie', cm: 200, tri: 15000, permissive: true },
   },
-  // Grands étals et vitrines (groupe G30), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  // Grands étals et vitrines (groupe G30 ; étal et présentoir refaits en G45), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
   presentoirs: {
-    '098_etal-de-marche_230cm': { nom: 'etal-de-marche', cm: 230, tri: 15000, permissive: true },
+    '098_etal-de-marche_250cm': { nom: 'etal-de-marche', cm: 250, tri: 15000, permissive: true },
     '130_etal-de-la-criee_200cm': { nom: 'etal-de-la-criee', cm: 200, tri: 15000, permissive: true },
-    '162_presentoir-a-gradins_150cm': { nom: 'presentoir-a-gradins', cm: 150, tri: 15000, permissive: true },
+    '162_presentoir-a-gradins_150cm': { nom: 'presentoir-a-gradins', cm: 192, tri: 15000, permissive: true },
     '222_vitrine-a-glaces_150cm': { nom: 'vitrine-a-glaces', cm: 150, tri: 15000, permissive: true },
   },
-  // Grands rangements (groupe G31), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  // Grands rangements (groupe G31 ; casier et étagère à remèdes refaits en G43), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
   rangements: {
-    '149_casier-de-tri_180cm': { nom: 'casier-de-tri', cm: 180, tri: 15000, permissive: true },
+    '149_casier-de-tri_120cm': { nom: 'casier-de-tri', cm: 120, tri: 15000, permissive: true },
     '233_bibliotheque-murale_240cm': { nom: 'bibliotheque-murale', cm: 240, tri: 15000, permissive: true },
     '234_echelle-bibliotheque_230cm': { nom: 'echelle-bibliotheque', cm: 230, tri: 10000, permissive: true },
     '272_etagere-pharmacie_200cm': { nom: 'etagere-pharmacie', cm: 200, tri: 15000, permissive: true },
@@ -389,12 +389,12 @@ const LOTS = {
     '261_coiffeuse-miroir_180cm': { nom: 'coiffeuse-miroir', cm: 180, tri: 15000, permissive: true },
     '262_casque-sechoir_150cm': { nom: 'casque-sechoir', cm: 150, tri: 10000, permissive: true },
   },
-  // Tables de travail (groupe G33), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  // Tables de travail (groupe G33 ; table vétérinaire et bureau du médecin refaits en G44), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
   tables: {
     '209_etabli-menuisier_200cm': { nom: 'etabli-menuisier', cm: 200, tri: 15000, permissive: true },
-    '245_table-veterinaire_85cm': { nom: 'table-veterinaire', cm: 85, tri: 15000, permissive: true },
+    '245_table-veterinaire_120cm': { nom: 'table-veterinaire', cm: 120, tri: 15000, permissive: true },
     '279_table-examen_190cm': { nom: 'table-examen', cm: 190, tri: 15000, permissive: true },
-    '280_bureau-medecin_100cm': { nom: 'bureau-medecin', cm: 100, tri: 15000, permissive: true },
+    '280_bureau-medecin_140cm': { nom: 'bureau-medecin', cm: 140, tri: 15000, permissive: true },
   },
   // Vélo, triporteur et scooter (groupe G34), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
   deuxroues: {
@@ -416,6 +416,59 @@ const LOTS = {
   engins: {
     '196_tracteur_300cm': { nom: 'tracteur', cm: 300, tri: 15000, permissive: true },
     '285_camionnette_380cm': { nom: 'camionnette', cm: 380, tri: 15000, permissive: true },
+  },
+  // Cabanes du bord de mer (groupe G38), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension ;
+  // texture 2048 : venues en 8192, on en fait le tour à pied et les planches restent nettes
+  cabanes: {
+    '132_cabane-pecheur_400cm': { nom: 'cabane-pecheur', cm: 400, tri: 15000, permissive: true, tex: 2048 },
+    '184_poulailler_200cm': { nom: 'poulailler', cm: 236, tri: 15000, permissive: true, tex: 2048 },
+    '221_kiosque-glaces_300cm': { nom: 'kiosque-glaces', cm: 425, tri: 15000, permissive: true, tex: 2048 },
+    '300_cabine-de-plage_250cm': { nom: 'cabine-de-plage', cm: 250, tri: 15000, permissive: true, tex: 2048 },
+  },
+  // Phare et moulin (groupe G39), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  monuments: {
+    '131_phare_1200cm': { nom: 'phare', cm: 1200, tri: 30000, permissive: true, err: 0.001 },
+    '199_moulin-a-vent_1000cm': { nom: 'moulin-a-vent', cm: 1000, tri: 15000, permissive: true },
+  },
+  // Locomotive et wagon (groupe G40), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  train: {
+    '288_locomotive_600cm': { nom: 'locomotive', cm: 600, tri: 15000, permissive: true },
+    '289_wagon-voyageurs_700cm': { nom: 'wagon-voyageurs', cm: 700, tri: 15000, permissive: true },
+  },
+  // Bus et camion de pompiers (groupe G41), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  utilitaires: {
+    '283_bus_900cm': { nom: 'bus', cm: 900, tri: 15000, permissive: true },
+    '297_camion-pompier_700cm': { nom: 'camion-pompier', cm: 700, tri: 15000, permissive: true },
+  },
+  // Bêtes de la ferme (groupe G46), sans squelette : générées en groupe, séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  betail: {
+    '179_vache_240cm': { nom: 'vache', cm: 240, tri: 15000, permissive: true },
+    '180_mouton_120cm': { nom: 'mouton', cm: 120, tri: 15000, permissive: true },
+    '181_cochon_110cm': { nom: 'cochon', cm: 110, tri: 15000, permissive: true },
+    '182_chevre_90cm': { nom: 'chevre', cm: 90, tri: 15000, permissive: true },
+    '183_ane_170cm': { nom: 'ane', cm: 171, tri: 15000, permissive: true },
+  },
+  // Volailles et oiseaux (groupe G47), sans squelette : générés en groupe, séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  oiseaux: {
+    '177_poule_40cm': { nom: 'poule', cm: 41, tri: 15000, permissive: true },
+    '178_coq_50cm': { nom: 'coq', cm: 50, tri: 15000, permissive: true },
+    '216_mouette_45cm': { nom: 'mouette', cm: 57, tri: 15000, permissive: true },
+    '217_pigeon_30cm': { nom: 'pigeon', cm: 30, tri: 15000, permissive: true },
+    '218_canard_40cm': { nom: 'canard', cm: 40, tri: 15000, permissive: true },
+  },
+  // Petits animaux (groupe G48), sans squelette : générés en groupe, séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  petitsanimaux: {
+    '219_herisson_25cm': { nom: 'herisson', cm: 25, tri: 15000, permissive: true },
+    '220_ecureuil_35cm': { nom: 'ecureuil', cm: 35, tri: 15000, permissive: true },
+    '251_chien_70cm': { nom: 'chien', cm: 70, tri: 15000, permissive: true },
+    '252_lapin_30cm': { nom: 'lapin', cm: 30, tri: 15000, permissive: true },
+    '253_perroquet_40cm': { nom: 'perroquet', cm: 40, tri: 15000, permissive: true },
+  },
+  // Bateaux de pêche et ponton (groupe G49), séparés objet par objet (tripo/modeles/groupes/) avant l'allègement ; cm = vraie plus grande dimension
+  bateaux: {
+    '123_bateau-peche-bleu_700cm': { nom: 'bateau-peche-bleu', cm: 700, tri: 15000, permissive: true },
+    '123_bateau-peche-rouge_700cm': { nom: 'bateau-peche-rouge', cm: 700, tri: 15000, permissive: true },
+    '133_ponton_1500cm': { nom: 'ponton', cm: 1500, tri: 15000, permissive: true },
   },
 };
 /** Côté de la texture de couleur (WebP) : `o.tex`, sinon selon la plus grande dimension du modèle. */
