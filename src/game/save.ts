@@ -67,6 +67,8 @@ export interface GameSave {
   argent?: ArgentSave;
   /** La commande payée, pas encore livrée. */
   commande?: Commande;
+  /** La saleté des sols (salissure.ts) et la boue sous les chaussures. Absent des anciennes sauvegardes : maison propre. */
+  salissure?: unknown;
 }
 
 /** Ce que le jeu ouvre à la sauvegarde (Game.saveAccess) : ses objets et de quoi les refaire. */
@@ -97,6 +99,8 @@ export interface SaveAccess {
   /** La commande en route (livrée par le sac de courses), et son retour. */
   delivery(): Commande | null;
   setDelivery(c: Commande | null): void;
+  /** La saleté des sols (salissure.ts), et son retour. */
+  salissure?: { save(): unknown; load(x: unknown): void };
   /** Après le chargement : chemins à refaire autour des meubles déplacés. */
   done(): void;
 }
@@ -155,6 +159,7 @@ export function captureGame(a: SaveAccess): GameSave {
     placed: { ...a.placed },
     argent: a.argent.save(),
     ...(a.delivery() ? { commande: structuredClone(a.delivery()!) } : {}),
+    ...(a.salissure ? { salissure: a.salissure.save() } : {}),
   };
 }
 
@@ -214,6 +219,7 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
   a.perso.placeAt(new THREE.Vector3(s.perso.x, 0, s.perso.z), s.perso.yaw);
   a.argent.load(s.argent);
   a.setDelivery(readCommande(s.commande));
+  if (s.salissure) a.salissure?.load(s.salissure);
   a.done();
 }
 
