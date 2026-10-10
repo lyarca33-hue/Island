@@ -30,6 +30,7 @@ export class KitchenSound {
   private sizzle: { gain: GainNode; filter: BiquadFilterNode } | null = null;
   private boil: { gain: GainNode; filter: BiquadFilterNode } | null = null;
   private rainLoop: Loop | null = null;
+  private vacuumLoop: Loop | null = null;
   private crackle = 0;
   private bubble = 0;
   private chirp = 1;
@@ -83,6 +84,13 @@ export class KitchenSound {
     this._rain = Math.min(1, Math.max(0, level));
   }
 
+  /** Moteur de l'aspirateur, de 0 (arrêté) à 1 (à côté) : un souffle grave et continu. */
+  setVacuum(level: number): void {
+    const v = this.vacuumLoop;
+    if (!v || !this.ctx) return;
+    v.gain.gain.setTargetAtTime(0.5 * Math.min(1, Math.max(0, level)), this.ctx.currentTime, 0.15);
+  }
+
   private apply(): void {
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(this._on ? this._volume : 0, this.ctx.currentTime, 0.05);
     try {
@@ -121,6 +129,7 @@ export class KitchenSound {
     this.sizzle = loop('highpass', 3200, 0.7);
     this.boil = loop('lowpass', 420, 1.2);
     this.rainLoop = loop('bandpass', 1800, 0.35);
+    this.vacuumLoop = loop('bandpass', 950, 1.4);
     return ctx;
   }
 

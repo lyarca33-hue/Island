@@ -139,6 +139,8 @@ export const ENTREE_SPEC: RoomSpec = {
     ['botte', ENTREE.x0 + 0.15, 0, ENTREE.z1 - 0.32, Q],
     ['porte-parapluies', ENTREE.x1 - 0.16, 0, ENTREE.z1 - 0.2, 0],
     ['parapluie', ENTREE.x1 - 0.16, 0.05, ENTREE.z1 - 0.2, 0],
+    // l'aspirateur balai debout dans le coin, contre le mur de la cuisine
+    ['aspirateur', ENTREE.x1 - 0.14, 0, ENTREE.z0 + 0.3, -Q],
     // une lettre glissée sous la porte
     ['lettre', FRONT_DOOR.x0 + 0.5, 0, ENTREE.z1 - 0.35, 0.4],
     // la boîte aux lettres dehors, au bord du chemin, à gauche de la porte
@@ -255,6 +257,8 @@ export const SALLE_DE_BAIN_SPEC: RoomSpec = {
   items: [
     // les toilettes au fond, sous la fenêtre ; le lavabo contre le mur ouest, après la douche
     ['toilettes', BATH.toilet, 0, SALLE_DE_BAIN.z0 + 0.27, 0],
+    // la brosse des WC debout à côté de la cuvette
+    ['brosse-wc', BATH.toilet + 0.34, 0, SALLE_DE_BAIN.z0 + 0.14, 0],
     ['papier-toilette', BATH.toilet, 0.805, SALLE_DE_BAIN.z0 + 0.09, 0],
     // à droite de la cuvette, par terre : le pot de la brosse WC et le gel WC
     ['support-brosse-wc', BATH.toilet + 0.34, 0, SALLE_DE_BAIN.z0 + 0.14, 0],

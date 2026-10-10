@@ -13,7 +13,7 @@ describe('meubles remplis au départ', () => {
       for (const id of ids) {
         const def = ITEM_BY_ID.get(id);
         expect(def?.portable, id).toBe(true);
-        const fits = shelf!.holds ? shelf!.holds.includes(def!.name) : def!.stack === 'livre';
+        const fits = shelf!.holds ? shelf!.holds.includes(def!.name) : def!.stack === 'livre' || !!def!.buildOpen;
         expect(fits, `${id} dans ${holder}`).toBe(true);
       }
     }

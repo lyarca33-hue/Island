@@ -18,6 +18,8 @@ import { Mouvements } from './mouvements';
 import { Velo } from './velo';
 import { Argent, type Commande as Delivery, euros, type OrderLine, orderTotal, sellPrice } from './argent';
 import { breakChance, Crumbs, Debris, type FloorMess, Spill } from './items/breakage';
+import { CHORES, choreFor, type ChoreKind } from './items/chores';
+import { ChoreFx } from './items/chorefx';
 import { gradeName } from './items/durability';
 import { LIVRES } from './items/livres';
 import { LAY_FLAT, SPLASH_CYCLE, WorldItem } from './items/carry';
@@ -50,6 +52,7 @@ import { Needs } from './needs';
 import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
 import { lampLevel, placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
+import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
@@ -111,6 +114,10 @@ const BIG_PUDDLE = 0.2;
 /** Dessus de la gazinière (sous les grilles) : où vont ses taches. */
 const COUNTER_TOP = 0.9;
 const MOP_REACH = 1.6;
+/** Ménage du sol (salissure.ts) : rayon d'un coup de balai ou de serpillière, carrés à passer au plus, et en dessous, propre. */
+const FLOOR_REACH = 0.7;
+const FLOOR_PASSES = 60;
+const FLOOR_CLEAN = 0.1;
 const GLASS_CUT = 3;
 const DIRTY_EAT = 3;
 const ROUGH_PER_DISH = 0.12;
@@ -407,6 +414,7 @@ interface Flying {
 }
 
 /** Un geste du menu au clic droit : son nom et ce qu'il lance (faux si rien ne se lance). */
+
 export interface MenuEntry {
   label: string;
   run: () => boolean;
@@ -561,6 +569,12 @@ export class Game {
   private breakfast = { day: -1, meal: false, drink: false, done: false };
   /** Sons de cuisine (grésillement, ébullition, bips, vaisselle). */
   readonly sound = new KitchenSound();
+  /** Poussière, mousse et gouttes à la tête de l'outil pendant le ménage. */
+  private choreFx = new ChoreFx();
+  /**
+   * Saleté de la maison (sols, meubles, sanitaires), branchée par le module de salissure : les gestes
+   * de ménage lui disent où ils passent. Absente, ils nettoient les miettes, flaques et taches.
+   */
   /** Vaisselle tenue à l'image d'avant : posée, elle tinte. */
   private carriedDishes = new Set<WorldItem>();
   /** Pas : où était le perso à l'image d'avant, chemin fait depuis le dernier pas (m). */
@@ -629,6 +643,8 @@ export class Game {
   private rolls = new Map<WorldItem, number>();
   /** Taches de cuisine sur la gazinière, le plan de travail, l'îlot : à nettoyer au spray et à l'éponge. */
   private grime = new Map<WorldItem, THREE.Group>();
+  /** La maison qui se salit avec le temps et l'usage : sols, dessus des meubles, sanitaire (salissure.ts). */
+  private salissure!: Salissure;
   /** Gants de ménage enfilés : la paire (retirée de la pièce le temps qu'on la porte), les gants montrés aux mains. */
   private gloved: { item: WorldItem; shown: THREE.Object3D[] } | null = null;
   /** Mains abîmées à force de laver sans gants (0 à 1). */
@@ -791,12 +807,17 @@ export class Game {
       this.rooms.push(room);
       this.scene.add(room.group);
     }
+    // un calque de saleté par sol, posé dans la pièce (caché tant que c'est propre)
+    this.salissure = new Salissure(this.rooms.map((r) => ({ name: r.spec.name, rect: r.rect })));
+    this.salissure.floors.forEach((f, i) => this.rooms[i].group.add(f.build()));
+    for (const item of this.items) this.salissure.track(item);
     // sol, murs, toit, porte et fenêtres du kit Tripo, dès qu'il est chargé (kit.ts)
     loadKit()
       .then((kit) => { for (const r of this.rooms) r.dress(kit); })
       .catch((e) => console.warn('kit de la maison non chargé', e));
     // la nuit, une seule lumière d'ambiance, sans ombre, qui suit la pièce du perso
     this.scene.add(this.nightLight);
+    this.scene.add(this.choreFx.group);
     // lumière des fenêtres : autant de projecteurs que la pièce qui a le plus de fenêtres, toujours
     // tous dans la scène (leur nombre ne change pas, aucun shader à recompiler)
     const most = Math.max(0, ...this.rooms.map((r) => r.winLights.length));
@@ -1610,6 +1631,7 @@ export class Game {
       }
       if (item.def.id === 'sacs-poubelle') ou += `, ${this.bagsLeft(item)} sac${this.bagsLeft(item) > 1 ? 's' : ''} dans le rouleau`;
       if (this.grime.has(item)) ou += `, taché${agree(item.name)} (à nettoyer au spray)`;
+      for (const w of itemDirtWords(this.salissure.levelOf(item), FEMININE.has(item.name))) ou += `, ${w}`;
       if (item.def.clock) ou += `, indique ${this.clockText()}`;
       if (item.def.window && this.smell > 0.1) ou += ', la cuisine sent le brûlé (ouvrir pour aérer)';
       if (item.def.food && item.portion < 1) ou += `, entamé${agree(item.name)}`;
@@ -1652,6 +1674,10 @@ export class Game {
     if (this.dirtyHands) perso += `, mains sales (${this.dirtyHands}) : se laver les mains au savon avant de cuisiner ou manger`;
     if (this.roughHands >= 1) perso += ', mains abîmées (vaisselle sans gants)';
     perso += this.roomName ? `, dans la pièce : ${this.roomName}` : ', dehors';
+    const sol = this.roomName ? this.salissure.floorNamed(this.roomName)?.level() : undefined;
+    if (sol && this.floorSpot('serpillière')) perso += ', traces de pas par terre (serpillière)';
+    if (sol && sol.poussiere >= DIRTY) perso += ', sol poussiéreux (balai)';
+    if (this.salissure.shoes > 0.2) perso += ', chaussures pleines de boue (elles laissent des traces)';
     if (this.body.state !== 'normal') perso += `, ${BODY_STATES[this.body.state].label.toLowerCase()} (${this.body.label}) : ${BODY_STATES[this.body.state].tip.toLowerCase()}`;
     if (this.body.soaked > 0.3) perso += ', trempé par la pluie (se sécher à la serviette)';
     if (this.sleep) perso += `, couché dans ${this.ref(this.sleep.bed)}${this.sleep.phase === 'asleep' ? ', endormi' : ''}`;
@@ -2477,12 +2503,12 @@ export class Game {
     const mid = new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
     const top = () => mid.clone().setY(mid.y + 0.04);
     c.approachThen(this.standNear(mid, 0.3), mid, () => {
-      if (!c.handOf(sponge)?.cut(top, () => {
+      if (!c.chore(sponge, 'scrub', top, { seconds: 2.6, onDone: () => {
         g.removeFromParent();
         this.crumbs.delete(table);
         this.wearItem(sponge, 2);
         this.onNotice?.(`${cap(the(table.name))} est essuyé${agree(table.name)}.`);
-      })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
+      } })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
     }, running);
     return true;
   }
@@ -2634,17 +2660,17 @@ export class Game {
     if (c.seated) return c.standUp(() => this.cleanFloor(running));
     const p = c.position;
     const small = this.puddles().filter((d) => d.radius < BIG_PUDDLE);
-    if (!small.length) return fail('Cette flaque est trop grande pour l’éponge : prends la serpillière (dans le seau, au coin de la cuisine).');
+    if (!small.length) return fail('Cette flaque est trop grande pour l’éponge : prends la serpillière (dans le seau, au coin de la cuisine près de la porte de l’entrée).');
     const spill = small.sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
     const at = spill.position.clone();
     c.approachThen(this.standNear(at, 0.2), at, () => {
-      if (!c.handOf(sponge)?.cut(() => at.clone().setY(0.03), () => {
+      if (!c.chore(sponge, 'scrub', () => at.clone().setY(0.005), { seconds: 2.6, onDone: () => {
         spill.wipe();
         this.wearItem(sponge, 1);
         // la suivante, s'il en reste (les grandes attendent la serpillière)
         if (this.puddles().some((d) => d.radius < BIG_PUDDLE)) requestAnimationFrame(() => this.cleanFloor(running));
         else this.onNotice?.(this.puddles().length ? 'Il reste une grande flaque : prends la serpillière.' : 'Le sol est sec.');
-      })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
+      } })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
     }, running);
     return true;
   }
@@ -2666,33 +2692,36 @@ export class Game {
   }
 
   /**
-   * Balaie avec le balai tenu les éclats et les miettes par terre, l'un après l'autre (les plus
-   * proches d'abord), puis vide la pelle dans la poubelle.
+   * Balaie avec le balai (pris au passage s'il n'est pas en main) : là où il y a des éclats, des
+   * miettes ou de la saleté, sinon un tour de la pièce ; puis vide la pelle dans la poubelle.
    */
   sweepFloor(running = false): boolean {
-    const c = this.character;
-    const broom = c.heldItems.find((h) => h.def.sweeps);
-    const fail = (t: string) => {
-      this.onNotice?.(t);
-      return false;
-    };
-    if (!this.floorMess().length) return fail('Rien à balayer : le sol est propre.');
-    if (!broom) return fail('Prends le balai (au coin de la cuisine, après le garde-manger) pour balayer.');
-    if (c.busy || c.bracing || this.moving) return false;
-    if (c.seated) return c.standUp(() => this.sweepFloor(running));
-    const p = c.position;
-    const mess = this.floorMess().sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
-    const at = mess.position.clone();
-    c.approachThen(this.standNear(at, 0.3), at, () => {
-      if (!c.handOf(broom)?.cut(() => at.clone().setY(0.05), () => {
-        mess.sweep();
-        this.wearItem(broom, 1);
-        this.soilHands('ménage');
-        if (this.floorMess().length) requestAnimationFrame(() => this.sweepFloor(running));
-        else this.emptyDustpan(mess.kind, running);
-      })) this.onNotice?.('Impossible de balayer pour l’instant.');
-    }, running);
-    return true;
+    if (!this.floorMess().length && !this.floorSpot('balai')) return this.notice('Rien à balayer : le sol est propre.');
+    return this.withTool((d) => !!d.sweeps, 'balai', running, (broom) => {
+      const mess = this.floorMess();
+      let swept: string | null = null;
+      const sweepNear = (p: THREE.Vector3, r: number) => {
+        for (const m of this.floorMess()) {
+          if (p0(m.position).distanceTo(p0(p)) > r) continue;
+          m.sweep();
+          swept = m.kind;
+        }
+      };
+      return this.floorRound(broom, 'sweep', 'balai', () => this.floorMess().map((m) => m.position), {
+        seconds: 3.2,
+        running,
+        onStroke: (head) => sweepNear(head, 0.35),
+        onSpot: (spot) => {
+          sweepNear(spot, 0.5);
+          this.wearItem(broom, 0.3, false);
+          this.soilHands('ménage');
+        },
+        done: () => {
+          if (swept) this.emptyDustpan(swept, running);
+          else this.onNotice?.(mess.length ? 'Sol balayé.' : 'Sol balayé : la poussière est partie.');
+        },
+      });
+    });
   }
 
   /** La pelle pleine va à la poubelle la plus proche (si elle a un sac et de la place). */
@@ -2711,32 +2740,327 @@ export class Game {
     }), running);
   }
 
-  /** Passe la serpillière tenue : la flaque la plus proche et toutes celles autour, d'un geste chacune. */
+  /** Passe la serpillière (prise au passage) : sur les flaques et le sol sale, sinon un tour de la pièce. */
   mopFloor(running = false): boolean {
+    if (!this.puddles().length && !this.floorSpot('serpillière')) return this.notice('Pas de flaque ni de trace par terre.');
+    return this.withTool((d) => !!d.mops, 'serpillière', running, (mop) => {
+      const had = this.puddles().length;
+      const wipeNear = (p: THREE.Vector3, r: number) => {
+        let n = 0;
+        for (const d of this.puddles()) if (p0(d.position).distanceTo(p0(p)) < r + d.radius) {
+          d.wipe();
+          n++;
+        }
+        return n;
+      };
+      return this.floorRound(mop, 'mop', 'serpillière', () => this.puddles().map((d) => d.position), {
+        seconds: 3.6,
+        running,
+        onStroke: (head) => void wipeNear(head, 0.3),
+        onSpot: (spot) => {
+          this.wearItem(mop, 0.3 + wipeNear(spot, MOP_REACH), false);
+          this.soilHands('ménage');
+        },
+        done: () => this.onNotice?.(had ? 'Serpillière passée : le sol est sec.' : 'Serpillière passée : le sol est propre.'),
+      });
+    });
+  }
+
+  /** Passe l'aspirateur (pris au passage) : il avale miettes, éclats et poussière du sol de la pièce. */
+  vacuumFloor(running = false): boolean {
+    if (!this.floorMess().length && !this.floorSpot('aspirateur')) return this.notice('Rien à aspirer : le sol est propre.');
+    return this.withTool((d) => !!d.vacuums, 'aspirateur', running, (vac) => {
+      const had = this.floorMess().length;
+      const suck = (p: THREE.Vector3, r: number) => {
+        for (const m of this.floorMess()) if (p0(m.position).distanceTo(p0(p)) < r) m.sweep();
+      };
+      return this.floorRound(vac, 'vacuum', 'aspirateur', () => this.floorMess().map((m) => m.position), {
+        seconds: 4.2,
+        running,
+        onStroke: (head) => suck(head, 0.35),
+        onSpot: (spot) => {
+          suck(spot, 0.6);
+          this.wearItem(vac, 0.3, false);
+        },
+        done: () => this.onNotice?.(had ? 'Aspirateur passé : plus une miette.' : 'Aspirateur passé : plus un grain de poussière.'),
+      });
+    });
+  }
+
+  /**
+   * Époussette le meuble `ref` (sinon le plus poussiéreux, ou le plus proche qui a un dessus) au
+   * plumeau, ou au chiffon s'il n'y a pas de plumeau.
+   */
+  dustFurniture(ref?: string, running = false): boolean {
     const c = this.character;
-    const mop = c.heldItems.find((h) => h.def.mops);
-    const fail = (t: string) => {
-      this.onNotice?.(t);
-      return false;
-    };
-    if (!this.puddles().length) return fail('Pas de flaque par terre.');
-    if (!mop) return fail('Prends la serpillière (dans le seau, au coin de la cuisine) pour essuyer.');
-    if (c.busy || c.bracing || this.moving) return false;
-    if (c.seated) return c.standUp(() => this.mopFloor(running));
-    const p = c.position;
-    const first = this.puddles().sort((a, b) => a.position.distanceTo(p) - b.position.distanceTo(p))[0];
-    const at = first.position.clone();
-    c.approachThen(this.standNear(at, 0.3), at, () => {
-      const around = this.puddles().filter((d) => d.position.distanceTo(at) < MOP_REACH);
-      if (!c.handOf(mop)?.cut(() => at.clone().setY(0.04), () => {
-        for (const d of around) d.wipe();
-        this.wearItem(mop, around.length);
-        this.soilHands('ménage');
-        if (this.puddles().length) requestAnimationFrame(() => this.mopFloor(running));
-        else this.onNotice?.('Serpillière passée : le sol est sec.');
-      })) this.onNotice?.('Impossible de passer la serpillière pour l’instant.');
-    }, running);
+    const dusty = (i: WorldItem) => this.hasTop(i) && (this.salissure.levelOf(i)?.dust ?? 0) >= FLOOR_CLEAN;
+    const target = ref ? this.byRef(ref) : (this.nearest(dusty) ?? this.nearest((i) => this.hasTop(i) && !c.carried.includes(i)));
+    if (!target) return this.notice('Il n’y a rien à épousseter ici.');
+    if (!this.hasTop(target)) return this.notice(`${cap(the(target.name))} n’a pas de dessus à épousseter.`);
+    const plumeau = (d: ItemDef) => !!d.dusts;
+    const cloth = (d: ItemDef) => !!d.wipes && !d.towel && d.id !== 'eponge';
+    const pick = c.heldItems.some((h) => plumeau(h.def)) || this.items.some((i) => plumeau(i.def)) ? plumeau : cloth;
+    return this.withTool(pick, pick === plumeau ? 'plumeau' : 'chiffon', running, (tool) => {
+      const kind = pick === plumeau ? 'dust' : 'scrub';
+      const top = this.topOf(target);
+      return this.choreRound(tool, kind, [top], {
+        seconds: 3.6,
+        running,
+        stand: this.frontOf(target),
+        onSpot: () => {
+          this.cleanItemDirt(target);
+          this.wearItem(tool, 1);
+        },
+        done: () => this.onNotice?.(`${cap(the(target.name))} est épousseté${agree(target.name)}.`),
+      });
+    });
+  }
+
+  /**
+   * Frotte le meuble sanitaire ou la vitre `ref` (sinon le plus proche qui en a besoin) : la cuvette
+   * à la brosse WC, une vitre ou un miroir au chiffon, l'évier, le lavabo, la douche, la table ou
+   * le plan de travail à l'éponge.
+   */
+  scrubSurface(ref?: string, running = false): boolean {
+    const c = this.character;
+    const scrubbable = (i: WorldItem) => !!(i.def.toilet || i.def.wash || i.def.window || i.def.shower || i.def.table || i.def.id === 'plan-de-travail' || /miroir|baignoire|lavabo|douche/.test(i.def.id));
+    const grimy = (i: WorldItem) => scrubbable(i) && this.needsCleaning(i);
+    const target = ref ? this.byRef(ref) : (this.nearest(grimy) ?? this.nearest((i) => scrubbable(i) && !c.carried.includes(i)));
+    if (!target || !scrubbable(target)) return this.notice(ref ? `On ne frotte pas ${the(this.byRef(ref)?.name ?? ref)}.` : 'Rien à frotter ici.');
+    const vertical = !!target.def.window || /miroir/.test(target.def.id);
+    if (target.def.toilet) {
+      return this.withTool((d) => !!d.scrubsBowl, 'brosse WC', running, (brush) => {
+        const bowl = this.bowlOf(target);
+        return this.choreRound(brush, 'brush', [bowl], {
+          seconds: 4,
+          running,
+          stand: this.frontOf(target),
+          onSpot: () => {
+            this.cleanItemDirt(target);
+            this.wearItem(brush, 1);
+            this.soilHands('toilettes');
+          },
+          done: () => this.onNotice?.('Cuvette brossée : elle est toute propre.'),
+        });
+      });
+    }
+    const tool = vertical ? (d: ItemDef) => !!d.wipes && d.id === 'chiffon' : (d: ItemDef) => !!d.wipes && !d.towel;
+    return this.withTool(tool, vertical ? 'chiffon' : 'éponge', running, (rag) => {
+      const at = vertical ? this.paneOf(target) : this.topOf(target, !!(target.def.wash || target.def.shower));
+      return this.choreRound(rag, vertical ? 'wipeUp' : 'scrub', [at], {
+        seconds: 4,
+        running,
+        stand: this.frontOf(target),
+        onSpot: () => {
+          if (this.crumbs.has(target)) {
+            this.crumbs.get(target)!.removeFromParent();
+            this.crumbs.delete(target);
+          }
+          this.cleanItemDirt(target);
+          this.wearItem(rag, 1);
+          this.soilHands('ménage');
+        },
+        done: () => this.onNotice?.(`${cap(the(target.name))} ${vertical ? 'brille, sans une trace' : `est propre`}.`),
+      });
+    });
+  }
+
+  /**
+   * Fait apparaître un objet portable du catalogue (`id`) par terre devant le perso : pour la
+   * console et les bancs d'essai (`game.spawn('aspirateur')`).
+   */
+  spawn(id: string): boolean {
+    const def = ITEM_BY_ID.get(id);
+    if (!def?.portable) return false;
+    const item = new WorldItem(def);
+    const c = this.character;
+    item.object.position.copy(p0(c.position).addScaledVector(c.forward, 0.55));
+    item.object.rotation.y = Math.atan2(c.forward.x, c.forward.z);
+    this.items.push(item);
+    this.scene.add(item.object);
     return true;
+  }
+
+  /**
+   * Lave au chiffon les vitres de la pièce où est le perso (la plus proche d'abord), ou le miroir
+   * de la salle de bain (`ref` « miroir ») : des cercles, la paume à plat contre le verre.
+   */
+  washWindows(ref?: string, running = false): boolean {
+    const c = this.character;
+    const p = c.position;
+    let panes: Array<{ at: THREE.Vector3; stand: THREE.Vector3 }> = [];
+    const mirror = ref && /miroir|glace/.test(ref) ? this.nearest((i) => !!i.def.wash && i.size.y > 1.1) : undefined;
+    if (mirror) panes = [{ at: this.paneOf(mirror), stand: this.frontOf(mirror) }];
+    else {
+      const room = this.rooms.find((r) => r.contains(p)) ?? this.rooms[0];
+      panes = room.panes
+        .map((g) => {
+          // devant la vitre, au plus près sans être dans un meuble (l'évier sous la fenêtre)
+          let stand = g.at.clone().addScaledVector(g.n, 0.5).setY(0);
+          for (const d of [0.45, 0.6, 0.75, 0.9]) {
+            const v = g.at.clone().addScaledVector(g.n, d).setY(0);
+            if (!c.nav?.blocked(v)) {
+              stand = v;
+              break;
+            }
+          }
+          return { at: g.at.clone().addScaledVector(g.n, 0.01).setY(THREE.MathUtils.clamp(g.at.y, 0.95, 1.45)), stand };
+        })
+        .sort((a, b) => a.stand.distanceTo(p) - b.stand.distanceTo(p))
+        .slice(0, 2);
+      if (!panes.length) return this.notice('Il n’y a pas de fenêtre dans cette pièce.');
+    }
+    return this.withTool((d) => d.id === 'chiffon', 'chiffon', running, (rag) => {
+      const todo = panes.slice();
+      const next = (): boolean => {
+        const pane = todo.shift();
+        if (!pane) {
+          this.onNotice?.(mirror ? 'Le miroir brille, sans une trace.' : `Vitre${panes.length > 1 ? 's' : ''} lavée${panes.length > 1 ? 's' : ''} : on y voit comme dehors.`);
+          return true;
+        }
+        return this.choreRound(rag, 'wipeUp', [pane.at], {
+          seconds: 4,
+          running,
+          stand: pane.stand,
+          onSpot: () => {
+            if (mirror) this.cleanItemDirt(mirror);
+            this.wearItem(rag, 1);
+          },
+          done: () => void next(),
+        });
+      };
+      return next();
+    });
+  }
+
+  /**
+   * Va prendre l'outil de ménage qui vérifie `ok` s'il n'est pas déjà en main (le plus proche, même
+   * rangé au placard), puis fait `then` avec.
+   */
+  private withTool(ok: (d: ItemDef) => boolean, what: string, running: boolean, then: (tool: WorldItem) => boolean): boolean {
+    const c = this.character;
+    const held = c.heldItems.find((h) => ok(h.def));
+    if (c.busy || c.bracing || this.moving) return false;
+    if (held) return c.seated ? c.standUp(() => then(held)) : then(held);
+    const tool = this.nearest((i) => ok(i.def) && i.def.portable && !c.carried.includes(i));
+    if (!tool) return this.notice(`Il n’y a pas de ${what} : on en trouve au magasin (rayon maison).`);
+    // l'outil d'avant (le balai pour passer à la serpillière) est posé d'abord
+    const swap = c.heldItems.filter((h) => choreFor(h.def));
+    const free = c.heldItems.length - swap.length === 0 || (!isTwoHanded(tool.grip) && c.heldItems.length - swap.length < 2);
+    if (!free) return this.notice(`Pose d’abord ce que tu tiens pour prendre ${the(tool.name)}.`);
+    let ran = false;
+    return this.chain([...swap.map((h) => () => this.drop(h.name)), () => this.take(tool, running), () => {
+      if (ran || !c.handOf(tool)) return false;
+      ran = true;
+      return then(tool);
+    }]);
+  }
+
+  /**
+   * Où passer l'outil `tool` au sol : les points `dirty` (éclats, miettes, flaques), puis les carrés
+   * sales de la pièce du perso (salissure.ts), de proche en proche, quatre au plus.
+   */
+  private choreSpots(dirty: THREE.Vector3[], tool: FloorTool): THREE.Vector3[] {
+    const p = this.character.position;
+    const room = this.rooms.find((r) => r.contains(p));
+    const floor = room && this.salissure.floorNamed(room.spec.name);
+    const pts = dirty.map(p0);
+    if (floor) {
+      const v = new THREE.Vector3();
+      let near: { x: number; z: number } = p;
+      for (let i = 0; i < 4; i++) {
+        const s = floor.dirtiest(tool, (x, z) => !!this.character.nav?.blocked(v.set(x, 0, z)) || pts.some((q) => Math.hypot(q.x - x, q.z - z) < 0.4), FLOOR_CLEAN, near);
+        if (!s) break;
+        pts.push(new THREE.Vector3(s.x, 0, s.z));
+        near = s;
+      }
+    }
+    // de proche en proche, les points voisins (moins de 40 cm) fondus en un seul passage
+    const order: THREE.Vector3[] = [];
+    let from = p0(p);
+    const left = pts.slice();
+    while (left.length && order.length < 4) {
+      left.sort((a, b) => a.distanceTo(from) - b.distanceTo(from));
+      const next = left.shift()!;
+      if (order.some((o) => o.distanceTo(next) < 0.4)) continue;
+      order.push(next);
+      from = next;
+    }
+    return order;
+  }
+
+  /**
+   * Fait le geste de ménage `kind` avec l'outil tenu `tool`, `seconds` secondes sur chaque point de
+   * `spots` (on s'y rend d'abord, devant, ou en `stand`), en appelant `onStroke` à chaque coup et
+   * `onSpot` à la fin de chaque point ; `done` une fois tous faits.
+   */
+  private choreRound(tool: WorldItem, kind: ChoreKind, spots: THREE.Vector3[], o: { seconds: number; running: boolean; stand?: THREE.Vector3; onStroke?: (head: THREE.Vector3) => void; onSpot?: (spot: THREE.Vector3) => void; done: () => void }): boolean {
+    const c = this.character;
+    const todo = spots.slice();
+    if (!todo.length) {
+      o.done();
+      return true;
+    }
+    const step = (): void => {
+      const spot = todo.shift();
+      if (!spot) return o.done();
+      // devant le point : la tête du balai à bout de manche, l'éponge à portée de main
+      const stand = o.stand ?? this.standNear(spot, CHORES[kind].pole ? 0.45 : 0.1);
+      c.approachThen(stand, spot, () => {
+        if (!this.items.includes(tool) || !c.handOf(tool)) return;
+        const ok = c.chore(tool, kind, () => spot.clone(), {
+          seconds: o.seconds,
+          onStroke: o.onStroke,
+          onDone: () => {
+            o.onSpot?.(spot);
+            requestAnimationFrame(step);
+          },
+        });
+        if (!ok) this.onNotice?.(`Impossible de ${CHORES[kind].label} pour l’instant.`);
+      }, o.running);
+    };
+    step();
+    return true;
+  }
+
+  /** Le meuble a-t-il un dessus qu'on peut épousseter (table, bibliothèque, commode, meuble télé…) ? */
+  private hasTop(i: WorldItem): boolean {
+    const d = i.def;
+    return !d.portable && i.size.y > 0.3 && i.size.y < 2.1 && Math.max(i.size.x, i.size.z) > 0.3 && !d.toilet && !d.wash && !d.heat && !d.shower && !d.bin && !d.outdoor;
+  }
+
+  /** Le milieu du dessus du meuble, un peu vers l'avant (monde) ; `basin` : au fond de la cuve (évier, lavabo, douche). */
+  private topOf(item: WorldItem, basin = false): THREE.Vector3 {
+    item.object.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(item.object);
+    const mid = b.getCenter(new THREE.Vector3());
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion).setY(0).normalize();
+    const depth = Math.abs(fwd.x) > Math.abs(fwd.z) ? b.max.x - b.min.x : b.max.z - b.min.z;
+    // un lavabo surmonté de son miroir : la cuve est bien plus bas que le haut du meuble
+    const y = basin ? (b.max.y > 1.1 ? 0.78 : Math.max(0.05, b.max.y - 0.14)) : b.max.y + 0.005;
+    return mid.addScaledVector(fwd, depth * (basin ? 0.05 : 0.18)).setY(y);
+  }
+
+  /** Le fond de la cuvette des toilettes (monde). */
+  private bowlOf(item: WorldItem): THREE.Vector3 {
+    item.object.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(item.object);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion).setY(0).normalize();
+    return b.getCenter(new THREE.Vector3()).addScaledVector(fwd, 0.08).setY(Math.min(0.42, b.max.y - 0.05));
+  }
+
+  /** Le milieu de la vitre, ou du miroir au fond du lavabo, à hauteur d'épaule au plus (monde). */
+  private paneOf(item: WorldItem): THREE.Vector3 {
+    item.object.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(item.object);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(item.object.quaternion).setY(0).normalize();
+    const mid = b.getCenter(new THREE.Vector3());
+    if (item.def.wash) {
+      // le miroir monte du fond du lavabo, au-dessus de la cuve
+      const depth = Math.abs(fwd.x) > Math.abs(fwd.z) ? b.max.x - b.min.x : b.max.z - b.min.z;
+      return mid.addScaledVector(fwd, -depth / 2 + 0.06).setY(Math.min(1.5, b.max.y - 0.2));
+    }
+    return mid.addScaledVector(fwd, 0.02).setY(THREE.MathUtils.clamp(mid.y, 0.9, 1.45));
   }
 
   /** Taches sur le dessus d'un meuble (gazinière après la cuisson, plan de travail après la coupe). */
@@ -2768,42 +3092,199 @@ export class Game {
   }
 
   /**
-   * Nettoie au spray et à l'éponge (tenus) le dessus taché du meuble `ref` (sinon le plus proche
-   * qui est taché) : gazinière, plan de travail, îlot.
+   * Le carré de sol le plus proche du perso, dans sa pièce, à passer avec `tool` (poussière pour le
+   * balai et l'aspirateur, traces pour la serpillière) ; null si la pièce est propre (ou dehors).
+   */
+  private floorSpot(tool: FloorTool): { x: number; z: number; value: number } | null {
+    const p = this.character.position;
+    const room = this.rooms.find((r) => r.contains(p));
+    const floor = room && this.salissure.floorNamed(room.spec.name);
+    if (!floor) return null;
+    const v = new THREE.Vector3();
+    return floor.dirtiest(tool, (x, z) => !!this.character.nav?.blocked(v.set(x, 0, z)), FLOOR_CLEAN, p);
+  }
+
+  /**
+   * Passe l'outil de sol tenu (`held`, geste `kind`) sur la saleté de la pièce du perso : les points
+   * `mess()`, puis les carrés que la salissure dit sales pour `tool`, quatre par tour, jusqu'à ce que
+   * tout soit propre (FLOOR_PASSES carrés au plus). Chaque coup nettoie sous la tête de l'outil.
+   */
+  private floorRound(held: WorldItem, kind: ChoreKind, tool: FloorTool, mess: () => THREE.Vector3[], o: { seconds: number; running: boolean; onStroke?: (head: THREE.Vector3) => void; onSpot?: (spot: THREE.Vector3) => void; done: () => void }, passes = 0): boolean {
+    const spots = passes < FLOOR_PASSES ? this.choreSpots(mess(), tool) : [];
+    if (!spots.length || !this.character.heldItems.includes(held)) {
+      o.done();
+      return true;
+    }
+    return this.choreRound(held, kind, spots, {
+      seconds: o.seconds,
+      running: o.running,
+      onStroke: (head) => {
+        o.onStroke?.(head);
+        this.cleanFloorAt(head.x, head.z, 0.35, tool, 0.4);
+      },
+      onSpot: (spot) => {
+        this.cleanFloorAt(spot.x, spot.z, FLOOR_REACH, tool);
+        o.onSpot?.(spot);
+      },
+      done: () => void this.floorRound(held, kind, tool, mess, o, passes + spots.length),
+    });
+  }
+
+  /** Le meuble frotté ou épousseté d'un bout à l'autre : sa poussière, sa crasse et ses taches partent. */
+  private cleanItemDirt(item: WorldItem): void {
+    this.grime.get(item)?.removeFromParent();
+    this.grime.delete(item);
+    this.salissure.cleanItem(item);
+    this.salissure.render();
+  }
+
+  /** Un meuble à nettoyer : taché (cuisine), poussiéreux ou encrassé (salissure.ts). */
+  private needsCleaning(item: WorldItem): boolean {
+    const d = this.salissure.levelOf(item);
+    return this.grime.has(item) || (!!d && (d.dust >= FLOOR_CLEAN || d.grime >= FLOOR_CLEAN));
+  }
+
+  /**
+   * Nettoie le meuble `ref` (sinon le plus proche à nettoyer) : les taches de cuisine et la crasse
+   * du sanitaire au spray puis à l'éponge (tenus), la poussière d'un coup d'éponge.
    */
   cleanSurface(ref?: string, running = false): boolean {
     const c = this.character;
     const p = c.position;
-    const target = ref ? this.byRef(ref) : [...this.grime.keys()].sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
+    const target = ref ? this.byRef(ref) : this.items.filter((i) => this.needsCleaning(i)).sort((a, b) => a.object.position.distanceTo(p) - b.object.position.distanceTo(p))[0];
     const spray = c.heldItems.find((h) => h.def.spray);
     const sponge = c.heldItems.find((h) => h.def.wipes);
     const fail = (t: string) => {
       this.onNotice?.(t);
       return false;
     };
-    if (!target || !this.grime.has(target)) return fail(ref ? `${cap(the(this.byRef(ref)?.name ?? ref))} est propre.` : 'Rien à nettoyer : les plans et la gazinière sont propres.');
-    if (!spray) return fail('Prends le spray nettoyant (au placard) et l’éponge pour nettoyer.');
-    if (!sponge) return fail('Prends aussi l’éponge (près de l’évier) pour essuyer après le spray.');
+    if (!target || !this.needsCleaning(target)) return fail(ref ? `${cap(the(this.byRef(ref)?.name ?? ref))} est propre.` : 'Rien à nettoyer : les meubles sont propres.');
+    const d = this.salissure.levelOf(target);
+    // la poussière seule part à l'éponge ; les taches et la crasse demandent le spray
+    const dustOnly = !this.grime.has(target) && (d?.grime ?? 0) < FLOOR_CLEAN;
+    if (!spray && !dustOnly) return fail('Prends le spray nettoyant (au placard) et l’éponge pour nettoyer.');
+    if (!sponge) return fail(dustOnly ? 'Prends l’éponge (près de l’évier) pour enlever la poussière.' : 'Prends aussi l’éponge (près de l’évier) pour essuyer après le spray.');
     if (c.busy || c.bracing || this.moving) return false;
     if (c.seated) return c.standUp(() => this.cleanSurface(ref, running));
-    const g = this.grime.get(target)!;
+    const g = this.grime.get(target);
     target.object.updateMatrixWorld(true);
-    const mid = new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
+    const b = target.box;
+    const mid = g ? new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3()) : new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y, (b.min.z + b.max.z) / 2).applyMatrix4(target.object.matrixWorld);
     const top = () => mid.clone().setY(mid.y + 0.04);
+    const wipe = () => {
+      if (!this.items.includes(sponge) || !c.chore(sponge, 'scrub', top, { seconds: 3, onDone: () => {
+        g?.removeFromParent();
+        this.grime.delete(target);
+        this.salissure.cleanItem(target);
+        this.salissure.render();
+        this.wearItem(sponge, 2);
+        this.soilHands('ménage');
+        this.onNotice?.(`${cap(the(target.name))} ${target.name.endsWith('s') ? 'sont propres et brillent' : 'est propre et brille'}.`);
+      } })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
+    };
     c.approachThen(this.frontOf(target), mid, () => {
-      // un coup de spray, puis l'éponge
-      if (!c.handOf(spray)?.cut(top, () => {
-        this.wearItem(spray, 3);
-        if (!this.items.includes(sponge) || !c.handOf(sponge)?.cut(top, () => {
-          g.removeFromParent();
-          this.grime.delete(target);
-          this.wearItem(sponge, 2);
-          this.soilHands('ménage');
-          this.onNotice?.(`${cap(the(target.name))} est propre et brille.`);
-        })) this.onNotice?.('Impossible d’essuyer pour l’instant.');
-      })) this.onNotice?.('Impossible de nettoyer pour l’instant.');
+      if (dustOnly) return wipe();
+      // quelques coups de spray, puis l'éponge en cercles
+      if (!c.chore(spray!, 'spray', top, { seconds: 2.2, onDone: () => {
+        this.wearItem(spray!, 3);
+        wipe();
+      } })) this.onNotice?.('Impossible de nettoyer pour l’instant.');
     }, running);
     return true;
+  }
+
+  /** Un usage encrasse un peu le sanitaire et la gazinière (salissure.ts). */
+  private useDirties(item: WorldItem): void {
+    const g = USE_GRIME[item.def.id];
+    if (g) this.salissure.soilItem(item, g, 'crasse');
+  }
+
+  /** Les pas du perso (empreintes, boue rapportée du jardin) et la poussière qui tombe. */
+  private tickDirt(dt: number, hours: number): void {
+    const c = this.character;
+    const f = c.forward;
+    const w = this.weather;
+    this.salissure.tick(dt, hours, {
+      position: c.position,
+      yaw: Math.atan2(f.x, f.z),
+      walking: !c.seated && !c.lying && !this.onBike,
+      // dehors, les semelles prennent de la terre : beaucoup quand le sol est mouillé ou enneigé
+      outsideMud: 0.02 + 0.16 * w.wet + 0.1 * w.cover,
+    }, (i) => this.rooms.some((r) => r.contains(i.object.position)));
+  }
+
+  // ——— salissure : l'API des ordres et des animations de ménage ———
+
+  /**
+   * La saleté de la maison, de 0 (propre) à 1 : par pièce, la poussière et les traces moyennes du
+   * sol, et `pire` (le carré de 50 cm le plus sale) ; par meuble suivi, sa poussière et sa crasse.
+   */
+  dirt(): { sols: Record<string, { poussiere: number; traces: number; pire: number }>; meubles: Record<string, { poussiere: number; crasse: number }> } {
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const sols: Record<string, { poussiere: number; traces: number; pire: number }> = {};
+    for (const f of this.salissure.floors) {
+      const l = f.level();
+      sols[f.name] = { poussiere: r2(l.poussiere), traces: r2(l.traces), pire: r2(l.pire) };
+    }
+    const meubles: Record<string, { poussiere: number; crasse: number }> = {};
+    for (const [item, d] of this.salissure.items) if (this.items.includes(item)) meubles[this.ref(item)] = { poussiere: r2(d.dust), crasse: r2(d.grime) };
+    return { sols, meubles };
+  }
+
+  /** Saleté d'un meuble suivi (poussière, crasse), ou null. */
+  dirtOf(ref: string): { poussiere: number; crasse: number } | null {
+    const item = this.byRef(ref);
+    const d = item && this.salissure.levelOf(item);
+    return d ? { poussiere: d.dust, crasse: d.grime } : null;
+  }
+
+  /** Salit le sol autour de (x, z) dans un rayon (m) : `poussière` (voile) ou `boue` (taches). */
+  soilFloor(x: number, z: number, rayon: number, quantite: number, sorte: FloorDirtKind = 'poussière'): boolean {
+    const ok = this.salissure.soilFloor(x, z, rayon, quantite, sorte);
+    this.salissure.render();
+    return ok;
+  }
+
+  /** Nettoie le sol autour de (x, z) avec `outil` (pour les animations de ménage) : la saleté enlevée. */
+  cleanFloorAt(x: number, z: number, rayon: number, outil: FloorTool, force = 1): number {
+    const n = this.salissure.cleanFloor(x, z, rayon, outil, force);
+    this.salissure.render();
+    return n;
+  }
+
+  /** Où passer `outil` ensuite dans la pièce `piece` (celle du perso par défaut) : le carré sale le plus proche du perso. */
+  dirtiestSpot(piece?: string, outil: FloorTool = 'balai'): { x: number; z: number } | null {
+    if (!piece) {
+      const s = this.floorSpot(outil);
+      return s && { x: s.x, z: s.z };
+    }
+    const floor = this.salissure.floorNamed(piece);
+    const v = new THREE.Vector3();
+    const s = floor?.dirtiest(outil, (x, z) => !!this.character.nav?.blocked(v.set(x, 0, z)), FLOOR_CLEAN, this.character.position);
+    return s ? { x: s.x, z: s.z } : null;
+  }
+
+  /** Salit le meuble `ref` : poussière sur le dessus, ou crasse (sanitaire). */
+  soilItem(ref: string, quantite: number, sorte?: 'poussière' | 'crasse'): boolean {
+    const item = this.byRef(ref);
+    const ok = !!item && this.salissure.soilItem(item, quantite, sorte);
+    this.salissure.render();
+    return ok;
+  }
+
+  /** Nettoie le meuble `ref` sans geste (pour les animations de ménage) : la saleté enlevée. */
+  cleanItem(ref: string, force = 1): number {
+    const item = this.byRef(ref);
+    if (!item) return 0;
+    const n = this.salissure.cleanItem(item, force);
+    this.salissure.render();
+    return n;
+  }
+
+  /** Fait vieillir la maison de `heures` heures de jeu (poussière, calcaire), sans toucher à l'horloge. */
+  ageHouse(heures: number): void {
+    this.salissure.age(heures, (i) => this.rooms.some((r) => r.contains(i.object.position)));
+    this.salissure.render();
   }
 
   /** Les mains se salissent (viande crue, poubelle, ménage), sauf avec les gants. */
@@ -3106,6 +3587,10 @@ export class Game {
     }
     this.sound.update(Math.max(0, dt), Math.min(1, sizzle), Math.min(1, boil));
     const c = this.character;
+    // l'aspirateur ronronne pendant qu'on le passe
+    const chore = c.choring;
+    this.sound.setVacuum(chore?.kind === 'vacuum' ? chore.hand.choreAmount : 0);
+    this.choreFx.update(Math.max(0, dt), chore?.kind ?? null, chore?.hand.choreHead ?? null, chore?.hand.choreAim ?? null, chore?.hand.choreAmount ?? 0);
     const now = new Set(c.carried.filter((i) => i.def.dish));
     for (const d of this.carriedDishes) {
       if (now.has(d) || !this.items.includes(d) || this.flying.some((f) => f.item === d)) continue;
@@ -3372,6 +3857,7 @@ export class Game {
             c.startWash(this.frontOf(sink), o.position, this.handsUnderTap(sink), false, () => {
               // les mains abîmées lavent moins vite
               this.washing = { sink, t: 0, seconds: DISH_SECONDS * dishes.length * (this.roughHands >= 1 && !this.gloved ? 1.5 : 1), hygiene: 0, face: false, dishes };
+              this.useDirties(sink);
             });
             return;
           }
@@ -3763,6 +4249,7 @@ export class Game {
     this.items = this.items.filter((i) => i !== item);
     this.riders = this.riders.filter((r) => r.item !== item && r.base !== item);
     this.lastBite.delete(item);
+    this.salissure?.forget(item);
     item.object.removeFromParent();
   }
 
@@ -4223,6 +4710,7 @@ export class Game {
     if (this.toiletVisit) return true;
     const start = () => {
       this.toiletVisit = { toilet, t: 0 };
+      this.useDirties(toilet);
     };
     this.setLid(toilet, true);
     if (this.sitting === toilet && this.character.seated) return start(), true;
@@ -4306,6 +4794,7 @@ export class Game {
     return c.startWash(stand, head.clone().setY(0), at, true, () => {
       this.showering = { shower, t: 0 };
       this.wet = 0;
+      this.useDirties(shower);
     }, running);
   }
 
@@ -5034,6 +5523,7 @@ export class Game {
       const how = drink ? { seconds: TAP_DRINK.seconds, hygiene: 0 } : face ? WASH_FACE : WASH_HANDS;
       return c.startWash(this.frontOf(sink), sink.object.position, this.handsUnderTap(sink), face, () => {
         this.washing = { sink, t: 0, seconds: how.seconds, hygiene: how.hygiene, face, thirst: drink ? TAP_DRINK.thirst : undefined };
+        this.useDirties(sink);
       }, running);
     }
     return false;
@@ -5965,6 +6455,7 @@ export class Game {
       this.character.gesture('interact');
       for (const i of which) h.on[i] = on;
       h.unused = 0;
+      if (on) this.useDirties(item);
       this.wearItem(item, WEAR_KNOB);
       const pan = which.length === 1 ? this.onSpot(item, which[0]) : undefined;
       if (!stove) this.onNotice?.(on ? `${cap(the(item.name))} est allumé${fem ? 'e' : ''} : elle chauffe.` : `${cap(the(item.name))} est éteint${fem ? 'e' : ''}.`);
@@ -6383,9 +6874,9 @@ export class Game {
     item.setStowed(false);
   }
 
-  /** Ce qu'on peut ranger dans ce meuble (sa fiche `holds`, sinon les livres). */
+  /** Ce qu'on peut ranger dans ce meuble (sa fiche `holds`, sinon les livres, livre de recettes compris). */
   private fits(shelf: WorldItem, item: WorldItem): boolean {
-    return shelf.def.holds ? shelf.def.holds.includes(item.name) : item.def.stack === 'livre';
+    return shelf.def.holds ? shelf.def.holds.includes(item.name) : item.def.stack === 'livre' || !!item.def.buildOpen;
   }
 
   /** Va devant le meuble (ouvre sa porte s'il en a une) et y range, un par un, les objets tenus. */
@@ -6702,8 +7193,13 @@ export class Game {
       if (box && pot) add(`Sachet de thé dans ${the(pot.name)}`, () => this.addTeaBag(this.ref(pot)));
       if (held.some((h) => h.def.wipes) && this.puddles().length) add('Essuyer la flaque', () => this.cleanFloor());
       // l'entretien : balai, serpillière, spray, gants, sac poubelle
-      if (held.some((h) => h.def.sweeps) && this.floorMess().length) add('Balayer', () => this.sweepFloor());
-      if (held.some((h) => h.def.mops) && this.puddles().length) add('Passer la serpillière', () => this.mopFloor());
+      if (held.some((h) => h.def.sweeps)) add('Balayer', () => this.sweepFloor());
+      if (held.some((h) => h.def.mops)) add('Passer la serpillière', () => this.mopFloor());
+      if (held.some((h) => h.def.vacuums)) add('Passer l’aspirateur', () => this.vacuumFloor());
+      if (held.some((h) => h.def.dusts)) add('Épousseter', () => this.dustFurniture());
+      if (held.some((h) => h.def.id === 'chiffon')) add('Laver les vitres', () => this.washWindows());
+      const wc = held.some((h) => h.def.scrubsBowl) ? this.nearest((i) => !!i.def.toilet) : undefined;
+      if (wc) add('Brosser la cuvette', () => this.scrubSurface(this.ref(wc)));
       if (held.some((h) => h.def.spray) && this.grime.size) add('Nettoyer au spray', () => this.cleanSurface());
       if (held.some((h) => h.def.gloves) && !this.gloved) add('Enfiler les gants', () => this.putOnGloves());
       if (this.gloved) add('Enlever les gants', () => this.takeOffGloves());
@@ -6788,6 +7284,10 @@ export class Game {
       add(`Sonnerie : ${this.toneOf(item).name} → ${next.name}`, () => this.setRingtone(next.id, ref));
     }
     if (this.grime.has(item) && held.some((h) => h.def.spray)) add('Nettoyer au spray', () => this.cleanSurface(ref));
+    // le ménage, outil en main : épousseter un meuble, frotter un sanitaire ou une table
+    if (held.some((h) => h.def.dusts) && this.hasTop(item)) add('Épousseter', () => this.dustFurniture(ref));
+    if (item.def.toilet && held.some((h) => h.def.scrubsBowl)) add('Brosser la cuvette', () => this.scrubSurface(ref));
+    if ((item.def.wash || item.def.shower || item.def.table) && held.some((h) => h.def.wipes && !h.def.towel)) add('Frotter', () => this.scrubSurface(ref));
     if (item.def.gloves && !this.gloved) add('Enfiler les gants', () => this.putOnGloves());
     // évier
     if (item.def.wash?.dishes && held.some((h) => h.def.dish && h.dirty)) add('Faire la vaisselle', () => this.washDishesAt(item, false));
@@ -7473,6 +7973,7 @@ export class Game {
   private tickNeeds(dt: number): void {
     const hours = this.clock.tick(dt);
     this.tickLife(hours);
+    this.tickDirt(dt, hours);
     const before = this.needs.health;
     this.tickBody(dt, hours);
     this.needs.tick(hours, this.character.lying ? 'sleep' : this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
@@ -7536,8 +8037,8 @@ export class Game {
     }
     const ref = this.ref(item);
     const foods = this.foodsAt(item);
-    // le livre de recettes : le prendre et l'ouvrir (une main libre)
-    if (item.def.id === 'livre-recettes' && !c.carried.includes(item) && !this.shelfOf(item)) add('Lire les recettes', () => this.chain([() => this.take(item, false), () => this.read()]));
+    // le livre de recettes : le prendre (posé, ou dans la bibliothèque) et l'ouvrir (une main libre)
+    if (item.def.id === 'livre-recettes' && !c.carried.includes(item)) add('Lire les recettes', () => this.chain([() => this.take(item, false), () => this.read()]));
     if (egg && (item.def.mixes || item.def.cookware?.holds.includes('œuf au plat'))) add(`Casser l’œuf dans ${the(item.name)}`, () => this.crackEgg(ref));
     if (dry && item.def.mixes) add(`Verser ${the(dry.name)} dedans`, () => this.addToBowl(ref));
     if (tool && item.def.mixes && this.mixes.get(item)?.parts.length) add(tool.name === 'fouet' ? 'Fouetter' : 'Mélanger', () => this.mixBowl(ref));
@@ -8666,6 +9167,8 @@ export class Game {
         if (this.bagless.has(item)) x.sansSac = true;
         if (this.flatCakes.has(item)) x.sansLevure = true;
         if (this.lamps.get(item)?.on) x.lampe = true;
+        const d = this.salissure.levelOf(item);
+        if (d && (d.dust || d.grime)) x.sale = [Math.round(d.dust * 100) / 100, Math.round(d.grime * 100) / 100];
         return x;
       },
       setExtras: (item, x) => {
@@ -8704,6 +9207,18 @@ export class Game {
         if (x.sansSac) this.bagless.add(item);
         if (x.sansLevure) this.flatten(item);
         if (x.lampe) this.setLamp(item, true);
+        const sale = x.sale as unknown;
+        if (Array.isArray(sale) && sale.length === 2 && sale.every((v) => typeof v === 'number')) {
+          this.salissure.soilItem(item, sale[0], 'poussière');
+          this.salissure.soilItem(item, sale[1], 'crasse');
+        }
+      },
+      salissure: {
+        save: () => this.salissure.save(),
+        load: (x) => {
+          this.salissure.load(x);
+          this.salissure.render();
+        },
       },
       perso: this.character,
       clock: this.clock,
