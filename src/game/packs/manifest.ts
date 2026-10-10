@@ -230,6 +230,14 @@ export const PACK_SIZES = {
     "tarte-pommes": [0.24, 0.07, 0.238],
     "vitrine-patisserie": [1.005, 1.214, 1.8],
   },
+  atelier: {
+    "cle-molette": [0.073, 0.032, 0.25],
+    "marteau": [0.122, 0.067, 0.3],
+    "pince": [0.062, 0.019, 0.2],
+    "rabot": [0.083, 0.144, 0.18],
+    "scie": [0.16, 0.07, 0.6],
+    "tournevis": [0.028, 0.032, 0.2],
+  },
 } as const satisfies Record<string, Record<string, readonly [number, number, number]>>;
 
 export type PackId = keyof typeof PACK_SIZES;
