@@ -25,7 +25,28 @@ export type Motion =
   /** Glisse de `distance` (m) le long de l'axe : un tiroir vers l'avant. */
   | { kind: 'slide'; axis: Axis; distance: number }
   /** Se tasse le long de l'axe jusqu'à la part `to` de sa taille, vers son axe : un rideau qu'on ouvre (à 1, tiré). */
-  | { kind: 'gather'; axis: Axis; to: number };
+  | { kind: 'gather'; axis: Axis; to: number }
+  /** Se replie vers son axe en largeur (x et z) jusqu'à la part `to` : la toile d'un parasol (à 1, ouverte). */
+  | { kind: 'fold'; to: number }
+  /** Pousse depuis son axe le long de `axis`, de rien à toute sa taille : un filet d'eau, une flamme. Cachée à 0. */
+  | { kind: 'grow'; axis: Axis }
+  /** S'éclaire : sa couleur propre monte à `color` (à 1, allumée) : une lanterne, une croix de pharmacie. */
+  | { kind: 'glow'; color: number }
+  /**
+   * Ondule comme un tissu au vent, sur toute une période quand la part va de 0 à 1 : chaque point
+   * bouge le long de `push`, d'autant plus qu'il est loin de l'axe le long de `along` (le mât).
+   */
+  | { kind: 'wave'; along: Axis; push: Axis; amp: number; waves: number }
+  /** Tourne de `angle` (rad) autour d'un axe quelconque (vecteur) : les aiguilles d'un cadran de biais. */
+  | { kind: 'spin'; axis: [number, number, number]; angle: number }
+  /** Se remplit : monte depuis son axe (sa base), et s'élargit de la part `from` de sa largeur à toute (verre évasé). Caché à 0. */
+  | { kind: 'fill'; from: number }
+  /** Se mange : rapetisse vers son axe jusqu'à la part `to` de sa taille, puis disparaît à 1 (0 : entier, tel que modélisé). */
+  | { kind: 'shrink'; to: number }
+  /** Change de taille le long de l'axe, depuis son axe, en suivant ces tailles (parts de la sienne) de 0 à 1 : la corde du puits. */
+  | { kind: 'reel'; axis: Axis; sizes: number[] }
+  /** Suit un chemin : décalages (m) depuis sa place, joints en ligne droite de 0 à 1 (le seau du puits). */
+  | { kind: 'path'; points: Array<[number, number, number]> };
 
 /** Pose `part` (sur son axe, au repos) à la part `k` de son mouvement. */
 export function poseMotion(part: THREE.Object3D, motion: Motion, k: number): void {
@@ -34,7 +55,66 @@ export function poseMotion(part: THREE.Object3D, motion: Motion, k: number): voi
   else if (motion.kind === 'slide') {
     const rest = (part.userData.rest ??= part.position.clone()) as THREE.Vector3;
     part.position[motion.axis] = rest[motion.axis] + t * motion.distance;
-  } else part.scale[motion.axis] = THREE.MathUtils.lerp(motion.to, 1, t);
+  } else if (motion.kind === 'gather') part.scale[motion.axis] = THREE.MathUtils.lerp(motion.to, 1, t);
+  else if (motion.kind === 'fold') part.scale.x = part.scale.z = THREE.MathUtils.lerp(motion.to, 1, t);
+  else if (motion.kind === 'grow') {
+    part.scale[motion.axis] = Math.max(t, 1e-3);
+    part.visible = t > 0;
+  } else if (motion.kind === 'glow') glow(part, motion.color, t);
+  else if (motion.kind === 'spin') part.quaternion.setFromAxisAngle(new THREE.Vector3(...motion.axis).normalize(), t * motion.angle);
+  else if (motion.kind === 'fill') {
+    part.scale.y = Math.max(t, 1e-3);
+    part.scale.x = part.scale.z = THREE.MathUtils.lerp(motion.from, 1, t);
+    part.visible = t > 0;
+  } else if (motion.kind === 'shrink') {
+    part.scale.setScalar(THREE.MathUtils.lerp(1, motion.to, t));
+    part.visible = t < 1;
+  } else if (motion.kind === 'reel') part.scale[motion.axis] = Math.max(along(motion.sizes, t), 1e-3);
+  else if (motion.kind === 'path') {
+    const rest = (part.userData.rest ??= part.position.clone()) as THREE.Vector3;
+    const n = motion.points.length - 1;
+    const i = Math.min(Math.floor(t * n), n - 1);
+    const a = new THREE.Vector3(...motion.points[i]), b = new THREE.Vector3(...motion.points[i + 1]);
+    part.position.copy(rest).add(a.lerp(b, t * n - i));
+  } else wave(part, motion, k - Math.floor(k));
+}
+
+/** La valeur à la part `t` d'une suite jointe en ligne droite. */
+function along(values: number[], t: number): number {
+  const n = values.length - 1;
+  const i = Math.min(Math.floor(t * n), n - 1);
+  return THREE.MathUtils.lerp(values[i], values[i + 1], t * n - i);
+}
+
+/** Couleur propre des matériaux de la pièce (à elle : `packRig` les lui donne). */
+function glow(part: THREE.Object3D, color: number, t: number): void {
+  const c = new THREE.Color(color).multiplyScalar(t);
+  part.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.MeshToonMaterial | undefined;
+    if (m?.emissive) m.emissive.copy(c);
+  });
+}
+
+/** Le tissu ondulé à la phase `t` (0 à 1) : ses sommets à lui (`packRig` les lui donne), au repos gardés. */
+function wave(part: THREE.Object3D, m: Extract<Motion, { kind: 'wave' }>, t: number): void {
+  const ax = { x: 0, y: 1, z: 2 } as const;
+  const a = ax[m.along], p = ax[m.push];
+  part.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const pos = o.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const rest = (o.userData.rest ??= Float32Array.from(pos.array as Float32Array)) as Float32Array;
+    let len = (o.userData.len as number | undefined) ?? 0;
+    if (!len) {
+      for (let i = 0; i < pos.count; i++) len = Math.max(len, Math.abs(rest[i * 3 + a]));
+      o.userData.len = len ||= 1;
+    }
+    const arr = pos.array as Float32Array;
+    for (let i = 0; i < pos.count; i++) {
+      const d = Math.abs(rest[i * 3 + a]) / len;
+      arr[i * 3 + p] = rest[i * 3 + p] + m.amp * d * Math.sin(2 * Math.PI * (m.waves * d - t));
+    }
+    pos.needsUpdate = true;
+  });
 }
 
 /**
