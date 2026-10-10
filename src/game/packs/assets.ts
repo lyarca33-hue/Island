@@ -12,7 +12,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { createToonMaterial } from '../toon';
+import { poseMotion } from '../items/rigs';
 import { PACK_SIZES, type ModelName, type PackId } from './manifest';
+import { packRigOf, type Box, type Make, type PackRig } from './rigs';
 
 export const packUrl = (id: PackId) => `${import.meta.env.BASE_URL}packs/${id}.glb`;
 
@@ -168,4 +170,161 @@ export function packTexture<P extends PackId>(id: P, name: string): THREE.Textur
     if (!map && o instanceof THREE.Mesh) map = (o.material as THREE.MeshToonMaterial).map ?? null;
   });
   return map;
+}
+
+const inBox = (p: THREE.Vector3, [lo, hi]: Box) =>
+  p.x >= lo[0] && p.x <= hi[0] && p.y >= lo[1] && p.y <= hi[1] && p.z >= lo[2] && p.z <= hi[2];
+
+/** Pixels d'une texture (lus une fois) ; null hors navigateur. */
+const pixels = new WeakMap<object, ImageData | null>();
+function pixelsOf(tex: THREE.Texture | null): ImageData | null {
+  const img = tex?.image as (CanvasImageSource & { width: number; height: number }) | undefined;
+  if (!img || typeof document === 'undefined') return null;
+  if (!pixels.has(img)) {
+    let data: ImageData | null = null;
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = img.width;
+      cv.height = img.height;
+      const g = cv.getContext('2d', { willReadFrequently: true })!;
+      g.drawImage(img, 0, 0);
+      data = g.getImageData(0, 0, img.width, img.height);
+    } catch {
+      data = null;
+    }
+    pixels.set(img, data);
+  }
+  return pixels.get(img)!;
+}
+
+/** Luminosité (0 à 1) de la texture au point uv. */
+function lumaAt(px: ImageData, u: number, v: number): number {
+  const x = Math.min(px.width - 1, Math.max(0, Math.floor((u - Math.floor(u)) * px.width)));
+  const y = Math.min(px.height - 1, Math.max(0, Math.floor((v - Math.floor(v)) * px.height)));
+  const o = (y * px.width + x) * 4;
+  return (0.2126 * px.data[o] + 0.7152 * px.data[o + 1] + 0.0722 * px.data[o + 2]) / 255;
+}
+
+/**
+ * Les triangles d'une géométrie sans index (repère du modèle) dont le centre passe le test (et, avec
+ * `bright`, dont la texture est assez claire au centre).
+ */
+function pick(g: THREE.BufferGeometry, keep: (c: THREE.Vector3) => boolean, bright?: { px: ImageData; min: number }): [THREE.BufferGeometry, THREE.BufferGeometry] {
+  const pos = g.getAttribute('position');
+  const uv = g.getAttribute('uv');
+  const yes: number[] = [], no: number[] = [];
+  const c = new THREE.Vector3(), v = new THREE.Vector3();
+  for (let t = 0; t < pos.count / 3; t++) {
+    c.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, t * 3 + k));
+    let ok = keep(c.divideScalar(3));
+    if (ok && bright && uv) {
+      const u = (uv.getX(t * 3) + uv.getX(t * 3 + 1) + uv.getX(t * 3 + 2)) / 3;
+      const w = (uv.getY(t * 3) + uv.getY(t * 3 + 1) + uv.getY(t * 3 + 2)) / 3;
+      ok = lumaAt(bright.px, u, w) >= bright.min;
+    }
+    (ok ? yes : no).push(t);
+  }
+  const take = (tris: number[]) => {
+    const out = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(g.attributes)) {
+      const arr = new Float32Array(tris.length * 3 * a.itemSize);
+      tris.forEach((t, i) => arr.set((a.array as Float32Array).subarray(t * 3 * a.itemSize, (t + 1) * 3 * a.itemSize), i * 3 * a.itemSize));
+      out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize));
+    }
+    return out;
+  };
+  return [take(yes), take(no)];
+}
+
+/** Pièce faite par programme, l'axe à l'origine. */
+function made(m: Make): THREE.Mesh {
+  if (m.shape === 'jet') {
+    const g = new THREE.CylinderGeometry(m.radius * (m.up ? 0.8 : 1), m.radius * (m.up ? 1 : 0.8), m.length, 8, 1, true).translate(0, (m.up ? 1 : -1) * (m.length / 2), 0);
+    const mat = createToonMaterial({ color: m.color, rimStrength: 0 });
+    mat.transparent = true;
+    mat.opacity = m.opacity ?? 0.75;
+    return new THREE.Mesh(g, mat);
+  }
+  if (m.shape === 'flamme') {
+    const g = new THREE.ConeGeometry(m.radius, m.height, 8).translate(0, m.height / 2, 0);
+    const mat = createToonMaterial({ color: 0xffb340, rimStrength: 0 });
+    mat.emissive.set(0xff8a1c);
+    return new THREE.Mesh(g, mat);
+  }
+  // (en anneaux : la surface peut onduler)
+  if (m.shape === 'disque') return new THREE.Mesh(new THREE.RingGeometry(0, m.radius, 32, 8).rotateX(-Math.PI / 2), createToonMaterial({ color: m.color, rimStrength: 0 }));
+  if (m.shape === 'cadran') return new THREE.Mesh(new THREE.CircleGeometry(m.radius, 32).rotateY(m.yaw), createToonMaterial({ color: m.color, rimStrength: 0 }));
+  // l'aiguille, de l'axe vers midi (un peu en arrière de l'axe), à 4 mm devant le cadran
+  const g = new THREE.BoxGeometry(m.width, m.length, 0.004).translate(0, m.length * 0.42, 0.004).rotateY(m.yaw);
+  return new THREE.Mesh(g, createToonMaterial({ color: m.color, rimStrength: 0 }));
+}
+
+/**
+ * Le modèle `name` du pack `id` découpé selon son rig (rigs.ts) : un groupe (repère du modèle, à sa
+ * vraie taille) dont les pièces mobiles sont des enfants nommés, posés sur leur axe et au repos,
+ * prêts pour `poseRig(objet, 'porte', k)`. Rend null si le pack n'est pas chargé ou si le modèle
+ * n'a pas de rig. Les matériaux sont à l'objet (une lumière s'allume seule).
+ */
+export function packRig<P extends PackId>(id: P, name: ModelName<P>): THREE.Group | null {
+  const rig = packRigOf(id, name);
+  const src = loaded.get(id)?.get(name);
+  if (!rig || !src) return null;
+  return cutRig(src, rig);
+}
+
+/** Découpe `src` (un modèle de pack) selon `rig`. */
+export function cutRig(src: THREE.Object3D, rig: PackRig): THREE.Group {
+  const root = src.clone();
+  root.position.set(0, 0, 0);
+  root.rotation.set(0, 0, 0);
+  root.scale.set(1, 1, 1);
+  root.updateMatrixWorld(true);
+  // à plat dans le repère du modèle, un morceau par maillage : le nœud lui-même porte la
+  // décompression des sommets (meshopt), sa matrice est gardée
+  const node = new THREE.Matrix4().compose(src.position, src.quaternion, src.scale);
+  const pieces: Array<{ g: THREE.BufferGeometry; mat: THREE.Material }> = [];
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    g.applyMatrix4(node.clone().multiply(o.matrixWorld));
+    pieces.push({ g, mat: (o.material as THREE.Material).clone() });
+  });
+  const out = new THREE.Group();
+  const side = rig.inside ? THREE.DoubleSide : THREE.FrontSide;
+  for (const p of pieces) p.mat.side = side;
+  for (const [partName, part] of Object.entries(rig.parts)) {
+    const g = new THREE.Group();
+    g.name = partName;
+    const pivot = new THREE.Vector3(...(part.pivot ?? [0, 0, 0]));
+    g.position.copy(pivot);
+    if (part.boxes) {
+      for (const p of pieces) {
+        const keep = (c: THREE.Vector3) => part.boxes!.some((b) => inBox(c, b)) && !(part.not ?? []).some((b) => inBox(c, b));
+        const px = part.bright !== undefined ? pixelsOf((p.mat as THREE.MeshToonMaterial).map) : null;
+        const [mine, rest] = pick(p.g, keep, px ? { px, min: part.bright! } : undefined);
+        p.g = rest;
+        if (!mine.getAttribute('position').count) continue;
+        mine.translate(-pivot.x, -pivot.y, -pivot.z);
+        // une pièce qui s'allume a ses matériaux à elle
+        const mesh = new THREE.Mesh(mine, part.motion?.kind === 'glow' ? p.mat.clone() : p.mat);
+        mesh.castShadow = mesh.receiveShadow = true;
+        g.add(mesh);
+      }
+    }
+    if (part.make) g.add(made(part.make));
+    if (part.motion) g.userData.motion = part.motion;
+    if (part.play) g.userData.play = part.play;
+    if (part.period) g.userData.period = part.period;
+    out.add(g);
+  }
+  for (const p of pieces) {
+    if (!p.g.getAttribute('position').count) continue;
+    const mesh = new THREE.Mesh(p.g, p.mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    out.add(mesh);
+  }
+  // au repos
+  for (const g of out.children) if (g.userData.motion) poseMotion(g, g.userData.motion, 0);
+  return out;
 }
