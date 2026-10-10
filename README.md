@@ -2,7 +2,7 @@
 
 ![Aperçu](apercu.png)
 
-Monde de RP en 3D dans le navigateur : un créateur de personnage, puis une map (un sol d'herbe)
+Monde de RP en 3D dans le navigateur : un créateur de personnage, puis une île (pelouse, plage, falaises, mer et routes)
 où le perso créé se promène, en cel shading avec le rendu HD-2D d'Arena Tactic.
 
 ## Jouer en ligne
@@ -52,7 +52,7 @@ ouvre le créateur, et « Jouer » ramène sur la map.
 
 ### La cuisine
 
-Le perso est dans une cuisine (`src/game/room.ts`), seule sur un sol d'herbe plat, construite avec
+Le perso est dans une cuisine (`src/game/room.ts`), au milieu de l'île (voir plus bas), construite avec
 le kit Tripo (`src/game/kit.ts`, `public/kit/maison.glb`) : sol carrelé, murs en enduit, une porte
 d'entrée en bois qui s'ouvre toute seule quand il s'en approche (on peut sortir sur l'herbe), deux
 fenêtres en bois, un toit en tuiles à deux pans visible de dehors. Les murs tournés vers la caméra
@@ -100,6 +100,21 @@ pour les places, `src/game/items/pieces.ts` pour les fiches, `public/models/<pi�
 Tapis, colonne de douche, miroirs et portemanteau sont du décor fixe (`decor`) ; le reste se prend ou se pousse.
 La télé, retirée avec l'ancienne maison, n'est pas encore rebranchée. La vessie baisse : en dessous de 18, le perso est
 prévenu ; à zéro, c'est l'accident.
+
+### L'île
+
+Autour de la maison, une île faite par le jeu, sans modèle à charger (`src/game/ile.ts`) : le
+carré où l'on marche (±46 m) reste plat et l'île se dessine autour.
+
+- **Pelouse** tondue en bandes autour de la maison, herbe libre ailleurs (saisons et neige comme avant).
+- **Plage** au sud et au sud-ouest : sable peint, mouillé au bord de l'eau ; on marche jusqu'à l'eau.
+- **Falaises** au nord et au nord-ouest : une paroi de roche à strates de 7 à 11 m au bord du carré,
+  de l'herbe en haut, et de l'autre côté la paroi tombe dans la mer. **Côte rocheuse** basse à l'est.
+- **Mer** : turquoise au bord, bleu profond au large, écume du rivage et au pied des rochers,
+  vagues qui arrivent sur la plage ; plus agitée sous la pluie.
+- **Routes** : une route côtière goudronnée qui fait le tour de l'île, une allée du garage à la
+  route et un chemin de terre depuis la porte d'entrée. Pour en ajouter une : quelques points dans
+  `WAYS` (ile.ts), la route suit la courbe.
 
 ### Les ordres
 

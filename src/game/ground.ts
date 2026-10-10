@@ -1,14 +1,11 @@
 /**
- * Sol de la map vide : un grand plan d'herbe, texture peinte par programme (taches de
- * couleur douces + petits brins), en cel shading comme les persos pour recevoir des ombres nettes.
+ * Le sol : la texture d'herbe peinte par programme (taches de couleur douces + petits brins), que
+ * le terrain de l'île répète (ile.ts), et le plan invisible qui reçoit les clics.
  */
 import * as THREE from 'three';
-import { createToonMaterial } from './toon';
 
 /** Demi-côté du sol (m) : le perso ne peut pas sortir de [-GROUND_HALF + 2, GROUND_HALF - 2]. */
 export const GROUND_HALF = 60;
-/** Côté couvert par une répétition de la texture (m). */
-const TILE_M = 8;
 
 /** Petit générateur pseudo-aléatoire déterministe (même sol à chaque lancement). */
 function rng(seed: number): () => number {
@@ -19,7 +16,8 @@ function rng(seed: number): () => number {
   };
 }
 
-function grassTexture(): THREE.CanvasTexture {
+/** Herbe : le terrain de l'île en pose une répétition tous les 8 m. */
+export function grassTexture(): THREE.CanvasTexture {
   const size = 512;
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
@@ -54,38 +52,19 @@ function grassTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set((GROUND_HALF * 2) / TILE_M, (GROUND_HALF * 2) / TILE_M);
   tex.anisotropy = 8;
   return tex;
 }
 
+/**
+ * Le sol sous la souris : un grand plan à y = 0, invisible (le terrain visible est l'île, voir
+ * ile.ts). Le carré où l'on marche est plat : un plan suffit pour savoir où l'on clique.
+ */
 export function createGround(): THREE.Mesh {
-  const geo = new THREE.PlaneGeometry(GROUND_HALF * 2, GROUND_HALF * 2);
+  const geo = new THREE.PlaneGeometry(GROUND_HALF * 8, GROUND_HALF * 8);
   geo.rotateX(-Math.PI / 2);
-  const mat = createToonMaterial({ color: 0xffffff, map: grassTexture(), rimStrength: 0 });
-  // neige : l'herbe blanchit, d'abord ses touffes claires, puis tout le sol
-  const snow = { value: 0 };
-  mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uSnow = snow;
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uSnow;')
-      .replace(
-        '#include <map_fragment>',
-        `#include <map_fragment>
-         float grassL = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.84, 0.92), clamp(uSnow * (0.7 + grassL * 2.5), 0.0, 1.0));`,
-      );
-  };
-  mat.customProgramCacheKey = () => 'ground-snow';
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.userData.snow = snow;
-  mesh.receiveShadow = true;
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial());
+  mesh.visible = false;
   mesh.name = 'ground';
   return mesh;
-}
-
-/** Saison du sol : teinte de l'herbe (multipliée à sa texture) et part de neige (0 à 1). */
-export function setGroundSeason(ground: THREE.Mesh, grass: [number, number, number], snow: number): void {
-  (ground.material as THREE.MeshToonMaterial).color.setRGB(grass[0], grass[1], grass[2]);
-  (ground.userData.snow as { value: number }).value = snow;
 }

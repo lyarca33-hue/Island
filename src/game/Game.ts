@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import type { Recipe } from '../creator/recipe';
 import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
-import { createGround, GROUND_HALF, setGroundSeason } from './ground';
+import { createGround, GROUND_HALF } from './ground';
+import { createIsland, type Island } from './ile';
 import { moveButton } from './items/buttons';
 import { loadInterior } from './items/interior';
 import { loadKit } from './kit';
@@ -501,6 +502,7 @@ export class Game {
   /** Sacs de courses posés : les aliments (noms) encore dedans. */
   private bags = new Map<WorldItem, string[]>();
   private ground: THREE.Mesh;
+  private island: Island;
   /** Sauter, grimper sur un meuble (mouvements.ts). */
   private mouvements: Mouvements;
   /** Le vélo : monter, rouler, descendre (velo.ts). */
@@ -713,6 +715,9 @@ export class Game {
 
     this.ground = createGround();
     this.scene.add(this.ground);
+    // l'île : pelouse, plage, falaises, mer et routes autour du carré où l'on marche
+    this.island = createIsland();
+    this.scene.add(this.island.root);
     // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
     loadInterior()
       .then(() => {
@@ -7765,8 +7770,8 @@ export class Game {
     // météo : pluie, flocons, gouttes aux vitres ; sol plus sombre mouillé, blanchi par la neige tombée
     const w = this.weather;
     w.update(this.clock, dt, (dt * this.clock.speed) / 3600);
-    const damp = 1 - 0.28 * w.wet;
-    setGroundSeason(this.ground, [look.grass[0] * damp, look.grass[1] * damp, look.grass[2] * damp], Math.max(look.snow, w.cover));
+    this.island.setSeason(look.grass, Math.max(look.snow, w.cover), w.wet);
+    this.island.update(dt, Math.max(w.rain, w.cloud * 0.4));
     this.rainView.copy(toCamera);
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
