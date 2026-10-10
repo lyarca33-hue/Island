@@ -69,7 +69,7 @@ const INNER_MAX = 12;
 
 /** Boissons chaudes, et boissons fraîches (du frigo). */
 const HOT_DRINKS = new Set(['café', 'thé', 'eau chaude', 'chocolat chaud', 'soupe']);
-const COLD_DRINKS = new Set(["jus d'orange", 'soda', 'eau gazeuse', 'vin', 'lait', 'jus de fruits']);
+const COLD_DRINKS = new Set(["jus d'orange", 'soda', 'eau gazeuse', 'vin', 'lait', 'jus de fruits', 'jus de pomme', 'jus de poire', 'jus de raisin', 'smoothie', 'smoothie à la banane', 'smoothie aux fraises', 'lait au chocolat']);
 
 /** Seuils des états du corps (°C). */
 const HYPO = 35;

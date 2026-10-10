@@ -38,7 +38,7 @@
   **CC0**. Plus affiché : l'œuf au plat et la pizza ont maintenant leur modèle Tripo (`plats.glb`).
 - Aliments texturés (`public/packs/aliments.glb`, 42 aliments) : modèles générés avec [Tripo](https://www.tripo3d.ai)
   (licence d'usage commercial), allégés et regroupés par `tools/build_aliments_assets.mjs`.
-- Plats cuisinés, vaisselle et emballages texturés (`public/packs/plats.glb`, 34 modèles : steak frites, pizza, gâteau, théière, passoire…) :
+- Plats cuisinés, vaisselle et emballages texturés (`public/packs/plats.glb`, 35 modèles : steak frites, pizza, gâteau, théière, passoire, livre de recettes…) :
   modèles générés avec [Tripo](https://www.tripo3d.ai) par Greg, mêmes conditions que les aliments.
 - Kit de la maison (`public/kit/maison.glb`) et meubles et objets des pièces
   (`public/models/cuisine.glb`, `salon.glb`, `chambre.glb`, `salle-de-bain.glb`, `entree.glb`, `garage.glb`) : modèles générés avec [Tripo](https://www.tripo3d.ai) (licence d'usage

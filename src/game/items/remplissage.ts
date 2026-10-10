@@ -23,7 +23,7 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
   ['placard-haut', 0, ['assiette', 'assiette', 'assiette', 'assiette', 'bol', 'bol', 'tasse', 'tasse']],
   ['placard-haut', 1, ['verre', 'verre', 'verre', 'verre', 'tasse', 'tasse', 'carafe']],
   // sous l'évier : l'entretien, le moule, la râpe et la pierre à pizza
-  ['placard', 0, ['pastilles', 'sacs-poubelle', 'spray', 'gants', 'moule', 'rape', 'pierre-pizza']],
+  ['placard', 0, ['pastilles', 'sacs-poubelle', 'spray', 'gants', 'chiffon', 'plumeau', 'moule', 'rape', 'pierre-pizza']],
   // sous le plan de travail, à côté de la gazinière : de quoi cuisiner
   ['plan-de-travail', 0, ['planche', 'saladier', 'passoire', 'plat-four']],
   // au mur : le couteau à sa barre aimantée, les ustensiles à leurs crochets
@@ -55,10 +55,11 @@ export const START_CONTENTS: Array<[string, number, string[]]> = [
   ],
   // le garage : le râteau et la bêche pendus à leur rangement
   ['rangement-outils', 0, ['rateau', 'beche']],
-  // la chambre : la chemise sur son cintre et le linge dans l'armoire ; un livre dans chaque table de nuit
-  ['armoire', 0, ['cintre', 'pull', 'serviette']],
+  // la chambre : un livre dans chaque table de nuit (l'armoire n'a que ses habits en silhouette, pieces.ts)
   ['table-de-nuit', 0, ['livre-vert']],
   ['table-de-nuit', 1, ['livre-ocre']],
+  // le livre de recettes, debout dans la bibliothèque du salon : le lire ouvre la liste des recettes
+  ['bibliotheque', 0, ['livre-recettes']],
 ];
 
 /** Couleur d'une silhouette quand l'objet n'a qu'une texture qu'on ne peut pas lire (neutre, carton). */

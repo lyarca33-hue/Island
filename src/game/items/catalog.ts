@@ -248,6 +248,8 @@ export interface ItemDef {
   stirs?: boolean;
   /** Râpe : râpe le fromage tenu dans l'autre main au-dessus d'un plat. */
   grates?: boolean;
+  /** Passoire : posée dans l'évier, elle garde ce qu'on égoutte au-dessus ; elle ne va pas sur le feu. */
+  strains?: boolean;
   /** Pot de l'étagère à épices : le mot du geste (« du sel ») quand on assaisonne avec. */
   spice?: string;
   /** Saladier : on y casse les œufs, verse lait et farine, puis on mélange (Game.mixes). */
@@ -269,6 +271,12 @@ export interface ItemDef {
   sweeps?: boolean;
   /** Serpillière : essuie d'un coup les grandes flaques. */
   mops?: boolean;
+  /** Aspirateur : avale la poussière et les miettes du sol (geste en va-et-vient, voir chores.ts). */
+  vacuums?: boolean;
+  /** Plumeau : époussette le dessus des meubles. */
+  dusts?: boolean;
+  /** Brosse des WC : frotte la cuvette. */
+  scrubsBowl?: boolean;
   /** Conteneur dehors : on y jette les sacs poubelle ; le camion le vide chaque matin. */
   outdoor?: boolean;
   /** Spray nettoyant : avec l'éponge, nettoie le plan de travail et la gazinière sales. */

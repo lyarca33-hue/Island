@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/Game';
-import { runIntents, type Intent } from '../orders/tasks';
+import { BOOK_RECIPES, runIntents, type Intent } from '../orders/tasks';
 
 type Entry = ReturnType<Game['recipeBook']>[number];
 
 /**
  * Le livre de recettes : toutes les recettes, ce qui en manque à la maison, et comment les faire.
- * « Préparer » envoie l'ordre au perso (comme « fais une omelette »). Ouvert en lisant le livre de
+ * « Préparer » fait faire la recette au perso, de bout en bout (orders/tasks.ts, BOOK_RECIPES). Ouvert en lisant le livre de
  * recettes de la cuisine (fenêtre), ou dans le menu (`inline`).
  */
 export function RecipeBook({ game, inline, onClose }: { game: Game; inline?: boolean; onClose?: () => void }) {
@@ -23,10 +23,14 @@ export function RecipeBook({ game, inline, onClose }: { game: Game; inline?: boo
   }, [game]);
 
   const prepare = async (e: Entry) => {
-    const intent: Intent | null = e.task ? { kind: e.task } : e.plat ? { kind: 'preparer', plat: e.plat } : null;
+    const intent: Intent | null = e.plat ? { kind: 'preparer', plat: e.plat } : BOOK_RECIPES.includes(e.name) ? { kind: 'recette', nom: e.name } : null;
     if (!intent || busy) return;
     setBusy(e.name);
-    const r = await runIntents(game, [intent], () => {});
+    // le livre tenu (on le lit) : remis d'abord à sa place dans la bibliothèque
+    const w = game.describe();
+    const book = w.objets.find((o) => o.nom === 'livre de recettes' && w.enMain.includes(o.ref));
+    const first: Intent[] = book ? [{ kind: 'ranger_place', ref: book.ref }] : [];
+    const r = await runIntents(game, [...first, intent], () => {});
     setBusy(null);
     game.onNotice?.(r.ok ? `${e.name.charAt(0).toUpperCase()}${e.name.slice(1)} : c’est fait.` : r.message);
   };
@@ -53,7 +57,7 @@ export function RecipeBook({ game, inline, onClose }: { game: Game; inline?: boo
                   {e.extras.length > 0 && <small> · en plus si tu en as : {e.extras.join(', ')}</small>}
                 </div>
                 <p>{e.how}</p>
-                {(e.task || e.plat) && <button onClick={() => prepare(e)} disabled={!!busy}>{busy === e.name ? 'En cours…' : 'Préparer'}</button>}
+                {(e.plat || BOOK_RECIPES.includes(e.name)) && <button onClick={() => prepare(e)} disabled={!!busy}>{busy === e.name ? 'En cours…' : 'Préparer'}</button>}
               </div>
             )}
           </li>

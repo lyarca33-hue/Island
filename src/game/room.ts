@@ -337,6 +337,8 @@ export class Room {
    * Jamais dessinées elles-mêmes : la pièce du perso les prête aux projecteurs de Game (windowLights).
    */
   readonly winLights: THREE.SpotLight[] = [];
+  /** Vitres des fenêtres, vues du dedans : leur milieu (monde, au ras du mur) et la normale vers la pièce (à laver). */
+  readonly panes: Array<{ at: THREE.Vector3; n: THREE.Vector3; size: number }> = [];
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
   /** Ce que le kit Tripo remplace (dress) : le sol, les pans du toit, les fenêtres faites par programme. */
@@ -384,6 +386,13 @@ export class Room {
     this.addWall('ouest', za, zb, on('ouest'));
     this.addWall('est', za, zb, on('est'));
     for (const o of windows) this.addWindow(this.wall(o.wall), o);
+    for (const o of windows) {
+      const [nx, nz] = WALLS[o.wall].n;
+      const u = (o.u0 + o.u1) / 2, y = (o.y0 + o.y1) / 2;
+      const r = this.rect;
+      const at = nz ? new THREE.Vector3(u, y, nz > 0 ? r.z0 : r.z1) : new THREE.Vector3(nx > 0 ? r.x0 : r.x1, y, u);
+      this.panes.push({ at, n: new THREE.Vector3(nx, 0, nz), size: Math.min(o.u1 - o.u0, o.y1 - o.y0) });
+    }
     for (const d of spec.doors) this.addDoorway(d);
 
     spec.decor?.(this, anchor);
@@ -1233,6 +1242,8 @@ export const KITCHEN: RoomSpec = {
     // le pain sur la table : la miche, et la baguette en travers
     ['pain', 'table', -0.2, 0.08],
     ['baguette', 'table', 0.12, -0.1, Math.PI / 2],
+    // l'éponge à côté de l'évier
+    ['eponge', 'placard', 0.16, 0.06],
   ],
   items: [
     // les placards hauts, au mur au-dessus des plans de travail (le haut au ras de la fenêtre)
@@ -1247,5 +1258,9 @@ export const KITCHEN: RoomSpec = {
     ['table', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z, 0],
     ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z - 0.5, 0],
     ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z + 0.5, Math.PI],
+    // le ménage, dans le coin à côté de la porte de l'entrée : le seau et sa serpillière, le balai
+    ['seau', ROOM.x0 + 0.24, 0, ROOM.z1 - 0.24, 0],
+    ['serpilliere', ROOM.x0 + 0.24, 0.02, ROOM.z1 - 0.24, 0],
+    ['balai', ROOM.x0 + 0.55, 0, ROOM.z1 - 0.14, 0],
   ],
 };
