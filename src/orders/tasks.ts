@@ -7,6 +7,7 @@ import type { Game, WorldObject } from '../game/Game';
 import { CONDIMENTS } from '../game/items/condiments';
 import { DISHES, RECIPE_BY_DISH } from '../game/items/recipes';
 import { ITEMS } from '../game/items/catalog';
+import { DIRTY } from '../game/salissure';
 import { perform } from './actions';
 
 export type Intent =
@@ -72,9 +73,15 @@ export type Intent =
   | { kind: 'empiler' }
   | { kind: 'essuyer_sol' }
   /** L'entretien : balai, serpillière, spray et éponge, gants, poubelle au conteneur, sac neuf, horloge. */
-  | { kind: 'balayer' }
-  | { kind: 'serpillere' }
+  | { kind: 'balayer'; piece?: string }
+  | { kind: 'serpillere'; piece?: string }
   | { kind: 'nettoyer'; ref?: string }
+  /** Le ménage des zones salies : l'aspirateur, la poussière, les vitres (et le miroir), dans la pièce `piece` ou sur le meuble `ref`. */
+  | { kind: 'aspirateur'; piece?: string; ref?: string }
+  | { kind: 'poussiere'; piece?: string; ref?: string }
+  | { kind: 'vitres'; piece?: string; ref?: string }
+  /** Tout le ménage : chaque zone sale de la pièce `piece` (celle du perso si `ici`, sinon toute la maison), avec le bon geste. */
+  | { kind: 'menage'; piece?: string; ici?: boolean }
   | { kind: 'gants'; mettre: boolean }
   | { kind: 'sortir_poubelle' }
   | { kind: 'sac_neuf'; ref?: string }
@@ -377,6 +384,66 @@ async function take(game: Game, act: Act, ref: string): Promise<void> {
 function nearestNamed(game: Game, nom: string): WorldObject | undefined {
   const w = world(game);
   return w.objets.filter((o) => o.nom === nom).sort((a, b) => +!w.enMain.includes(a.ref) - +!w.enMain.includes(b.ref) || +a.ou.includes(', sale') - +b.ou.includes(', sale') || a.distance - b.distance)[0];
+}
+
+/** Va dans la pièce `piece` si le perso n'y est pas déjà. */
+async function goToRoom(game: Game, act: Act, piece?: string): Promise<void> {
+  if (piece && game.roomName !== piece) await act('aller_piece', { piece });
+}
+
+/** Les sanitaires : ils se frottent (brosse WC, éponge) plutôt qu'ils ne s'époussettent. */
+const SANITARY = new Set(['toilettes', 'lavabo', 'douche', 'évier']);
+/** Ce qui ne se lave pas : on passe l'aspirateur dessus (et autour). */
+const FABRIC = new Set(['canapé', 'fauteuil', 'lit', 'tapis']);
+
+/** Les meubles sales (poussière ou crasse au-delà du seuil) de la pièce `piece` (toute la maison sinon), les plus proches d'abord. */
+function dirtyItems(game: Game, piece: string | undefined, sorte: 'poussiere' | 'crasse'): string[] {
+  const near = new Map(world(game).objets.map((o) => [o.ref, o.distance]));
+  return Object.entries(game.dirt().meubles)
+    .filter(([ref, d]) => d[sorte] >= DIRTY && (!piece || game.roomOf(ref) === piece))
+    .map(([ref]) => ref)
+    .sort((a, b) => (near.get(a) ?? 99) - (near.get(b) ?? 99));
+}
+
+/** « Nettoie les toilettes », « frotte le lavabo », « nettoie la table basse » : le bon geste pour ce meuble. */
+async function cleanThing(game: Game, act: Act, ref?: string): Promise<void> {
+  const o = ref ? world(game).objets.find((x) => x.ref === ref) : undefined;
+  const d = ref ? game.dirtOf(ref) : null;
+  if (ref) await goToRoom(game, act, game.roomOf(ref) ?? undefined);
+  if (o && SANITARY.has(o.nom)) return act('frotter', { objet: o.ref });
+  if (o && FABRIC.has(o.nom) && !d) return act('aspirer');
+  if (o && d && d.poussiere > d.crasse) return act('depoussierer', { objet: o.ref });
+  // plan de travail, gazinière, îlot : au spray et à l'éponge
+  return act('nettoyer', ref ? { objet: ref } : {});
+}
+
+/**
+ * « Fais le ménage » : dans chaque pièce sale (celle du perso d'abord, ou seulement `piece`), le balai
+ * sur la poussière, la serpillière sur les traces, les sanitaires frottés, puis la poussière des meubles.
+ */
+async function houseClean(game: Game, act: Act, piece?: string): Promise<void> {
+  const here = game.roomName;
+  const rooms = piece ? [piece] : Object.keys(game.dirt().sols).sort((a, b) => +(b === here) - +(a === here));
+  let done = 0;
+  for (const room of rooms) {
+    const tasks: Array<[string, Record<string, string>]> = [];
+    if (game.dirtiestSpot(room, 'balai')) tasks.push(['balayer', {}]);
+    if (game.dirtiestSpot(room, 'serpillière')) tasks.push(['serpillere', {}]);
+    for (const ref of dirtyItems(game, room, 'crasse')) tasks.push([SANITARY.has(world(game).objets.find((o) => o.ref === ref)?.nom ?? '') ? 'frotter' : 'nettoyer', { objet: ref }]);
+    for (const ref of dirtyItems(game, room, 'poussiere')) tasks.push(['depoussierer', { objet: ref }]);
+    if (!tasks.length) continue;
+    await goToRoom(game, act, room);
+    for (const [name, args] of tasks) {
+      // un geste qui rate (outil introuvable) n'arrête pas le ménage
+      try {
+        await act(name, args);
+        done++;
+      } catch (e) {
+        if ((e as Error).message === 'Interrompu.') throw e;
+      }
+    }
+  }
+  if (!done) game.onNotice?.(piece ? `${piece[0].toUpperCase()}${piece.slice(1)} : rien à nettoyer, c’est propre.` : 'Rien à nettoyer : la maison est propre.');
 }
 
 /** Prend l'outil `nom` (le premier qui existe de la liste), en gardant en main ce que vérifie `keep`. */
@@ -993,17 +1060,40 @@ async function runOne(game: Game, intent: Intent, act: Act): Promise<void> {
       await take(game, act, sponge.ref);
       return act('essuyer_sol');
     }
+    // le ménage : chaque geste va chercher son outil, et travaille dans la pièce où est le perso
     case 'balayer':
-      await takeTool(game, act, ['balai']);
+      await goToRoom(game, act, intent.piece);
       return act('balayer');
     case 'serpillere':
-      await takeTool(game, act, ['serpillière']);
+      await goToRoom(game, act, intent.piece);
       return act('serpillere');
-    case 'nettoyer': {
-      const spray = await takeTool(game, act, ['spray nettoyant']);
-      await takeTool(game, act, ['éponge'], (ref) => ref === spray);
-      return act('nettoyer', intent.ref ? { objet: intent.ref } : {});
+    case 'aspirateur':
+      await goToRoom(game, act, intent.piece ?? (intent.ref ? game.roomOf(intent.ref) ?? undefined : undefined));
+      return act('aspirer');
+    case 'poussiere': {
+      if (intent.ref) {
+        await goToRoom(game, act, game.roomOf(intent.ref) ?? undefined);
+        return act('depoussierer', { objet: intent.ref });
+      }
+      // « fais la poussière (dans la chambre) » : chaque meuble poussiéreux, pièce par pièce
+      const dusty = dirtyItems(game, intent.piece, 'poussiere');
+      if (!dusty.length) {
+        game.onNotice?.(`Pas de poussière${intent.piece ? ` : ${intent.piece}` : ''}.`);
+        return;
+      }
+      for (const ref of dusty) {
+        await goToRoom(game, act, game.roomOf(ref) ?? undefined);
+        await act('depoussierer', { objet: ref });
+      }
+      return;
     }
+    case 'vitres':
+      await goToRoom(game, act, intent.ref === 'miroir' ? 'salle de bain' : intent.piece);
+      return act('vitres', intent.ref ? { objet: intent.ref } : {});
+    case 'nettoyer':
+      return cleanThing(game, act, intent.ref);
+    case 'menage':
+      return houseClean(game, act, intent.piece ?? (intent.ici ? game.roomName ?? undefined : undefined));
     case 'gants':
       if (intent.mettre) {
         await freeHands(game, act);

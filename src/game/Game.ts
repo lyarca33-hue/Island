@@ -1723,6 +1723,12 @@ export class Game {
     return this.rooms.find((r) => r.contains(p))?.spec.name ?? null;
   }
 
+  /** La pièce où se trouve l'objet `ref` (pour y envoyer le perso), ou null. */
+  roomOf(ref: string): string | null {
+    const item = this.byRef(ref);
+    return item ? (this.rooms.find((r) => r.contains(item.object.position))?.spec.name ?? null) : null;
+  }
+
   /** Monte sur le vélo (mains vides), comme « Monter sur le vélo » au menu. */
   rideBike(running = false): boolean {
     const bike = this.items.find((i) => i.def.bike);
