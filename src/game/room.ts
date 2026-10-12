@@ -28,6 +28,7 @@ import { lightAllPasses } from './postfx';
 import { kitParts, PlasterSheet, tileRoof, type Kit } from './kit';
 import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
+import type { SightWall } from './brouillard';
 
 /** Rectangle intérieur d'une pièce (m) : x de x0 à x1, z de z0 à z1. Le fond (nord) est à z0. */
 export interface Rect {
@@ -404,6 +405,59 @@ export class Room {
     }
     this.buildRoof();
     this.mergeGhosts();
+    this.buildSight(windows);
+  }
+
+  /**
+   * Murs vus de dessus pour le brouillard de guerre (brouillard.ts), au milieu de leur épaisseur :
+   * les morceaux pleins arrêtent la vue ; une fenêtre la laisse passer (sauf rideaux tirés), un
+   * passage aussi, une porte selon qu'elle est ouverte.
+   */
+  private sight: Array<{ ax: number; az: number; bx: number; bz: number; clear: () => number }> = [];
+
+  private buildSight(windows: Opening[]): void {
+    const { x0, x1, z0, z1 } = this.rect;
+    const h = WALL_T / 2, t = WALL_T;
+    // ligne de chaque mur et son étendue (le long de x pour nord et sud, de z pour est et ouest)
+    const lines: Record<WallName, { at: number; a: number; b: number }> = {
+      nord: { at: z0 - h, a: x0 - t, b: x1 + t },
+      sud: { at: z1 + h, a: x0 - t, b: x1 + t },
+      ouest: { at: x0 - h, a: z0 - t, b: z1 + t },
+      est: { at: x1 + h, a: z0 - t, b: z1 + t },
+    };
+    const gaps: Array<{ wall: WallName; u0: number; u1: number; clear: () => number }> = [];
+    let leaf = 0, lift = 0, curtain = 0;
+    for (const d of this.spec.doors) {
+      const clear = d.garage
+        ? ((l) => () => l.open)(this.lifts[lift++])
+        : d.leaf || d.inner
+          ? ((l) => () => l.open)(this.leaves[leaf++])
+          : () => 1;
+      gaps.push({ wall: d.wall, u0: d.u0, u1: d.u1, clear });
+    }
+    for (const o of windows) {
+      const c = o.curtain !== undefined ? this.curtains[curtain++] : null;
+      gaps.push({ wall: o.wall, u0: o.u0, u1: o.u1, clear: c ? () => 1 - c.k : () => 1 });
+    }
+    for (const name of Object.keys(lines) as WallName[]) {
+      const { at, a, b } = lines[name];
+      const seg = (u0: number, u1: number, clear: () => number) => {
+        if (u1 - u0 < 1e-3) return;
+        this.sight.push(name === 'nord' || name === 'sud' ? { ax: u0, az: at, bx: u1, bz: at, clear } : { ax: at, az: u0, bx: at, bz: u1, clear });
+      };
+      let u = a;
+      for (const g of gaps.filter((g) => g.wall === name).sort((p, q) => p.u0 - q.u0)) {
+        seg(u, g.u0, () => 0);
+        seg(g.u0, g.u1, g.clear);
+        u = Math.max(u, g.u1);
+      }
+      seg(u, b, () => 0);
+    }
+  }
+
+  /** Murs de la pièce pour le brouillard de guerre, marqués du numéro `room` de la pièce. */
+  sightWalls(room: number): SightWall[] {
+    return this.sight.map((w) => ({ ...w, room }));
   }
 
   /**

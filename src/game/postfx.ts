@@ -16,6 +16,7 @@
  * masque flouté, rangé dans le canal alpha du bloom (même passes, rien de plus à dessiner).
  */
 import * as THREE from 'three';
+import type { FogOfWar } from './brouillard';
 
 /** Calque des maillages de persos : contour limité à la silhouette. */
 export const LAYER_CHARACTER = 4;
@@ -187,6 +188,8 @@ export class PostFx {
         sharpen: { value: 0.5 },
         lift: { value: new THREE.Vector3(0.0, 0.004, 0.014) }, gain: { value: new THREE.Vector3(1.05, 1.0, 0.95) },
         saturation: { value: 1.12 },
+        fogOn: { value: 0 }, tFog: { value: null }, fogBox: { value: new THREE.Vector3() },
+        fogInvVP: { value: new THREE.Matrix4() }, fogTime: { value: 0 }, fogNight: { value: 0 },
       },
       vertexShader: VS,
       fragmentShader: `
@@ -195,6 +198,14 @@ export class PostFx {
         uniform vec2 texel; uniform float near; uniform float range; uniform float ink; uniform float bloom; uniform float aspect;
         uniform float sharpen;
         uniform vec3 lift; uniform vec3 gain; uniform float saturation; varying vec2 vUv;
+        uniform float fogOn; uniform sampler2D tFog; uniform vec3 fogBox; uniform mat4 fogInvVP;
+        uniform float fogTime; uniform float fogNight;
+        // bruit de valeur doux (brume qui dérive lentement dans le brouillard de guerre)
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vnoise(vec2 p){
+          vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0)), f.x), f.y);
+        }
         // caméra orthographique : profondeur linéaire
         float lin(float raw){ return near + raw * range; }
         float raw(vec2 o){ return texture2D(tDepth, vUv + o * texel).r; }
@@ -237,6 +248,22 @@ export class PostFx {
             c = mix(c, texture2D(tChar, vUv).rgb * 0.9 + aura * 0.1, hid * 0.7);
             c += aura * smoothstep(0.0, 0.5, b.a) * (1.0 - hid * 0.8) * 0.45;
           }
+          if (fogOn > 0.5 && r0 < 0.9999) {
+            // brouillard de guerre (brouillard.ts) : position du pixel dans le monde, d'après sa
+            // profondeur (vaut pour une caméra orthographique comme pour une vue à la première personne)
+            vec4 wp = fogInvVP * vec4(vUv * 2.0 - 1.0, r0 * 2.0 - 1.0, 1.0);
+            vec2 xz = wp.xz / wp.w;
+            vec2 f = texture2D(tFog, (xz - fogBox.xy) * fogBox.z).rg;
+            if (f.r < 0.999) {
+              float grey = dot(c, vec3(0.2126, 0.7152, 0.0722));
+              float drift = vnoise(xz * 0.35 + vec2(fogTime * 0.05, fogTime * 0.03)) * 0.6 + vnoise(xz * 0.9 - fogTime * 0.04) * 0.4;
+              vec3 mist = mix(vec3(0.55, 0.6, 0.68), vec3(0.05, 0.07, 0.13), fogNight);
+              // déjà vu : souvenir terne et assombri ; jamais vu : presque noyé dans la brume
+              vec3 known = mix(vec3(grey), c, 0.3) * 0.5 + mist * (0.1 + 0.08 * drift);
+              vec3 unknown = mix(vec3(grey), c, 0.1) * 0.16 + mist * (0.12 + 0.1 * drift);
+              c = mix(mix(unknown, known, f.g), c, f.r);
+            }
+          }
           c = c * gain + lift;
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
           c = mix(vec3(l), c, saturation);
@@ -249,6 +276,22 @@ export class PostFx {
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.finalMat);
     this.quad.frustumCulled = false;
     this.quadScene.add(this.quad);
+  }
+
+  private fog: FogOfWar | null = null;
+
+  /** Brouillard de guerre lu par la passe finale (null : tout se voit). */
+  setFog(fog: FogOfWar | null): void {
+    this.fog = fog;
+    const u = this.finalMat.uniforms;
+    u.fogOn.value = fog ? 1 : 0;
+    u.tFog.value = fog?.texture ?? null;
+    if (fog) (u.fogBox.value as THREE.Vector3).copy(fog.box);
+  }
+
+  /** Brume du brouillard de guerre : claire le jour, bleu nuit la nuit (0 à 1). */
+  set fogNight(k: number) {
+    this.finalMat.uniforms.fogNight.value = k;
   }
 
   /** Étalonnage : gain par couleur et saturation (le cycle jour/nuit les fait varier). */
@@ -306,6 +349,11 @@ export class PostFx {
     r.setRenderTarget(this.sceneRT);
     r.render(this.scene, this.camera);
     this.renderCharacter();
+    if (this.fog) {
+      // caméra telle que dessinée à l'instant (matrixWorld à jour après le rendu)
+      (u.fogInvVP.value as THREE.Matrix4).multiplyMatrices(this.camera.matrixWorld, this.camera.projectionMatrixInverse);
+      u.fogTime.value = performance.now() / 1000;
+    }
     // bloom (et masque du perso caché, en alpha)
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
     const through = this.seeThrough && !this.tucked;
