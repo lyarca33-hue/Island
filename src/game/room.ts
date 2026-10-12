@@ -10,8 +10,8 @@
  * nuit un peu de clair de lune. Un vrai toit couvre la pièce quand le perso est dehors.
  * Un toit et des murs invisibles, qui ne font que de l'ombre, gardent le soleil et la lune dehors
  * (sauf par les fenêtres, même quand un mur est abaissé en coupe) : le soleil seul fait les ombres.
- * La nuit, une seule lumière d'ambiance suit la pièce du perso (Game.updateNightLight) ; ni
- * plafonnier ni interrupteur.
+ * La nuit, les pièces restent sombres (seules les lampes posées éclairent) : pas encore de
+ * plafonnier ni d'interrupteur.
  *
  * Murs « en coupe » comme dans les Sims : quand le perso est dans une pièce, les murs tournés
  * vers la caméra s'abaissent à hauteur de plinthe dans toutes les pièces ; ils se relèvent quand
@@ -43,9 +43,9 @@ export const ROOM: Rect = { x0: -3.2, x1: 3.2, z0: -2.8, z1: 2.8 };
 /** Hauteur et épaisseur des murs, hauteur d'un mur abaissé (en coupe). */
 export const WALL_H = 2.5;
 /** Plâtre du plafond (vu à la première personne). */
-/** Plafond (sans lumière, voir le plafond dans le constructeur) : le jour, la nuit sous la lampe. */
+/** Plafond (sans lumière, voir le plafond dans le constructeur) : le jour, la nuit. */
 const CEILING_DAY = new THREE.Color(0xeee8dc).multiplyScalar(0.8);
-const CEILING_NIGHT = new THREE.Color(0xb8a28c);
+const CEILING_NIGHT = new THREE.Color(0x2a2c38);
 export const WALL_T = 0.12;
 const CUT_H = 0.2;
 /** Hauteur d'une porte ou d'un passage. */
@@ -381,8 +381,8 @@ export class Room {
     roof.name = 'toit-ombre';
     this.group.add(roof);
     // plafond, vu d'en dessous à la première personne seulement (la vue de dessus le traverse) ;
-    // teinte unie réglée par l'heure (applyLight) : éclairé, la lumière de nuit juste dessous y
-    // dessinait un disque lumineux tout plat, comme un faux plafonnier
+    // teinte unie réglée par l'heure (applyLight), sans lumière : pas de reflet rond qui ferait
+    // croire à un plafonnier
     this.ceiling = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(Math.PI / 2), this.ceilingMat);
     this.ceiling.position.set((x0 + x1) / 2, WALL_H - 0.002, (z0 + z1) / 2);
     this.ceiling.visible = false;
