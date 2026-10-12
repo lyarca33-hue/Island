@@ -198,7 +198,7 @@ export function createGrass(o: GrassInputs): Grass {
   // dessinée après le reste, sans écrire la profondeur : les contours à l'encre (tirés de la
   // profondeur) ignorent les brins, sinon tout le pré se couvre de traits noirs
   mat.depthWrite = false;
-  mesh.renderOrder = 1;
+  mesh.renderOrder = 4;
   const all = COUNT * COUNT;
   return {
     mesh,
