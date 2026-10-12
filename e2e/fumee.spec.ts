@@ -87,5 +87,33 @@ test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info
   });
   expect(rateau).toBe('ok');
 
+  // les portes ne s'ouvrent qu'à la main : planté devant la porte d'entrée, elle reste fermée ;
+  // envoyé dehors, le perso s'arrête, l'ouvre, et la laisse ouverte derrière lui
+  const portes = await page.evaluate(async () => {
+    type V = { x: number; z: number; clone(): V; distanceTo(o: V): number };
+    type Room = { spec: { name: string }; doorOpen(i: number): boolean; doorPassable(i: number): boolean; entrySpot(): { stand: V }; fixtureSpot(k: 'porte', i: number, from: V): { stand: V } };
+    const g = (window as unknown as { game: { rooms: Room[]; character: { position: V; idle: boolean; goTo(p: V, r: boolean): void } } }).game;
+    const wait = async (ok: () => boolean) => {
+      for (let i = 0; i < 600 && !ok(); i++) await new Promise((r) => setTimeout(r, 100));
+      return ok();
+    };
+    const hall = g.rooms.find((r) => r.spec.name === 'entrée')!;
+    if (hall.doorOpen(0)) return 'porte d’entrée ouverte au départ';
+    const front = hall.fixtureSpot('porte', 0, hall.entrySpot().stand).stand;
+    g.character.goTo(front, false);
+    if (!(await wait(() => g.character.position.distanceTo(front) < 0.2 && g.character.idle))) return 'pas arrivé devant la porte';
+    await new Promise((r) => setTimeout(r, 1500));
+    if (hall.doorOpen(0) || hall.doorPassable(0)) return 'la porte s’est ouverte toute seule';
+    const out = front.clone();
+    out.z += 2.5;
+    g.character.goTo(out, false);
+    if (!(await wait(() => g.character.position.distanceTo(out) < 0.3))) return 'pas sorti';
+    if (!hall.doorOpen(0)) return 'la porte ne s’est pas ouverte en passant';
+    await new Promise((r) => setTimeout(r, 1500));
+    return hall.doorPassable(0) ? 'ok' : 'la porte s’est refermée derrière lui';
+  });
+  expect(portes).toBe('ok');
+  await page.screenshot({ path: info.outputPath('3-porte.png') });
+
   expect(erreurs, erreurs.join('\n')).toEqual([]);
 });

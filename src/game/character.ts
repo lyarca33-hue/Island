@@ -42,6 +42,10 @@ type Gesture = 'interact' | 'pickUp' | 'kneel' | 'throw';
 const KNEEL_TIME = 1.7;
 /** Haut d'une porte (m) sous lequel on s'agenouille pour l'ouvrir plutôt que de tendre la main. */
 const KNEEL_BELOW = 0.6;
+/** Distance (m) devant le perso, le long de son chemin, où il voit une porte fermée et s'arrête pour l'ouvrir. */
+const DOOR_LOOK = 0.6;
+/** À vélo, plus loin : la roue avant dépasse et il faut freiner. */
+const DOOR_LOOK_RIDE = 1.8;
 /** Plan de travail, table : hauteurs (m) où l'on prend un objet en se penchant (clip PickUp_Table). */
 const TABLE_HEIGHT: [number, number] = [0.55, 1.2];
 
@@ -81,6 +85,21 @@ const PUSH_TURN_SPEED = 1.2;
  * À vélo (velo.ts) : le vélo mène le perso (où il va, comment il se tient) ; le perso ne fait que
  * lui passer la direction voulue (touches, ou le prochain point du chemin d'un clic au sol).
  */
+/** Porte fermée sur le chemin : où regarder, l'ouvrir (faux si elle ne s'ouvre pas), et si l'on peut passer. */
+export interface DoorAhead {
+  face: THREE.Vector3;
+  open(): boolean;
+  ready(): boolean;
+}
+
+/** Les portes de la maison, vues du perso. */
+export interface DoorGate {
+  /** Porte fermée que coupe le chemin de `from` à `to`, s'il y en a une. */
+  ahead(from: THREE.Vector3, to: THREE.Vector3): DoorAhead | null;
+  /** Pas de `from` à `to` : une porte fermée le retient (remet `to` en arrière). */
+  block(from: THREE.Vector3, to: THREE.Vector3): void;
+}
+
 export interface Ride {
   /** Un pas : `want` est la direction voulue au sol (null : on freine) ; faux si le vélo est bloqué. */
   update(dt: number, want: THREE.Vector3 | null, running: boolean): boolean;
@@ -109,6 +128,10 @@ export class Character {
   private path: THREE.Vector3[] = [];
   /** Meubles à contourner. */
   nav: Nav | null = null;
+  /** Portes de la maison : elles ne s'ouvrent qu'à la main (le perso s'arrête pour ouvrir celle de son chemin). */
+  doors: DoorGate | null = null;
+  /** Arrêté devant une porte fermée sur son chemin : il se tourne vers elle, l'ouvre, attend qu'elle le soit. */
+  private doorStop: (DoorAhead & { opened: boolean }) | null = null;
   private heading = 0;
   /** Perso du créateur (sinon : X Bot). */
   private puppet: Puppet | null = null;
@@ -328,6 +351,7 @@ export class Character {
 
   /** Chemin vers `to` en contournant les meubles (null : on s'arrête). */
   private setRoute(to: THREE.Vector3 | null): void {
+    this.doorStop = null;
     this.path = to ? (this.nav?.route(this.root.position, to) || [to.clone().setY(0)]) : [];
     this.target = this.path.shift() ?? null;
   }
@@ -381,6 +405,57 @@ export class Character {
   /** En train de lire (livre ouvert). */
   get reading(): Carry | null {
     return this.carries ? (SIDES_.map((s) => this.carries![s]).find((c) => c.reading) ?? null) : null;
+  }
+
+  /** Le point du chemin à `d` m devant le perso (ou le bout du chemin). */
+  private ahead(d: number): THREE.Vector3 {
+    let from = this.root.position.clone().setY(0);
+    for (const p of [this.target, ...this.path]) {
+      if (!p) break;
+      const to = p.clone().setY(0);
+      const l = from.distanceTo(to);
+      if (l >= d) return from.lerp(to, d / l);
+      d -= l;
+      from = to;
+    }
+    return from;
+  }
+
+  /**
+   * Une porte fermée sur le chemin : on s'arrête devant, tourné vers elle, on l'ouvre (geste de la
+   * main, sauf à vélo), puis on attend qu'elle soit ouverte. Vrai tant qu'on est arrêté. Une porte
+   * qui ne s'ouvre pas (fermée à clé de l'autre côté) : on renonce au chemin.
+   */
+  private stopAtDoor(dt: number, gesture: boolean): boolean {
+    if (!this.doorStop && this.doors) {
+      const d = this.doors.ahead(this.root.position, this.ahead(this.ride ? DOOR_LOOK_RIDE : DOOR_LOOK));
+      if (d) this.doorStop = { ...d, opened: false };
+    }
+    const s = this.doorStop;
+    if (!s) return false;
+    if (!s.opened) {
+      if (!this.ride) {
+        const to = s.face.clone().sub(this.root.position);
+        let delta = Math.atan2(to.x, to.z) - this.heading;
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+        this.heading += delta * Math.min(1, dt * TURN_RATE);
+        this.root.rotation.y = this.heading;
+        if (Math.abs(delta) > 0.15) return true;
+      }
+      s.opened = true;
+      if (!s.open()) {
+        this.doorStop = null;
+        this.target = null;
+        this.path = [];
+        this.approach = null;
+        return true;
+      }
+      if (gesture) this.gesture('interact');
+      return true;
+    }
+    if (!s.ready()) return true;
+    this.doorStop = null;
+    return false;
   }
 
   /** Où le perso va (le bout de son chemin), s'il marche. */
@@ -767,7 +842,7 @@ export class Character {
     if (this.busy || this.washing) {
       // pendant une saisie, une dépose ou quand il se lave, le perso reste sur place
     } else if (this.move.lengthSq() > 0) dir.copy(this.move).normalize();
-    else if (this.target) {
+    else if (this.target && !this.stopAtDoor(dt, true)) {
       dir.subVectors(this.target, this.root.position).setY(0);
       // point de passage atteint : le suivant (on coupe un peu les virages)
       // (seulement si la ligne droite vers le suivant est libre : sinon on va jusqu'au point)
@@ -790,6 +865,8 @@ export class Character {
         // au clavier, on glisse le long des meubles au lieu d'y entrer
         this.nav?.pushOut(this.root.position);
       }
+      // une porte fermée arrête le perso (au clavier : on l'ouvre d'un clic)
+      this.doors?.block(before, this.root.position);
       // vers un point, bloqué sur place : on renonce au bout de 2 s (plutôt que de piétiner sans fin)
       if (this.target && this.move.lengthSq() === 0) {
         this.stuckFor = this.root.position.distanceTo(before) < step * 0.2 ? this.stuckFor + dt : 0;
@@ -839,7 +916,7 @@ export class Character {
   private updateRide(dt: number): void {
     let want: THREE.Vector3 | null = null;
     if (this.move.lengthSq() > 0) want = this.move.clone().setY(0).normalize();
-    else if (this.target) {
+    else if (this.target && !this.stopAtDoor(dt, false)) {
       const to = this.target.clone().sub(this.root.position).setY(0);
       // à vélo, on vise large : on ne tourne pas sur place
       if (to.length() < (this.path.length ? 0.7 : 0.45)) {
@@ -848,7 +925,7 @@ export class Character {
       }
       if (this.target) want = to.normalize();
     }
-    const ok = this.ride!.update(dt, want, this.running);
+    const ok = this.ride!.update(dt, want, this.running) || !!this.doorStop;
     // bloqué vers un point : on renonce au bout de 2 s
     if (this.target && this.move.lengthSq() === 0) {
       this.stuckFor = ok ? 0 : this.stuckFor + dt;
