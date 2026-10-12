@@ -37,6 +37,7 @@ de bout en bout :
 2. le perso prend la tasse (`game.pickUp('tasse')`) ;
 3. il se fait un café (`game.makeCoffee()`) : la tasse finit pleine de café ;
 4. il s'assoit (`game.sit()`) ;
+   (et, dans la maison : planté devant la porte d'entrée, elle reste fermée ; envoyé dehors, le perso l'ouvre et la laisse ouverte) ;
 5. aucune erreur dans la console du navigateur pendant tout ce temps.
 
 Les gestes passent par `window.game`, comme dans la console du jeu, et l'état est lu avec

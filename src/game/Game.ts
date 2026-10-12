@@ -258,6 +258,8 @@ const WEAR_PUSH = 2;
 const WEAR_RIDE = 0.02;
 /** De combien le vélo, en roulant, peut frôler les murs et les meubles (m de chaque côté). */
 const BIKE_SLIM = 0.08;
+/** Du milieu du vélo à ses roues (m) : là où une porte fermée l'arrête. */
+const BIKE_REACH = 0.75;
 /** Usure en prenant un objet, et à chaque café (machine, tasse). */
 const WEAR_GRAB = 0.3;
 const WEAR_BREW = { machine: 1.5, cup: 0.5 };
@@ -797,7 +799,9 @@ export class Game {
         const rect = footprint(bike.box, pos, yaw, -BIKE_SLIM);
         const bound = GROUND_HALF - 14;
         return Math.abs(pos.x) > bound || Math.abs(pos.z) > bound || this.hitsWall(rect)
-          || this.items.some((it) => it !== bike && this.isObstacle(it) && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)));
+          || this.items.some((it) => it !== bike && this.isObstacle(it) && overlaps(rect, footprint(it.box, it.object.position, it.object.rotation.y)))
+          // une porte fermée arrête le vélo (l'avant, le milieu ou l'arrière dans l'ouverture)
+          || [-BIKE_REACH, 0, BIKE_REACH].some((d) => this.rooms.some((r) => r.closedDoorAt(pos.clone().add(new THREE.Vector3(Math.sin(yaw - Math.PI / 2), 0, Math.cos(yaw - Math.PI / 2)).multiplyScalar(d)), 0.1)));
       },
       standable: (p, bike) => !this.buildNav(bike).blocked(p),
       onRide: (bike) => {
@@ -822,6 +826,39 @@ export class Game {
     // au moment de la prise, l'objet est encore posé : on note ce qui est dessus ; les livres
     // posés sur un livre forment la pile qu'on emporte
     this.character.onStuck = () => this.onNotice?.('Je n’arrive pas à passer : quelque chose bloque le chemin.');
+    // les portes ne s'ouvrent qu'à la main : sur son chemin, le perso s'arrête et ouvre la porte fermée
+    // (déverrouille en sortant de la pièce fermée à clé), puis la laisse comme ça
+    this.character.doors = {
+      ahead: (from, to) => {
+        for (const room of this.rooms) {
+          const hit = room.doorAcross(from, to);
+          if (!hit) continue;
+          const { index, inside } = hit;
+          const locked = room.doorLock(index).locked;
+          return {
+            face: room.fixtureSpot('porte', index, from).face,
+            open: () => {
+              if (locked && !inside) {
+                this.onNotice?.('La porte est fermée à clé.');
+                return false;
+              }
+              if (locked) {
+                room.setLocked(index, false);
+                this.sound.play('tinte', 0.5);
+                this.onNotice?.('Porte déverrouillée.');
+              }
+              room.setDoor(index, true);
+              return true;
+            },
+            ready: () => room.doorPassable(index),
+          };
+        }
+        return null;
+      },
+      block: (from, to) => {
+        for (const room of this.rooms) if (room.blockDoors(from, to)) return;
+      },
+    };
     this.character.onGrab = (item, hand) => {
       this.wearItem(item, WEAR_GRAB);
       if (RAW_TOUCH.includes(item.name) && (item.name === 'œuf' || doneness(item.def, item.cooking) === 'cru')) this.soilHands(item.name === 'œuf' ? 'œuf cru' : 'viande crue');
@@ -1991,6 +2028,7 @@ export class Game {
     if (c.seated) return c.standUp(() => this.useFixture(f, on, running));
     const { stand, face } = f.room.fixtureSpot(f.kind, f.index, c.position);
     c.approachThen(stand, face, () => {
+      c.gesture('interact');
       if (f.kind === 'porte') f.room.setDoor(f.index, on);
       else f.room.setCurtains(f.index, on);
       this.onNotice?.(f.kind === 'porte' ? (on ? 'Porte ouverte.' : 'Porte fermée.') : (on ? 'Rideaux tirés.' : 'Rideaux ouverts.'));
@@ -7310,6 +7348,13 @@ export class Game {
 
   /** Clic (pas un glisser) sur un meuble ou le sol : agir sur le meuble, ou y aller. */
   private pointAt(cx: number, cy: number, shift: boolean, hit: ReturnType<Game['hitAt']>): void {
+    // une porte (devant tout objet) : le perso va l'ouvrir ou la fermer
+    const fixture = this.fixtureAt(cx, cy);
+    if (fixture?.kind === 'porte') {
+      if (fixture.room.doorLock(fixture.index).locked) this.onNotice?.('La porte est fermée à clé.');
+      else this.useFixture(fixture, !this.fixtureOn(fixture), shift);
+      return;
+    }
     if (hit) {
       this.clickItem(hit, shift);
       return;
@@ -7995,8 +8040,6 @@ export class Game {
     if (inRoom) this.activeRoom = inRoom;
     else if (this.activeRoom && !this.activeRoom.contains(c.position, 2 * WALL_T + 0.15)) this.activeRoom = null;
     for (const r of this.rooms) {
-      // fermé à clé dans la salle de bain : le perso déverrouille en sortant
-      if (r.unlockToLeave(c.position, c.goal)) this.onNotice?.('Porte déverrouillée.');
       r.overcast = this.weather.cloud;
       // à la première personne, murs et toit restent entiers : on est dedans
       r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.fp ? null : this.activeRoom?.rect ?? null);
