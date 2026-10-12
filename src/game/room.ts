@@ -156,6 +156,11 @@ export interface Doorway {
   garage?: boolean;
   /** Porte intérieure qui se ferme à clé de l'intérieur de la pièce (salle de bain) : un verrou au-dessus de la poignée. */
   lock?: boolean;
+  /**
+   * Porte d'entrée qui s'ouvre vers la pièce, posée contre la face intérieure du mur : dehors, la
+   * façade d'un modèle Tripo (maison de campagne) est trop près du mur pour qu'elle s'ouvre dehors.
+   */
+  inward?: boolean;
 }
 
 /** Rangée de meubles dos au mur, dans l'ordre de x (nord, sud) ou de z (est, ouest) croissant à partir de `from` ; un nombre laisse un écart (m). */
@@ -180,6 +185,8 @@ export interface RoomSpec {
   doors: Doorway[];
   /** Murs collés à une autre pièce : le toit n'y déborde pas et n'y a pas de pignon. */
   joined?: WallName[];
+  /** Pas de toit fait par programme (false) : la pièce est dans un modèle qui a le sien (campagne.ts). */
+  roof?: false;
   /** Fenêtres (selon la place des meubles). */
   windows: (anchor: Anchors) => Opening[];
   /** Meubles rangés contre les murs. */
@@ -425,7 +432,7 @@ export class Room {
       const light = this.addWindowLight(this.wall(o.wall), o);
       if (o.curtain !== undefined) this.addCurtain(o, light);
     }
-    this.buildRoof();
+    if (spec.roof !== false) this.buildRoof();
     this.mergeGhosts();
     this.buildSight(windows);
   }
@@ -507,6 +514,11 @@ export class Room {
   contains(p: THREE.Vector3, margin = 0): boolean {
     const { x0, x1, z0, z1 } = this.rect;
     return p.x > x0 - margin && p.x < x1 + margin && p.z > z0 - margin && p.z < z1 + margin;
+  }
+
+  /** Le mur `name` est-il abaissé en coupe ? */
+  wallCut(name: WallName): boolean {
+    return this.wall(name).cut;
   }
 
   /** Mur haut `name` : y accrocher du décor, caché avec le mur quand il est abaissé en coupe. */
@@ -738,7 +750,7 @@ export class Room {
     door.name = inner ? 'porte' : 'porte-entree';
     // porte d'entrée au fond de l'épaisseur du mur (elle s'ouvre dehors) ; porte intérieure contre
     // la pièce (elle s'ouvre dedans, à plat contre le mur)
-    door.position.set(inner ? -0.03 : -WALL_T + 0.02, 0, -s * (half - 0.01));
+    door.position.set(inner || d.inward ? -0.03 : -WALL_T + 0.02, 0, -s * (half - 0.01));
     door.add(
       box(0.04, DOOR_H - 0.02, leafW, leafMat, 0, (DOOR_H - 0.02) / 2 + 0.01, s * leafW / 2),
       // panneaux moulurés et poignée, côté pièce (des deux côtés pour une porte intérieure)
@@ -797,8 +809,9 @@ export class Room {
       mat.add(box(0.5, 0.012, 0.8, toon(0x9b6b3d), 0.32, 0.008, 0, false));
       this.group.add(mat);
     }
-    // ouverte : la porte d'entrée tourne de 100° vers le dehors, une porte intérieure de 90° vers la pièce
-    const swing = (inner ? s : -s) * THREE.MathUtils.degToRad(inner ? 90 : 100);
+    // ouverte : la porte d'entrée tourne de 100° vers le dehors, une porte intérieure (ou d'entrée
+    // `inward`) de 90° vers la pièce
+    const swing = inner || d.inward ? s * THREE.MathUtils.degToRad(90) : -s * THREE.MathUtils.degToRad(100);
     this.leaves.push({ door, frame: lf, ghost, center: f.position.clone(), open: inner ? 1 : 0, swing, wall: d.wall, inner, half, shut: !inner, lock, locked: false });
   }
 

@@ -31,7 +31,8 @@ test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info
   });
 
   // la maison : la cuisine et les pièces autour (entrée, garage, salon, salle de bain, chambre),
-  // meublées avec les modèles Tripo, un fichier par pièce
+  // meublées avec les modèles Tripo, un fichier par pièce ; et le rez-de-chaussée (vide) de la
+  // maison de campagne
   const etat = await page.evaluate(() => {
     const g = (window as unknown as { game: Jeu }).game;
     const d = g.describe();
@@ -39,7 +40,7 @@ test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info
     const tripo = ['cuisine', 'salon', 'chambre', 'salle-de-bain', 'entree', 'garage', 'menage'].every((p) => loaded.some((n) => n.endsWith(`models/${p}.glb`)));
     return { pieces: g.rooms.length, objets: d.objets.length, perso: d.perso, tripo };
   });
-  expect(etat.pieces).toBe(6);
+  expect(etat.pieces).toBe(7);
   expect(etat.objets).toBeGreaterThanOrEqual(60);
   expect(etat.tripo).toBe(true);
   expect(etat.perso).toContain('cuisine');
