@@ -80,12 +80,13 @@ export interface TripoLook {
    */
   unshade?: ShadeZone[];
   /** Morceaux du modèle retirés (boîtes min, max dans son repère) : la bonde et la tirette du lavabo, mal placées. */
-  cut?: Array<[V3, V3]>;
+  cut?: CutBox[];
   /**
    * Trous bouchés après `cut` : un carré horizontal à la hauteur y, sur x0..x1 et z0..z1, de la
-   * couleur du modèle juste à côté (là où était la tirette, le rebord du lavabo).
+   * couleur du modèle juste à côté (là où était la tirette, le rebord du lavabo), ou au point `from` ;
+   * `skirt` : il retombe jusqu'à cette hauteur sur ses côtés x et au bout z1 (un drap bordé).
    */
-  fill?: Array<{ y: number; x: [number, number]; z: [number, number] }>;
+  fill?: Fill[];
 }
 
 /** Les fiches habillées et leur modèle. */
@@ -438,39 +439,64 @@ function merge(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
+type Fill = { y: number; x: [number, number]; z: [number, number]; from?: V3; skirt?: number };
+
 /** Carré horizontal (`fill` de TripoLook), sa texture prise au point du modèle le plus proche, juste à côté. */
-function patch(model: THREE.BufferGeometry, f: { y: number; x: [number, number]; z: [number, number] }): THREE.BufferGeometry {
+function patch(model: THREE.BufferGeometry, f: Fill): THREE.BufferGeometry {
   const [x0, x1] = f.x, [z0, z1] = f.z;
   const p = model.getAttribute('position'), n = model.getAttribute('normal'), uv = model.getAttribute('uv');
   // le dessus du rebord (face tournée vers le haut) à côté du trou
-  const at = new THREE.Vector3(x1 + 0.05, f.y, (z0 + z1) / 2);
+  const at = f.from ? new THREE.Vector3(...f.from) : new THREE.Vector3(x1 + 0.05, f.y, (z0 + z1) / 2);
   let best = 0, d = Infinity;
   for (let i = 0; i < p.count; i++) {
     if (n && n.getY(i) < 0.9) continue;
     const dd = at.distanceToSquared(new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)));
     if (dd < d) [d, best] = [dd, i];
   }
+  const y = f.y, b = f.skirt;
+  // sommets (x, y, z) et normale de chaque carré, dans le sens qui le montre de dehors
+  const quads: Array<[number[][], number[]]> = [[[[x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0]], [0, 1, 0]]];
+  if (b !== undefined) {
+    quads.push([[[x0, y, z0], [x0, b, z0], [x0, b, z1], [x0, y, z1]], [-1, 0, 0]]);
+    quads.push([[[x1, y, z1], [x1, b, z1], [x1, b, z0], [x1, y, z0]], [1, 0, 0]]);
+    quads.push([[[x0, y, z1], [x0, b, z1], [x1, b, z1], [x1, y, z1]], [0, 0, 1]]);
+  }
+  const pos: number[] = [], nor: number[] = [];
+  for (const [[a, c, d, e], nn] of quads) for (const q of [a, c, d, a, d, e]) pos.push(...q), nor.push(...nn);
   const out = new THREE.BufferGeometry();
-  const quad = [[x0, z0], [x0, z1], [x1, z1], [x0, z0], [x1, z1], [x1, z0]];
-  out.setAttribute('position', new THREE.BufferAttribute(new Float32Array(quad.flatMap(([x, z]) => [x, f.y, z])), 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(quad.flatMap(() => [0, 1, 0])), 3));
-  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(quad.flatMap(() => [uv.getX(best), uv.getY(best)])), 2));
+  out.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(pos.length / 3 * 2).map((_, i) => (i % 2 ? uv.getY(best) : uv.getX(best))), 2));
   return out;
 }
 
+/**
+ * Boîte de `cut` (min, max) ; `ny` : seulement les faces tournées vers le haut (positif : leur
+ * normale a au moins cette composante y) ou vers le bas (négatif : au plus) ; un drap posé à plat,
+ * pas l'oreiller qui le touche.
+ */
+export type CutBox = [V3, V3] | [V3, V3, number];
+
 /** Retire d'une géométrie sans index les triangles dont le centre est dans l'une des boîtes. */
-export function cutBoxes(g: THREE.BufferGeometry, boxes: Array<[V3, V3]>): THREE.BufferGeometry {
-  const inside = ([x, y, z]: V3) => boxes.some(([a, b]) => x > a[0] && x < b[0] && y > a[1] && y < b[1] && z > a[2] && z < b[2]);
-  return keepTriangles(g, (c) => !inside(c));
+export function cutBoxes(g: THREE.BufferGeometry, boxes: CutBox[]): THREE.BufferGeometry {
+  const inside = ([x, y, z]: V3, ny: () => number) =>
+    boxes.some(([a, b, t]) => x > a[0] && x < b[0] && y > a[1] && y < b[1] && z > a[2] && z < b[2] && (t === undefined || (t >= 0 ? ny() >= t : ny() <= t)));
+  return keepTriangles(g, (c, ny) => !inside(c, ny));
 }
 
-/** Garde d'une géométrie sans index les triangles dont le centre passe le test `keep`. */
-export function keepTriangles(g: THREE.BufferGeometry, keep: (center: V3) => boolean): THREE.BufferGeometry {
+/** Garde d'une géométrie sans index les triangles dont le centre passe le test `keep` (`ny` : la composante y de leur normale, au besoin). */
+export function keepTriangles(g: THREE.BufferGeometry, keep: (center: V3, ny: () => number) => boolean): THREE.BufferGeometry {
   const p = g.getAttribute('position');
   const kept: number[] = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   for (let i = 0; i < p.count; i += 3) {
-    const c = [0, 1, 2].map((k) => (p.getComponent(i, k) + p.getComponent(i + 1, k) + p.getComponent(i + 2, k)) / 3) as V3;
-    if (keep(c)) kept.push(i, i + 1, i + 2);
+    a.fromBufferAttribute(p, i);
+    b.fromBufferAttribute(p, i + 1);
+    c.fromBufferAttribute(p, i + 2);
+    const center: V3 = [(a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3];
+    // normale de la face (sens des sommets)
+    const ny = () => b.clone().sub(a).cross(c.clone().sub(a)).normalize().y;
+    if (keep(center, ny)) kept.push(i, i + 1, i + 2);
   }
   const out = new THREE.BufferGeometry();
   for (const name of ['position', 'normal', 'uv']) {
