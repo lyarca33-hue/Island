@@ -452,21 +452,21 @@ export const PACK_SIZES = {
     "thermometre": [0.022, 0.015, 0.13],
   },
   comptoirs: {
-    "comptoir-pharmacie": [0.741, 1.4, 0.929],
-    "guichet-poste": [0.968, 1.706, 2],
+    "comptoir-pharmacie": [0.616, 0.833, 2],
+    "guichet-poste": [0.753, 1.268, 2],
     "passe-plat-chauffant": [0.564, 1.037, 1.6],
   },
   presentoirs: {
     "etal-de-la-criee": [1.176, 1.514, 2],
-    "etal-de-marche": [1.278, 2.3, 2.178],
-    "presentoir-a-gradins": [0.749, 1.5, 0.786],
+    "etal-de-marche": [1.493, 2.299, 2.5],
+    "presentoir-a-gradins": [1.499, 1.92, 1.343],
     "vitrine-a-glaces": [0.796, 1.25, 1.5],
   },
   rangements: {
     "bibliotheque-murale": [0.796, 2.4, 1.123],
-    "casier-de-tri": [0.73, 1.8, 0.863],
+    "casier-de-tri": [0.658, 1.2, 0.877],
     "echelle-bibliotheque": [0.951, 2.3, 0.762],
-    "etagere-pharmacie": [0.774, 2, 0.93],
+    "etagere-pharmacie": [1.282, 1.999, 1.114],
   },
   salon: {
     "bac-a-shampoing": [1.39, 1.101, 0.791],
@@ -475,10 +475,10 @@ export const PACK_SIZES = {
     "fauteuil-coiffeur": [0.744, 1.1, 0.696],
   },
   tables: {
-    "bureau-medecin": [0.519, 1, 0.567],
+    "bureau-medecin": [0.79, 0.75, 1.4],
     "etabli-menuisier": [1.017, 1.309, 2],
     "table-examen": [1.9, 1.198, 0.802],
-    "table-veterinaire": [0.659, 0.85, 0.61],
+    "table-veterinaire": [0.592, 0.713, 1.2],
   },
   deuxroues: {
     "scooter": [1.8, 1.044, 0.769],
@@ -514,6 +514,32 @@ export const PACK_SIZES = {
   utilitaires: {
     "bus": [9, 3.933, 3.775],
     "camion-pompier": [6.997, 4.407, 3.777],
+  },
+  betail: {
+    "ane": [1.699, 1.71, 0.597],
+    "chevre": [0.9, 0.835, 0.501],
+    "cochon": [1.1, 0.594, 0.559],
+    "mouton": [1.2, 0.875, 0.608],
+    "vache": [2.4, 1.731, 0.904],
+  },
+  oiseaux: {
+    "canard": [0.4, 0.356, 0.207],
+    "coq": [0.41, 0.5, 0.231],
+    "mouette": [0.388, 0.57, 0.449],
+    "pigeon": [0.3, 0.282, 0.228],
+    "poule": [0.41, 0.401, 0.245],
+  },
+  petitsanimaux: {
+    "chien": [0.7, 0.501, 0.395],
+    "ecureuil": [0.35, 0.288, 0.216],
+    "herisson": [0.25, 0.21, 0.237],
+    "lapin": [0.231, 0.3, 0.152],
+    "perroquet": [0.319, 0.4, 0.212],
+  },
+  bateaux: {
+    "bateau-peche-bleu": [2.517, 4.553, 7],
+    "bateau-peche-rouge": [2.46, 4.537, 7],
+    "ponton": [2.923, 1.818, 15],
   },
 } as const satisfies Record<string, Record<string, readonly [number, number, number]>>;
 

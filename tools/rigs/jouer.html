@@ -1,0 +1,57 @@
+<!doctype html><meta charset="utf-8"><title>Pièces mobiles des packs</title>
+<body style="margin:0;background:#f4f1ea;font:14px sans-serif">
+<!--
+  Aperçu des pièces mobiles des packs (src/game/packs/rigs.ts), hors du monde : chaque modèle à trois
+  parts de son mouvement (repos, milieu, fin). Avec le serveur de dev (npm run dev) :
+  /tools/rigs/jouer.html?pack=ville&m=puits[&vue=dos|cote|dessus][&k=0,0.5,1][&c=x,y,z&r=0.4][&montre=1 : pièces en rouge]
+  Sans `m` : tous les modèles à rig du pack, l'un sous l'autre.
+-->
+<script type="module">
+import * as THREE from 'three';
+import { loadPack, packRig, packSize } from '/src/game/packs/assets.ts';
+import { PACK_RIGS } from '/src/game/packs/rigs.ts';
+import { poseRig } from '/src/game/items/rigs.ts';
+const q = new URLSearchParams(location.search);
+const pack = q.get('pack');
+const names = q.get('m') ? q.get('m').split(',') : Object.keys(PACK_RIGS[pack] ?? {});
+const W = 1200, H = 420;
+await loadPack(pack);
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setPixelRatio(1); r.setSize(W, H * names.length); r.setScissorTest(true);
+r.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(r.domElement);
+const label = document.createElement('canvas'); label.width = W; label.height = H * names.length;
+label.style.cssText = 'position:absolute;left:0;top:0'; document.body.appendChild(label);
+const g2 = label.getContext('2d'); g2.font = 'bold 15px sans-serif'; g2.fillStyle = '#222';
+const dirs = { face: [0.55, 0.45, 1], dos: [-0.55, 0.45, -1], cote: [1, 0.45, 0.35], gauche: [-1, 0.45, 0.35], dessus: [0.15, 1.6, 0.6] };
+names.forEach((name, row) => {
+  const rig = PACK_RIGS[pack][name];
+  const parts = Object.entries(rig.parts);
+  const ks = q.get('k') ? q.get('k').split(',').map(Number)
+    : parts.some(([, p]) => p.play === 'loop' || p.play === 'swing') ? [0, 0.25, 0.5, 0.75] : [0, 0.5, 1];
+  const s = packSize(pack, name);
+  // `c=x,y,z&r=0.4` : vue rapprochée sur ce point
+  const R = q.get('r') ? +q.get('r') : Math.max(s.x, s.y, s.z);
+  ks.forEach((k, i) => {
+    const scene = new THREE.Scene(); scene.background = new THREE.Color(0xf4f1ea);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8070, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(2, 4, 3); scene.add(sun);
+    const m = packRig(pack, name); scene.add(m);
+    for (const [pn] of parts) poseRig(m, pn, k);
+    // `montre=1` : les pièces en rouge
+    if (q.get('montre')) for (const [pn] of parts) m.getObjectByName(pn)?.traverse((o) => { if (o.isMesh) o.material = new THREE.MeshLambertMaterial({ color: 0xff2a2a }); });
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(R * 0.9, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xe2dccd }));
+    ground.position.y = -0.001; scene.add(ground);
+    const w = W / ks.length;
+    const cam = new THREE.PerspectiveCamera(28, w / H, 0.01, 100);
+    const d = new THREE.Vector3(...dirs[q.get('vue') ?? 'face']).normalize();
+    const c = q.get('c') ? new THREE.Vector3(...q.get('c').split(',').map(Number)) : new THREE.Vector3(0, s.y / 2, 0);
+    cam.position.copy(c).addScaledVector(d, R * 2.9); cam.lookAt(c);
+    const y0 = H * (names.length - 1 - row);
+    r.setViewport(i * w, y0, w, H); r.setScissor(i * w, y0, w, H); r.render(scene, cam);
+    g2.fillText(`${name} · ${k}`, i * w + 10, H * row + 22);
+  });
+  g2.font = '12px sans-serif'; g2.fillText(parts.map(([n, p]) => `${n} (${p.motion?.kind ?? "fixe"}, ${p.play ?? ""})`).join('   '), 10, H * row + H - 10); g2.font = 'bold 15px sans-serif';
+});
+window.ready = true;
+</script>

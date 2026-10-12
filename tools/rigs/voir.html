@@ -1,0 +1,47 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#fff">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+const q = new URLSearchParams(location.search);
+const pack = q.get('pack'), name = q.get('m'), W = 1500, H = 520;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(W, H); r.setScissorTest(true); document.body.appendChild(r.domElement);
+const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(`/public/packs/${pack}.glb`);
+const node = gltf.scene.getObjectByName(name);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
+scene.add(new THREE.AmbientLight(0xffffff, 2.2));
+const m = node.clone(); m.traverse(o => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: o.material.map, color: o.material.map ? 0xffffff : o.material.color }); });
+scene.add(m);
+const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
+const S = Math.max(size.x, size.y, size.z) * 0.6;
+const step = S > 1.5 ? 0.25 : S > 0.6 ? 0.1 : S > 0.25 ? 0.05 : 0.02;
+// trois vues : face (+z vers la caméra), côté (+x vers la caméra), dessus
+const views = [['face', [0, 0, 1], [0, 1, 0]], ['cote', [1, 0, 0], [0, 1, 0]], ['dessus', [0, 1, 0], [0, 0, -1]]];
+const c = box.getCenter(new THREE.Vector3());
+const cv = document.createElement('canvas'); cv.width = W; cv.height = H; cv.style.cssText = 'position:absolute;left:0;top:0';
+document.body.appendChild(cv); const g = cv.getContext('2d'); g.font = '11px monospace';
+views.forEach(([label, dir, up], i) => {
+  const cam = new THREE.OrthographicCamera(-S, S, S * H / (W / 3), -S * H / (W / 3), 0.01, 100);
+  cam.position.copy(c).add(new THREE.Vector3(...dir).multiplyScalar(20)); cam.up.set(...up); cam.lookAt(c); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  r.setViewport(i * W / 3, 0, W / 3, H); r.setScissor(i * W / 3, 0, W / 3, H); r.render(scene, cam);
+  const proj = (v) => { const p = v.clone().project(cam); return [i * W / 3 + (p.x + 1) / 2 * W / 3, (1 - p.y) / 2 * H]; };
+  g.strokeStyle = 'rgba(255,0,0,.35)'; g.fillStyle = '#c00';
+  const axes = label === 'face' ? ['x', 'y'] : label === 'cote' ? ['z', 'y'] : ['x', 'z'];
+  for (const [ai, a] of axes.entries()) {
+    const lo = Math.floor(box.min[a] / step) * step, hi = box.max[a] + step;
+    let n = 0;
+    for (let t = lo; t <= hi; t += step, n++) {
+      const p0 = c.clone(), p1 = c.clone(); p0[a] = p1[a] = t;
+      const o = axes[1 - ai]; p0[o] = box.min[o] - step * 0.3; p1[o] = box.max[o] + step * 0.3;
+      const [x0, y0] = proj(p0), [x1, y1] = proj(p1);
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      if (ai === 0 && n % 2) continue;
+      g.fillText(`${a}${t.toFixed(2)}`, ai === 0 ? x0 - 14 : x0 - 50, ai === 0 ? y0 + 12 : y0 + 4);
+    }
+  }
+  g.fillStyle = '#000'; g.font = 'bold 14px sans-serif'; g.fillText(`${name} · ${label}`, i * W / 3 + 8, 18); g.font = '11px monospace';
+});
+window.info = { min: box.min.toArray().map(v => +v.toFixed(3)), max: box.max.toArray().map(v => +v.toFixed(3)) };
+window.ready = true;
+</script>
