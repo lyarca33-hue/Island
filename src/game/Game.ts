@@ -78,8 +78,14 @@ const FP_PITCH = -0.15;
 const FP_PITCH_MAX = 1.35;
 /** Radians tournés par pixel de souris glissée à la première personne. */
 const FP_LOOK = 0.005;
-/** Mouvement de souris capturée au-delà duquel c'est un saut parasite (px). */
-const FP_SPIKE = 300;
+/**
+ * Plafond d'un mouvement de souris capturée (px) : certains navigateurs envoient parfois un saut
+ * parasite de plusieurs centaines de pixels. Plafonné, pas ignoré : un geste rapide sur un jeu
+ * qui rame (Firefox regroupe alors les mouvements d'une image) reste un vrai mouvement.
+ */
+const FP_SPIKE = 400;
+/** Radians tournés par pixel de défilement horizontal (deux doigts sur le pavé tactile). */
+const FP_SCROLL = 0.004;
 /** Le regard suit le perso qui agit seul : délai après un mouvement de souris (ms), et vivacité. */
 const FP_HANDS_OFF = 1500;
 const FP_FOLLOW = 3;
@@ -7155,9 +7161,12 @@ export class Game {
     });
     on(window, 'blur', () => this.keys.clear());
     on(el, 'wheel', (e) => {
+      // (empêché aussi pour le défilement horizontal : sinon Firefox y voit « page précédente »)
       e.preventDefault();
-      // à la première personne, la molette n'a pas de zoom à régler
-      if (!this.fp) this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      // à la première personne, pas de zoom ; deux doigts glissés sur le pavé tactile tournent la tête
+      if (!this.fp) {
+        if (e.deltaY) this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      } else if (e.deltaX) this.turnView((e.deltaX * (e.deltaMode === 1 ? 16 : 1) * FP_SCROLL) / FP_LOOK, 0);
     }, { passive: false });
     const lockChange = () => {
       this.look = null;
@@ -7177,8 +7186,8 @@ export class Game {
     on(el, 'pointermove', (e) => {
       if (this.pointerLocked) {
         // souris capturée : elle tourne la tête ; l'objet sous le viseur montre son usure
-        // (certains navigateurs envoient parfois un saut de plusieurs centaines de pixels : ignoré)
-        if (Math.abs(e.movementX) < FP_SPIKE && Math.abs(e.movementY) < FP_SPIKE) this.turnView(e.movementX, e.movementY);
+        const clamp = (v: number) => THREE.MathUtils.clamp(v, -FP_SPIKE, FP_SPIKE);
+        this.turnView(clamp(e.movementX), clamp(e.movementY));
         this.hoverAt(this.aimPoint(e));
         return;
       }
