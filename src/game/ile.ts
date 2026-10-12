@@ -231,6 +231,8 @@ export const WAYS: Way[] = [
 
 /** Hauteur au-dessus du sol de chaque revêtement : la route passe sur l'allée et le chemin là où ils la rejoignent. */
 const WAY_LIFT = { chemin: 0.03, allee: 0.04, route: 0.05 } as const;
+/** Ordre de dessin des revêtements (sans profondeur écrite, le dernier dessiné passe dessus). */
+const WAY_ORDER = { chemin: 1, allee: 2, route: 3 } as const;
 
 function wayCurve(w: Way): THREE.CatmullRomCurve3 {
   return new THREE.CatmullRomCurve3(w.points.map(([x, z]) => new THREE.Vector3(x, 0, z)), w.closed, 'centripetal');
@@ -669,10 +671,10 @@ function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
 function wayMaterial(u: IslandUniforms, map: THREE.Texture, cutout: boolean): THREE.MeshToonMaterial {
   const mat = createToonMaterial({ color: 0xffffff, map, rimStrength: 0 });
   if (cutout) mat.alphaTest = 0.5;
-  // toujours devant le relief, que la grille du terrain coupe un peu entre ses sommets
-  mat.polygonOffset = true;
-  mat.polygonOffsetFactor = -2;
-  mat.polygonOffsetUnits = -8;
+  // les routes ne marquent pas la profondeur : la marche de quelques cm entre le ruban et le sol,
+  // vue en rasant (première personne), ferait sinon des traits d'encre sur l'herbe au loin.
+  // Dessinées après le relief, elles restent cachées par les collines et les persos devant elles
+  mat.depthWrite = false;
   mat.onBeforeCompile = (sh) => {
     worldVaryings(sh, u);
     sh.fragmentShader = sh.fragmentShader.replace(
@@ -793,6 +795,8 @@ export function createIsland(): Island {
     const mesh = new THREE.Mesh(wayGeometry(w, w.kind === 'chemin' ? w.width * 4 : w.width * 2), wayMaterial(u, map, w.kind === 'chemin'));
     mesh.name = w.kind;
     mesh.receiveShadow = true;
+    // l'une après l'autre (route par-dessus l'allée, par-dessus le chemin), puis l'herbe
+    mesh.renderOrder = WAY_ORDER[w.kind];
     root.add(mesh);
   }
 
