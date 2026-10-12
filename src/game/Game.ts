@@ -55,7 +55,7 @@ import { lampLevel, placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
-import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo } from './autoQuality';
+import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo, GRASS_MIN } from './autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -706,7 +706,8 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
     this.gpu = gpuInfo(this.renderer.getContext());
-    if (this.gpu.software) this.autoQuality = new AutoQuality(AUTO_SOFTWARE_START);
+    // sans carte graphique : image plus douce et herbe éclaircie dès le départ
+    if (this.gpu.software) this.autoQuality = new AutoQuality(AUTO_SOFTWARE_START, GRASS_MIN);
     // pas d'ombres pour l'instant : ni carte d'ombre ni passe d'ombre (le soleil éclaire sans ombre)
     this.renderer.shadowMap.enabled = false;
     // les pièces « ombre seule » des objets (voir merge.ts) ne sont dessinées que dans les ombres
@@ -970,6 +971,13 @@ export class Game {
     };
     watchDpr();
     this.disposers.push(() => dprQuery?.removeEventListener('change', onDpr));
+    // onglet de retour au premier plan : le temps passé caché ne compte pas dans les images/s
+    const onVisible = () => {
+      if (document.hidden) return;
+      this.fpsAcc = { frames: 0, since: performance.now() };
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    this.disposers.push(() => document.removeEventListener('visibilitychange', onVisible));
     this.resizeObs.observe(container);
     this.resize();
     this.bindInput();
@@ -6969,6 +6977,8 @@ export class Game {
     const q = this.qualityLevel;
     fitRenderer(this.renderer, w, h, q === 'auto' ? this.autoQuality.budget : QUALITY_PIXELS[q]);
     this.post.setSize(w, h);
+    // herbe 3D : éclaircie en qualité basse, ou par la qualité auto sur un ordinateur faible
+    this.island.setGrassDensity(q === 'auto' ? this.autoQuality.grass : q === 'basse' ? 0.5 : 1);
   }
 
   /** Qualité d'image (plafond de pixels de l'image 3D), mémorisée pour les prochaines parties. */
@@ -7681,8 +7691,9 @@ export class Game {
     this.last = now;
     const acc = this.fpsAcc;
     acc.frames++;
-    if (real > 0.25) {
-      // onglet caché ou fenêtre réduite : ce trou ne dit rien de la fluidité, relevé repris à zéro
+    if (real > 3) {
+      // trou de plusieurs secondes (onglet caché, ordinateur en veille) : il ne dit rien de la
+      // fluidité, relevé repris à zéro
       acc.frames = 0;
       acc.since = now;
     } else if (now - acc.since >= 500) {

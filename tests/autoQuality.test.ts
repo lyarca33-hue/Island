@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AUTO_MAX, AUTO_MIN, AutoQuality } from '../src/game/autoQuality';
+import { AUTO_MAX, AUTO_MIN, AutoQuality, GRASS_MIN } from '../src/game/autoQuality';
 
 /** Relevés d'images par seconde, après le temps de chauffe du lancement. */
 function feed(q: AutoQuality, fps: number, n: number): void {
@@ -22,10 +22,22 @@ describe('qualité auto', () => {
   it('baisse la finesse quand le jeu rame, jusqu’au plancher', () => {
     const q = new AutoQuality();
     feed(q, 60, 8);
-    feed(q, 20, 4);
+    feed(q, 20, 2);
     expect(q.budget).toBeLessThan(AUTO_MAX);
-    feed(q, 10, 40);
+    feed(q, 10, 2);
     expect(q.budget).toBe(AUTO_MIN);
+    expect(q.grass).toBe(1);
+  });
+
+  it('au plus doux et toujours lent : l’herbe s’éclaircit, sans revenir', () => {
+    const q = new AutoQuality();
+    feed(q, 60, 8);
+    feed(q, 10, 60);
+    expect(q.budget).toBe(AUTO_MIN);
+    expect(q.grass).toBe(GRASS_MIN);
+    feed(q, 60, 200);
+    expect(q.grass).toBe(GRASS_MIN);
+    expect(q.budget).toBeGreaterThan(AUTO_MIN);
   });
 
   it('remonte sans retourner là où il ramait', () => {
