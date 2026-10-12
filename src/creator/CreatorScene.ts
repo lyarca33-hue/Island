@@ -4,6 +4,7 @@
  * cadrage « corps entier » ou « visage ».
  */
 import * as THREE from 'three';
+import { AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo } from '../game/autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS } from '../game/postfx';
 import { createToonMaterial } from '../game/toon';
 import { Puppet } from './puppet';
@@ -136,7 +137,10 @@ export class CreatorScene {
   private resize(): void {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
     // même qualité que le jeu (réglage de l'affichage) : un ordinateur lent reste fluide
-    fitRenderer(this.renderer, w, h, QUALITY_PIXELS[loadQuality()]);
+    // en auto : qualité normale, ou plus douce si le navigateur dessine sans carte graphique
+    const q = loadQuality();
+    const auto = gpuInfo(this.renderer.getContext()).software ? AUTO_SOFTWARE_START : AUTO_MAX;
+    fitRenderer(this.renderer, w, h, q === 'auto' ? auto : QUALITY_PIXELS[q]);
     this.post.setSize(w, h);
   }
 

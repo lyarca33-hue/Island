@@ -55,6 +55,7 @@ import { lampLevel, placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
+import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo, GRASS_MIN } from './autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -524,6 +525,10 @@ export class Game {
   private raf = 0;
   private last = performance.now();
   private qualityLevel: Quality = loadQuality();
+  /** Qualité auto : plafond de pixels qui suit la fluidité (créé avec le moteur de rendu). */
+  private autoQuality = new AutoQuality(AUTO_MAX);
+  /** Carte graphique vue par le navigateur, et s'il dessine sans elle. */
+  gpu = { name: '', software: false };
   /** Compteur d'images : images et temps cumulés depuis le dernier relevé, et dernier relevé. */
   private fpsAcc = { frames: 0, since: performance.now() };
   private fpsNow = { fps: 0, ms: 0 };
@@ -700,6 +705,9 @@ export class Game {
     // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
+    this.gpu = gpuInfo(this.renderer.getContext());
+    // sans carte graphique : image plus douce et herbe éclaircie dès le départ
+    if (this.gpu.software) this.autoQuality = new AutoQuality(AUTO_SOFTWARE_START, GRASS_MIN);
     // pas d'ombres pour l'instant : ni carte d'ombre ni passe d'ombre (le soleil éclaire sans ombre)
     this.renderer.shadowMap.enabled = false;
     // les pièces « ombre seule » des objets (voir merge.ts) ne sont dessinées que dans les ombres
@@ -963,6 +971,13 @@ export class Game {
     };
     watchDpr();
     this.disposers.push(() => dprQuery?.removeEventListener('change', onDpr));
+    // onglet de retour au premier plan : le temps passé caché ne compte pas dans les images/s
+    const onVisible = () => {
+      if (document.hidden) return;
+      this.fpsAcc = { frames: 0, since: performance.now() };
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    this.disposers.push(() => document.removeEventListener('visibilitychange', onVisible));
     this.resizeObs.observe(container);
     this.resize();
     this.bindInput();
@@ -6959,8 +6974,11 @@ export class Game {
 
   private resize(): void {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
-    fitRenderer(this.renderer, w, h, QUALITY_PIXELS[this.qualityLevel]);
+    const q = this.qualityLevel;
+    fitRenderer(this.renderer, w, h, q === 'auto' ? this.autoQuality.budget : QUALITY_PIXELS[q]);
     this.post.setSize(w, h);
+    // herbe 3D : éclaircie en qualité basse, ou par la qualité auto sur un ordinateur faible
+    this.island.setGrassDensity(q === 'auto' ? this.autoQuality.grass : q === 'basse' ? 0.5 : 1);
   }
 
   /** Qualité d'image (plafond de pixels de l'image 3D), mémorisée pour les prochaines parties. */
@@ -7673,10 +7691,16 @@ export class Game {
     this.last = now;
     const acc = this.fpsAcc;
     acc.frames++;
-    if (now - acc.since >= 500) {
+    if (real > 3) {
+      // trou de plusieurs secondes (onglet caché, ordinateur en veille) : il ne dit rien de la
+      // fluidité, relevé repris à zéro
+      acc.frames = 0;
+      acc.since = now;
+    } else if (now - acc.since >= 500) {
       this.fpsNow = { fps: (acc.frames * 1000) / (now - acc.since), ms: (now - acc.since) / acc.frames };
       acc.frames = 0;
       acc.since = now;
+      if (this.qualityLevel === 'auto' && this.autoQuality.sample(this.fpsNow.fps)) this.resize();
     }
     // image lente : plusieurs pas de jeu avant de dessiner (voir catchUp)
     const steps = THREE.MathUtils.clamp(Math.ceil(real / 0.05), 1, Math.max(1, Math.floor(this.catchUp)));

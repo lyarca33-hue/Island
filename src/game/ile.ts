@@ -751,6 +751,8 @@ export interface Island {
   terrain: THREE.Mesh;
   /** Avance l'eau et l'herbe (dt en s) ; `rough` : mer agitée et vent (0 à 1) ; (x, z) : le point regardé ; zoom de la caméra. */
   update(dt: number, rough: number, x: number, z: number, zoom: number): void;
+  /** Part des touffes d'herbe dessinées (1, 0,5 ou 0,25 : ordinateur faible). */
+  setGrassDensity(d: number): void;
   /** Pas d'herbe dans ce rectangle (une pièce de la maison). */
   clearGrass(x0: number, x1: number, z0: number, z1: number): void;
   /** Teinte de l'herbe, part de neige (0 à 1), sol mouillé (0 à 1). */
@@ -804,6 +806,7 @@ export function createIsland(): Island {
       u.uRough.value = rough;
       grass.follow(x, z, rough, zoom);
     },
+    setGrassDensity: grass.setDensity,
     clearGrass: mask.clear,
     setSeason(grass, snow, wet) {
       u.uGrass.value.setRGB(grass[0], grass[1], grass[2]);

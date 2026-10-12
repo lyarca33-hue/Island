@@ -34,6 +34,11 @@ export interface GrassInputs {
 
 export interface Grass {
   mesh: THREE.Mesh;
+  /**
+   * Part des touffes dessinées (1, 0,5 ou 0,25) : sur un ordinateur faible, une case sur deux ou
+   * sur quatre, en touffes un peu plus larges pour couvrir le pré.
+   */
+  setDensity(d: number): void;
   /** Recentre la grille sur le point regardé ; force du vent (0 à 1) ; zoom de la caméra (1 : normal). */
   follow(x: number, z: number, wind: number, zoom: number): void;
 }
@@ -83,8 +88,13 @@ function tuftGeometry(): THREE.InstancedBufferGeometry {
   g.setAttribute('aFlower', new THREE.Float32BufferAttribute(flower, 1));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length).fill(0).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
   g.setIndex(idx);
+  // cases rangées par parité : le premier quart (paires, paires) puis la diagonale (impaires,
+  // impaires) puis le reste ; dessiner un début de liste éclaircit le pré de façon régulière
   const cells = new Float32Array(COUNT * COUNT * 2);
-  for (let j = 0; j < COUNT; j++) for (let i = 0; i < COUNT; i++) cells.set([i, j], (j * COUNT + i) * 2);
+  let n = 0;
+  for (const [pi, pj] of [[0, 0], [1, 1], [1, 0], [0, 1]]) {
+    for (let j = pj; j < COUNT; j += 2) for (let i = pi; i < COUNT; i += 2) cells.set([i, j], 2 * n++);
+  }
   g.setAttribute('aCell', new THREE.InstancedBufferAttribute(cells, 2));
   g.instanceCount = COUNT * COUNT;
   return g;
@@ -98,6 +108,7 @@ export function createGrass(o: GrassInputs): Grass {
     uFocus: { value: new THREE.Vector2() },
     uWind: { value: 0.3 },
     uFar: { value: 0 },
+    uThin: { value: 1 },
     uHeight: { value: o.height },
     uSplat: { value: o.splat },
     uMask: { value: o.mask },
@@ -114,7 +125,7 @@ export function createGrass(o: GrassInputs): Grass {
         '#include <common>',
         `#include <common>
          attribute vec2 aCell; attribute float aH; attribute float aFlower;
-         uniform vec2 uOrigin; uniform vec2 uFocus; uniform float uWind; uniform float uFar; uniform float uTime; uniform float uSnow;
+         uniform vec2 uOrigin; uniform vec2 uFocus; uniform float uWind; uniform float uFar; uniform float uThin; uniform float uTime; uniform float uSnow;
          uniform sampler2D uHeight; uniform sampler2D uSplat; uniform sampler2D uMask; uniform sampler2D uTone;
          uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform vec3 uGrass;
          varying vec3 vGrassCol;
@@ -147,7 +158,7 @@ export function createGrass(o: GrassInputs): Grass {
          size *= 1.0 - uFar;
          float ang = hash(cell + 41.1) * 6.2832;
          float c = cos(ang), s = sin(ang);
-         vec2 local = mat2(c, -s, s, c) * position.xz * (0.8 + 0.5 * hash(cell + 9.7));
+         vec2 local = mat2(c, -s, s, c) * position.xz * (0.8 + 0.5 * hash(cell + 9.7)) * uThin;
          // vent : une houle lente qui traverse le pré, plus des rafales ; là où passe la rafale, les
          // brins se couchent et leur revers clair attrape la lumière (les vagues argentées de Zelda)
          float gust = texture2D(uTone, base / 30.0 + vec2(uTime * 0.04, uTime * 0.025)).r;
@@ -188,10 +199,18 @@ export function createGrass(o: GrassInputs): Grass {
   // profondeur) ignorent les brins, sinon tout le pré se couvre de traits noirs
   mat.depthWrite = false;
   mesh.renderOrder = 1;
+  const all = COUNT * COUNT;
   return {
     mesh,
+    setDensity(d) {
+      const geo = mesh.geometry as THREE.InstancedBufferGeometry;
+      geo.instanceCount = Math.round(all * THREE.MathUtils.clamp(d, 0.25, 1));
+      u.uThin.value = Math.pow(all / geo.instanceCount, 0.3);
+    },
     follow(x, z, wind, zoom) {
       u.uFar.value = 1 - THREE.MathUtils.smoothstep(zoom, 0.3, 0.5);
+      // vue de loin, tous les brins sont repliés à rien : inutile de faire passer 40 000 touffes
+      mesh.visible = u.uFar.value < 0.999;
       u.uFocus.value.set(x, z);
       u.uOrigin.value.set(Math.floor(x / STEP) - COUNT / 2, Math.floor(z / STEP) - COUNT / 2);
       u.uWind.value = wind;
