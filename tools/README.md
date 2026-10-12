@@ -125,19 +125,21 @@ npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/e
 node tools/build_kit_assets.mjs --src <dossier des modèles retouchés> --out public/kit/maison.glb
 ```
 
-## `build_campagne_assets.mjs` : la maison de campagne où l'on entre
+## `build_campagne_assets.mjs` : les maisons Tripo où l'on entre
 
-Découpe la maison de campagne Tripo (un seul maillage fermé de 1,9 million de triangles, vu du
-dehors) en `public/models/maison-campagne.glb` : façades du rez-de-chaussée coupées net à 2,5 m (une
-par côté), étage et toit à part, porte peinte retirée de la façade, marches enterrées. Environ
-80 000 triangles, texture de couleur en WebP 2048 px. Le jeu met dedans une vraie pièce et cache
-l'étage, le toit et les façades côté caméra quand le perso y est (`src/game/campagne.ts`). Le
-script affiche le nu des façades mesuré : s'il change, reporter les valeurs dans `FACADE` et
-`INNER` de campagne.ts.
+Découpe une maison Tripo (un seul maillage fermé de 1,9 million de triangles, vu du dehors) en
+`public/models/maison-<nom>.glb` : façades du rez-de-chaussée coupées net à 2,5 m (une par côté),
+étage et toit à part, porte peinte retirée de la façade, marches enterrées ; pour la maison en
+pierre, l'aile basse à part, entière. Environ 80 000 triangles, texture de couleur en WebP 2048 px.
+Le jeu met dedans une vraie pièce et cache l'étage, le toit, l'aile et les façades côté caméra quand
+le perso y est (`src/game/campagne.ts`). Les réglages de chaque maison (échelle, porte, coupes) sont
+dans `PRESETS` ; le script affiche le nu des façades et leur fond mesurés : s'ils changent, reporter
+les valeurs dans `facade` et `inner` de la maison dans campagne.ts.
 
 ```bash
 npm i --no-save @gltf-transform/core @gltf-transform/functions @gltf-transform/extensions sharp meshoptimizer
-node tools/build_campagne_assets.mjs --src "<…>/cozy countryside house 3d model.glb" --out public/models/maison-campagne.glb
+node tools/build_campagne_assets.mjs --maison campagne --src "<…>/cozy countryside house 3d model.glb"
+node tools/build_campagne_assets.mjs --maison pierre --src "<…>/stone house 3d model.glb"
 ```
 
 ## `build_cuisine_assets.mjs` : meubles et objets Tripo d'une pièce
