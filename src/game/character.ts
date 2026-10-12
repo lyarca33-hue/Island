@@ -92,6 +92,9 @@ export interface Ride {
   readonly speed: number;
 }
 
+const EYE_TMP = new THREE.Vector3();
+const EYE_Q = new THREE.Quaternion();
+
 export class Character {
   readonly root = new THREE.Group();
   private mixer: THREE.AnimationMixer | null = null;
@@ -248,6 +251,56 @@ export class Character {
   get yaw(): number {
     return this.heading;
   }
+
+  /**
+   * Vue à la première personne : la tête (cheveux, accessoires) est réduite à rien pour que la
+   * caméra, placée aux yeux, ne voie pas l'intérieur du crâne ; le corps et les mains restent.
+   * Sans perso du créateur (X Bot), tout le modèle est caché. Rappelé à chaque image : le perso
+   * peut être reconstruit (nouvelle tenue).
+   */
+  hideHead(on: boolean): void {
+    const head = this.puppet?.headBone;
+    if (head) head.scale.setScalar(on ? 1e-3 : 1);
+    else for (const o of this.root.children) o.visible = !on;
+  }
+
+  /**
+   * Point entre les yeux (monde), où se place la caméra à la première personne. Mesuré depuis l'os
+   * de la tête sans son échelle : la tête réduite par hideHead ne déplace pas les yeux.
+   */
+  eye(out: THREE.Vector3): THREE.Vector3 {
+    const head = this.puppet?.headBone;
+    if (!head) return out.copy(this.root.position).setY(this.root.position.y + this.height * 0.93);
+    head.updateWorldMatrix(true, false);
+    head.getWorldPosition(out);
+    const h = this.puppet!.vrm.humanoid;
+    const l = h.getRawBoneNode('leftEye'), r = h.getRawBoneNode('rightEye');
+    if (l?.parent === head && r?.parent === head) {
+      const scale = head.parent ? head.parent.getWorldScale(EYE_TMP).x : 1;
+      const local = l.position.clone().add(r.position).multiplyScalar(0.5 * scale);
+      return out.add(local.applyQuaternion(head.getWorldQuaternion(EYE_Q)));
+    }
+    // sans os des yeux : un peu au-dessus et en avant du cou
+    return out.add(EYE_TMP.set(0, 0.07, 0)).addScaledVector(this.forward, 0.08);
+  }
+
+  /**
+   * Vue à la première personne : immobile et debout, le perso se tourne vers où regarde la caméra
+   * (cap `yaw`) quand elle s'écarte trop de devant lui, pour ne pas voir son propre dos.
+   */
+  faceView(yaw: number, dt: number): void {
+    if (!this.idle || this.seat || this.bed || this.ride || this.pushing) return;
+    let delta = yaw - this.heading;
+    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+    if (Math.abs(delta) < 0.9 && !this.facing) return;
+    // une fois lancé, on se tourne jusqu'au bout
+    this.facing = Math.abs(delta) > 0.05;
+    this.heading += delta * Math.min(1, dt * TURN_RATE * 0.8);
+    this.root.rotation.y = this.heading;
+  }
+
+  /** En train de se tourner vers la vue (voir faceView). */
+  private facing = false;
 
   /** Remet le perso debout à `pos`, tourné de `yaw` (partie chargée), sans marche en cours. */
   placeAt(pos: THREE.Vector3, yaw: number): void {

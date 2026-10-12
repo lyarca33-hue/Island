@@ -12,8 +12,9 @@
  * pièce est alors compté comme vu (c'est le toit qu'on voit), sans être retenu comme visité.
  *
  * La grille part au GPU dans une petite texture (rouge : vu maintenant, vert : déjà vu) que la
- * passe finale (postfx.ts) lit pour chaque pixel, d'après sa position dans le monde : ce qui est
- * vu reste tel quel, ce qui a été vu s'assombrit et se ternit, l'inconnu reste dans la brume.
+ * passe finale (postfx.ts) lisse, puis lit pour chaque pixel d'après sa position dans le monde : ce
+ * qui est vu reste tel quel, et un dégradé doux mène au noir ; un lieu déjà vu garde une faible
+ * lueur terne, l'inconnu est noir. Au bout de la vue aussi, le décor se fond dans le noir.
  */
 import * as THREE from 'three';
 import { SEA_LEVEL as SEA } from './ile';
@@ -33,6 +34,8 @@ const WALL_TOP = 2.5;
 const AROUND = 0.6;
 /** Au-delà du mur touché, la case du mur lui-même est encore vue (m). */
 const WALL_SKIN = 0.18;
+/** Part de la portée où commence le dégradé vers le noir du bout de la vue. */
+const FAR_FADE = 0.6;
 /** Vitesse (par seconde) à laquelle une case s'éclaire quand on la voit, et s'éteint quand on ne la voit plus. */
 const FADE_IN = 6;
 const FADE_OUT = 1.6;
@@ -82,6 +85,8 @@ export class FogOfWar {
   readonly texture: THREE.DataTexture;
   /** Coin de la grille (x, z) et 1 / côté : pour passer d'un point du monde à la texture. */
   readonly box = new THREE.Vector3(-FOG_HALF, -FOG_HALF, 1 / (2 * FOG_HALF));
+  /** Cases de la grille sur un côté. */
+  readonly size = N;
   private data = new Uint8Array(N * N * 2);
   /** Part vue (0 à 1) des cases encore éclairées, et la liste de ces cases. */
   private level = new Float32Array(N * N);
@@ -89,6 +94,8 @@ export class FogOfWar {
   private inActive = new Uint8Array(N * N);
   /** Tracé de rayons où chaque case a été vue pour la dernière fois. */
   private stamp = new Uint32Array(N * N);
+  /** Part vue visée à ce tracé (moins au bout de la vue : fondu vers le noir avec la distance). */
+  private want = new Float32Array(N * N);
   private cast = 0;
   /** Hauteur du sol de chaque case, calculée la première fois qu'un rayon y passe. */
   private ground = new Float32Array(N * N).fill(NaN);
@@ -161,7 +168,8 @@ export class FogOfWar {
   }
 
   /** Case `i` vue à ce tracé ; `remember` : retenue comme déjà vue. */
-  private mark(i: number, remember: boolean): void {
+  private mark(i: number, remember: boolean, k = 1): void {
+    this.want[i] = this.stamp[i] === this.cast ? Math.max(this.want[i], k) : k;
     this.stamp[i] = this.cast;
     if (remember && this.data[i * 2 + 1] !== 255) {
       this.data[i * 2 + 1] = 255;
@@ -191,6 +199,8 @@ export class FogOfWar {
     const roofSeen = new Set<number>();
     const { rays, range } = this.detail;
     const step = FOG_CELL * 0.9;
+    // au bout de la vue, un dégradé vers le noir plutôt qu'un bord net
+    const far = range * FAR_FADE;
     for (let k = 0; k < rays; k++) {
       const a = (k / rays) * Math.PI * 2;
       const dx = Math.cos(a), dz = Math.sin(a);
@@ -210,7 +220,7 @@ export class FogOfWar {
         const i = this.index(ex + dx * r, ez + dz * r);
         if (i < 0) break;
         const h = Math.max(this.groundAt(i), SEA);
-        if (i !== last && (h + TARGET - ey) / r >= horizon) this.mark(i, true);
+        if (i !== last && (h + TARGET - ey) / r >= horizon) this.mark(i, true, r < far ? 1 : 1 - THREE.MathUtils.smoothstep(r, far, range));
         last = i;
         horizon = Math.max(horizon, (h - ey) / r);
       }
@@ -237,10 +247,10 @@ export class FogOfWar {
     const list = this.active;
     for (let j = list.length - 1; j >= 0; j--) {
       const i = list[j];
-      const on = this.stamp[i] === this.cast;
+      const goal = this.stamp[i] === this.cast ? this.want[i] : 0;
       const prev = this.level[i];
-      const v = on ? Math.min(1, prev + FADE_IN * dt) : Math.max(0, prev - FADE_OUT * dt);
-      if (v === prev && on) continue;
+      const v = goal > prev ? Math.min(goal, prev + FADE_IN * dt) : Math.max(goal, prev - FADE_OUT * dt);
+      if (v === prev && goal > 0) continue;
       this.level[i] = v;
       this.data[i * 2] = Math.round(v * 255);
       this.dirty = true;

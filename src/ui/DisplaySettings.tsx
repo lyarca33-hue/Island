@@ -49,7 +49,7 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
         <input type="checkbox" checked={fog} onChange={(e) => { game.fogOfWar = e.target.checked; setFog(e.target.checked); }} />
         <span>Brouillard de guerre</span>
       </label>
-      <small>Seul ce que le perso voit se montre net : derrière un mur, une porte fermée ou une colline, la brume ; les lieux déjà vus restent en souvenir, plus sombres.</small>
+      <small>Seul ce que le perso voit se montre net : derrière un mur, une porte fermée ou une colline, un dégradé vers le noir ; les lieux déjà vus gardent une faible lueur.</small>
       <label className="menu-check">
         <input type="checkbox" checked={fps} onChange={(e) => onFps(e.target.checked)} />
         <span>Afficher les images par seconde</span>

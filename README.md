@@ -28,6 +28,9 @@ ouvre le créateur, et « Jouer » ramène sur la map.
 - ZQSD, WASD ou flèches : marcher (Maj : courir)
 - Molette : zoom
 - Boutons en haut à gauche, à côté du menu : tourner la caméra d'un quart de tour
+- X (ou le bouton du bonhomme en haut à gauche) : vue à la première personne, par les yeux du perso ;
+  glisser la souris (ou le doigt) pour regarder autour, Z avance là où l'on regarde, et les clics sur
+  les objets marchent comme d'habitude. X encore : retour à la vue de dessus
 - H (ou l'œil barré en haut à gauche) : masquer l'interface pour profiter de la scène
 - Jauges rondes en haut à droite (santé, fatigue, faim, soif, hygiène) : la flèche dit si elle
   remonte ou baisse vite ; au survol, la valeur et quand elle tombera à zéro au rythme actuel

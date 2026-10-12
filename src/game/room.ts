@@ -42,6 +42,8 @@ export interface Rect {
 export const ROOM: Rect = { x0: -3.2, x1: 3.2, z0: -2.8, z1: 2.8 };
 /** Hauteur et épaisseur des murs, hauteur d'un mur abaissé (en coupe). */
 export const WALL_H = 2.5;
+/** Plâtre du plafond (vu à la première personne). */
+const CEILING_COLOR = 0xeee8dc;
 export const WALL_T = 0.12;
 const CUT_H = 0.2;
 /** Hauteur d'une porte ou d'un passage. */
@@ -342,6 +344,8 @@ export class Room {
   readonly panes: Array<{ at: THREE.Vector3; n: THREE.Vector3; size: number }> = [];
   /** Toit visible, montré quand le perso est dehors. */
   private roof = new THREE.Group();
+  /** Plafond (première personne), caché sinon. */
+  readonly ceiling: THREE.Mesh;
   /** Ce que le kit Tripo remplace (dress) : le sol, les pans du toit, les fenêtres faites par programme. */
   private floor: THREE.Mesh;
   private roofPans: Array<{ mesh: THREE.Mesh; side: number; lx: number; slope: number }> = [];
@@ -373,6 +377,13 @@ export class Room {
     roof.receiveShadow = false;
     roof.name = 'toit-ombre';
     this.group.add(roof);
+    // plafond, vu d'en dessous à la première personne seulement (la vue de dessus le traverse)
+    this.ceiling = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(Math.PI / 2), toon(CEILING_COLOR));
+    this.ceiling.position.set((x0 + x1) / 2, WALL_H - 0.002, (z0 + z1) / 2);
+    this.ceiling.receiveShadow = true;
+    this.ceiling.visible = false;
+    this.ceiling.name = 'plafond';
+    this.group.add(this.ceiling);
 
     // les murs (nord et sud couvrent les coins), percés des portes et des fenêtres
     const windows = spec.windows(anchor);
@@ -1224,6 +1235,11 @@ export class Room {
     p.x = THREE.MathUtils.clamp(p.x, x0 + 0.3, x1 - 0.3);
     p.z = THREE.MathUtils.clamp(p.z, z0 + 0.3, z1 - 0.3);
     return { point: p, distance: hit.distance };
+  }
+
+  /** Distance du premier mur (entier) touché par le rayon, ou null (caméra à la première personne). */
+  wallDistance(ray: THREE.Raycaster): number | null {
+    return ray.intersectObjects(this.solid, false)[0]?.distance ?? null;
   }
 
   private visibleChain(o: THREE.Object3D): boolean {
