@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ITEM_BY_ID } from '../src/game/items/catalog';
-import { clipY, stretchY, TRIPO_LOOKS } from '../src/game/items/tripo';
+import { clipY, gatherXZ, stretchY, TRIPO_LOOKS } from '../src/game/items/tripo';
 
 /** Aire totale des triangles d'une géométrie sans index. */
 function area(g: THREE.BufferGeometry): number {
@@ -54,5 +54,19 @@ describe('modèles Tripo de la maison', () => {
     g.computeBoundingBox();
     expect(g.boundingBox!.min.y).toBeCloseTo(0, 6);
     expect(g.boundingBox!.max.y).toBeCloseTo(0.74, 6);
+  });
+
+  it('resserre les franges de la serpillière pour qu’elles tiennent dans le seau', () => {
+    // franges étalées sur 45 cm au sol, le manche (4 cm) au-dessus de 30 cm
+    const g = gatherXZ(new THREE.CylinderGeometry(0.02, 0.22, 1.3, 16, 1, true).translate(0, 0.65, 0), 0.3, 0.5);
+    const p = g.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      const r = Math.hypot(p.getX(i), p.getZ(i));
+      if (p.getY(i) < 0.01) expect(r).toBeCloseTo(0.11, 6);
+    }
+    g.computeBoundingBox();
+    expect(g.boundingBox!.max.y).toBeCloseTo(1.3, 6);
+    // rangée dans le seau, elle trempe dans l'eau, pas sous son fond
+    expect(ITEM_BY_ID.get('seau')!.slots![0][1]).toBeGreaterThanOrEqual(0.11);
   });
 });

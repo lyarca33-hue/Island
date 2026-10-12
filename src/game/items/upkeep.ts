@@ -289,7 +289,8 @@ export const UPKEEP_ITEMS: ItemDef[] = [
     fragility: 9,
     durability: 140,
     holds: ['serpillière'],
-    slots: [[0, 0.02, 0]],
+    // les franges posées dans l'eau du seau (son fond est à 11 cm), pas sous le seau
+    slots: [[0, 0.12, 0]],
     build: () => {
       // seau plein (fermé), l'intérieur sombre vu d'en haut
       const g = group(mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.28, 20), 0x2f8a6e, 0, 0.14, 0), cyl(0.138, 0.004, 0x1f4f40, 0.281));

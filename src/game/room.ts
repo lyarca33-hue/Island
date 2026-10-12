@@ -1330,7 +1330,7 @@ export const KITCHEN: RoomSpec = {
     ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z + 0.5, Math.PI],
     // le ménage, dans le coin à côté de la porte de l'entrée : le seau et sa serpillière, le balai
     ['seau', ROOM.x0 + 0.24, 0, ROOM.z1 - 0.24, 0],
-    ['serpilliere', ROOM.x0 + 0.24, 0.02, ROOM.z1 - 0.24, 0],
+    ['serpilliere', ROOM.x0 + 0.24, 0.12, ROOM.z1 - 0.24, 0],
     ['balai', ROOM.x0 + 0.55, 0, ROOM.z1 - 0.14, 0],
   ],
 };

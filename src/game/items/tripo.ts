@@ -64,6 +64,11 @@ export interface TripoLook {
   /** Allonge ce qui est sous la hauteur y (repère du modèle) de `by` mètres : les pieds de la table basse. */
   stretch?: [y: number, by: number];
   /**
+   * Resserre vers l'axe ce qui est sous la hauteur y (repère du modèle) : à y le modèle ne bouge
+   * pas, au sol il est ramené à `to` de sa largeur (les franges de la serpillière, étalées par terre).
+   */
+  gather?: [y: number, to: number];
+  /**
    * Remet d'aplomb ce qui penche vers l'avant : devant z, les points montent de `rise` par mètre,
    * pleinement au-dessus de y1, pas du tout sous y0 (la lunette des toilettes, modélisée en pente).
    */
@@ -180,7 +185,8 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   // —— le ménage et le linge (menage.glb, menage.ts ; upkeep.ts pour les outils des gestes). Le pack
   // porte aussi un gant seul (gant-porte), pas encore utilisé.
   balai: { model: 'balai' },
-  serpilliere: { model: 'serpilliere' },
+  // les franges du modèle s'étalent par terre sur 45 cm : resserrées, elles pendent et tiennent dans le seau
+  serpilliere: { model: 'serpilliere', gather: [0.3, 0.5] },
   seau: { model: 'seau' },
   // le bec du modèle vers -X : tourné vers l'avant (+Z), comme celui du jeu
   spray: { model: 'spray', turn: Math.PI / 2 },
@@ -294,6 +300,7 @@ function bake(id: string, look: TripoLook, model: Model) {
     let out = look.clip ? clipY(g, s0, s1) : g.clone();
     if (look.cut) out = cutBoxes(out, look.cut);
     if (look.stretch) stretchY(out, ...look.stretch);
+    if (look.gather) gatherXZ(out, ...look.gather);
     if (look.level && !part) levelY(out, look.level);
     if (look.unshade) {
       all.push(out.clone());
@@ -479,6 +486,20 @@ export function stretchY(g: THREE.BufferGeometry, y: number, by: number): THREE.
   for (let i = 0; i < p.count; i++) {
     const v = p.getY(i);
     p.setY(i, v < y ? (v * (y + by)) / y : v + by);
+  }
+  p.needsUpdate = true;
+  return g;
+}
+
+/** Voir TripoLook.gather : sous y, rapproche les points de l'axe vertical, jusqu'à `to` au sol. */
+export function gatherXZ(g: THREE.BufferGeometry, y: number, to: number): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const v = p.getY(i);
+    if (v >= y) continue;
+    const f = to + (1 - to) * Math.max(0, v / y);
+    p.setX(i, p.getX(i) * f);
+    p.setZ(i, p.getZ(i) * f);
   }
   p.needsUpdate = true;
   return g;
