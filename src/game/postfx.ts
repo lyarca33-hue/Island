@@ -109,7 +109,7 @@ const HIDDEN_GAP = 0.3;
 export class PostFx {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
-  private camera: THREE.OrthographicCamera;
+  private camera: THREE.OrthographicCamera | THREE.PerspectiveCamera;
   private sceneRT: THREE.WebGLRenderTarget;
   /** Bloom (quart de résolution). */
   private brightRT: THREE.WebGLRenderTarget;
@@ -132,7 +132,7 @@ export class PostFx {
   private warmed = -1;
   private ph = 1;
 
-  constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera, seeThrough = false) {
+  constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera | THREE.PerspectiveCamera, seeThrough = false) {
     this.renderer = renderer;
     this.seeThrough = seeThrough;
     this.scene = scene;
@@ -182,7 +182,7 @@ export class PostFx {
         tScene: { value: this.sceneRT.texture }, tDepth: { value: this.sceneRT.depthTexture },
         tCharDepth: { value: this.charRT.depthTexture }, tBloom: { value: this.brightRT.texture },
         tChar: { value: this.charRT.texture }, seeThrough: { value: seeThrough ? 1 : 0 },
-        texel: { value: new THREE.Vector2() }, near: { value: 0.1 }, range: { value: 399.9 },
+        texel: { value: new THREE.Vector2() }, near: { value: 0.1 }, range: { value: 399.9 }, persp: { value: 0 },
         ink: { value: 0.8 }, bloom: { value: 0.5 }, aspect: { value: 1 },
         sharpen: { value: 0.5 },
         lift: { value: new THREE.Vector3(0.0, 0.004, 0.014) }, gain: { value: new THREE.Vector3(1.05, 1.0, 0.95) },
@@ -192,11 +192,11 @@ export class PostFx {
       fragmentShader: `
         uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tCharDepth; uniform sampler2D tBloom;
         uniform sampler2D tChar; uniform float seeThrough;
-        uniform vec2 texel; uniform float near; uniform float range; uniform float ink; uniform float bloom; uniform float aspect;
+        uniform vec2 texel; uniform float near; uniform float range; uniform float persp; uniform float ink; uniform float bloom; uniform float aspect;
         uniform float sharpen;
         uniform vec3 lift; uniform vec3 gain; uniform float saturation; varying vec2 vUv;
-        // caméra orthographique : profondeur linéaire
-        float lin(float raw){ return near + raw * range; }
+        // profondeur en mètres : linéaire en orthographique, en 1/z en perspective (première personne)
+        float lin(float raw){ return persp > 0.5 ? near * (near + range) / (near + range - raw * range) : near + raw * range; }
         float raw(vec2 o){ return texture2D(tDepth, vUv + o * texel).r; }
         // 1 si le pixel montre un perso : sa profondeur seule égale celle de la scène (pas masqué par un
         // décor) ; textureLod car appelé dans une branche (pas de dérivées implicites)
@@ -220,9 +220,13 @@ export class PostFx {
           c = max((c + (nE + nW + nN + nS) * wgt) / (1.0 + 4.0 * wgt), 0.0);
           // contours : dérivée SECONDE de la profondeur, nulle sur toute surface plane (sol vu en
           // biais), forte seulement sur les vraies arêtes et silhouettes
-          float lx = abs(lin(rxp) + lin(rxm) - 2.0 * c0);
-          float ly = abs(lin(ryp) + lin(rym) - 2.0 * c0);
-          float e = max(lx, ly);
+          float e;
+          if (persp > 0.5) {
+            // en perspective, c'est 1/z (donc la profondeur brute) qui varie linéairement sur un plan :
+            // sa dérivée seconde, ramenée en mètres ; estompée au loin (précision du tampon)
+            float k = range / (near * (near + range)) * c0 * c0;
+            e = max(abs(rxp + rxm - 2.0 * r0), abs(ryp + rym - 2.0 * r0)) * k * (1.0 - smoothstep(40.0, 90.0, c0));
+          } else e = max(abs(lin(rxp) + lin(rxm) - 2.0 * c0), abs(lin(ryp) + lin(rym) - 2.0 * c0));
           // persos : arêtes intérieures ignorées, seule la silhouette reste encrée (le masque ne sert
           // qu'au-dessus du seuil d'encre : calculé seulement là)
           if (e > 0.16) e *= 1.0 - ch(vec2(0.0), r0) * ch(vec2(1.0,0.0), rxp) * ch(vec2(-1.0,0.0), rxm) * ch(vec2(0.0,1.0), ryp) * ch(vec2(0.0,-1.0), rym);
@@ -298,17 +302,24 @@ export class PostFx {
     this.pass(this.blurMat, a);
   }
 
+  /** Caméra du rendu : l'iso orthographique, ou celle de la première personne. */
+  setCamera(camera: THREE.OrthographicCamera | THREE.PerspectiveCamera): void {
+    this.camera = camera;
+  }
+
   render(): void {
     const r = this.renderer;
     const u = this.finalMat.uniforms;
     u.near.value = this.camera.near;
     u.range.value = this.camera.far - this.camera.near;
+    u.persp.value = (this.camera as THREE.PerspectiveCamera).isPerspectiveCamera ? 1 : 0;
     r.setRenderTarget(this.sceneRT);
     r.render(this.scene, this.camera);
     this.renderCharacter();
     // bloom (et masque du perso caché, en alpha)
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
-    const through = this.seeThrough && !this.tucked;
+    // à la première personne (perspective), pas de perso à montrer à travers le décor
+    const through = this.seeThrough && !this.tucked && !u.persp.value;
     this.brightMat.uniforms.gap.value = through ? HIDDEN_GAP / (this.camera.far - this.camera.near) : 0;
     this.finalMat.uniforms.seeThrough.value = through ? 1 : 0;
     this.pass(this.brightMat, this.brightRT);
