@@ -62,6 +62,16 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const [ready, setReady] = useState<Game | null>(null);
   const [camAngle, setCamAngle] = useState(0);
   useEffect(() => setCamAngle(ready?.cameraAngle ?? 0), [ready]);
+  /** Vue à la première personne (touche X ou bouton de la barre). */
+  const [firstPerson, setFirstPerson] = useState(false);
+  useEffect(() => {
+    if (!ready) return;
+    setFirstPerson(ready.firstPerson);
+    ready.onViewChange = setFirstPerson;
+    return () => {
+      ready.onViewChange = null;
+    };
+  }, [ready]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // les modèles dont sont faits des objets (aliments, meubles de la cuisine) : chargés avant de construire la maison
@@ -220,6 +230,19 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                 aria-label="Faire tourner la caméra"
                 title="Faire tourner la caméra autour du perso"
               />
+              <button
+                className={`hud-icon${firstPerson ? ' on' : ''}`}
+                onClick={(e) => {
+                  if (game.current) game.current.firstPerson = !game.current.firstPerson;
+                  // rendre le clavier au perso (ZQSD)
+                  e.currentTarget.blur();
+                }}
+                aria-pressed={firstPerson}
+                aria-label="Vue à la première personne"
+                title={firstPerson ? 'Revenir à la vue de dessus (X)' : 'Vue à la première personne (X) : glisser pour regarder autour'}
+              >
+                <Icon name="user" />
+              </button>
               <span className="hud-sep" />
               <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
                 <Icon name="eyeOff" />

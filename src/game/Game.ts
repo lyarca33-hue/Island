@@ -71,6 +71,25 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2.5;
 /** Hauteur du point suivi au-dessus des pieds du perso (m). */
 const FOCUS_HEIGHT = 0.9;
+/** Première personne : champ de vision vertical (°), regard de départ un peu baissé, limites du regard. */
+const FP_FOV = 70;
+const FP_PITCH = -0.15;
+const FP_PITCH_MAX = 1.35;
+/** Radians tournés par pixel de souris glissée à la première personne. */
+const FP_LOOK = 0.005;
+/** Avancée des yeux regard baissé (m), et distance gardée aux murs (m). */
+const FP_LEAN = 0.14;
+const FP_MARGIN = 0.12;
+const FP_KEY = 'rp-island-premiere-personne';
+
+/** Vue à la première personne mémorisée (iso par défaut). */
+function loadFirstPerson(): boolean {
+  try {
+    return localStorage.getItem(FP_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 /** Soif rendue par une tasse pleine bue en entier, et regain d'énergie si c'est du café (moitié moins pour le thé). */
 const DRINK_THIRST = 35;
@@ -469,11 +488,26 @@ const ON_BOX = new THREE.Box3();
 const ON_TMP = new THREE.Vector3();
 const ON_POS = new THREE.Vector3();
 const roofProbe = new THREE.Vector3();
+const EYE_LOOK = new THREE.Vector3();
+const EYE_FWD = new THREE.Vector3();
+const EYE_FROM = new THREE.Vector3();
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  /** Caméra iso (vue de dessus, par défaut) et caméra aux yeux du perso (première personne). */
+  private iso = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  private eyeCam = new THREE.PerspectiveCamera(FP_FOV, 1, 0.05, 400);
+  /** Caméra du rendu et des clics : l'une des deux. */
+  private camera: THREE.OrthographicCamera | THREE.PerspectiveCamera = this.iso;
+  /** Vue à la première personne (touche X) : la caméra aux yeux du perso, la souris tourne la tête. */
+  private fp = loadFirstPerson();
+  /** Regard vers le haut (+) ou le bas (-) à la première personne (radians). */
+  private pitch = FP_PITCH;
+  /** Appui sur le sol ou un meuble à la première personne : un glisser tourne la vue, un clic agit. */
+  private look: { x: number; y: number; dragging: boolean; shift: boolean } | null = null;
+  /** Appelé quand on passe d'une vue à l'autre (bouton du HUD). */
+  onViewChange: ((firstPerson: boolean) => void) | null = null;
   private post: PostFx;
   private character = new Character();
   private sun: THREE.DirectionalLight;
@@ -1003,6 +1037,26 @@ export class Game {
     const at = this.turn / q;
     // entre deux quarts (après le curseur) : on s'arrête sur le prochain dans le sens voulu
     this.turn = (dir > 0 ? Math.floor(at + 1e-6) + 1 : Math.ceil(at - 1e-6) - 1) * q;
+  }
+
+  /** Vue à la première personne (sinon la vue iso de dessus). */
+  get firstPerson(): boolean {
+    return this.fp;
+  }
+
+  set firstPerson(on: boolean) {
+    if (on === this.fp) return;
+    this.fp = on;
+    this.look = null;
+    // on repart du regard droit devant, un peu baissé (de quoi voir le plan de travail)
+    this.pitch = FP_PITCH;
+    if (!on) this.character.hideHead(false);
+    try {
+      localStorage.setItem(FP_KEY, on ? '1' : '0');
+    } catch {
+      // stockage indisponible : réglage pour cette partie seulement
+    }
+    this.onViewChange?.(on);
   }
 
   /** Angle de la caméra en degrés, 0 à 360 (curseur du HUD). */
@@ -7011,6 +7065,7 @@ export class Game {
       this.shift = e.shiftKey;
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
+      if (e.code === 'KeyX' && !e.repeat) this.firstPerson = !this.fp;
       if (e.code === 'KeyB' && !e.repeat) this.drink();
       // M : la lettre, quelle que soit la disposition du clavier (AZERTY ou QWERTY)
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
@@ -7041,9 +7096,20 @@ export class Game {
     on(window, 'blur', () => this.keys.clear());
     on(el, 'wheel', (e) => {
       e.preventDefault();
-      this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      // à la première personne, la molette n'a pas de zoom à régler
+      if (!this.fp) this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
     on(el, 'pointermove', (e) => {
+      const lk = this.look;
+      if (lk && e.buttons & 1) {
+        if (!lk.dragging && Math.hypot(e.clientX - lk.x, e.clientY - lk.y) > DRAG_START) lk.dragging = true;
+        if (lk.dragging) {
+          this.turnView(e.clientX - lk.x, e.clientY - lk.y);
+          lk.x = e.clientX;
+          lk.y = e.clientY;
+        }
+        return;
+      }
       const pr = this.press;
       if (pr && e.buttons & 1) {
         if (!pr.dragging && Math.hypot(e.clientX - pr.x, e.clientY - pr.y) > DRAG_START) pr.dragging = true;
@@ -7099,25 +7165,26 @@ export class Game {
       if (e.button !== 0) return;
       this.onMenu?.(null);
       const hit = this.hitAt(e.clientX, e.clientY);
-      if (hit) {
-        // un objet qu'on porte peut être traîné (glisser-déposer) : on attend de savoir si c'est un clic
-        if (hit.item.def.portable && !this.moving) {
-          this.press = { hit, x: e.clientX, y: e.clientY, shift: e.shiftKey, dragging: false };
-          return;
-        }
-        this.clickItem(hit, e.shiftKey);
+      // un objet qu'on porte peut être traîné (glisser-déposer) : on attend de savoir si c'est un clic
+      if (hit?.item.def.portable && !this.moving) {
+        this.press = { hit, x: e.clientX, y: e.clientY, shift: e.shiftKey, dragging: false };
         return;
       }
-      const p = this.groundPoint(e.clientX, e.clientY);
-      if (!p) return;
-      if (this.moving) {
-        this.onNotice?.(matchMedia('(pointer: coarse)').matches ? 'Les flèches pour déplacer le meuble, les flèches rondes pour le pivoter, Lâcher pour le poser.' : 'Z Q S D pour déplacer le meuble, R / F pour le pivoter, E pour le lâcher.');
+      // à la première personne, glisser ailleurs tourne la vue : on attend de savoir si c'est un clic
+      if (this.fp) {
+        this.look = { x: e.clientX, y: e.clientY, dragging: false, shift: e.shiftKey };
+        el.setPointerCapture?.(e.pointerId);
         return;
       }
-      this.character.goTo(p, e.shiftKey);
-      this.marker.position.set(p.x, 0.01, p.z);
-      (this.marker.material as THREE.MeshBasicMaterial).opacity = 0.9;
+      this.pointAt(e.clientX, e.clientY, e.shiftKey, hit);
     });
+    on(window, 'pointerup', (e) => {
+      const lk = this.look;
+      if (!lk || e.button !== 0) return;
+      this.look = null;
+      if (!lk.dragging) this.pointAt(e.clientX, e.clientY, lk.shift, this.hitAt(e.clientX, e.clientY));
+    });
+    on(window, 'pointercancel', () => (this.look = null));
     on(window, 'pointerup', (e) => {
       const pr = this.press;
       if (!pr || e.button !== 0) return;
@@ -7128,6 +7195,32 @@ export class Game {
       // sur un objet : le geste qui va de soi ; sinon par terre, là où on lâche
       this.dragDrop(pr.hit.item, target?.item ?? null, target ? target.point : this.groundPoint(e.clientX, e.clientY));
     });
+  }
+
+  /** Clic (pas un glisser) sur un meuble ou le sol : agir sur le meuble, ou y aller. */
+  private pointAt(cx: number, cy: number, shift: boolean, hit: ReturnType<Game['hitAt']>): void {
+    if (hit) {
+      this.clickItem(hit, shift);
+      return;
+    }
+    const p = this.groundPoint(cx, cy);
+    if (!p) return;
+    if (this.moving) {
+      this.onNotice?.(matchMedia('(pointer: coarse)').matches ? 'Les flèches pour déplacer le meuble, les flèches rondes pour le pivoter, Lâcher pour le poser.' : 'Z Q S D pour déplacer le meuble, R / F pour le pivoter, E pour le lâcher.');
+      return;
+    }
+    this.character.goTo(p, shift);
+    this.marker.position.set(p.x, 0.01, p.z);
+    (this.marker.material as THREE.MeshBasicMaterial).opacity = 0.9;
+  }
+
+  /**
+   * Première personne : tourner la tête de (dx, dy) pixels (souris glissée, doigt, ou le
+   * curseur du HUD) ; vers la droite et vers le bas pour des valeurs positives.
+   */
+  turnView(dx: number, dy: number): void {
+    this.turn += dx * FP_LOOK;
+    this.pitch = THREE.MathUtils.clamp(this.pitch - dy * FP_LOOK, -FP_PITCH_MAX, FP_PITCH_MAX);
   }
 
   /** Clic gauche sur un objet : le prendre (ou ouvrir la porte, appuyer sur le bouton, allumer la lampe…). */
@@ -7793,7 +7886,9 @@ export class Game {
       // fermé à clé dans la salle de bain : le perso déverrouille en sortant
       if (r.unlockToLeave(c.position, c.goal)) this.onNotice?.('Porte déverrouillée.');
       r.overcast = this.weather.cloud;
-      r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.activeRoom?.rect ?? null);
+      // à la première personne, murs et toit restent entiers : on est dedans
+      r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.fp ? null : this.activeRoom?.rect ?? null);
+      r.ceiling.visible = this.fp;
     }
     this.updateNightLight(dt);
     this.updateWindowLights(dt);
@@ -7804,7 +7899,7 @@ export class Game {
     const w = this.weather;
     w.update(this.clock, dt, (dt * this.clock.speed) / 3600);
     this.island.setSeason(look.grass, Math.max(look.snow, w.cover), w.wet);
-    this.island.update(dt, Math.max(w.rain, w.cloud * 0.4), this.focus.x, this.focus.z, this.zoom);
+    this.island.update(dt, Math.max(w.rain, w.cloud * 0.4), this.focus.x, this.focus.z, this.fp ? 1 : this.zoom);
     this.rainView.copy(toCamera);
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
@@ -7821,7 +7916,8 @@ export class Game {
    */
   private rainHidden = (x: number, y: number, z: number): boolean => {
     if (this.underRoof(x, z)) return true;
-    if (!this.activeRoom) return false;
+    // à la première personne, les murs sont entiers : ils cachent eux-mêmes la pluie
+    if (!this.activeRoom || this.fp) return false;
     // vue de la caméra, la goutte passe devant le sol ou le haut des murs d'une pièce
     const v = this.rainView;
     for (const h of [0, WALL_H]) {
@@ -9128,15 +9224,22 @@ export class Game {
       this.bubble.hidden = true;
       return;
     }
-    const head = this.character.position.clone().setY(1.75).project(this.camera);
     const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (this.fp) {
+      // à la première personne, la tête est hors de l'image : la bulle en haut, au milieu
+      this.bubble.style.left = `${w / 2}px`;
+      this.bubble.style.top = `${h * 0.22}px`;
+      return;
+    }
+    const head = this.character.position.clone().setY(1.75).project(this.camera);
     this.bubble.style.left = `${((head.x + 1) / 2) * w}px`;
     this.bubble.style.top = `${((1 - head.y) / 2) * h}px`;
   }
 
   private updateCamera(dt: number): void {
     const targetYaw = BASE_YAW + this.turn;
-    this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * 8);
+    // à la première personne, la tête suit la souris presque tout de suite
+    this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * (this.fp ? 30 : 8));
     const p = this.character.position;
     this.lift.position.y = heightAt(p.x, p.z);
     this.focus.lerp(new THREE.Vector3(p.x, FOCUS_HEIGHT + this.lift.position.y, p.z), Math.min(1, dt * 5));
@@ -9144,7 +9247,10 @@ export class Game {
     const aspect = w / h;
     // portrait (téléphone) : vue plus haute pour garder assez de largeur
     const viewH = (aspect >= 1 ? VIEW_HEIGHT : Math.max(VIEW_HEIGHT, 7 / aspect)) / this.zoom;
-    const c = this.camera;
+    if (this.fp) this.updateEyes(aspect, dt);
+    else this.camera = this.iso;
+    this.post.setCamera(this.camera);
+    const c = this.iso;
     c.left = -viewH * aspect / 2;
     c.right = viewH * aspect / 2;
     c.top = viewH / 2;
@@ -9158,6 +9264,43 @@ export class Game {
     c.lookAt(this.focus);
     // lumière selon l'heure et la saison ; soleil et carte d'ombre suivent le perso
     applySky(this.clock.solarHour, this.clock.noonElevation, { sun: this.sun, hemi: this.hemi, scene: this.scene, grade: (g, s) => this.post.setGrade(g, s) }, this.focus, this.weather.cloud);
+  }
+
+  /**
+   * Caméra aux yeux du perso (première personne) : elle regarde dans la direction de la vue iso
+   * (`yaw`), levée ou baissée de `pitch`. La tête du perso est réduite à rien (voir hideHead).
+   */
+  private updateEyes(aspect: number, dt: number): void {
+    const c = this.eyeCam;
+    this.camera = c;
+    this.character.hideHead(true);
+    // immobile, le perso se tourne vers où l'on regarde (cap du perso : x = sin, z = cos)
+    this.character.faceView(Math.atan2(-Math.cos(this.yaw), -Math.sin(this.yaw)), dt);
+    if (c.aspect !== aspect) {
+      c.aspect = aspect;
+      c.updateProjectionMatrix();
+    }
+    const eye = this.character.eye(c.position);
+    const fwd = EYE_FWD.set(-Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    // regard baissé : les yeux passent devant le cou (sinon on voit l'intérieur du col)
+    eye.addScaledVector(fwd, FP_LEAN * THREE.MathUtils.smoothstep(-this.pitch, 0.2, 1));
+    // contre un mur, la caméra reste de ce côté-ci : rayon depuis l'axe du perso vers les yeux
+    // (prolongé de la marge du plan de coupe), arrêté au premier mur
+    const p = this.character.position;
+    const from = EYE_FROM.set(p.x, eye.y, p.z);
+    const to = EYE_LOOK.copy(eye).addScaledVector(fwd, FP_MARGIN).sub(from);
+    const len = to.length();
+    if (len > 1e-4) {
+      this.raycaster.set(from, to.divideScalar(len));
+      this.raycaster.far = len;
+      let d = len;
+      for (const r of this.rooms) d = Math.min(d, r.wallDistance(this.raycaster) ?? d);
+      this.raycaster.far = Infinity;
+      if (d < len) eye.copy(from).addScaledVector(to, Math.max(0, d - FP_MARGIN));
+    }
+    const cp = Math.cos(this.pitch);
+    EYE_LOOK.set(fwd.x * cp, Math.sin(this.pitch), fwd.z * cp).add(eye);
+    c.lookAt(EYE_LOOK);
   }
 
   /** La partie en cours, à sauver (voir save.ts). */
