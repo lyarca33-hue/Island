@@ -16,6 +16,7 @@
  * masque flouté, rangé dans le canal alpha du bloom (même passes, rien de plus à dessiner).
  */
 import * as THREE from 'three';
+import type { FogOfWar } from './brouillard';
 
 /** Calque des maillages de persos : contour limité à la silhouette. */
 export const LAYER_CHARACTER = 4;
@@ -187,6 +188,8 @@ export class PostFx {
         sharpen: { value: 0.5 },
         lift: { value: new THREE.Vector3(0.0, 0.004, 0.014) }, gain: { value: new THREE.Vector3(1.05, 1.0, 0.95) },
         saturation: { value: 1.12 },
+        fogOn: { value: 0 }, tFog: { value: null }, fogBox: { value: new THREE.Vector3() },
+        fogInvVP: { value: new THREE.Matrix4() },
       },
       vertexShader: VS,
       fragmentShader: `
@@ -195,6 +198,7 @@ export class PostFx {
         uniform vec2 texel; uniform float near; uniform float range; uniform float persp; uniform float ink; uniform float bloom; uniform float aspect;
         uniform float sharpen;
         uniform vec3 lift; uniform vec3 gain; uniform float saturation; varying vec2 vUv;
+        uniform float fogOn; uniform sampler2D tFog; uniform vec3 fogBox; uniform mat4 fogInvVP;
         // profondeur en mètres : linéaire en orthographique, en 1/z en perspective (première personne)
         float lin(float raw){ return persp > 0.5 ? near * (near + range) / (near + range - raw * range) : near + raw * range; }
         float raw(vec2 o){ return texture2D(tDepth, vUv + o * texel).r; }
@@ -241,6 +245,18 @@ export class PostFx {
             c = mix(c, texture2D(tChar, vUv).rgb * 0.9 + aura * 0.1, hid * 0.7);
             c += aura * smoothstep(0.0, 0.5, b.a) * (1.0 - hid * 0.8) * 0.45;
           }
+          if (fogOn > 0.5 && r0 < 0.9999) {
+            // brouillard de guerre (brouillard.ts) : position du pixel dans le monde, d'après sa
+            // profondeur (vaut pour la vue iso comme pour la première personne) ; la grille lissée
+            // donne un dégradé doux vers le noir au bord de ce que le perso voit
+            vec4 wp = fogInvVP * vec4(vUv * 2.0 - 1.0, r0 * 2.0 - 1.0, 1.0);
+            vec2 f = texture2D(tFog, (wp.xz / wp.w - fogBox.xy) * fogBox.z).rg;
+            float seen = smoothstep(0.0, 1.0, f.r);
+            // déjà vu : une faible lueur terne (le souvenir du lieu) ; jamais vu : noir
+            float grey = dot(c, vec3(0.2126, 0.7152, 0.0722));
+            vec3 memory = mix(vec3(grey), c, 0.35) * 0.14 * smoothstep(0.0, 1.0, f.g);
+            c = mix(memory, c, seen);
+          }
           c = c * gain + lift;
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
           c = mix(vec3(l), c, saturation);
@@ -253,6 +269,40 @@ export class PostFx {
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.finalMat);
     this.quad.frustumCulled = false;
     this.quadScene.add(this.quad);
+  }
+
+  private fog: FogOfWar | null = null;
+  /** Grille du brouillard lissée (flou à deux passes, refait quand elle change) : bords en dégradé. */
+  private fogRT: THREE.WebGLRenderTarget | null = null;
+  private fogTmp: THREE.WebGLRenderTarget | null = null;
+  private fogVersion = -1;
+
+  /** Brouillard de guerre lu par la passe finale (null : tout se voit). */
+  setFog(fog: FogOfWar | null): void {
+    this.fog = fog;
+    const u = this.finalMat.uniforms;
+    u.fogOn.value = fog ? 1 : 0;
+    if (fog && !this.fogRT) {
+      const opts = { type: THREE.UnsignedByteType, colorSpace: THREE.NoColorSpace, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+      this.fogRT = new THREE.WebGLRenderTarget(fog.size, fog.size, opts);
+      this.fogTmp = new THREE.WebGLRenderTarget(fog.size, fog.size, opts);
+    }
+    this.fogVersion = -1;
+    u.tFog.value = fog ? this.fogRT!.texture : null;
+    if (fog) (u.fogBox.value as THREE.Vector3).copy(fog.box);
+  }
+
+  /** Lisse la grille du brouillard si elle a changé depuis la dernière image. */
+  private smoothFog(fog: FogOfWar): void {
+    if (fog.texture.version === this.fogVersion) return;
+    this.fogVersion = fog.texture.version;
+    const dir = this.blurMat.uniforms.dir.value as THREE.Vector2;
+    this.blurMat.uniforms.tSrc.value = fog.texture;
+    dir.set(1 / fog.size, 0);
+    this.pass(this.blurMat, this.fogTmp);
+    this.blurMat.uniforms.tSrc.value = this.fogTmp!.texture;
+    dir.set(0, 1 / fog.size);
+    this.pass(this.blurMat, this.fogRT);
   }
 
   /** Étalonnage : gain par couleur et saturation (le cycle jour/nuit les fait varier). */
@@ -316,6 +366,11 @@ export class PostFx {
     r.setRenderTarget(this.sceneRT);
     r.render(this.scene, this.camera);
     this.renderCharacter();
+    if (this.fog) {
+      // caméra telle que dessinée à l'instant (matrixWorld à jour après le rendu)
+      (u.fogInvVP.value as THREE.Matrix4).multiplyMatrices(this.camera.matrixWorld, this.camera.projectionMatrixInverse);
+      this.smoothFog(this.fog);
+    }
     // bloom (et masque du perso caché, en alpha)
     this.brightMat.uniforms.tScene.value = this.sceneRT.texture;
     // à la première personne (perspective), pas de perso à montrer à travers le décor
@@ -388,7 +443,7 @@ export class PostFx {
   }
 
   dispose(): void {
-    for (const t of [this.sceneRT, this.brightRT, this.blurRT, this.charRT]) t.dispose();
+    for (const t of [this.sceneRT, this.brightRT, this.blurRT, this.charRT, this.fogRT, this.fogTmp]) t?.dispose();
     for (const m of [this.charMat, this.brightMat, this.blurMat, this.finalMat]) m.dispose();
     this.quad.geometry.dispose();
   }

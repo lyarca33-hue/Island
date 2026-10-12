@@ -12,6 +12,7 @@ import { Character } from './character';
 import { applySky, GameClock, seasonLook } from './clock';
 import { createGround, GROUND_HALF } from './ground';
 import { createIsland, heightAt, type Island } from './ile';
+import { FogOfWar, loadFogOn, saveFogOn, type SightWall } from './brouillard';
 import { moveButton } from './items/buttons';
 import { loadInterior } from './items/interior';
 import { loadKit } from './kit';
@@ -509,6 +510,10 @@ export class Game {
   /** Appelé quand on passe d'une vue à l'autre (bouton du HUD). */
   onViewChange: ((firstPerson: boolean) => void) | null = null;
   private post: PostFx;
+  /** Brouillard de guerre (brouillard.ts) : seul ce que le perso voit se montre net. */
+  private fog!: FogOfWar;
+  private sightWalls: SightWall[] = [];
+  private fogOn = loadFogOn();
   private character = new Character();
   private sun: THREE.DirectionalLight;
   private hemi: THREE.HemisphereLight;
@@ -990,6 +995,9 @@ export class Game {
 
     // sans le perso vu à travers les murs (son aura) : une passe de couleur en moins à chaque image
     this.post = new PostFx(this.renderer, this.scene, this.camera);
+    this.fog = new FogOfWar(heightAt, this.rooms.map((r) => r.rect));
+    this.sightWalls = this.rooms.flatMap((r, i) => r.sightWalls(i));
+    this.post.setFog(this.fogOn ? this.fog : null);
     this.resizeObs = new ResizeObserver(() => this.resize());
     // fenêtre passée d'un écran Retina à un écran externe (ou zoom du navigateur) : le
     // ResizeObserver ne le voit pas, mais le plafond de pixels en dépend
@@ -7033,6 +7041,19 @@ export class Game {
     this.post.setSize(w, h);
     // herbe 3D : éclaircie en qualité basse, ou par la qualité auto sur un ordinateur faible
     this.island.setGrassDensity(q === 'auto' ? this.autoQuality.grass : q === 'basse' ? 0.5 : 1);
+    // brouillard de guerre : moins de rayons, moins loin, sur un ordinateur faible
+    this.fog?.setDetail(q === 'basse' || (q === 'auto' && this.autoQuality.grass < 1) ? 'basse' : 'normale');
+  }
+
+  /** Brouillard de guerre affiché ou non (mémorisé pour les prochaines parties). */
+  get fogOfWar(): boolean {
+    return this.fogOn;
+  }
+
+  set fogOfWar(on: boolean) {
+    this.fogOn = on;
+    saveFogOn(on);
+    this.post.setFog(on ? this.fog : null);
   }
 
   /** Qualité d'image (plafond de pixels de l'image 3D), mémorisée pour les prochaines parties. */
@@ -7889,6 +7910,9 @@ export class Game {
       // à la première personne, murs et toit restent entiers : on est dedans
       r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.fp ? null : this.activeRoom?.rect ?? null);
       r.ceiling.visible = this.fp;
+    }
+    if (this.fogOn) {
+      this.fog.update(dt, c.position, this.sightWalls, !!this.activeRoom);
     }
     this.updateNightLight(dt);
     this.updateWindowLights(dt);

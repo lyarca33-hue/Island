@@ -30,6 +30,8 @@ export function useFpsShown(): [boolean, (on: boolean) => void] {
 export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: boolean; onFps: (on: boolean) => void }) {
   const [quality, setQuality] = useState<Quality | null>(game?.quality ?? null);
   useEffect(() => setQuality(game?.quality ?? null), [game]);
+  const [fog, setFog] = useState(game?.fogOfWar ?? true);
+  useEffect(() => setFog(game?.fogOfWar ?? true), [game]);
   if (!game) return null;
   return (
     <div className="menu-form time-controls">
@@ -43,6 +45,11 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
       {game.gpu.software && (
         <small>Le navigateur dessine sans carte graphique ({game.gpu.name}) : active l’accélération matérielle pour un jeu bien plus fluide.</small>
       )}
+      <label className="menu-check">
+        <input type="checkbox" checked={fog} onChange={(e) => { game.fogOfWar = e.target.checked; setFog(e.target.checked); }} />
+        <span>Brouillard de guerre</span>
+      </label>
+      <small>Seul ce que le perso voit se montre net : derrière un mur, une porte fermée ou une colline, un dégradé vers le noir ; les lieux déjà vus gardent une faible lueur.</small>
       <label className="menu-check">
         <input type="checkbox" checked={fps} onChange={(e) => onFps(e.target.checked)} />
         <span>Afficher les images par seconde</span>
