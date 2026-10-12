@@ -25,7 +25,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from './toon';
 import { lightAllPasses } from './postfx';
-import { kitParts, PlasterSheet, tileRoof, type Kit } from './kit';
+import { GARAGE_SIDES, kitParts, PlasterSheet, stretchSides, tileRoof, type Kit } from './kit';
 import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
 import type { SightWall } from './brouillard';
@@ -1004,7 +1004,7 @@ export class Room {
     for (const l of this.lifts) {
       const door = new THREE.Group();
       for (const part of kitParts(kit.garage)) {
-        const mesh = new THREE.Mesh(part.geometry, part.material);
+        const mesh = new THREE.Mesh(stretchSides(part.geometry, GARAGE_SIDES), part.material);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         door.add(mesh);
