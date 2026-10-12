@@ -460,19 +460,24 @@ function patch(model: THREE.BufferGeometry, f: { y: number; x: [number, number];
 
 /** Retire d'une géométrie sans index les triangles dont le centre est dans l'une des boîtes. */
 export function cutBoxes(g: THREE.BufferGeometry, boxes: Array<[V3, V3]>): THREE.BufferGeometry {
+  const inside = ([x, y, z]: V3) => boxes.some(([a, b]) => x > a[0] && x < b[0] && y > a[1] && y < b[1] && z > a[2] && z < b[2]);
+  return keepTriangles(g, (c) => !inside(c));
+}
+
+/** Garde d'une géométrie sans index les triangles dont le centre passe le test `keep`. */
+export function keepTriangles(g: THREE.BufferGeometry, keep: (center: V3) => boolean): THREE.BufferGeometry {
   const p = g.getAttribute('position');
-  const inside = (x: number, y: number, z: number) => boxes.some(([a, b]) => x > a[0] && x < b[0] && y > a[1] && y < b[1] && z > a[2] && z < b[2]);
-  const keep: number[] = [];
+  const kept: number[] = [];
   for (let i = 0; i < p.count; i += 3) {
-    const c = [0, 1, 2].map((k) => (p.getComponent(i, k) + p.getComponent(i + 1, k) + p.getComponent(i + 2, k)) / 3);
-    if (!inside(c[0], c[1], c[2])) keep.push(i, i + 1, i + 2);
+    const c = [0, 1, 2].map((k) => (p.getComponent(i, k) + p.getComponent(i + 1, k) + p.getComponent(i + 2, k)) / 3) as V3;
+    if (keep(c)) kept.push(i, i + 1, i + 2);
   }
   const out = new THREE.BufferGeometry();
   for (const name of ['position', 'normal', 'uv']) {
     const a = g.getAttribute(name);
     if (!a) continue;
-    const arr = new Float32Array(keep.length * a.itemSize);
-    keep.forEach((v, j) => {
+    const arr = new Float32Array(kept.length * a.itemSize);
+    kept.forEach((v, j) => {
       for (let c = 0; c < a.itemSize; c++) arr[j * a.itemSize + c] = a.getComponent(v, c);
     });
     out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize));

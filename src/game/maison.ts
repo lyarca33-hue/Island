@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { CART_SHELVES } from './items/menage';
 import { DOOR, ROOM, SALON_PASS, tiles, toon, WALL_T, WIN_HIGH, type Rect, type Room, type RoomSpec, type WallName } from './room';
-import { tripoDecor } from './items/tripo';
+import { keepTriangles, tripoDecor } from './items/tripo';
 import { BENCH_TOP, CONSOLE_TOP, NIGHTSTAND_TOP, RACK_Y } from './items/pieces';
 
 /** Écart entre les intérieurs de deux pièces voisines : leurs deux murs. */
@@ -101,15 +101,36 @@ function hang(room: Room, wall: WallName, u: number, y: number, name: string, ou
   return m;
 }
 
-/** Décor fixe posé au sol (tapis, douche) : le modèle `name` en (x, z), tourné de `rot`, aplati de `flat`. */
-function lay(room: Room, name: string, x: number, z: number, rot = 0, flat = 1): void {
+/**
+ * Décor fixe posé au sol (tapis, douche) : le modèle `name` en (x, z), tourné de `rot`, aplati de `flat`.
+ * Posé juste au-dessus du sol fait par programme (4 mm) : en dessous, les lames du parquet le traversaient.
+ */
+function lay(room: Room, name: string, x: number, z: number, rot = 0, flat = 1): THREE.Group | null {
   const m = tripoDecor(name);
-  if (!m) return;
-  m.position.set(x, 0.002, z);
+  if (!m) return null;
+  m.position.set(x, 0.005, z);
   m.rotation.y = rot;
   m.scale.y = flat;
   for (const c of m.children) c.castShadow = false;
   room.group.add(m);
+  return m;
+}
+
+/** Tapis octogonal de la chambre (côtés face aux axes) : son liseré, en lambeaux dans le modèle, coupé net et refait. */
+const RUG_HEM = { cut: 1.06, edge: 1.1, color: 0x714a31 };
+
+/** Distance au centre mesurée en octogone : la même tout le long d'un côté d'un octogone dont les côtés font face aux axes. */
+export const octagonal = (x: number, z: number) => Math.max(Math.abs(x), Math.abs(z), (Math.abs(x) + Math.abs(z)) / Math.SQRT2);
+
+function hemRug(m: THREE.Group | null): void {
+  if (!m) return;
+  for (const c of m.children as THREE.Mesh[]) c.geometry = keepTriangles(c.geometry, ([x, , z]) => octagonal(x, z) < RUG_HEM.cut);
+  // le liseré : un octogone plein sous le tapis, qui dépasse de 4 cm tout autour, un peu moins haut que lui
+  const r = RUG_HEM.edge / Math.cos(Math.PI / 8);
+  const hem = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.016, 8).rotateY(Math.PI / 8).translate(0, 0.008, 0), toon(RUG_HEM.color));
+  hem.receiveShadow = true;
+  hem.name = 'liseré';
+  m.add(hem);
 }
 
 /** Entrée : place du portemanteau et du miroir le long du mur ouest (z), sur les murs du fond, que la caméra voit. */
@@ -316,5 +337,5 @@ export const CHAMBRE_SPEC: RoomSpec = {
     ['armoire', CHAMBRE.x1 - 0.62, 0, CHAMBRE.z0 + 0.3, 0],
     ['sansevieria', CHAMBRE.x0 + 0.35, 0, CHAMBRE.z0 + 0.32, 0],
   ],
-  decor: (room) => lay(room, 'tapis-chambre', CHAMBRE.x0 + 2.4, BED.z, 0, 0.5),
+  decor: (room) => hemRug(lay(room, 'tapis-chambre', CHAMBRE.x0 + 2.4, BED.z, 0, 0.5)),
 };
