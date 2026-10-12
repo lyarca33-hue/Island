@@ -201,7 +201,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   }), []);
 
   return (
-    <div className={`app${hidden ? ' hud-off' : ''}`}>
+    <div className={`app${hidden ? ' hud-off' : ''}${firstPerson ? ' fp' : ''}`}>
       <div ref={host} className="viewport" />
       <div className="hud">
         <Menu

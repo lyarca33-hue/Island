@@ -15,11 +15,11 @@ function Act({ k, label, title, main, onClick }: { k: string | string[]; label: 
   const body = (
     <>
       <span className="act-keys">{keys.map((x) => <Key key={x} k={x} />)}</span>
-      {label}
+      <span className="act-label">{label}</span>
     </>
   );
   // les gestes au clavier seulement (déplacer un meuble) ne sont pas des boutons
-  if (!onClick) return <span className="act act-info" title={title}>{body}</span>;
+  if (!onClick) return <span className="act act-info" title={title ?? `${label} (${keys.join(' ')})`}>{body}</span>;
   return (
     <button className={`act${main ? ' act-main' : ''}`} onClick={onClick} title={title ?? `${label} (${keys.join(' ')})`}>
       {body}
