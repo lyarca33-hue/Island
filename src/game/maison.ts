@@ -32,7 +32,7 @@ const BATH_DOOR = { x0: SALLE_DE_BAIN.x0 + 0.75, x1: SALLE_DE_BAIN.x0 + 1.55 };
 const BED_DOOR = { x0: CHAMBRE.x1 - 1.3, x1: CHAMBRE.x1 - 0.45 };
 
 /** Parquet : lames de bois de tons voisins, posées en quinconce. */
-function parquet(r: Rect): THREE.Material {
+export function parquet(r: Rect): THREE.Material {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 256;
   const g = cv.getContext('2d')!;

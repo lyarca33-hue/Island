@@ -54,6 +54,7 @@ import { Needs } from './needs';
 import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
 import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
+import { Campagne, CAMPAGNE_SPEC } from './campagne';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo, GRASS_MIN } from './autoQuality';
@@ -564,6 +565,9 @@ export class Game {
   private rooms: Room[] = [];
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
   private activeRoom: Room | null = null;
+  /** La maison de campagne Tripo, où l'on entre (campagne.ts), et sa pièce du rez-de-chaussée. */
+  private campagne = new Campagne();
+  private campagneRoom: Room | null = null;
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
   /** Rotation voulue de la caméra autour du perso (radians, depuis la vue de départ). */
@@ -917,6 +921,12 @@ export class Game {
     this.salissure = new Salissure(this.rooms.map((r) => ({ name: r.spec.name, rect: r.rect })));
     this.salissure.floors.forEach((f, i) => this.rooms[i].group.add(f.build()));
     for (const item of this.items) this.salissure.track(item);
+    // la maison de campagne : le modèle Tripo autour de sa pièce, sans herbe dedans
+    this.campagneRoom = this.rooms.find((r) => r.spec === CAMPAGNE_SPEC) ?? null;
+    this.scene.add(this.campagne.group);
+    const cf = Campagne.footprint();
+    this.island.clearGrass(cf.x0, cf.x1, cf.z0, cf.z1);
+    this.campagne.load().catch((e) => console.warn('maison de campagne non chargée', e));
     // sol, murs, toit, porte et fenêtres du kit Tripo, dès qu'il est chargé (kit.ts)
     loadKit()
       .then((kit) => { for (const r of this.rooms) r.dress(kit); })
@@ -8054,6 +8064,7 @@ export class Game {
       r.update(dt, this.yaw, c.position, this.clock.hour, this.clock.solarHour, toCamera, this.fp ? null : this.activeRoom?.rect ?? null);
       r.ceiling.visible = this.fp;
     }
+    if (this.campagneRoom) this.campagne.update(this.campagneRoom, !this.fp && this.activeRoom === this.campagneRoom);
     if (this.fogOn) {
       this.fog.update(dt, c.position, this.sightWalls, !!this.activeRoom);
     }

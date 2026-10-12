@@ -94,13 +94,29 @@ function stepped(t: number, steps: number): number {
   return Math.min(1, (i + smooth(0.3, 0.8, s - i)) / steps) * 0.8 + THREE.MathUtils.clamp(t, 0, 1) * 0.2;
 }
 
-/** Demi-côtés du terrain de la maison, tout plat (centre -0,5 ; -2), puis la pente qui s'y raccorde. */
-const LOT = { cx: -0.5, cz: -2, hx: 17, hz: 13, blend: 9 };
+/**
+ * Milieu de la pièce du bas de la maison de campagne (campagne.ts), au sud-est, entre le chemin de
+ * la maison et la route côtière ; sa porte regarde la route, au sud.
+ */
+export const CAMPAGNE_SITE = { x: 18, z: 18 };
 
-/** Part des collines au point (x, z) : 0 sur le terrain de la maison et près de la côte, 1 ailleurs. */
+/**
+ * Les terrains tout plats, à y = 0 (centre, demi-côtés, puis la pente qui s'y raccorde) : celui de
+ * la maison (centre -0,5 ; -2) et celui de la maison de campagne.
+ */
+const LOTS = [
+  { cx: -0.5, cz: -2, hx: 17, hz: 13, blend: 9 },
+  { cx: CAMPAGNE_SITE.x, cz: CAMPAGNE_SITE.z + 0.5, hx: 8, hz: 5.5, blend: 4.5 },
+];
+
+/** Part des collines au point (x, z) : 0 sur les terrains des maisons et près de la côte, 1 ailleurs. */
 function hillShare(x: number, z: number, d: number): number {
-  const px = Math.max(Math.abs(x - LOT.cx) - LOT.hx, 0), pz = Math.max(Math.abs(z - LOT.cz) - LOT.hz, 0);
-  return smooth(0, LOT.blend, Math.hypot(px, pz)) * (1 - smooth(-14, -5, d));
+  let share = 1;
+  for (const l of LOTS) {
+    const px = Math.max(Math.abs(x - l.cx) - l.hx, 0), pz = Math.max(Math.abs(z - l.cz) - l.hz, 0);
+    share = Math.min(share, smooth(0, l.blend, Math.hypot(px, pz)));
+  }
+  return share * (1 - smooth(-14, -5, d));
 }
 
 /**
@@ -180,9 +196,12 @@ function splatAt(x: number, z: number): { sable: number; roche: number; terre: n
   const roche = k.rochers * smooth(0.3, 1.1, d - n * 0.6);
   // éboulis de terre au pied des falaises, entre l'herbe et la paroi
   const terre = k.falaise * smooth(-2.4 - n * 1.5 + fine * 0.6, -0.6, d) * (1 - smooth(1.5, 2.5, d));
-  // pelouse tondue autour de la maison (un rectangle aux coins arrondis, bord adouci)
-  const px = Math.max(Math.abs(x + 0.5) - 13, 0), pz = Math.max(Math.abs(z + 2) - 9, 0);
-  const pelouse = 1 - smooth(2, 3.2, Math.hypot(px, pz) + fine * 0.8);
+  // pelouse tondue autour de la maison et de la maison de campagne (des rectangles aux coins arrondis, bord adouci)
+  const lawn = (cx: number, cz: number, hx: number, hz: number) => {
+    const px = Math.max(Math.abs(x - cx) - hx, 0), pz = Math.max(Math.abs(z - cz) - hz, 0);
+    return 1 - smooth(2, 3.2, Math.hypot(px, pz) + fine * 0.8);
+  };
+  const pelouse = Math.max(lawn(-0.5, -2, 13, 9), lawn(CAMPAGNE_SITE.x, CAMPAGNE_SITE.z + 0.5, 6, 4.5));
   return { sable, roche, terre, pelouse };
 }
 
@@ -227,6 +246,8 @@ export const WAYS: Way[] = [
   { points: [[-8.6, 2.9], [-8.6, 9], [-8.2, 16], [-7, 24], [-6.4, 33]], closed: false, width: 3.4, kind: 'allee' },
   // chemin de la porte d'entrée : il part vers le sud-est et rejoint la route
   { points: [[-4.7, 2.9], [-4.5, 6], [-2.5, 10], [1.5, 15], [4, 22], [5, 28], [5.5, 33]], closed: false, width: 1.6, kind: 'chemin' },
+  // chemin de la maison de campagne : de sa porte, droit vers la route, au sud
+  { points: [[CAMPAGNE_SITE.x, CAMPAGNE_SITE.z + 2.7], [CAMPAGNE_SITE.x + 0.2, CAMPAGNE_SITE.z + 6], [CAMPAGNE_SITE.x - 0.4, CAMPAGNE_SITE.z + 10], [CAMPAGNE_SITE.x - 0.2, 30.5]], closed: false, width: 1.6, kind: 'chemin' },
 ];
 
 /** Hauteur au-dessus du sol de chaque revêtement : la route passe sur l'allée et le chemin là où ils la rejoignent. */
