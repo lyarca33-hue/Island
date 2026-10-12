@@ -80,6 +80,9 @@ const FP_PITCH_MAX = 1.35;
 const FP_LOOK = 0.005;
 /** Mouvement de souris capturée au-delà duquel c'est un saut parasite (px). */
 const FP_SPIKE = 300;
+/** Le regard suit le perso qui agit seul : délai après un mouvement de souris (ms), et vivacité. */
+const FP_HANDS_OFF = 1500;
+const FP_FOLLOW = 3;
 /** Avancée des yeux regard baissé (m), et distance gardée aux murs (m). */
 const FP_LEAN = 0.14;
 const FP_MARGIN = 0.12;
@@ -509,6 +512,8 @@ export class Game {
   private pitch = FP_PITCH;
   /** Appui sur le sol ou un meuble à la première personne : un glisser tourne la vue, un clic agit. */
   private look: { x: number; y: number; dragging: boolean; shift: boolean } | null = null;
+  /** Dernier mouvement de la vue par le joueur (ms) : le regard suit le perso passé ce délai. */
+  private lookedAt = 0;
   /** Appelé quand on passe d'une vue à l'autre (bouton du HUD). */
   onViewChange: ((firstPerson: boolean) => void) | null = null;
   private post: PostFx;
@@ -7322,6 +7327,7 @@ export class Game {
    * curseur du HUD) ; vers la droite et vers le bas pour des valeurs positives.
    */
   turnView(dx: number, dy: number): void {
+    if (dx || dy) this.lookedAt = performance.now();
     this.turn += dx * FP_LOOK;
     this.pitch = THREE.MathUtils.clamp(this.pitch - dy * FP_LOOK, -FP_PITCH_MAX, FP_PITCH_MAX);
   }
@@ -9382,6 +9388,7 @@ export class Game {
     this.character.hideHead(true);
     // immobile, le perso se tourne vers où l'on regarde (cap du perso : x = sin, z = cos)
     this.character.faceView(Math.atan2(-Math.cos(this.yaw), -Math.sin(this.yaw)), dt);
+    this.followGaze(dt);
     if (c.aspect !== aspect) {
       c.aspect = aspect;
       c.updateProjectionMatrix();
@@ -9407,6 +9414,22 @@ export class Game {
     const cp = Math.cos(this.pitch);
     EYE_LOOK.set(fwd.x * cp, Math.sin(this.pitch), fwd.z * cp).add(eye);
     c.lookAt(EYE_LOOK);
+  }
+
+  /**
+   * Première personne : le perso qui agit de lui-même (marche vers un clic, enchaîne les ordres de
+   * l'IA, se tourne vers un objet) regarde devant lui, et la vue suit son regard. La souris (ou le
+   * doigt) reprend la main aussitôt ; les touches de marche aussi, puisque le perso suit alors la vue.
+   */
+  private followGaze(dt: number): void {
+    const c = this.character;
+    const axes = this.keyAxes();
+    if (c.idle || c.lying || axes.f || axes.s || performance.now() - this.lookedAt < FP_HANDS_OFF) return;
+    // cap du perso (avant = sin, cos) → lacet de la vue (avant = -cos, -sin)
+    const want = Math.atan2(-Math.cos(c.yaw), -Math.sin(c.yaw)) - BASE_YAW;
+    const k = Math.min(1, dt * FP_FOLLOW);
+    this.turn += Math.atan2(Math.sin(want - this.turn), Math.cos(want - this.turn)) * k;
+    this.pitch += (FP_PITCH - this.pitch) * k * 0.5;
   }
 
   /** La partie en cours, à sauver (voir save.ts). */
