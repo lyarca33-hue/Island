@@ -25,7 +25,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from './toon';
 import { lightAllPasses } from './postfx';
-import { kitParts, PlasterSheet, tileRoof, type Kit } from './kit';
+import { GARAGE_SIDES, kitParts, PlasterSheet, stretchSides, tileRoof, type Kit } from './kit';
 import { SUNRISE, SUNSET } from './clock';
 import type { WorldItem } from './items/carry';
 import type { SightWall } from './brouillard';
@@ -72,6 +72,8 @@ const WIN_LOW = 1.3;
 export const WIN_HIGH = 2.1;
 /** Kit Tripo (dress) : taille d'un carreau du kit posé (quatre carreaux de 40 cm), enfoncement de l'enduit dans le mur. */
 const KIT_FLOOR = 0.8;
+/** Couleur des joints du carrelage du kit (prise sur sa texture). */
+const FLOOR_JOINT = 0x605553;
 const PLASTER_IN = 0.012;
 /** Ce que l'enduit dépasse au plus de la face du mur (relief de 2 cm, enfoncé de PLASTER_IN). */
 const PLASTER_OUT = 0.008;
@@ -909,7 +911,16 @@ export class Room {
       tiles.name = `carrelage-${this.spec.name}`;
       this.group.add(tiles);
     }
-    if (this.spec.kitFloor !== false) this.floor.visible = false;
+    if (this.spec.kitFloor !== false) {
+      this.floor.visible = false;
+      // le carreau du kit a des trous dans ses joints : dessous, une chape de la couleur des joints,
+      // pour qu'on n'y voie pas l'herbe sous la maison
+      const joints = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), toon(FLOOR_JOINT));
+      joints.position.set((x0 + x1) / 2, -0.004, (z0 + z1) / 2);
+      joints.receiveShadow = true;
+      joints.name = `joints-${this.spec.name}`;
+      this.group.add(joints);
+    }
 
     // murs : l'enduit sur chaque face des morceaux pleins, haut et bas (en coupe), et des pignons
     for (const w of this.walls) {
@@ -1008,7 +1019,7 @@ export class Room {
     for (const l of this.lifts) {
       const door = new THREE.Group();
       for (const part of kitParts(kit.garage)) {
-        const mesh = new THREE.Mesh(part.geometry, part.material);
+        const mesh = new THREE.Mesh(stretchSides(part.geometry, GARAGE_SIDES), part.material);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         door.add(mesh);
@@ -1335,7 +1346,7 @@ export const KITCHEN: RoomSpec = {
     ['chaise', KITCHEN_TABLE.x, 0, KITCHEN_TABLE.z + 0.5, Math.PI],
     // le ménage, dans le coin à côté de la porte de l'entrée : le seau et sa serpillière, le balai
     ['seau', ROOM.x0 + 0.24, 0, ROOM.z1 - 0.24, 0],
-    ['serpilliere', ROOM.x0 + 0.24, 0.02, ROOM.z1 - 0.24, 0],
+    ['serpilliere', ROOM.x0 + 0.24, 0.12, ROOM.z1 - 0.24, 0],
     ['balai', ROOM.x0 + 0.55, 0, ROOM.z1 - 0.14, 0],
   ],
 };

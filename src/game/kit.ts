@@ -57,6 +57,24 @@ export function loadKit(): Promise<Kit> {
   return loading;
 }
 
+/**
+ * Bords de la porte de garage : ceux du modèle sont en dents de scie et rentrent jusqu'à 9 cm (côté -x)
+ * et 4 cm (côté +x) sous les 1,2 m annoncés. Étirés de ces facteurs, ils passent au-delà de l'ouverture
+ * (1,21 m de part et d'autre) et finissent dans l'épaisseur du mur : plus de jour entre la porte et le mur.
+ */
+export const GARAGE_SIDES: [left: number, right: number] = [1.1, 1.05];
+
+/** Étire une géométrie le long de x : `left` pour ce qui est à x < 0, `right` pour le reste. */
+export function stretchSides(g: THREE.BufferGeometry, [left, right]: [number, number]): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    p.setX(i, x * (x < 0 ? left : right));
+  }
+  p.needsUpdate = true;
+  return g;
+}
+
 /** Les maillages d'une pièce du kit, leur géométrie ramenée dans le repère de la pièce. */
 export function kitParts(piece: THREE.Object3D): Array<{ geometry: THREE.BufferGeometry; material: THREE.Material }> {
   const out: Array<{ geometry: THREE.BufferGeometry; material: THREE.Material }> = [];

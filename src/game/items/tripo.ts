@@ -64,6 +64,11 @@ export interface TripoLook {
   /** Allonge ce qui est sous la hauteur y (repère du modèle) de `by` mètres : les pieds de la table basse. */
   stretch?: [y: number, by: number];
   /**
+   * Resserre vers l'axe ce qui est sous la hauteur y (repère du modèle) : à y le modèle ne bouge
+   * pas, au sol il est ramené à `to` de sa largeur (les franges de la serpillière, étalées par terre).
+   */
+  gather?: [y: number, to: number];
+  /**
    * Remet d'aplomb ce qui penche vers l'avant : devant z, les points montent de `rise` par mètre,
    * pleinement au-dessus de y1, pas du tout sous y0 (la lunette des toilettes, modélisée en pente).
    */
@@ -180,7 +185,8 @@ export const TRIPO_LOOKS: Record<string, TripoLook> = {
   // —— le ménage et le linge (menage.glb, menage.ts ; upkeep.ts pour les outils des gestes). Le pack
   // porte aussi un gant seul (gant-porte), pas encore utilisé.
   balai: { model: 'balai' },
-  serpilliere: { model: 'serpilliere' },
+  // les franges du modèle s'étalent par terre sur 45 cm : resserrées, elles pendent et tiennent dans le seau
+  serpilliere: { model: 'serpilliere', gather: [0.3, 0.5] },
   seau: { model: 'seau' },
   // le bec du modèle vers -X : tourné vers l'avant (+Z), comme celui du jeu
   spray: { model: 'spray', turn: Math.PI / 2 },
@@ -294,6 +300,7 @@ function bake(id: string, look: TripoLook, model: Model) {
     let out = look.clip ? clipY(g, s0, s1) : g.clone();
     if (look.cut) out = cutBoxes(out, look.cut);
     if (look.stretch) stretchY(out, ...look.stretch);
+    if (look.gather) gatherXZ(out, ...look.gather);
     if (look.level && !part) levelY(out, look.level);
     if (look.unshade) {
       all.push(out.clone());
@@ -453,19 +460,24 @@ function patch(model: THREE.BufferGeometry, f: { y: number; x: [number, number];
 
 /** Retire d'une géométrie sans index les triangles dont le centre est dans l'une des boîtes. */
 export function cutBoxes(g: THREE.BufferGeometry, boxes: Array<[V3, V3]>): THREE.BufferGeometry {
+  const inside = ([x, y, z]: V3) => boxes.some(([a, b]) => x > a[0] && x < b[0] && y > a[1] && y < b[1] && z > a[2] && z < b[2]);
+  return keepTriangles(g, (c) => !inside(c));
+}
+
+/** Garde d'une géométrie sans index les triangles dont le centre passe le test `keep`. */
+export function keepTriangles(g: THREE.BufferGeometry, keep: (center: V3) => boolean): THREE.BufferGeometry {
   const p = g.getAttribute('position');
-  const inside = (x: number, y: number, z: number) => boxes.some(([a, b]) => x > a[0] && x < b[0] && y > a[1] && y < b[1] && z > a[2] && z < b[2]);
-  const keep: number[] = [];
+  const kept: number[] = [];
   for (let i = 0; i < p.count; i += 3) {
-    const c = [0, 1, 2].map((k) => (p.getComponent(i, k) + p.getComponent(i + 1, k) + p.getComponent(i + 2, k)) / 3);
-    if (!inside(c[0], c[1], c[2])) keep.push(i, i + 1, i + 2);
+    const c = [0, 1, 2].map((k) => (p.getComponent(i, k) + p.getComponent(i + 1, k) + p.getComponent(i + 2, k)) / 3) as V3;
+    if (keep(c)) kept.push(i, i + 1, i + 2);
   }
   const out = new THREE.BufferGeometry();
   for (const name of ['position', 'normal', 'uv']) {
     const a = g.getAttribute(name);
     if (!a) continue;
-    const arr = new Float32Array(keep.length * a.itemSize);
-    keep.forEach((v, j) => {
+    const arr = new Float32Array(kept.length * a.itemSize);
+    kept.forEach((v, j) => {
       for (let c = 0; c < a.itemSize; c++) arr[j * a.itemSize + c] = a.getComponent(v, c);
     });
     out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize));
@@ -479,6 +491,20 @@ export function stretchY(g: THREE.BufferGeometry, y: number, by: number): THREE.
   for (let i = 0; i < p.count; i++) {
     const v = p.getY(i);
     p.setY(i, v < y ? (v * (y + by)) / y : v + by);
+  }
+  p.needsUpdate = true;
+  return g;
+}
+
+/** Voir TripoLook.gather : sous y, rapproche les points de l'axe vertical, jusqu'à `to` au sol. */
+export function gatherXZ(g: THREE.BufferGeometry, y: number, to: number): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const v = p.getY(i);
+    if (v >= y) continue;
+    const f = to + (1 - to) * Math.max(0, v / y);
+    p.setX(i, p.getX(i) * f);
+    p.setZ(i, p.getZ(i) * f);
   }
   p.needsUpdate = true;
   return g;

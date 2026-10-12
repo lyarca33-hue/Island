@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { PlasterSheet } from '../src/game/kit';
+import { GARAGE_SIDES, PlasterSheet, stretchSides } from '../src/game/kit';
 
 /** Plaque d'essai comme celle du kit : 1 × 1 m, x de -0,5 à 0,5, y de 0 à 1, relief vers +z. */
 function plaque(): THREE.Object3D {
@@ -38,5 +38,16 @@ describe('enduit des murs (kit Tripo)', () => {
 
   it('rien hors du mur', () => {
     expect(new PlasterSheet(plaque(), 2, 2.5).piece(3, 4, 0, 1)).toBeNull();
+  });
+});
+
+describe('porte de garage', () => {
+  it('ses bords dentelés vont jusque dans le mur, de chaque côté de l’ouverture', () => {
+    // les bords les plus rentrés du modèle : 1,109 m à -x, 1,159 m à +x ; l'ouverture fait 2,42 m
+    const g = stretchSides(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([-1.109, 0, 0, 1.159, 0, 0, 0, 1, 0], 3)), GARAGE_SIDES);
+    const p = g.getAttribute('position');
+    expect(p.getX(0)).toBeLessThan(-1.21);
+    expect(p.getX(1)).toBeGreaterThan(1.21);
+    expect(p.getX(2)).toBe(0);
   });
 });
