@@ -54,19 +54,20 @@ export function skipDarkLights(scene: THREE.Scene): void {
  * les contours encrés : au-delà du plafond, le navigateur agrandit l'image.
  */
 export const QUALITY_PIXELS = { basse: 0.9e6, normale: 1.4e6, haute: 4.2e6 } as const;
-export type Quality = keyof typeof QUALITY_PIXELS;
+/** « auto » : plafond réglé en continu selon la fluidité (autoQuality.ts). */
+export type Quality = 'auto' | keyof typeof QUALITY_PIXELS;
 
 const QUALITY_KEY = 'rp-island-qualite';
 
-/** Réglage de qualité mémorisé (normale par défaut). */
+/** Réglage de qualité mémorisé (auto par défaut). */
 export function loadQuality(): Quality {
   try {
     const q = localStorage.getItem(QUALITY_KEY);
-    if (q && q in QUALITY_PIXELS) return q as Quality;
+    if (q === 'auto' || (q && q in QUALITY_PIXELS)) return q as Quality;
   } catch {
     // stockage indisponible (navigation privée) : réglage par défaut
   }
-  return 'normale';
+  return 'auto';
 }
 
 export function saveQuality(q: Quality): void {

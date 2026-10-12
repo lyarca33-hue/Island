@@ -55,6 +55,7 @@ import { lampLevel, placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
+import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo } from './autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
 /** Élévation de la caméra iso 2:1 (30° au-dessus de l'horizon), comme Arena Tactic. */
@@ -524,6 +525,10 @@ export class Game {
   private raf = 0;
   private last = performance.now();
   private qualityLevel: Quality = loadQuality();
+  /** Qualité auto : plafond de pixels qui suit la fluidité (créé avec le moteur de rendu). */
+  private autoQuality = new AutoQuality(AUTO_MAX);
+  /** Carte graphique vue par le navigateur, et s'il dessine sans elle. */
+  gpu = { name: '', software: false };
   /** Compteur d'images : images et temps cumulés depuis le dernier relevé, et dernier relevé. */
   private fpsAcc = { frames: 0, since: performance.now() };
   private fpsNow = { fps: 0, ms: 0 };
@@ -700,6 +705,8 @@ export class Game {
     // le canevas ne reçoit que le quad final du post-traitement : ni profondeur ni image conservée
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NoToneMapping; // étalonnage fait par le post-traitement
+    this.gpu = gpuInfo(this.renderer.getContext());
+    if (this.gpu.software) this.autoQuality = new AutoQuality(AUTO_SOFTWARE_START);
     // pas d'ombres pour l'instant : ni carte d'ombre ni passe d'ombre (le soleil éclaire sans ombre)
     this.renderer.shadowMap.enabled = false;
     // les pièces « ombre seule » des objets (voir merge.ts) ne sont dessinées que dans les ombres
@@ -6959,7 +6966,8 @@ export class Game {
 
   private resize(): void {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
-    fitRenderer(this.renderer, w, h, QUALITY_PIXELS[this.qualityLevel]);
+    const q = this.qualityLevel;
+    fitRenderer(this.renderer, w, h, q === 'auto' ? this.autoQuality.budget : QUALITY_PIXELS[q]);
     this.post.setSize(w, h);
   }
 
@@ -7673,10 +7681,15 @@ export class Game {
     this.last = now;
     const acc = this.fpsAcc;
     acc.frames++;
-    if (now - acc.since >= 500) {
+    if (real > 0.25) {
+      // onglet caché ou fenêtre réduite : ce trou ne dit rien de la fluidité, relevé repris à zéro
+      acc.frames = 0;
+      acc.since = now;
+    } else if (now - acc.since >= 500) {
       this.fpsNow = { fps: (acc.frames * 1000) / (now - acc.since), ms: (now - acc.since) / acc.frames };
       acc.frames = 0;
       acc.since = now;
+      if (this.qualityLevel === 'auto' && this.autoQuality.sample(this.fpsNow.fps)) this.resize();
     }
     // image lente : plusieurs pas de jeu avant de dessiner (voir catchUp)
     const steps = THREE.MathUtils.clamp(Math.ceil(real / 0.05), 1, Math.max(1, Math.floor(this.catchUp)));

@@ -3,7 +3,7 @@ import type { Game } from '../game/Game';
 import type { Quality } from '../game/postfx';
 import './time.css';
 
-const QUALITIES: Array<[Quality, string]> = [['basse', 'Basse'], ['normale', 'Normale'], ['haute', 'Haute']];
+const QUALITIES: Array<[Quality, string]> = [['auto', 'Auto'], ['basse', 'Basse'], ['normale', 'Normale'], ['haute', 'Haute']];
 const FPS_KEY = 'rp-island-fps';
 
 /** Compteur d'images affiché ou non (mémorisé). */
@@ -39,7 +39,10 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
           <button key={q} className={quality === q ? 'active' : ''} onClick={() => { game.quality = q; setQuality(q); }}>{label}</button>
         ))}
       </div>
-      <small>Basse : plus fluide sur un ordinateur portable ou un écran Retina, image un peu plus douce.</small>
+      <small>Auto : l’image s’adoucit d’elle-même si le jeu rame, et reste fine sur un ordinateur rapide.</small>
+      {game.gpu.software && (
+        <small>Le navigateur dessine sans carte graphique ({game.gpu.name}) : active l’accélération matérielle pour un jeu bien plus fluide.</small>
+      )}
       <label className="menu-check">
         <input type="checkbox" checked={fps} onChange={(e) => onFps(e.target.checked)} />
         <span>Afficher les images par seconde</span>
