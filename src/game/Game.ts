@@ -52,7 +52,7 @@ import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
 import { Needs } from './needs';
 import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
-import { lampLevel, placeRuns, Room, WALL_H, WALL_T } from './room';
+import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
@@ -484,10 +484,6 @@ export interface HandActions {
   seated: boolean;
 }
 
-/** Lumière d'ambiance de nuit (voir updateNightLight) : couleur, force à fond, et sa cible. */
-const NIGHT_COLOR = 0xffd2a0;
-const NIGHT_I = 3;
-const NIGHT_AT = new THREE.Vector3();
 const SLOT_TMP = new THREE.Vector3();
 const ON_INV = new THREE.Matrix4();
 const ON_BOX = new THREE.Box3();
@@ -882,8 +878,6 @@ export class Game {
     loadKit()
       .then((kit) => { for (const r of this.rooms) r.dress(kit); })
       .catch((e) => console.warn('kit de la maison non chargé', e));
-    // la nuit, une seule lumière d'ambiance, sans ombre, qui suit la pièce du perso
-    this.scene.add(this.nightLight);
     this.scene.add(this.choreFx.group);
     // lumière des fenêtres : autant de projecteurs que la pièce qui a le plus de fenêtres, toujours
     // tous dans la scène (leur nombre ne change pas, aucun shader à recompiler)
@@ -8002,7 +7996,6 @@ export class Game {
     if (this.fogOn) {
       this.fog.update(dt, c.position, this.sightWalls, !!this.activeRoom);
     }
-    this.updateNightLight(dt);
     this.updateWindowLights(dt);
     this.placeBubble();
     // saison dehors : herbe et neige au sol
@@ -8040,13 +8033,6 @@ export class Game {
     return false;
   };
 
-  /**
-   * Lumière d'ambiance de nuit : chaude, sans ombre, au plafond de la pièce du perso (la dernière
-   * occupée quand il sort). Elle remplace les plafonniers : une seule lumière pour toute la maison.
-   */
-  private nightLight = lightAllPasses(new THREE.PointLight(NIGHT_COLOR, 0, 8, 1));
-  private nightRoom: Room | null = null;
-
   /** Projecteurs des fenêtres de la pièce du perso (voir Room.winLights). */
   private windowLights: THREE.SpotLight[] = [];
   private windowRoom: Room | null = null;
@@ -8083,20 +8069,6 @@ export class Game {
       l.penumbra = src.penumbra;
       l.decay = src.decay;
     });
-  }
-
-  /** Allume la lumière de nuit selon l'heure, et la fait glisser vers la pièce du perso. */
-  private updateNightLight(dt: number): void {
-    const room = (this.nightRoom = this.activeRoom ?? this.nightRoom ?? this.rooms[0] ?? null);
-    if (!room) return;
-    const { x0, x1, z0, z1 } = room.rect;
-    const l = this.nightLight;
-    NIGHT_AT.set((x0 + x1) / 2, WALL_H - 0.3, (z0 + z1) / 2);
-    // posée d'un coup la première fois, puis glissée : pas de saut de lumière en changeant de pièce
-    if (l.intensity === 0) l.position.copy(NIGHT_AT);
-    else l.position.lerp(NIGHT_AT, 1 - Math.exp(-4 * dt));
-    l.distance = Math.max(6, 0.9 * Math.hypot(x1 - x0, z1 - z0));
-    l.intensity = NIGHT_I * lampLevel(this.clock.solarHour);
   }
 
   /** Lumières des lampes cassées ou jetées : gardées dans la scène, éteintes. */

@@ -10,8 +10,8 @@
  * nuit un peu de clair de lune. Un vrai toit couvre la pièce quand le perso est dehors.
  * Un toit et des murs invisibles, qui ne font que de l'ombre, gardent le soleil et la lune dehors
  * (sauf par les fenêtres, même quand un mur est abaissé en coupe) : le soleil seul fait les ombres.
- * La nuit, une seule lumière d'ambiance suit la pièce du perso (Game.updateNightLight) ; ni
- * plafonnier ni interrupteur.
+ * La nuit, les pièces restent sombres (seules les lampes posées éclairent) : pas encore de
+ * plafonnier ni d'interrupteur.
  *
  * Murs « en coupe » comme dans les Sims : quand le perso est dans une pièce, les murs tournés
  * vers la caméra s'abaissent à hauteur de plinthe dans toutes les pièces ; ils se relèvent quand
@@ -43,7 +43,9 @@ export const ROOM: Rect = { x0: -3.2, x1: 3.2, z0: -2.8, z1: 2.8 };
 /** Hauteur et épaisseur des murs, hauteur d'un mur abaissé (en coupe). */
 export const WALL_H = 2.5;
 /** Plâtre du plafond (vu à la première personne). */
-const CEILING_COLOR = 0xeee8dc;
+/** Plafond (sans lumière, voir le plafond dans le constructeur) : le jour, la nuit. */
+const CEILING_DAY = new THREE.Color(0xeee8dc).multiplyScalar(0.8);
+const CEILING_NIGHT = new THREE.Color(0x2a2c38);
 export const WALL_T = 0.12;
 const CUT_H = 0.2;
 /** Hauteur d'une porte ou d'un passage. */
@@ -346,6 +348,7 @@ export class Room {
   private roof = new THREE.Group();
   /** Plafond (première personne), caché sinon. */
   readonly ceiling: THREE.Mesh;
+  private readonly ceilingMat = new THREE.MeshBasicMaterial({ color: CEILING_DAY });
   /** Ce que le kit Tripo remplace (dress) : le sol, les pans du toit, les fenêtres faites par programme. */
   private floor: THREE.Mesh;
   private roofPans: Array<{ mesh: THREE.Mesh; side: number; lx: number; slope: number }> = [];
@@ -377,10 +380,11 @@ export class Room {
     roof.receiveShadow = false;
     roof.name = 'toit-ombre';
     this.group.add(roof);
-    // plafond, vu d'en dessous à la première personne seulement (la vue de dessus le traverse)
-    this.ceiling = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(Math.PI / 2), toon(CEILING_COLOR));
+    // plafond, vu d'en dessous à la première personne seulement (la vue de dessus le traverse) ;
+    // teinte unie réglée par l'heure (applyLight), sans lumière : pas de reflet rond qui ferait
+    // croire à un plafonnier
+    this.ceiling = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(Math.PI / 2), this.ceilingMat);
     this.ceiling.position.set((x0 + x1) / 2, WALL_H - 0.002, (z0 + z1) / 2);
-    this.ceiling.receiveShadow = true;
     this.ceiling.visible = false;
     this.ceiling.name = 'plafond';
     this.group.add(this.ceiling);
@@ -1042,6 +1046,7 @@ export class Room {
     const night = Math.max(1 - THREE.MathUtils.smoothstep(hour, SUNRISE - 0.5, SUNRISE + 1), THREE.MathUtils.smoothstep(hour, SUNSET - 1, SUNSET + 0.5));
     this.glassMat.color.copy(PANE_DAY.color).lerp(PANE_NIGHT.color, night);
     this.glassMat.opacity = THREE.MathUtils.lerp(PANE_DAY.opacity, PANE_NIGHT.opacity, night);
+    this.ceilingMat.color.copy(CEILING_DAY).lerp(CEILING_NIGHT, lampLevel(hour));
     // fenêtres : plein jour (doré près du lever et du coucher), clair de lune la nuit
     const day = THREE.MathUtils.smoothstep(hour, SUNRISE, SUNRISE + 1.5) * (1 - THREE.MathUtils.smoothstep(hour, SUNSET - 1.5, SUNSET));
     const warm = 1 - THREE.MathUtils.smoothstep(Math.min(hour - SUNRISE, SUNSET - hour), 1, 3.5);
