@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CAMPAGNE_SITE, groundKind, heightAt, SEA_LEVEL, WALK_HALF, WAYS, wayAt } from '../src/game/ile';
+import { CAMPAGNE_SITE, groundKind, heightAt, PIERRE_SITE, SEA_LEVEL, WALK_HALF, WAYS, wayAt } from '../src/game/ile';
 
 describe("l'île", () => {
   it('le terrain de la maison est plat, à y = 0', () => {
@@ -57,5 +57,15 @@ describe("l'île", () => {
       }
     }
     expect(wayAt(cx, cz + 3.5)).toBe('chemin');
+  });
+
+  it('la maison en pierre et son aile sont posées sur un terrain plat, son chemin part de sa porte', () => {
+    const { x: cx, z: cz } = PIERRE_SITE;
+    for (let x = cx - 5.5; x <= cx + 7.5; x += 0.5) {
+      for (let z = cz - 7; z <= cz + 4.5; z += 0.5) {
+        if (heightAt(x, z) !== 0) throw new Error(`relief en (${x}, ${z}) : ${heightAt(x, z)}`);
+      }
+    }
+    expect(wayAt(cx - 0.13, cz + 4.5)).toBe('chemin');
   });
 });
