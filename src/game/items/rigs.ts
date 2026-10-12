@@ -163,8 +163,26 @@ export const ROOM_RIGS: Record<string, Rig> = {
     def: { lamp: { y: 0.29, color: 0xffc98a, intensity: 0.4, range: 3 } },
   },
   // la couette se cache quand le perso dort (le jeu montre `couette-dormeur` sur lui)
+  // sous la couette rigide du modèle (remplacée par le tissu simulé), un drap gris au bord
+  // déchiqueté, en dents de scie au pied des oreillers : retiré, et le dessus du matelas refait à
+  // plat, de la teinte du drap clair d'à côté des oreillers
   lit: {
-    look: { model: 'lit', parts: { couette: { from: 'couette' } } },
+    look: {
+      model: 'lit',
+      parts: { couette: { from: 'couette' } },
+      // le drap : son dessus (faces tournées vers le haut : le devant des oreillers, posé dessus,
+      // reste entier), le dessous et la tranche de sa lèvre devant les oreillers ; et le bas du
+      // devant des oreillers, qui retombait en franges sur le drap
+      cut: [
+        [[-0.75, 0.48, -0.38], [0.75, 0.668, 0.93], 0.45],
+        [[-0.75, 0.48, -0.47], [0.75, 0.655, -0.38], 0.45],
+        [[-0.75, 0.48, -0.45], [0.75, 0.69, 0.93], -0.3],
+        [[-0.75, 0.48, -0.36], [0.75, 0.666, 0.93]],
+        [[-0.62, 0.6, -0.4], [0.62, 0.7, -0.3]],
+      ],
+      // refait à plat, bordé : il retombe sur les côtés et au pied, sur le bord inégal du drap gris
+      fill: [{ y: 0.6, x: [-0.68, 0.68], z: [-0.48, 0.95], from: [0.66, 0.57, -0.65], skirt: 0.42 }],
+    },
     def: { bed: { top: 0.59, length: 2.05 } },
   },
   // —— salon

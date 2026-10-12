@@ -1041,7 +1041,7 @@ export class Game {
     this.post = new PostFx(this.renderer, this.scene, this.camera);
     this.fog = new FogOfWar(heightAt, this.rooms.map((r) => r.rect));
     this.sightWalls = this.rooms.flatMap((r, i) => r.sightWalls(i));
-    this.post.setFog(this.fogOn ? this.fog : null);
+    this.showFog();
     this.resizeObs = new ResizeObserver(() => this.resize());
     // fenêtre passée d'un écran Retina à un écran externe (ou zoom du navigateur) : le
     // ResizeObserver ne le voit pas, mais le plafond de pixels en dépend
@@ -1103,6 +1103,7 @@ export class Game {
     // on repart du regard droit devant, un peu baissé (de quoi voir le plan de travail)
     this.pitch = FP_PITCH;
     if (!on) this.character.hideHead(false);
+    if (this.fog) this.showFog();
     // la souris oriente la vue (curseur capturé, viseur au centre) ; en sortant, on la rend
     if (on) this.lockPointer();
     else if (this.pointerLocked) document.exitPointerLock();
@@ -7134,7 +7135,15 @@ export class Game {
   set fogOfWar(on: boolean) {
     this.fogOn = on;
     saveFogOn(on);
-    this.post.setFog(on ? this.fog : null);
+    this.showFog();
+  }
+
+  /**
+   * Le brouillard se montre en vue de dessus seulement : à la première personne, on voit déjà par
+   * les yeux du perso. La carte de ce qu'il a vu continue de se remplir (elle sert au retour).
+   */
+  private showFog(): void {
+    this.post.setFog(this.fogOn && !this.fp ? this.fog : null);
   }
 
   /** Qualité d'image (plafond de pixels de l'image 3D), mémorisée pour les prochaines parties. */
