@@ -63,7 +63,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['C', 'S’asseoir / se lever ; endormi : se réveiller'],
   ['Entrée', 'Écrire'],
   ['Tab', 'Parole ↔ Action'],
-  ['X', 'Vue à la première personne ↔ vue de dessus (glisser pour regarder autour)'],
+  ['X', 'Vue à la première personne ↔ vue de dessus (la souris oriente la vue, Échap la libère)'],
   ['H', 'Masquer / afficher l’interface'],
   ['Échap', 'Menu'],
 ];

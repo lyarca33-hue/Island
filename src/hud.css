@@ -381,6 +381,33 @@
   background: rgba(30, 20, 14, 0.6); pointer-events: none;
 }
 
+/*
+ * Vue à la première personne : la scène devant soi reste dégagée. Le bas de l'écran passe dans le
+ * coin en bas à gauche, en plus petit : l'objet tenu sans son pictogramme, les gestes réduits à
+ * leur touche (le nom au survol), sauf le geste principal ; la saisie au repos disparaît
+ * (Entrée l'ouvre toujours).
+ */
+.app.fp .hud-bottom { left: var(--hud-gap); transform: none; width: min(460px, calc(100% - 2 * var(--hud-gap))); align-items: flex-start; gap: 6px; }
+.app.fp .hud-bottom-main, .app.fp .chat { align-items: flex-start; gap: 6px; }
+.app.fp .hud-notice { font-size: 12.5px; padding: 4px 12px 4px 8px; }
+.app.fp .held { min-height: 0; padding: 3px; justify-content: flex-start; background: rgba(30, 20, 14, 0.32); box-shadow: none; }
+.app.fp .held-pic { display: none; }
+.app.fp .held-what { padding-left: 8px; font-size: 12.5px; }
+.app.fp .act { height: 28px; font-size: 12.5px; padding: 0 6px; }
+.app.fp .act-main { padding-right: 9px; }
+/* Viseur au centre (souris capturée), et au repos le rappel du clic qui la capture */
+.fp-aim { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
+.fp-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 248, 235, 0.9); box-shadow: 0 0 0 1.5px rgba(30, 20, 14, 0.55); }
+.fp-aim:not(.locked) .fp-dot { opacity: 0.45; }
+.fp-hint { margin-top: 26px; padding: 4px 11px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; color: var(--hud-ink); background: rgba(30, 20, 14, 0.45); }
+@media (pointer: coarse) {
+  .fp-aim { display: none; }
+}
+@media (pointer: fine) {
+  .app.fp .act:not(.act-main) .act-label { display: none; }
+  .app.fp .chat-bar:not(.open) { position: absolute; width: 1px; height: 1px; padding: 0; opacity: 0; pointer-events: none; }
+}
+
 /* Téléphone */
 @media (max-width: 560px) {
   :root { --hud-gap: 10px; --hud-ring: 34px; }

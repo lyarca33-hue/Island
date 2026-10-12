@@ -64,12 +64,16 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   useEffect(() => setCamAngle(ready?.cameraAngle ?? 0), [ready]);
   /** Vue à la première personne (touche X ou bouton de la barre). */
   const [firstPerson, setFirstPerson] = useState(false);
+  /** Souris capturée par la première personne (elle oriente la vue) : viseur au centre. */
+  const [locked, setLocked] = useState(false);
   useEffect(() => {
     if (!ready) return;
     setFirstPerson(ready.firstPerson);
     ready.onViewChange = setFirstPerson;
+    ready.onPointerLock = setLocked;
     return () => {
       ready.onViewChange = null;
+      ready.onPointerLock = null;
     };
   }, [ready]);
   const [loading, setLoading] = useState(true);
@@ -201,7 +205,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   }), []);
 
   return (
-    <div className={`app${hidden ? ' hud-off' : ''}`}>
+    <div className={`app${hidden ? ' hud-off' : ''}${firstPerson ? ' fp' : ''}`}>
       <div ref={host} className="viewport" />
       <div className="hud">
         <Menu
@@ -332,6 +336,12 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       {can.book && ready && !inv && <BookReader key={can.book} game={ready} id={can.book} onClose={() => ready.stopReading()} />}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       <Magasin game={ready} />
+      {firstPerson && (
+        <div className={`fp-aim${locked ? ' locked' : ''}`} aria-hidden>
+          <span className="fp-dot" />
+          {!locked && <span className="fp-hint">Clic : la souris oriente la vue · Échap : la libérer</span>}
+        </div>
+      )}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
       {drag && (
         <div className="hud-drag" style={{ left: drag.x, top: drag.y }}>
