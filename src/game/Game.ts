@@ -78,6 +78,8 @@ const FP_PITCH = -0.15;
 const FP_PITCH_MAX = 1.35;
 /** Radians tournés par pixel de souris glissée à la première personne. */
 const FP_LOOK = 0.005;
+/** Mouvement de souris capturée au-delà duquel c'est un saut parasite (px). */
+const FP_SPIKE = 300;
 /** Avancée des yeux regard baissé (m), et distance gardée aux murs (m). */
 const FP_LEAN = 0.14;
 const FP_MARGIN = 0.12;
@@ -1059,6 +1061,9 @@ export class Game {
     // on repart du regard droit devant, un peu baissé (de quoi voir le plan de travail)
     this.pitch = FP_PITCH;
     if (!on) this.character.hideHead(false);
+    // la souris oriente la vue (curseur capturé, viseur au centre) ; en sortant, on la rend
+    if (on) this.lockPointer();
+    else if (this.pointerLocked) document.exitPointerLock();
     try {
       localStorage.setItem(FP_KEY, on ? '1' : '0');
     } catch {
@@ -1066,6 +1071,39 @@ export class Game {
     }
     this.onViewChange?.(on);
   }
+
+  /** Curseur capturé par la vue à la première personne : la souris tourne la tête, on vise au centre. */
+  get pointerLocked(): boolean {
+    return document.pointerLockElement === this.renderer.domElement;
+  }
+
+  /**
+   * Capture la souris pour la première personne (souris seulement : au doigt, on glisse). Doit
+   * suivre un geste (clic, touche) ; Échap la rend, un clic dans la scène la reprend.
+   */
+  private lockPointer(): void {
+    if (!this.fp || this.pointerLocked || !matchMedia('(pointer: fine)').matches) return;
+    try {
+      const p = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+      p?.catch?.(() => (this.noLock = true));
+    } catch {
+      // refusé (pas de geste, navigateur sans capture) : on garde le glisser pour regarder
+      this.noLock = true;
+    }
+  }
+
+  /** Point de l'écran visé : le centre (viseur) quand la souris est capturée, sinon le pointeur. */
+  private aimPoint(e: { clientX: number; clientY: number }): { x: number; y: number } {
+    if (!this.pointerLocked) return { x: e.clientX, y: e.clientY };
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  /** La capture de la souris a échoué : on regarde en glissant (jusqu'à une capture réussie). */
+  private noLock = false;
+
+  /** Appelé quand la souris est capturée ou rendue (viseur du HUD). */
+  onPointerLock: ((locked: boolean) => void) | null = null;
 
   /** Angle de la caméra en degrés, 0 à 360 (curseur du HUD). */
   get cameraAngle(): number {
@@ -7087,6 +7125,8 @@ export class Game {
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
       if (e.code === 'KeyX' && !e.repeat) this.firstPerson = !this.fp;
+      // Entrée : écrire dans la saisie, souris rendue
+      if (e.code === 'Enter' && this.pointerLocked) document.exitPointerLock();
       if (e.code === 'KeyB' && !e.repeat) this.drink();
       // M : la lettre, quelle que soit la disposition du clavier (AZERTY ou QWERTY)
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
@@ -7120,7 +7160,29 @@ export class Game {
       // à la première personne, la molette n'a pas de zoom à régler
       if (!this.fp) this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
+    const lockChange = () => {
+      this.look = null;
+      this.onHover?.(null);
+      if (this.pointerLocked) this.noLock = false;
+      this.onPointerLock?.(this.pointerLocked);
+    };
+    // capture refusée (aperçu dans un cadre, navigateur) : on regarde en glissant, comme au doigt
+    const lockError = () => (this.noLock = true);
+    document.addEventListener('pointerlockchange', lockChange);
+    document.addEventListener('pointerlockerror', lockError);
+    this.disposers.push(() => {
+      document.removeEventListener('pointerlockchange', lockChange);
+      document.removeEventListener('pointerlockerror', lockError);
+      if (this.pointerLocked) document.exitPointerLock();
+    });
     on(el, 'pointermove', (e) => {
+      if (this.pointerLocked) {
+        // souris capturée : elle tourne la tête ; l'objet sous le viseur montre son usure
+        // (certains navigateurs envoient parfois un saut de plusieurs centaines de pixels : ignoré)
+        if (Math.abs(e.movementX) < FP_SPIKE && Math.abs(e.movementY) < FP_SPIKE) this.turnView(e.movementX, e.movementY);
+        this.hoverAt(this.aimPoint(e));
+        return;
+      }
       const lk = this.look;
       if (lk && e.buttons & 1) {
         if (!lk.dragging && Math.hypot(e.clientX - lk.x, e.clientY - lk.y) > DRAG_START) lk.dragging = true;
@@ -7142,25 +7204,16 @@ export class Game {
           return;
         }
       }
-      const fixture = e.buttons ? null : this.fixtureAt(e.clientX, e.clientY);
-      if (fixture) {
-        const r = el.getBoundingClientRect();
-        const on = this.fixtureOn(fixture);
-        const state = fixture.kind === 'porte' ? (fixture.room.doorLock(fixture.index).locked ? 'fermée à clé' : on ? 'ouverte' : 'fermée') : (on ? 'tirés' : 'ouverts');
-        this.onHover?.({ name: fixture.kind, grade: gradeName(1, fixture.kind === 'porte'), condition: 1, state, x: e.clientX - r.left, y: e.clientY - r.top });
-        return;
-      }
-      const item = e.buttons ? null : this.itemAt(e.clientX, e.clientY);
-      if (!item) {
-        this.onHover?.(null);
-        return;
-      }
-      const r = el.getBoundingClientRect();
-      this.onHover?.({ name: item.name, grade: gradeName(item.condition, FEMININE.has(item.name)), condition: item.condition, state: this.stateOf(item), x: e.clientX - r.left, y: e.clientY - r.top });
+      if (e.buttons) this.onHover?.(null);
+      else this.hoverAt({ x: e.clientX, y: e.clientY });
     });
     on(el, 'pointerleave', () => this.onHover?.(null));
-    on(el, 'contextmenu', (e) => {
-      e.preventDefault();
+    on(el, 'contextmenu', (ev) => {
+      ev.preventDefault();
+      // souris capturée : le menu de ce qui est sous le viseur, et la souris rendue pour y choisir
+      const { x: clientX, y: clientY } = this.aimPoint(ev);
+      if (this.pointerLocked) document.exitPointerLock();
+      const e = { clientX, clientY };
       const r = el.getBoundingClientRect();
       const fixture = this.fixtureAt(e.clientX, e.clientY);
       if (fixture) {
@@ -7185,6 +7238,14 @@ export class Game {
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
       this.onMenu?.(null);
+      if (this.fp && e.pointerType === 'mouse' && (this.pointerLocked || !this.noLock)) {
+        // première personne à la souris : un premier clic capture la souris (sans agir), puis
+        // chaque clic agit sur ce qui est sous le viseur
+        if (!this.pointerLocked) return this.lockPointer();
+        const c = this.aimPoint(e);
+        this.pointAt(c.x, c.y, e.shiftKey, this.hitAt(c.x, c.y));
+        return;
+      }
       const hit = this.hitAt(e.clientX, e.clientY);
       // un objet qu'on porte peut être traîné (glisser-déposer) : on attend de savoir si c'est un clic
       if (hit?.item.def.portable && !this.moving) {
@@ -7193,6 +7254,8 @@ export class Game {
       }
       // à la première personne, glisser ailleurs tourne la vue : on attend de savoir si c'est un clic
       if (this.fp) {
+        // capture refusée plus tôt : on retente (la souris orientera la vue si elle passe)
+        if (e.pointerType === 'mouse') this.lockPointer();
         this.look = { x: e.clientX, y: e.clientY, dragging: false, shift: e.shiftKey };
         el.setPointerCapture?.(e.pointerId);
         return;
@@ -7216,6 +7279,25 @@ export class Game {
       // sur un objet : le geste qui va de soi ; sinon par terre, là où on lâche
       this.dragDrop(pr.hit.item, target?.item ?? null, target ? target.point : this.groundPoint(e.clientX, e.clientY));
     });
+  }
+
+  /** Bulle d'usure de l'objet (ou de la porte, des rideaux) sous le point (x, y) de l'écran. */
+  private hoverAt({ x, y }: { x: number; y: number }): void {
+    const el = this.renderer.domElement;
+    const r = el.getBoundingClientRect();
+    const fixture = this.fixtureAt(x, y);
+    if (fixture) {
+      const on = this.fixtureOn(fixture);
+      const state = fixture.kind === 'porte' ? (fixture.room.doorLock(fixture.index).locked ? 'fermée à clé' : on ? 'ouverte' : 'fermée') : (on ? 'tirés' : 'ouverts');
+      this.onHover?.({ name: fixture.kind, grade: gradeName(1, fixture.kind === 'porte'), condition: 1, state, x: x - r.left, y: y - r.top });
+      return;
+    }
+    const item = this.itemAt(x, y);
+    if (!item) {
+      this.onHover?.(null);
+      return;
+    }
+    this.onHover?.({ name: item.name, grade: gradeName(item.condition, FEMININE.has(item.name)), condition: item.condition, state: this.stateOf(item), x: x - r.left, y: y - r.top });
   }
 
   /** Clic (pas un glisser) sur un meuble ou le sol : agir sur le meuble, ou y aller. */
