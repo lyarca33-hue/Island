@@ -14,6 +14,7 @@ import {
 } from '../game/carteTest';
 import { WorldItem } from '../game/items/carry';
 import { type ItemDef, ITEMS } from '../game/items/catalog';
+import { type Correction, correctionOf } from '../game/items/corriges';
 import type { Motion } from '../game/items/rigs';
 import { poseMotion } from '../game/items/rigs';
 import { loadTripo } from '../game/items/tripo';
@@ -40,6 +41,8 @@ interface Entry {
   def?: ItemDef;
   pack?: PackId;
   model?: string;
+  /** Déjà corrigé sur Blender (items/corriges.ts). */
+  fixed?: Correction;
 }
 
 /** Les modèles, dans l'ordre de la carte de test : objets du jeu, puis la galerie pack par pack. */
@@ -50,8 +53,14 @@ function allEntries(): Entry[] {
   const packs = galleryModels().flatMap(({ pack, models }) =>
     models.map((model) => ({ ref: `pack ${pack}/${model}`, label: model, group: `Pack ${pack}`, pack, model })),
   );
-  return [...items, ...packs];
+  return ([...items, ...packs] as Entry[]).map((e) => ({ ...e, fixed: correctionOf({ objet: e.def?.id, pack: e.pack && `${e.pack}/${e.model}` }) }));
 }
+
+/** Les deux onglets de la liste : tous les modèles, ou ceux déjà corrigés sur Blender. */
+type Onglet = 'tous' | 'corriges';
+const DATE = new Intl.DateTimeFormat('fr', { day: 'numeric', month: 'long', year: 'numeric' });
+const dateFr = (d: string) => DATE.format(new Date(`${d}T12:00:00`));
+const PR_URL = 'https://github.com/lyarca33-hue/Island/pull/';
 
 /** Une pièce qui bouge (porte, tiroir, flamme…), trouvée dans le modèle. */
 interface Part {
@@ -337,6 +346,7 @@ export function Visionneuse() {
   const [index, setIndex] = useState(0);
   const [query, setQuery] = useState('');
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [onglet, setOnglet] = useState<Onglet>('tous');
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -406,10 +416,22 @@ export function Visionneuse() {
     const q = query.trim().toLowerCase();
     return entries
       .map((e, i) => ({ e, i }))
+      .filter(({ e }) => onglet === 'tous' || !!e.fixed)
       .filter(({ e }) => !q || e.ref.toLowerCase().includes(q) || e.label.toLowerCase().includes(q))
       .filter(({ e }) => !onlyFlagged || isFlagged(e.ref, 'retirer') || isFlagged(e.ref, 'corriger') || !!notes[e.ref]);
     // (version : relu à chaque signalement)
-  }, [entries, query, onlyFlagged, notes, version]);
+  }, [entries, onglet, query, onlyFlagged, notes, version]);
+
+  /** Change d'onglet (la recherche repart de zéro) ; dans les corrigés, montre le premier si le modèle choisi n'en est pas. */
+  const ouvrir = (o: Onglet) => {
+    setOnglet(o);
+    setQuery('');
+    if (o === 'corriges' && !entries[index]?.fixed) {
+      const first = entries.findIndex((e) => e.fixed);
+      if (first >= 0) setIndex(first);
+    }
+  };
+  const nbCorriges = useMemo(() => entries.filter((e) => e.fixed).length, [entries]);
 
   const go = useCallback(
     (step: number) => {
@@ -421,9 +443,11 @@ export function Visionneuse() {
     [shown, index],
   );
 
-  // garde le modèle choisi visible dans la liste
+  // garde le modèle choisi visible dans la liste, et ses infos reprennent en haut
+  const infoRef = useRef<HTMLElement>(null);
   useEffect(() => {
     listRef.current?.querySelector('.vis-item.on')?.scrollIntoView({ block: 'nearest' });
+    infoRef.current?.scrollTo({ top: 0 });
   }, [index]);
 
   // clavier (hors saisie) : ←/→ ou ↑/↓ modèle précédent / suivant, A supprimer, E corriger, R recadrer, Espace jouer
@@ -453,6 +477,14 @@ export function Visionneuse() {
           <b>Visionneuse</b>
           <span className="vis-count">{shown.length} modèles</span>
         </div>
+        <div className="vis-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={onglet === 'tous'} className={onglet === 'tous' ? 'on' : ''} onClick={() => ouvrir('tous')}>
+            Tous
+          </button>
+          <button type="button" role="tab" aria-selected={onglet === 'corriges'} className={onglet === 'corriges' ? 'on' : ''} onClick={() => ouvrir('corriges')}>
+            Corrigés sur Blender ({nbCorriges})
+          </button>
+        </div>
         <input className="vis-search" type="search" placeholder="Chercher un modèle…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <label className="vis-check">
           <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} /> Seulement les signalés ou commentés
@@ -469,6 +501,7 @@ export function Visionneuse() {
                   {flagged(e.ref, 'retirer') && <span className="vis-tag del" title="À supprimer">S</span>}
                   {flagged(e.ref, 'corriger') && <span className="vis-tag fix" title="À corriger sur Blender">B</span>}
                   {notes[e.ref] && <span className="vis-tag note" title={notes[e.ref]}>✎</span>}
+                  {e.fixed && <span className="vis-tag done" title={`Corrigé sur Blender le ${dateFr(e.fixed.date)}`}>✓</span>}
                 </button>
               </div>
             );
@@ -494,11 +527,29 @@ export function Visionneuse() {
         <p className="vis-help">Glisser : tourner · Molette ou deux doigts : zoomer · Clic droit : déplacer · A : supprimer · E : Blender</p>
       </main>
 
-      <aside className="vis-info">
+      <aside className="vis-info" ref={infoRef}>
         {entry && (
           <>
             <h2>{entry.label}</h2>
             <code className="vis-ref">{entry.ref}</code>
+            {entry.fixed && (
+              <div className="vis-fixed">
+                <b>✓ Corrigé sur Blender</b> le {dateFr(entry.fixed.date)} :{' '}
+                {entry.fixed.quoi} (
+                <a href={`${PR_URL}${entry.fixed.pr}`} target="_blank" rel="noreferrer">
+                  PR #{entry.fixed.pr}
+                </a>
+                )
+                {flagged(entry.ref, 'corriger') && (
+                  <p>
+                    Encore dans ta liste à corriger.{' '}
+                    <button type="button" className="save-link" onClick={() => toggleFlag(entry.ref, 'corriger')}>
+                      L’en retirer
+                    </button>
+                  </p>
+                )}
+              </div>
+            )}
             <div className="vis-flags">
               {(['retirer', 'corriger'] as const).map((kind) => {
                 const on = flagged(entry.ref, kind);
