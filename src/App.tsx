@@ -4,6 +4,7 @@ import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
 import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
+import { CARTE_TEST, testMapUrl } from './game/carteTest';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
 import { preloadPacks } from './game/packs/assets';
@@ -102,7 +103,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   /** Fenêtre « Signaler » ouverte, avec son texte de départ. */
   const [report, setReport] = useState<string | null>(null);
   /** Partie du menu dépliée. */
-  const [section, setSection] = useState<string | null>('raccourcis');
+  const [section, setSection] = useState<string | null>(null);
   const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
   /** Interface masquée (touche H) : il ne reste que la scène, les messages et les menus ouverts exprès. */
   const [hidden, setHidden] = useState(false);
@@ -167,7 +168,8 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
     g.onNotice = flash;
     Avatar.onMissingImport = () => flash('Ton perso VRoid importé n’est pas sur cet appareil : perso de base en attendant.');
     // la partie gardée dans le navigateur, puis sauvée toute seule (et envoyée au compte Google)
-    const saved = loadLocal();
+    // carte de test : ni chargée ni sauvée, la vraie partie reste intacte
+    const saved = CARTE_TEST ? null : loadLocal();
     if (saved) {
       try {
         g.loadState(saved);
@@ -176,7 +178,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
         console.error('Partie sauvée illisible', e);
       }
     }
-    const capture = () => ({ ...g.saveState(), recipe });
+    const capture = () => (CARTE_TEST ? null : { ...g.saveState(), recipe });
     const auto = new AutoSave(capture, (s, leaving) => {
       setSavedAt(s.savedAt);
       cloud.push(s, leaving);
@@ -187,7 +189,10 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       replaceGame(s);
       flash('Partie du compte chargée.');
     };
-    g.start().then(() => setLoading(false)).catch((e) => {
+    g.start().then(() => {
+      setLoading(false);
+      if (CARTE_TEST) flash('Carte de test : rien n’est sauvé. Menu → Partie pour revenir à l’île.');
+    }).catch((e) => {
       console.error(e);
       setError('Le personnage n’a pas pu être chargé.');
     });
@@ -283,7 +288,14 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           }
         >
           <MenuSection title="Partie" icon="cloud" open={section === 'partie'} onToggle={fold('partie')}>
-            <SavePanel savedAt={savedAt} onNewGame={() => replaceGame(null)} />
+            {CARTE_TEST ? (
+              <p>Carte de test : un sol plat et chaque objet du jeu en rangées. Rien n’y est sauvé, ta partie t’attend sur l’île.</p>
+            ) : (
+              <SavePanel savedAt={savedAt} onNewGame={() => replaceGame(null)} />
+            )}
+            <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(!CARTE_TEST))}>
+              {CARTE_TEST ? 'Retour à l’île' : 'Carte de test (objets en rangées)'}
+            </button>
           </MenuSection>
           <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
             <Shortcuts />

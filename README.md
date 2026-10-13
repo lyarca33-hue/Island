@@ -109,6 +109,15 @@ Tapis, colonne de douche, miroirs et portemanteau sont du décor fixe (`decor`) 
 La télé, retirée avec l'ancienne maison, n'est pas encore rebranchée. La vessie baisse : en dessous de 18, le perso est
 prévenu ; à zéro, c'est l'accident.
 
+### La carte de test
+
+Pour inspecter les objets un par un : ajouter `?test` à l'adresse
+(https://lyarca33-hue.github.io/Island/?test), ou Menu → Partie → « Carte de test ». Un sol plat
+quadrillé tous les mètres, sans île ni maison, avec un exemplaire de chaque objet du catalogue en
+rangées, bien séparés : les petits objets devant, les meubles et appareils derrière, dans l'ordre
+du catalogue (`src/game/carteTest.ts`). Rien n'y est chargé ni sauvé : la vraie partie reste
+intacte, et Menu → Partie → « Retour à l'île » la retrouve.
+
 ### L'île
 
 Autour de la maison, une île faite par le jeu, sans modèle à charger (`src/game/ile.ts`) : le
