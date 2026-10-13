@@ -125,6 +125,8 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   page.on('console', (m) => {
     if (m.type() === 'error') erreurs.push(`console : ${m.text()}`);
   });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  const presse = () => page.evaluate(() => navigator.clipboard.readText());
   await page.goto('/?modeles');
   await expect(page.locator('.vis-item').first()).toBeVisible();
   await expect(page.locator('.vis-loading')).toHaveCount(0, { timeout: 120_000 });
@@ -135,9 +137,10 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   await expect(page.locator('.vis-parts li')).toContainText(['porte']);
   await page.getByRole('button', { name: /Corriger sur Blender/ }).click();
   await page.locator('.vis-comment textarea').fill('charnière à revoir');
-  await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).click();
-  await expect(page.locator('.feedback textarea')).toHaveValue(/objet frigo \(frigo\) : charnière à revoir/);
-  await page.locator('.feedback').getByRole('button', { name: 'Fermer' }).click();
+  // « Copier » met la liste dans le presse-papiers
+  await page.getByRole('button', { name: 'Copier la liste' }).click();
+  await expect(page.getByRole('button', { name: 'Copié ✓' })).toBeVisible();
+  await expect.poll(presse).toMatch(/objet frigo \(frigo\) : charnière à revoir/);
   // l'onglet des modèles déjà corrigés sur Blender
   await page.getByRole('tab', { name: /Corrigés sur Blender/ }).click();
   await expect(page.locator('.vis-item')).toContainText(['banane', 'bêche', 'beurre', 'boîte aux lettres']);
@@ -146,15 +149,13 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   // le tag « trop anguleux » part dans sa propre liste
   await page.getByRole('button', { name: /Trop anguleux/ }).click();
   await expect(page.locator('.vis-item.on .vis-tag.angle')).toBeVisible();
-  await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).last().click();
-  await expect(page.locator('.feedback textarea')).toHaveValue(/Modèles trop anguleux[^\n]*\n[\s\S]*- objet beche \(bêche\)/);
-  await page.locator('.feedback').getByRole('button', { name: 'Fermer' }).click();
+  await page.getByRole('button', { name: /^Copi/ }).last().click();
+  await expect.poll(presse).toMatch(/Modèles trop anguleux[^\n]*\n[\s\S]*- objet beche \(bêche\)/);
   // et « pas assez lisse », la quatrième liste
   await page.getByRole('button', { name: /Pas assez lisse/ }).click();
   await expect(page.locator('.vis-item.on .vis-tag.lisse')).toBeVisible();
-  await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).last().click();
-  await expect(page.locator('.feedback textarea')).toHaveValue(/Modèles pas assez lisses[^\n]*\n[\s\S]*- objet beche \(bêche\)/);
-  await page.locator('.feedback').getByRole('button', { name: 'Fermer' }).click();
+  await page.getByRole('button', { name: /^Copi/ }).last().click();
+  await expect.poll(presse).toMatch(/Modèles pas assez lisses[^\n]*\n[\s\S]*- objet beche \(bêche\)/);
   await page.screenshot({ path: info.outputPath('visionneuse.png') });
   expect(erreurs).toEqual([]);
 });

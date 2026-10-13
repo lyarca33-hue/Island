@@ -22,7 +22,6 @@ import { loadTripo } from '../game/items/tripo';
 import { loadPack, packModel, packRig, preloadPacks } from '../game/packs/assets';
 import type { ModelName, PackId } from '../game/packs/manifest';
 import { packRigOf } from '../game/packs/rigs';
-import { FeedbackPanel } from './FeedbackPanel';
 import { TestFlags } from './TestFlags';
 import './visionneuse.css';
 
@@ -32,7 +31,7 @@ import './visionneuse.css';
  * modèles (objets du jeu, puis la galerie des packs, comme sur la carte de test) ; à droite ses
  * infos (taille, triangles, pièces qui bougent, ce qu'on peut en faire), un commentaire, et les deux
  * signalements de la carte de test : à supprimer (A), à corriger sur Blender (E), trop anguleux (T) et pas assez lisse (L). Les listes partent
- * à Claude avec les commentaires (« Envoyer la liste à Claude »).
+ * à Claude avec les commentaires (« Copier la liste », à coller dans la discussion).
  */
 
 interface Entry {
@@ -356,7 +355,6 @@ export function Visionneuse() {
   const [k, setK] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [spin, setSpin] = useState(false);
-  const [report, setReport] = useState<string | null>(null);
   /** Change à chaque signalement ou commentaire : la liste et les boutons se relisent. */
   const [version, setVersion] = useState(0);
   useEffect(() => onFlags(() => setVersion((v) => v + 1)), []);
@@ -455,7 +453,7 @@ export function Visionneuse() {
   // clavier (hors saisie) : ←/→ ou ↑/↓ modèle précédent / suivant, A supprimer, E corriger, R recadrer, Espace jouer
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || report !== null) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === 'ArrowRight' || e.code === 'ArrowDown') go(1);
       else if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') go(-1);
       else if (e.key.toLowerCase() === 'a') toggleFlag(entry.ref, 'retirer');
@@ -469,7 +467,7 @@ export function Visionneuse() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, entry, report]);
+  }, [go, entry]);
 
   let lastGroup = '';
   const uses = entry?.def ? (Object.keys(DEF_WORD) as Array<keyof ItemDef>).filter((key) => entry.def![key] !== undefined && entry.def![key] !== false) : [];
@@ -648,13 +646,12 @@ export function Visionneuse() {
             <h3>Listes à envoyer</h3>
             <div className="vis-lists">
               {FLAG_KINDS.map((kind) => (
-                <TestFlags key={kind} kind={kind} onSend={setReport} />
+                <TestFlags key={kind} kind={kind} />
               ))}
             </div>
           </>
         )}
       </aside>
-      {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
     </div>
   );
 }

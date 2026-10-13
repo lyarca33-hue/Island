@@ -13,7 +13,7 @@ function titleOf(text: string): string {
   return first.length > 70 ? `${first.slice(0, 67)}…` : first || 'Retour depuis le jeu';
 }
 
-async function copyText(text: string): Promise<void> {
+export async function copyText(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
   } catch {

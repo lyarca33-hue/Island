@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clearFlags, type FlagKind, FLAG_WORD, flagListText, loadComments, loadFlags, onFlags, toggleFlag } from '../game/carteTest';
+import { copyText } from './FeedbackPanel';
 
 const KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E', anguleux: 'T', lisse: 'L' };
 /** Comment signaler, quand la liste est vide. */
@@ -13,9 +14,19 @@ const HOW: Record<FlagKind, string> = {
 /**
  * Carte de test (Menu → Partie) et visionneuse de modèles : une liste de modèles signalés, à retirer
  * (touche A sur le modèle visé) ou à corriger sur Blender (touche E), avec leurs commentaires. « Envoyer à Claude » ouvre la fenêtre Signaler avec la liste
- * (GitHub ou copier-coller), et Claude s'en occupe ensuite.
+ * (GitHub ou copier-coller), et Claude s'en occupe ensuite. Sans `onSend` (visionneuse), un bouton
+ * « Copier » met directement la liste dans le presse-papiers, à coller dans la discussion.
  */
-export function TestFlags({ kind, onSend }: { kind: FlagKind; onSend: (text: string) => void }) {
+export function TestFlags({ kind, onSend }: { kind: FlagKind; onSend?: (text: string) => void }) {
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(0);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
+  const copy = async () => {
+    await copyText(flagListText(kind));
+    setCopied(true);
+    clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => setCopied(false), 2000);
+  };
   const [flags, setFlags] = useState(() => loadFlags(kind));
   const [notes, setNotes] = useState(loadComments);
   useEffect(
@@ -46,9 +57,15 @@ export function TestFlags({ kind, onSend }: { kind: FlagKind; onSend: (text: str
           </li>
         ))}
       </ul>
-      <button type="button" className="menu-action" onClick={() => onSend(flagListText(kind))}>
-        Envoyer la liste à Claude
-      </button>
+      {onSend ? (
+        <button type="button" className="menu-action" onClick={() => onSend(flagListText(kind))}>
+          Envoyer la liste à Claude
+        </button>
+      ) : (
+        <button type="button" className="menu-action" onClick={() => void copy()}>
+          {copied ? 'Copié ✓' : 'Copier la liste'}
+        </button>
+      )}
       <button type="button" className="save-link" onClick={() => clearFlags(kind)}>
         Vider la liste
       </button>
