@@ -275,12 +275,16 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
             {CARTE_TEST ? (
               <>
                 <p>Carte de test : un sol plat et chaque modèle du jeu en rangées. Rien n’y est sauvé, ta partie t’attend sur l’île.</p>
-                <TestFlags
-                  onSend={(text) => {
-                    setMenuOpen(false);
-                    setReport(text);
-                  }}
-                />
+                {(['retirer', 'corriger'] as const).map((kind) => (
+                  <TestFlags
+                    key={kind}
+                    kind={kind}
+                    onSend={(text) => {
+                      setMenuOpen(false);
+                      setReport(text);
+                    }}
+                  />
+                ))}
               </>
             ) : (
               <SavePanel savedAt={savedAt} onNewGame={() => replaceGame(null)} />

@@ -256,21 +256,23 @@ export function cullTestMap(map: TestMap, items: WorldItem[], at: THREE.Vector3)
  * dans le navigateur. Menu → Partie les envoie à Claude, qui les retire ensuite.
  * Un repère par modèle : `objet <id> (<nom>)` pour un objet du jeu, `pack <pack>/<modèle>` pour la galerie.
  */
-const FLAGS_KEY = 'rp-island-a-retirer';
+/** Les deux listes : à retirer du jeu (touche A), à corriger (touche E). */
+export type FlagKind = 'retirer' | 'corriger';
+const FLAGS_KEY: Record<FlagKind, string> = { retirer: 'rp-island-a-retirer', corriger: 'rp-island-a-corriger' };
 const flagListeners = new Set<() => void>();
 
-export function loadFlags(): string[] {
+export function loadFlags(kind: FlagKind = 'retirer'): string[] {
   try {
-    const v = JSON.parse(localStorage.getItem(FLAGS_KEY) ?? '[]');
+    const v = JSON.parse(localStorage.getItem(FLAGS_KEY[kind]) ?? '[]');
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
   } catch {
     return [];
   }
 }
 
-function saveFlags(flags: string[]): void {
+function saveFlags(kind: FlagKind, flags: string[]): void {
   try {
-    localStorage.setItem(FLAGS_KEY, JSON.stringify(flags));
+    localStorage.setItem(FLAGS_KEY[kind], JSON.stringify(flags));
   } catch {
     // stockage indisponible : la liste dure le temps de la page
   }
@@ -278,15 +280,15 @@ function saveFlags(flags: string[]): void {
 }
 
 /** Signale le modèle `ref`, ou le retire de la liste s'il y était ; vrai s'il est maintenant signalé. */
-export function toggleFlag(ref: string): boolean {
-  const flags = loadFlags();
+export function toggleFlag(ref: string, kind: FlagKind = 'retirer'): boolean {
+  const flags = loadFlags(kind);
   const on = !flags.includes(ref);
-  saveFlags(on ? [...flags, ref] : flags.filter((f) => f !== ref));
+  saveFlags(kind, on ? [...flags, ref] : flags.filter((f) => f !== ref));
   return on;
 }
 
-export function clearFlags(): void {
-  saveFlags([]);
+export function clearFlags(kind: FlagKind = 'retirer'): void {
+  saveFlags(kind, []);
 }
 
 /** Prévient `fn` à chaque changement de la liste ; rend de quoi arrêter. */
