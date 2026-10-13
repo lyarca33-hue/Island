@@ -33,8 +33,9 @@ ouvre le créateur, et « Jouer » ramène sur la map.
   agit sur ce qui est sous le viseur ; deux doigts glissés sur le pavé tactile (ou la molette) tournent aussi la
   tête ; au doigt, on glisse pour regarder. Z avance là où l'on regarde. Avec Firefox sous Linux sur
   un écran haute définition, la souris capturée bute vers la droite et le bas (défaut de Firefox) : la
-  capture y est coupée d'office et l'on regarde en glissant ou à deux doigts (Menu → Affichage pour la
-  remettre).
+  capture y est coupée d'office (Menu → Affichage pour la remettre) : la souris reste libre et,
+  poussée au bord de l'écran, fait tourner la vue (un doigt sur le pavé tactile suffit) ; glisser ou
+  deux doigts marchent aussi.
   Quand le perso agit seul (marche vers un clic, ordres enchaînés), la vue suit son regard ; bouger la
   souris reprend la main. X encore : retour à la vue de dessus. Dans cette vue, le bas
   de l'écran se range en petit dans le coin en bas à gauche (gestes réduits à leur touche, saisie

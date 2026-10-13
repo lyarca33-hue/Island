@@ -38,7 +38,7 @@ import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, JUICES, juiceFor, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { fillerColor, START_CONTENTS } from './items/remplissage';
-import { MouseLookFilter, captureBlocked } from './mouseLook';
+import { MouseLookFilter, captureBlocked, edgePan } from './mouseLook';
 import { cellsOf, GRIDS, pack, type Cell } from './items/cases';
 import { forgetIcons, itemIcon } from './items/vignettes';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
@@ -89,6 +89,14 @@ const FP_LOOK = 0.005;
 const FP_EDGE = 500;
 /** Distance au bord de la fenêtre (px) où la souris glissée fait tourner la vue en continu. */
 const EDGE_ZONE = 4;
+/**
+ * Souris libre poussée au bord de la scène (sans capture) : pixels de vue par seconde, de côté et
+ * en hauteur, et temps de montée en vitesse (s) : la traversée du bord vers un bouton du HUD ne
+ * fait presque pas tourner.
+ */
+const FP_PAN = 340;
+const FP_PAN_Y = 200;
+const FP_PAN_RAMP = 0.3;
 
 /** Bord de la fenêtre où se trouve le point (x, y) : -1 (gauche, haut), 1 (droite, bas) ou 0. */
 function edgeDir(x: number, y: number): { x: number; y: number } {
@@ -542,6 +550,11 @@ export class Game {
   private look: { x: number; y: number; dragging: boolean; shift: boolean; edge?: { x: number; y: number } } | null = null;
   /** Dernier mouvement de la vue par le joueur (ms) : le regard suit le perso passé ce délai. */
   private lookedAt = 0;
+  /** Souris libre sur la scène (sans capture, sans bouton) : sa position, pour tourner au bord. */
+  private hoverPan: { x: number; y: number } | null = null;
+  /** Montée en vitesse du tour au bord, de 0 à 1, et heure de son dernier pas (ms). */
+  private panRamp = 0;
+  private panAt = 0;
   /** Appelé quand on passe d'une vue à l'autre (bouton du HUD). */
   onViewChange: ((firstPerson: boolean) => void) | null = null;
   /** Mode terraformation (terraform.ts) : le clic gauche retouche le relief au pinceau. */
@@ -1181,6 +1194,8 @@ export class Game {
     if (on && this.construction?.on) this.building = false;
     this.fp = on;
     this.look = null;
+    this.hoverPan = null;
+    if (this.renderer) this.renderer.domElement.style.cursor = '';
     // on repart du regard droit devant, un peu baissé (de quoi voir le plan de travail)
     this.pitch = FP_PITCH;
     if (!on) this.character.hideHead(false);
@@ -1261,6 +1276,14 @@ export class Game {
 
   /** Appelé quand le réglage de la capture change (rappel du HUD). */
   onMouseCapture: ((on: boolean) => void) | null = null;
+
+  /**
+   * Première personne sans capture de la souris (coupée, ou refusée) : la souris reste libre, et
+   * poussée au bord de la scène elle fait tourner la vue (un doigt sur le pavé tactile suffit).
+   */
+  private get freeLook(): boolean {
+    return this.fp && !this.pointerLocked && (this.noLock || !this.mouseCapture);
+  }
 
   /** Appelé quand la souris est capturée ou rendue (viseur du HUD). */
   onPointerLock: ((locked: boolean) => void) | null = null;
@@ -7403,7 +7426,10 @@ export class Game {
       this.shift = e.shiftKey;
       this.keys.delete(e.code);
     });
-    on(window, 'blur', () => this.keys.clear());
+    on(window, 'blur', () => {
+      this.keys.clear();
+      this.hoverPan = null;
+    });
     on(el, 'wheel', (e) => {
       // (empêché aussi pour le défilement horizontal : sinon Firefox y voit « page précédente »)
       e.preventDefault();
@@ -7444,6 +7470,8 @@ export class Game {
         this.hoverAt(this.aimPoint(e));
         return;
       }
+      // souris libre, sans bouton : au bord de la scène, la vue tournera (voir updateEyes)
+      this.hoverPan = e.pointerType === 'mouse' && !e.buttons && this.freeLook ? { x: e.clientX, y: e.clientY } : null;
       const lk = this.look;
       if (lk && e.buttons & 1) {
         if (!lk.dragging && Math.hypot(e.clientX - lk.x, e.clientY - lk.y) > DRAG_START) lk.dragging = true;
@@ -7470,12 +7498,14 @@ export class Game {
       else this.hoverAt({ x: e.clientX, y: e.clientY });
     });
     on(el, 'pointerleave', () => {
+      this.hoverPan = null;
       this.onHover?.(null);
       if (this.terraform.on && !this.terraform.pressed) this.terraPointer = null;
       if (this.construction.on && !this.construction.pressed) this.terraPointer = null;
     });
     on(el, 'contextmenu', (ev) => {
       ev.preventDefault();
+      this.hoverPan = null;
       // souris capturée : le menu de ce qui est sous le viseur, et la souris rendue pour y choisir
       const { x: clientX, y: clientY } = this.aimPoint(ev);
       if (this.pointerLocked) document.exitPointerLock();
@@ -7502,6 +7532,7 @@ export class Game {
       this.onMenu?.({ x: e.clientX - r.left, y: e.clientY - r.top, title, entries });
     });
     on(el, 'pointerdown', (e) => {
+      this.hoverPan = null;
       if (e.button !== 0) return;
       this.onMenu?.(null);
       // terraformation : le clic gauche tient le pinceau, le perso ne bouge pas
@@ -9744,6 +9775,7 @@ export class Game {
     // continue de tourner tant qu'on la tient contre le bord
     const edge = this.look?.dragging ? this.look.edge : null;
     if (edge && (edge.x || edge.y)) this.turnView(edge.x * FP_EDGE * dt, edge.y * FP_EDGE * dt);
+    this.panAtEdge();
     if (c.aspect !== aspect) {
       c.aspect = aspect;
       c.updateProjectionMatrix();
@@ -9769,6 +9801,30 @@ export class Game {
     const cp = Math.cos(this.pitch);
     EYE_LOOK.set(fwd.x * cp, Math.sin(this.pitch), fwd.z * cp).add(eye);
     c.lookAt(EYE_LOOK);
+  }
+
+  /**
+   * Souris libre poussée au bord de la scène (première personne sans capture) : la vue tourne de ce
+   * côté, après une courte montée en vitesse ; le curseur montre le sens.
+   */
+  private panAtEdge(): void {
+    const el = this.renderer.domElement;
+    // en temps réel, pas en temps de jeu : sur une machine qui rame, la vue tourne aussi vite
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - this.panAt) / 1000);
+    this.panAt = now;
+    let pan: { x: number; y: number } | null = null;
+    if (this.hoverPan && this.freeLook) {
+      const r = el.getBoundingClientRect();
+      pan = edgePan(this.hoverPan.x - r.left, this.hoverPan.y - r.top, r.width, r.height);
+    }
+    if (pan && (pan.x || pan.y)) {
+      this.panRamp = Math.min(1, this.panRamp + dt / FP_PAN_RAMP);
+      this.turnView(pan.x * FP_PAN * this.panRamp * dt, pan.y * FP_PAN_Y * this.panRamp * dt);
+    } else this.panRamp = 0;
+    const dir = pan ? `${pan.y < 0 ? 'n' : pan.y > 0 ? 's' : ''}${pan.x < 0 ? 'w' : pan.x > 0 ? 'e' : ''}` : '';
+    const cursor = dir ? `${dir}-resize` : '';
+    if (el.style.cursor !== cursor) el.style.cursor = cursor;
   }
 
   /**

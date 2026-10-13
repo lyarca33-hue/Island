@@ -60,7 +60,7 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
         <input type="checkbox" checked={capture} onChange={(e) => { game.mouseCapture = e.target.checked; setCapture(e.target.checked); }} />
         <span>Première personne : la souris capturée tourne la vue</span>
       </label>
-      <small>Décoché : on regarde en glissant (clic maintenu) ou à deux doigts. Décoché d’office avec Firefox sous Linux sur un écran haute définition, où le curseur capturé bute vers la droite et vers le bas.</small>
+      <small>Décoché : la souris reste libre et, poussée au bord de l’écran, fait tourner la vue (un doigt sur le pavé tactile suffit) ; glisser ou deux doigts marchent aussi. Décoché d’office avec Firefox sous Linux sur un écran haute définition, où le curseur capturé bute vers la droite et vers le bas.</small>
       <SoundControls game={game} />
     </div>
   );

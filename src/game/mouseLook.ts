@@ -50,3 +50,22 @@ export class MouseLookFilter {
 export function captureBlocked(ua: string, dpr: number): boolean {
   return /Firefox\//.test(ua) && /Linux|X11/.test(ua) && !/Android/.test(ua) && dpr >= 1.5;
 }
+
+/** Part de la scène, sur chaque bord, où la souris libre fait tourner la vue (et minimum en px). */
+export const PAN_ZONE = 0.12;
+export const PAN_MIN = 36;
+
+/**
+ * Souris libre (non capturée) à la première personne : poussée vers un bord de la scène, la vue
+ * tourne de ce côté, d'autant plus vite qu'elle s'en approche. De -1 à 1 par axe (droite et bas
+ * positifs), 0 loin des bords. Un seul doigt sur le pavé tactile suffit : pas de clic à tenir.
+ */
+export function edgePan(x: number, y: number, w: number, h: number): { x: number; y: number } {
+  const axis = (v: number, size: number) => {
+    const z = Math.max(PAN_MIN, size * PAN_ZONE);
+    if (v < z) return -Math.min(1, (z - v) / z);
+    if (v > size - z) return Math.min(1, (v - (size - z)) / z);
+    return 0;
+  };
+  return { x: axis(x, w), y: axis(y, h) };
+}
