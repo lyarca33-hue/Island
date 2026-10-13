@@ -682,7 +682,7 @@ export class Construction {
   }
 }
 
-/** Clé des bâtiments de la page du créateur (`?batir`) dans le navigateur. */
+/** Clé des bâtiments de la carte de test dans le navigateur (celle de l'ancienne page `?batir`). */
 const BATIR_KEY = 'island-batiments';
 
 export function loadBatiments(): unknown {

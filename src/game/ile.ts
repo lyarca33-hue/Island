@@ -141,6 +141,18 @@ function hills(x: number, z: number): number {
   return h;
 }
 
+/**
+ * Carte de test (carteTest.ts) : à la place de l'île, un grand terrain tout plat à y = 0, en herbe,
+ * quadrillé tous les mètres, sans routes ni côte (la mer l'entoure). Il se retouche au pinceau
+ * comme l'île. À choisir avant de créer l'île.
+ */
+let flat = false;
+export function flattenIsland(): void {
+  flat = true;
+  naturalGrid = null;
+  naturalSplat = null;
+}
+
 /** Hauteur du sol de l'île au point (x, z) (m), retouches de la terraformation comprises ; sous SEA_LEVEL, c'est la mer. */
 export function heightAt(x: number, z: number): number {
   return naturalHeight(x, z) + editAt(x, z);
@@ -148,6 +160,7 @@ export function heightAt(x: number, z: number): number {
 
 /** Hauteur du relief tel que le jeu le fait, sans les retouches (m). */
 function naturalHeight(x: number, z: number): number {
+  if (flat) return 0;
   const d = edgeDistance(x, z);
   const share = hillShare(x, z, d);
   const inland = share > 0 ? hills(x, z) * share : 0;
@@ -198,6 +211,7 @@ export function groundKind(x: number, z: number): 'herbe' | 'sable' | 'roche' | 
 
 /** Parts du sol (0 à 1) : sable, roche (côte rocheuse, falaise), terre (bord des falaises), pelouse tondue. */
 function splatAt(x: number, z: number): { sable: number; roche: number; terre: number; pelouse: number } {
+  if (flat) return { sable: 0, roche: 0, terre: 0, pelouse: 1 };
   const d = edgeDistance(x, z);
   const k = coastKind(x, z);
   const n = fbm(x * 0.09, z * 0.09, 21);
@@ -264,6 +278,9 @@ export const WAYS: Way[] = [
   { points: [[PIERRE_SITE.x - 0.13, PIERRE_SITE.z + 3.7], [PIERRE_SITE.x, PIERRE_SITE.z + 6.5], [PIERRE_SITE.x + 3, PIERRE_SITE.z + 9.5], [PIERRE_SITE.x + 7.5, PIERRE_SITE.z + 11]], closed: false, width: 1.6, kind: 'chemin' },
 ];
 
+/** Les routes et chemins dessinés (aucun sur le terrain plat de la carte de test). */
+const shownWays = () => (flat ? [] : WAYS);
+
 /** Hauteur au-dessus du sol de chaque revêtement : la route passe sur l'allée et le chemin là où ils la rejoignent. */
 const WAY_LIFT = { chemin: 0.03, allee: 0.04, route: 0.05 } as const;
 /** Ordre de dessin des revêtements (sans profondeur écrite, le dernier dessiné passe dessus). */
@@ -278,7 +295,7 @@ const wayPoints = new Map<Way, THREE.Vector3[]>();
 /** Le point (x, z) est-il sur une route ou un chemin ? */
 export function wayAt(x: number, z: number): Way['kind'] | null {
   const p = new THREE.Vector3(x, 0, z);
-  for (const w of WAYS) {
+  for (const w of shownWays()) {
     let pts = wayPoints.get(w);
     if (!pts) {
       const c = wayCurve(w);
@@ -759,7 +776,7 @@ function grassMask(): { tex: THREE.DataTexture; clear(x0: number, x1: number, z0
       if ((cx - x) ** 2 + (cz - z) ** 2 < r * r) data[j * n + i] = 255;
     }
   };
-  for (const w of WAYS) {
+  for (const w of shownWays()) {
     const c = wayCurve(w);
     for (const p of c.getSpacedPoints(Math.ceil(c.getLength() / 0.3))) clearDisc(p.x, p.z, w.width / 2 + 0.15);
   }
@@ -781,12 +798,12 @@ function grassMask(): { tex: THREE.DataTexture; clear(x0: number, x1: number, z0
 function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
   // ombrage fondu : les paliers nets feraient des bandes sur les pentes de la plage
   const mat = createToonMaterial({ color: 0xffffff, rimStrength: 0, soft: true });
-  const tex = { uTone: { value: tone() }, uG0: { value: GREENS[0] }, uG1: { value: GREENS[1] }, uG2: { value: GREENS[2] }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() } };
+  const tex = { uTone: { value: tone() }, uG0: { value: GREENS[0] }, uG1: { value: GREENS[1] }, uG2: { value: GREENS[2] }, uSand: { value: sandTexture() }, uRock: { value: rockTexture() }, uDirt: { value: dirtTexture() }, uGrid: { value: flat ? 1 : 0 } };
   mat.onBeforeCompile = (sh) => {
     worldVaryings(sh, u);
     Object.assign(sh.uniforms, tex);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uTone; uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uTone; uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2; uniform sampler2D uSand; uniform sampler2D uRock; uniform sampler2D uDirt; uniform float uGrid;')
       .replace(
         '#include <map_fragment>',
         `vec2 xz = vIleW.xz;
@@ -817,6 +834,11 @@ function terrainMaterial(u: IslandUniforms): THREE.MeshToonMaterial {
          vec3 col = mix(grass, sand, sandW);
          col = mix(col, dirt, dirtW);
          col = mix(col, rock, rockW);
+         // carte de test : un trait tous les mètres (de quoi juger les tailles), effacé au loin
+         vec2 gw = max(fwidth(xz), vec2(1e-4));
+         vec2 gd = abs(fract(xz + 0.5) - 0.5) / gw;
+         float gridL = (1.0 - clamp(min(gd.x, gd.y) - 0.75, 0.0, 1.0)) * (1.0 - smoothstep(0.05, 0.25, max(gw.x, gw.y)));
+         col *= 1.0 - 0.25 * gridL * uGrid;
          // modelé des collines : les pentes face au soleil s'éclairent, les autres foncent (à plat : rien)
          vec3 sunDir = normalize(vec3(-0.45, 0.75, -0.5));
          col *= clamp(1.0 + (dot(normalize(vIleN), sunDir) - sunDir.y) * 1.8, 0.6, 1.25);
@@ -962,7 +984,7 @@ export function createIsland(): Island {
   const road = asphaltTexture(true), lane = asphaltTexture(false), path = pathTexture();
   const ways: Array<{ way: Way; mesh: THREE.Mesh }> = [];
   const wayRepeat = (w: Way) => (w.kind === 'chemin' ? w.width * 4 : w.width * 2);
-  for (const w of WAYS) {
+  for (const w of shownWays()) {
     const map = w.kind === 'route' ? road : w.kind === 'allee' ? lane : path;
     const mesh = new THREE.Mesh(wayGeometry(w, wayRepeat(w)), wayMaterial(u, map, w.kind === 'chemin'));
     ways.push({ way: w, mesh });

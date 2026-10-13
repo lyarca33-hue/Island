@@ -91,6 +91,8 @@ export class Terraform {
   private readonly listeners = new Set<() => void>();
   /** Quelque chose a été retouché depuis le dernier enregistrement. */
   dirty = false;
+  /** Appelé à la fin de chaque geste qui a retouché le terrain (et quand tout est rétabli). */
+  onEdited: (() => void) | null = null;
 
   constructor(private readonly island: Island, private readonly protect: Box[]) {
     const geo = new THREE.BufferGeometry();
@@ -175,7 +177,9 @@ export class Terraform {
     this.pressing = false;
     const s = this.stroke;
     this.stroke = null;
-    if (s) this.island.reshape(s.x0, s.x1, s.z0, s.z1, true);
+    if (!s) return;
+    this.island.reshape(s.x0, s.x1, s.z0, s.z1, true);
+    this.onEdited?.();
   }
 
   update(dt: number): void {
@@ -195,6 +199,7 @@ export class Terraform {
     const h = RELIEF.half;
     this.island.reshape(-h, h, -h, h, true);
     this.dirty = true;
+    this.onEdited?.();
   }
 
   /** Y a-t-il des retouches ? */

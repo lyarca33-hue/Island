@@ -116,9 +116,10 @@ prévenu ; à zéro, c'est l'accident.
 ### La carte de test
 
 Pour inspecter les modèles un par un : ajouter `?test` à l'adresse
-(https://lyarca33-hue.github.io/Island/?test), ou Menu → Partie → « Carte de test ». Un sol plat
-quadrillé tous les mètres, sans île ni maison (`src/game/carteTest.ts`), avec, en rangées bien
-séparées :
+(https://lyarca33-hue.github.io/Island/?test), ou Menu → Partie → « Carte de test ». Un grand
+terrain plat quadrillé tous les mètres, sans île ni maison (`src/game/carteTest.ts`), où l'on
+inspecte les modèles, construit (touche **N** ou bouton maison) et façonne le terrain (touche **U**
+ou bouton montagne), avec, en rangées bien séparées :
 - un exemplaire de chaque objet du catalogue : les petits flottent à hauteur du torse, puis les
   gros objets et les meubles au sol ;
 - derrière, la galerie : chaque modèle de chaque pack (`public/packs`, états des aliments compris),
@@ -138,8 +139,11 @@ listes, et « Envoyer la liste à Claude » l'ouvre dans la fenêtre Signaler (i
 copier-coller), pour que Claude retire ou corrige ces modèles. Sur la carte de test, E ne sert
 donc pas à utiliser un objet.
 
-Rien n'y est chargé ni sauvé : la vraie partie reste intacte, et Menu → Partie → « Retour à
-l'île » la retrouve.
+La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte, et Menu → Partie →
+« Retour à l'île » la retrouve. Les bâtiments et les retouches du terrain sont gardés dans le
+navigateur, à part de la partie. Menu → Construction (depuis l'île) ou `?batir` ouvre la carte de
+test directement en construction. Il y a de la place pour bâtir derrière le perso au départ et sur
+les côtés des rangées.
 
 ### La visionneuse de modèles
 

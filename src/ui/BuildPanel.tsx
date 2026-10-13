@@ -6,7 +6,7 @@ import './terraform.css';
 import './build.css';
 
 /**
- * Le panneau du créateur de bâtiment (sa page `?batir` ; bouton maison ou touche N) : les familles de pièces (murs, sols,
+ * Le panneau du créateur de bâtiment (sur la carte de test ; bouton maison ou touche N) : les familles de pièces (murs, sols,
  * toits, décor), la pièce à poser, tourner, démolir, annuler, et de quoi tout démolir.
  */
 export function BuildPanel({ game }: { game: Game }) {
