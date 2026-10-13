@@ -24,6 +24,7 @@ import type { ModelName, PackId } from '../packs/manifest';
 import type { ItemDef } from './catalog';
 import { setFoodMaps } from './foodstates';
 import { dressTripo, hasTripoLook } from './tripo';
+import { RETIRES_PACK } from './retires';
 
 export const INTERIOR_URL = `${import.meta.env.BASE_URL}models/interior.glb`;
 
@@ -113,6 +114,9 @@ export const FOOD_LOOKS: Record<string, FoodLook> = {
   'jus-orange': plat('jus-orange', { fit: 'stretch' }),
   'legumes-surgeles': plat('legumes-surgeles', { fit: 'stretch' }),
 };
+
+// un modèle de pack retiré du jeu n'habille plus rien : l'objet garde son modèle de base
+for (const [id, look] of Object.entries(FOOD_LOOKS)) if (RETIRES_PACK.has(`${look.pack ?? 'nourriture'}/${look.model}`)) delete FOOD_LOOKS[id];
 
 /** Les modèles chargés : pour chacun, ses pièces (géométrie partagée, couleur). */
 type Kit = Map<string, Array<{ geometry: THREE.BufferGeometry; color: THREE.Color }>>;

@@ -23,4 +23,20 @@ export const RETIRES = new Set([
   'pastilles', 'liste-courses', 'sac-courses', 'sacs-poubelle', 'sac-poubelle', 'savon',
   // vêtements
   'pull', 'cintre', 'serviette', 'chaussure', 'chausson', 'botte',
+  // deuxième liste (13 octobre) : meubles et appareils
+  'pot-ustensiles', 'egouttoir', 'congelateur', 'machine-a-cafe', 'etagere-epices', 'armoire', 'lavabo',
+]);
+
+/**
+ * Modèles de pack retirés du jeu (deuxième liste, `pack/modèle`) : plus dans la galerie de la carte
+ * de test, et un objet qu'ils habillaient (FOOD_LOOKS) reprend son modèle de base.
+ */
+export const RETIRES_PACK = new Set([
+  'utilitaires/bus', 'utilitaires/camion-pompier', 'train/wagon-voyageurs', 'train/locomotive', 'bateaux/bateau-peche-rouge',
+  'bateaux/bateau-peche-bleu', 'monuments/phare', 'monuments/moulin-a-vent', 'voitures/voiture-citadine', 'engins/camionnette',
+  'guichets/urne', 'pharmacie/boite-medicament',
+  'nourriture/Lettuce_Whole', 'nourriture/Orange', 'nourriture/Pizza', 'nourriture/Steak', 'nourriture/Tomato', 'nourriture/MayoBottle',
+  'nourriture/KetchupBottle', 'nourriture/Egg_Whole', 'nourriture/Egg_Fried', 'nourriture/ChickenLeg', 'nourriture/Bread',
+  'nourriture/Banana', 'nourriture/Apple',
+  'aliments/chocolat', 'aliments/fraises-perime', 'aliments/huile', 'plats/livre-recettes',
 ]);

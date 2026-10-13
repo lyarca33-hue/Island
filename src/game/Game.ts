@@ -926,11 +926,13 @@ export class Game {
       }
     }
     // les meubles rangés contre les murs, et ce qui est posé dessus (micro-ondes sur le placard)
+    // un meuble retiré du jeu qui en portait un autre (le frigo sur le congélateur) : celui du dessus prend sa place au sol
+    const stand = new Map(rooms.flatMap((r) => r.onTop ?? []).filter(([id, under]) => known(id) && !known(under)).map(([id, under]) => [under, id]));
     for (const spec of rooms) {
-      const runItems = spec.runs.flatMap((r) => r.items.filter((id): id is string => typeof id === 'string' && known(id)).map(add));
+      const runItems = spec.runs.flatMap((r) => r.items.flatMap((id) => (typeof id === 'string' ? [stand.get(id) ?? id] : [])).filter(known).map(add));
       const placed = new Set<WorldItem>();
       placeRuns(spec, (id) => {
-        const it = runItems.find((i) => i.def.id === id && !placed.has(i));
+        const it = runItems.find((i) => i.def.id === (stand.get(id) ?? id) && !placed.has(i));
         if (it) placed.add(it);
         return it;
       });
