@@ -118,3 +118,25 @@ test('le jeu se lance : la cuisine meublée, sans erreur', async ({ page }, info
 
   expect(erreurs, erreurs.join('\n')).toEqual([]);
 });
+
+test('la visionneuse de modèles : un modèle, ses infos, un signalement avec commentaire', async ({ page }, info) => {
+  const erreurs: string[] = [];
+  page.on('pageerror', (e) => erreurs.push(`exception : ${e.message}`));
+  page.on('console', (m) => {
+    if (m.type() === 'error') erreurs.push(`console : ${m.text()}`);
+  });
+  await page.goto('/?modeles');
+  await expect(page.locator('.vis-item').first()).toBeVisible();
+  await expect(page.locator('.vis-loading')).toHaveCount(0, { timeout: 120_000 });
+  await page.locator('.vis-search').fill('frigo');
+  await page.locator('.vis-item').first().click();
+  await expect(page.locator('.vis-loading')).toHaveCount(0, { timeout: 120_000 });
+  await expect(page.locator('.vis-info h2')).toHaveText('frigo');
+  await expect(page.locator('.vis-parts li')).toContainText(['porte']);
+  await page.getByRole('button', { name: /Corriger sur Blender/ }).click();
+  await page.locator('.vis-comment textarea').fill('charnière à revoir');
+  await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).click();
+  await expect(page.locator('.feedback textarea')).toHaveValue(/objet frigo \(frigo\) : charnière à revoir/);
+  await page.screenshot({ path: info.outputPath('visionneuse.png') });
+  expect(erreurs).toEqual([]);
+});

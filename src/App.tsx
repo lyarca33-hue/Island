@@ -4,7 +4,7 @@ import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
 import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
-import { ARRIVEE_CONSTRUCTION, CARTE_TEST, testMapUrl } from './game/carteTest';
+import { ARRIVEE_CONSTRUCTION, CARTE_TEST, testMapUrl, VISIONNEUSE, visionneuseUrl } from './game/carteTest';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions, loadFirstPerson } from './game/Game';
 import { preloadPacks } from './game/packs/assets';
@@ -22,6 +22,7 @@ import { RecipeBook } from './ui/RecipeBook';
 import { BookReader } from './ui/BookReader';
 import { SavePanel } from './ui/SavePanel';
 import { TestFlags } from './ui/TestFlags';
+import { Visionneuse } from './ui/Visionneuse';
 import { Menu, MenuSection, Shortcuts } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
@@ -50,6 +51,8 @@ export function App() {
     setRun((n) => n + 1);
   }, []);
 
+  // visionneuse de modèles (?modeles) : sa propre page, sans monde ni partie
+  if (VISIONNEUSE) return <Visionneuse />;
   if (mode === 'creator') {
     return <Creator initial={recipe} onDone={(r) => { setRecipe(r); setMode('game'); }} />;
   }
@@ -319,6 +322,9 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
             <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(!CARTE_TEST))}>
               {CARTE_TEST ? 'Retour à l’île' : 'Carte de test (objets, construction, terraformation)'}
             </button>
+            <button type="button" className="menu-action" onClick={() => location.assign(visionneuseUrl(true))}>
+              Visionneuse de modèles (un par un)
+            </button>
           </MenuSection>
           <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
             <Shortcuts />
@@ -409,7 +415,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
         <div className={`fp-aim${locked ? ' locked' : ''}`} aria-hidden>
           <span className="fp-dot" />
           {!locked && capture && <span className="fp-hint">Clic : la souris oriente la vue · Échap : la libérer</span>}
-          {!locked && !capture && <span className="fp-hint fades">Glisser (clic maintenu) ou deux doigts : tourner la vue</span>}
+          {!locked && !capture && <span className="fp-hint fades">Souris près du bord de la fenêtre : la vue tourne · glisser ou deux doigts aussi</span>}
         </div>
       )}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MouseLookFilter, captureBlocked } from '../src/game/mouseLook';
+import { MouseLookFilter, captureBlocked, edgePan } from '../src/game/mouseLook';
 
 describe('souris capturée à la première personne', () => {
   it('ignore un saut parasite à contre-sens pendant un glisser vers la droite', () => {
@@ -44,5 +44,26 @@ describe('capture de la souris qui bute à droite et en bas', () => {
     expect(captureBlocked('Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0', 2)).toBe(false);
     expect(captureBlocked('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0', 1.5)).toBe(false);
     expect(captureBlocked('Mozilla/5.0 (Android 14; Mobile; rv:158.0) Gecko/158.0 Firefox/158.0', 3)).toBe(false);
+  });
+});
+
+describe('souris libre poussée au bord de la scène', () => {
+  it('ne tourne pas loin des bords', () => {
+    expect(edgePan(480, 300, 960, 600)).toEqual({ x: 0, y: 0 });
+  });
+  it('tourne vers le bord, plus vite tout contre', () => {
+    const near = edgePan(910, 300, 960, 600);
+    const edge = edgePan(959, 300, 960, 600);
+    expect(near.x).toBeGreaterThan(0);
+    expect(edge.x).toBeGreaterThan(near.x);
+    expect(edge.x).toBeLessThanOrEqual(1);
+    expect(edgePan(0, 300, 960, 600).x).toBe(-1);
+  });
+  it('lève ou baisse le regard en haut et en bas, et les deux dans un coin', () => {
+    expect(edgePan(480, 599, 960, 600).y).toBeGreaterThan(0.9);
+    expect(edgePan(480, 0, 960, 600).y).toBe(-1);
+    const corner = edgePan(959, 599, 960, 600);
+    expect(corner.x).toBeGreaterThan(0.9);
+    expect(corner.y).toBeGreaterThan(0.9);
   });
 });

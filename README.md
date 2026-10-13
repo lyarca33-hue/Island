@@ -33,8 +33,9 @@ ouvre le créateur, et « Jouer » ramène sur la map.
   agit sur ce qui est sous le viseur ; deux doigts glissés sur le pavé tactile (ou la molette) tournent aussi la
   tête ; au doigt, on glisse pour regarder. Z avance là où l'on regarde. Avec Firefox sous Linux sur
   un écran haute définition, la souris capturée bute vers la droite et le bas (défaut de Firefox) : la
-  capture y est coupée d'office et l'on regarde en glissant ou à deux doigts (Menu → Affichage pour la
-  remettre).
+  capture y est coupée d'office (Menu → Affichage pour la remettre) : la souris reste libre et,
+  poussée près du bord de la fenêtre, fait tourner la vue (un doigt sur le pavé tactile suffit) ; glisser ou
+  deux doigts marchent aussi.
   Quand le perso agit seul (marche vers un clic, ordres enchaînés), la vue suit son regard ; bouger la
   souris reprend la main. X encore : retour à la vue de dessus. Dans cette vue, le bas
   de l'écran se range en petit dans le coin en bas à gauche (gestes réduits à leur touche, saisie
@@ -143,6 +144,19 @@ La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte, et Men
 navigateur, à part de la partie. Menu → Construction (depuis l'île) ou `?batir` ouvre la carte de
 test directement en construction. Il y a de la place pour bâtir derrière le perso au départ et sur
 les côtés des rangées.
+
+### La visionneuse de modèles
+
+Pour regarder un modèle à la fois : ajouter `?modeles` à l'adresse
+(https://lyarca33-hue.github.io/Island/?modeles), ou Menu → Partie → « Visionneuse de modèles »
+(`src/ui/Visionneuse.tsx`). À gauche, la liste de tous les modèles (objets du jeu, puis la
+galerie pack par pack, comme sur la carte de test), avec une recherche ; ← et → passent au
+suivant. Au milieu, le modèle seul sur un sol quadrillé : glisser pour tourner, molette (ou deux
+doigts) pour zoomer, clic droit pour déplacer, « Recadrer » (R) pour revenir. À droite, ses infos
+(taille, triangles, maillages, textures, pièces qui bougent, que l'on peut jouer ou poser au
+curseur, et ce que l'objet permet dans le jeu), un commentaire, et les deux signalements de la
+carte de test : « Supprimer » (A) et « Corriger sur Blender » (E). Ce sont les mêmes listes que
+sur la carte de test ; « Envoyer la liste à Claude » les envoie avec les commentaires.
 
 ### L'île
 
