@@ -1,11 +1,13 @@
 /**
  * Carte de test (`?test` dans l'adresse) : un sol plat quadrillé, sans île ni maison, pour
  * inspecter un par un tous les modèles du jeu, posés en rangées bien séparées :
- * - les objets du catalogue (un exemplaire de chacun) : les petits sur des présentoirs à hauteur
- *   des yeux, les gros objets puis les meubles au sol ;
+ * - les objets du catalogue (un exemplaire de chacun) : les petits flottent à hauteur des yeux,
+ *   les gros objets puis les meubles sont au sol ;
  * - derrière, la galerie : chaque modèle de chaque pack (public/packs), y compris les états des
  *   aliments (cuit, brûlé, périmé), rangés pack par pack avec une pancarte ; les petits aussi
- *   sur présentoirs. Ce sont des modèles à regarder, pas des objets du jeu.
+ *   en l'air. Ce sont des modèles à regarder, pas des objets du jeu.
+ * Pour rester fluide, seul ce qui est près du perso est dessiné (cullTestMap) : la galerie entière
+ * fait près de 5 millions de triangles.
  * Tout au fond, la maison assemblée du kit Tripo (décor, on n'y entre pas).
  * La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte.
  */
@@ -32,11 +34,9 @@ const FIRST_ROW = 42;
 /** Où le perso commence : devant la première rangée, tourné vers elle. */
 export const TEST_START = new THREE.Vector3(0, 0, FIRST_ROW + 3);
 
-/** Dessus des présentoirs (m) : les petits objets à hauteur des yeux du perso. */
-const COUNTER_H = 1.35;
-/** Épaisseur de la planche des présentoirs (m). */
-const SHELF_T = 0.04;
-/** Petit objet (sur présentoir) : sa plus grande dimension (m) au plus. */
+/** Hauteur (m) où flottent les petits objets : à hauteur des yeux du perso. */
+const FLOAT_H = 1.35;
+/** Petit objet (qui flotte) : sa plus grande dimension (m) au plus. */
 const SMALL = 0.7;
 /** Demi-longueur d'une rangée (m), écarts entre deux objets (petits, gros) et allée entre deux rangées. */
 const HALF_ITEMS = 20;
@@ -53,10 +53,10 @@ interface Entry {
   box: THREE.Box3;
 }
 
-/** Ce que la carte ajoute à la scène : présentoirs, galerie, pancartes ; et les présentoirs à contourner. */
+/** Ce que la carte ajoute à la scène (galerie, pancartes), et tout ce qui n'est dessiné que de près. */
 export interface TestMap {
   group: THREE.Group;
-  obstacles: Array<{ box: THREE.Box3; pos: THREE.Vector3; yaw: number }>;
+  shown: Array<{ obj: THREE.Object3D; radius: number }>;
 }
 
 /** Le sol plat : herbe claire quadrillée tous les mètres (de quoi juger les tailles). */
@@ -107,46 +107,23 @@ function sign(text: string): Entry {
   return { obj, box: new THREE.Box3(new THREE.Vector3(-w / 2, 0, -0.01), new THREE.Vector3(w / 2, h + 0.02, 0.01)) };
 }
 
-/** Range des modèles en rangées le long de x, l'avant au bord de la rangée ; sur présentoirs si `counter`. */
+/** Range des modèles en rangées le long de x, l'avant au bord de la rangée ; en l'air à hauteur des yeux si `float`. */
 class Rows {
   front = FIRST_ROW;
-  readonly map: TestMap = { group: new THREE.Group(), obstacles: [] };
-  private wood = createToonMaterial({ color: 0x9a7650, rimStrength: 0 });
+  readonly map: TestMap = { group: new THREE.Group(), shown: [] };
 
-  place(list: Entry[], o: { gap: number; half: number; counter: boolean }): void {
+  place(list: Entry[], o: { gap: number; half: number; float: boolean }): void {
     let row: Entry[] = [];
     let width = 0;
     const flush = () => {
       if (!row.length) return;
-      const lift = o.counter ? COUNTER_H : 0;
-      const inset = o.counter ? 0.12 : 0;
+      const lift = o.float ? FLOAT_H : 0;
       let x = -width / 2;
       let depth = 0;
       for (const { obj, box } of row) {
-        obj.position.add(new THREE.Vector3(x - box.min.x, lift - box.min.y, this.front - inset - box.max.z));
+        obj.position.add(new THREE.Vector3(x - box.min.x, lift - box.min.y, this.front - box.max.z));
         x += box.max.x - box.min.x + o.gap;
         depth = Math.max(depth, box.max.z - box.min.z);
-      }
-      if (o.counter) {
-        // le présentoir : une longue planche à hauteur des yeux sur des pieds fins (on voit
-        // dessous les rangées d'après), à contourner
-        depth += inset * 2;
-        const w = width + 0.6;
-        const z = this.front - depth / 2;
-        const top = new THREE.Mesh(new THREE.BoxGeometry(w, SHELF_T, depth), this.wood);
-        top.position.set(0, COUNTER_H - SHELF_T / 2, z);
-        this.map.group.add(top);
-        const legs = Math.max(2, Math.ceil(w / 2) + 1);
-        const leg = new THREE.BoxGeometry(0.04, COUNTER_H - SHELF_T, 0.04);
-        for (let i = 0; i < legs; i++) {
-          for (const dz of [-1, 1]) {
-            const m = new THREE.Mesh(leg, this.wood);
-            m.position.set(-w / 2 + 0.05 + ((w - 0.1) * i) / (legs - 1), (COUNTER_H - SHELF_T) / 2, z + dz * (depth / 2 - 0.04));
-            this.map.group.add(m);
-          }
-        }
-        const half = new THREE.Vector3(w / 2, 0, depth / 2);
-        this.map.obstacles.push({ box: new THREE.Box3(half.clone().negate(), half.clone().setY(COUNTER_H)), pos: new THREE.Vector3(0, 0, z), yaw: 0 });
       }
       this.front -= depth + ALLEY;
       row = [];
@@ -186,16 +163,16 @@ const small = (e: Entry) => {
 };
 
 /**
- * Pose les objets du jeu en rangées (petits sur présentoirs, puis gros, puis meubles), puis la
+ * Pose les objets du jeu en rangées (petits en l'air, puis gros, puis meubles), puis la
  * galerie des packs. Rend ce qu'il faut ajouter à la scène.
  */
 export function buildTestMap(items: WorldItem[]): TestMap {
   const rows = new Rows();
   const all = items.map((item) => ({ item, e: itemEntry(item) }));
   const isSmall = ({ item, e }: (typeof all)[number]) => item.def.portable && small(e);
-  rows.place(all.filter(isSmall).map((a) => a.e), { gap: GAP_SMALL, half: HALF_ITEMS, counter: true });
-  rows.place(all.filter((a) => a.item.def.portable && !isSmall(a)).map((a) => a.e), { gap: GAP_BIG, half: HALF_ITEMS, counter: false });
-  rows.place(all.filter((a) => !a.item.def.portable).map((a) => a.e), { gap: GAP_BIG, half: HALF_ITEMS, counter: false });
+  rows.place(all.filter(isSmall).map((a) => a.e), { gap: GAP_SMALL, half: HALF_ITEMS, float: true });
+  rows.place(all.filter((a) => a.item.def.portable && !isSmall(a)).map((a) => a.e), { gap: GAP_BIG, half: HALF_ITEMS, float: false });
+  rows.place(all.filter((a) => !a.item.def.portable).map((a) => a.e), { gap: GAP_BIG, half: HALF_ITEMS, float: false });
 
   // la galerie : pack par pack, une pancarte devant chaque pack
   const packs = Object.keys(PACK_SIZES) as PackId[];
@@ -205,10 +182,13 @@ export function buildTestMap(items: WorldItem[]): TestMap {
       const these = models.filter((m) => small(m) === tiny);
       return these.length ? [sign(p), ...these] : [];
     });
-    rows.place(list, { gap: tiny ? GAP_SMALL : GAP_BIG, half: HALF_GALLERY, counter: tiny });
-    for (const e of list) rows.map.group.add(e.obj);
+    rows.place(list, { gap: tiny ? GAP_SMALL : GAP_BIG, half: HALF_GALLERY, float: tiny });
+    for (const e of list) {
+      rows.map.group.add(e.obj);
+      rows.map.shown.push({ obj: e.obj, radius: e.box.getSize(new THREE.Vector3()).length() / 2 });
+    }
   }
-  // les objets du jeu restent dans la scène du jeu ; seuls présentoirs et galerie sont ajoutés
+  // les objets du jeu restent dans la scène du jeu ; seule la galerie est ajoutée
   return rows.map;
 }
 
@@ -250,4 +230,17 @@ export function createTestHouse(): THREE.Group {
     })
     .catch((e) => console.warn('maison de test non chargée', e));
   return group;
+}
+
+/** Distance (m, au sol) jusqu'où les modèles de la carte de test sont dessinés autour du perso. */
+const SHOW_RADIUS = 18;
+
+/**
+ * Ne dessine que les modèles de la galerie et les objets du jeu proches de `at` (le perso) : les
+ * autres sont cachés, ils réapparaissent quand on s'approche.
+ */
+export function cullTestMap(map: TestMap, items: WorldItem[], at: THREE.Vector3): void {
+  const near = (o: THREE.Object3D, radius: number) => Math.hypot(o.position.x - at.x, o.position.z - at.z) - radius < SHOW_RADIUS;
+  for (const { obj, radius } of map.shown) obj.visible = near(obj, radius);
+  for (const it of items) it.object.visible = near(it.object, it.size.length() / 2);
 }

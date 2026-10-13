@@ -32,7 +32,7 @@ import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
-import { buildTestMap, CARTE_TEST, createTestFloor, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
+import { buildTestMap, CARTE_TEST, createTestFloor, cullTestMap, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -578,6 +578,8 @@ export class Game {
   private tripoRooms = new Map<TripoHouseModel, Room>();
   /** Carte de test (carteTest.ts) : présentoirs à contourner et galerie des packs. */
   private testMap: TestMap | null = null;
+  /** Temps (s) avant de revoir ce que la carte de test dessine (cullTestMap). */
+  private testCull = 0;
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
   /** Rotation voulue de la caméra autour du perso (radians, depuis la vue de départ). */
@@ -1368,7 +1370,6 @@ export class Game {
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
-    for (const o of this.testMap?.obstacles ?? []) nav.add(o.box, o.pos, o.yaw);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
     // carte de test : la maison assemblée se contourne
     if (CARTE_TEST) nav.add(TEST_HOUSE_BOX, TEST_HOUSE, 0, true);
@@ -7986,7 +7987,8 @@ export class Game {
   private hitAt(cx: number, cy: number): { item: WorldItem; door: boolean; button?: number; point: THREE.Vector3 } | null {
     this.aim(cx, cy);
     const carried = this.character.carried;
-    const objects = this.items.filter((i) => !carried.includes(i)).map((i) => i.object);
+    // (carte de test : les objets loin du perso ne sont pas dessinés, ni visés)
+    const objects = this.items.filter((i) => !carried.includes(i) && i.object.visible).map((i) => i.object);
     const hit = this.raycaster.intersectObjects(objects, true)[0];
     if (!hit) return null;
     let door = false;
@@ -8158,8 +8160,17 @@ export class Game {
     // météo : pluie, flocons, gouttes aux vitres ; sol plus sombre mouillé, blanchi par la neige tombée
     const w = this.weather;
     w.update(this.clock, dt, (dt * this.clock.speed) / 3600);
-    this.island.setSeason(look.grass, Math.max(look.snow, w.cover), w.wet);
-    this.island.update(dt, Math.max(w.rain, w.cloud * 0.4), this.focus.x, this.focus.z, this.fp ? 1 : this.zoom);
+    if (this.testMap) {
+      // carte de test : pas d'île à animer, et seul ce qui est près du perso est dessiné
+      this.testCull -= dt;
+      if (this.testCull <= 0) {
+        this.testCull = 0.25;
+        cullTestMap(this.testMap, this.items, this.character.position);
+      }
+    } else {
+      this.island.setSeason(look.grass, Math.max(look.snow, w.cover), w.wet);
+      this.island.update(dt, Math.max(w.rain, w.cloud * 0.4), this.focus.x, this.focus.z, this.fp ? 1 : this.zoom);
+    }
     if (this.terraform.on) {
       const tp = this.terraPointer;
       if (tp) this.aim(tp.x, tp.y);
