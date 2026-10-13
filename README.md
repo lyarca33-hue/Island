@@ -124,9 +124,11 @@ séparées :
 Pour rester fluide, seul ce qui est à moins de 18 m du perso est dessiné : le reste apparaît
 quand on s'approche.
 
-Le survol donne le nom de chaque modèle. **A** sur le modèle visé le signale « à retirer du jeu »
-(encore A pour annuler) ; Menu → Partie montre la liste, et « Envoyer la liste à Claude » l'ouvre
-dans la fenêtre Signaler (issue GitHub ou copier-coller), pour que Claude retire ces modèles.
+Le survol donne le nom de chaque modèle. **A** sur le modèle visé le signale « à retirer du jeu »,
+**E** le signale « à corriger » (encore la même touche pour annuler) ; Menu → Partie montre les deux
+listes, et « Envoyer la liste à Claude » l'ouvre dans la fenêtre Signaler (issue GitHub ou
+copier-coller), pour que Claude retire ou corrige ces modèles. Sur la carte de test, E ne sert
+donc pas à utiliser un objet.
 
 Rien n'y est chargé ni sauvé : la vraie partie reste intacte, et Menu → Partie → « Retour à
 l'île » la retrouve.

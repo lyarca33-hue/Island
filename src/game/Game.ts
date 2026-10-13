@@ -32,7 +32,7 @@ import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
-import { buildTestMap, CARTE_TEST, createTestFloor, cullTestMap, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
+import { buildTestMap, CARTE_TEST, createTestFloor, cullTestMap, type FlagKind, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -7258,7 +7258,11 @@ export class Game {
       if (typing(e)) return;
       this.shift = e.shiftKey;
       this.keys.add(e.code);
-      if (e.code === 'KeyE' && !e.repeat) this.useKey();
+      // carte de test, E : signaler le modèle visé à corriger (à la place de « utiliser »)
+      if (e.code === 'KeyE' && !e.repeat) {
+        if (this.testMap) this.flagAimed('corriger');
+        else this.useKey();
+      }
       if (e.code === 'KeyX' && !e.repeat) this.firstPerson = !this.fp;
       if (e.code === 'KeyU' && !e.repeat) this.terraforming = !this.terraform.on;
       // en terraformation, 1 à 6 : le pinceau
@@ -7271,7 +7275,7 @@ export class Game {
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
       if (e.code === 'KeyT' && !e.repeat) this.throwItem();
       // carte de test, A (la lettre, AZERTY ou QWERTY) : signaler le modèle visé à retirer du jeu
-      if (this.testMap && e.key.toLowerCase() === 'a' && !e.repeat) this.flagAimed();
+      if (this.testMap && e.key.toLowerCase() === 'a' && !e.repeat) this.flagAimed('retirer');
       if (e.code === 'Space') {
         // Espace : sauter (pas de défilement de la page ni de bouton pressé)
         e.preventDefault();
@@ -7466,16 +7470,16 @@ export class Game {
     return hit ? { ref: `objet ${hit.item.def.id} (${hit.item.name})`, name: hit.item.name, item: hit.item } : null;
   }
 
-  /** Carte de test, touche A : signale (ou ne signale plus) le modèle visé, à retirer du jeu. */
-  private flagAimed(): void {
+  /** Carte de test, touche A (à retirer du jeu) ou E (à corriger) : signale (ou ne signale plus) le modèle visé. */
+  private flagAimed(kind: FlagKind): void {
     const at = this.pointerLocked ? this.aimPoint({ clientX: 0, clientY: 0 }) : this.testAim;
     const hit = at && this.testModelAt(at.x, at.y);
     if (!hit) {
-      this.onNotice?.('Vise un modèle avec la souris, puis A pour le signaler.');
+      this.onNotice?.(`Vise un modèle avec la souris, puis ${kind === 'retirer' ? 'A' : 'E'} pour le signaler.`);
       return;
     }
-    const on = toggleFlag(hit.ref);
-    this.onNotice?.(on ? `${hit.name} : signalé à retirer (Menu → Partie pour l’envoyer).` : `${hit.name} : n’est plus signalé.`);
+    const on = toggleFlag(hit.ref, kind);
+    this.onNotice?.(on ? `${hit.name} : signalé à ${kind} (Menu → Partie pour l’envoyer).` : `${hit.name} : n’est plus signalé à ${kind}.`);
     this.hoverAt(at);
   }
 
@@ -7489,12 +7493,12 @@ export class Game {
       const hit = this.testModelAt(x, y);
       if (!hit) return this.onHover?.(null);
       const it = hit.item;
-      const flagged = loadFlags().includes(hit.ref) ? ' · à retirer' : '';
+      const flagged = (['retirer', 'corriger'] as const).filter((k) => loadFlags(k).includes(hit.ref)).map((k) => ` · à ${k}`).join('');
       this.onHover?.({
         name: hit.name,
         grade: (it ? gradeName(it.condition, FEMININE.has(it.name)) : '') + flagged,
         condition: it?.condition ?? 1,
-        state: [it && this.stateOf(it), 'A : signaler à retirer'].filter(Boolean).join(' · '),
+        state: [it && this.stateOf(it), 'A : à retirer', 'E : à corriger'].filter(Boolean).join(' · '),
         x: x - r.left,
         y: y - r.top,
       });
