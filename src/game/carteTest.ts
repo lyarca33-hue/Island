@@ -6,9 +6,12 @@
  * - derrière, la galerie : chaque modèle de chaque pack (public/packs), y compris les états des
  *   aliments (cuit, brûlé, périmé), rangés pack par pack avec une pancarte ; les petits aussi
  *   sur présentoirs. Ce sont des modèles à regarder, pas des objets du jeu.
+ * Tout au fond, la maison assemblée du kit Tripo (décor, on n'y entre pas).
  * La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte.
  */
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { LAY_FLAT, type WorldItem } from './items/carry';
 import { packModel, packSize } from './packs/assets';
 import { type ModelName, PACK_SIZES, type PackId } from './packs/manifest';
@@ -25,7 +28,7 @@ export function testMapUrl(on: boolean): string {
 }
 
 /** Bord avant de la première rangée (m) : les rangées s'enfoncent vers -z jusqu'au bout du carré où l'on marche. */
-const FIRST_ROW = 38;
+const FIRST_ROW = 42;
 /** Où le perso commence : devant la première rangée, tourné vers elle. */
 export const TEST_START = new THREE.Vector3(0, 0, FIRST_ROW + 3);
 
@@ -207,4 +210,44 @@ export function buildTestMap(items: WorldItem[]): TestMap {
   }
   // les objets du jeu restent dans la scène du jeu ; seuls présentoirs et galerie sont ajoutés
   return rows.map;
+}
+
+/**
+ * La maison assemblée du kit Tripo (`public/models/maison-kit.glb` : murs, toits, lucarnes,
+ * cheminées, porte, fenêtres, volets, porche, marches, balcon, jardinières, glycine), posée au fond,
+ * derrière la galerie, porte vers les rangées (+z). Elle sort du modèle à l'échelle du jeu, le bas à y = 0, le
+ * corps de logis (14 m) centré en x = z = 0 et l'aile vers +x : on la déplace seulement. Décor : on
+ * n'y entre pas.
+ */
+export const TEST_HOUSE = new THREE.Vector3(-2, 0, -40);
+
+/** Ce qui bloque le passage : les murs du corps de logis et de l'aile (le porche et les marches restent libres). */
+export const TEST_HOUSE_BOX = new THREE.Box3(new THREE.Vector3(-7, 0, -3.9), new THREE.Vector3(11.3, 8, 3.5));
+
+/** Charge la maison de test dans un groupe déjà posé à sa place (vide tant qu'elle n'est pas chargée). */
+export function createTestHouse(): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'maison-test';
+  group.position.copy(TEST_HOUSE);
+  new GLTFLoader()
+    .setMeshoptDecoder(MeshoptDecoder)
+    .loadAsync(`${import.meta.env.BASE_URL}models/maison-kit.glb`)
+    .then((gltf) => {
+      const mats = new Map<THREE.Material, THREE.Material>();
+      gltf.scene.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return;
+        // le modèle allégé n'a plus ses normales : sans elles, tout sort noir
+        if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
+        const m = o.material as THREE.MeshStandardMaterial;
+        if (!mats.has(m)) {
+          if (m.map) m.map.anisotropy = 8;
+          mats.set(m, createToonMaterial({ color: m.color, map: m.map, rimStrength: 0, soft: true }));
+        }
+        o.material = mats.get(m)!;
+        o.castShadow = o.receiveShadow = true;
+      });
+      group.add(gltf.scene);
+    })
+    .catch((e) => console.warn('maison de test non chargée', e));
+  return group;
 }
