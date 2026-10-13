@@ -1,0 +1,53 @@
+/* Carte de test, Menu → Carte : la carte ouverte, « Mes cartes », importer / exporter */
+.cartes-panel { gap: 7px; }
+.cartes-panel small { line-height: 1.4; }
+.cartes-stats { font-size: 12.5px; }
+.cartes-etat { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--hud-ink-3); font-size: 12px; }
+.cartes-etat.modifiee { color: var(--hud-honey); }
+.cartes-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.cartes-panel .cartes-row button {
+  flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 8px; font-size: 12.5px; white-space: nowrap;
+}
+.cartes-sous { display: flex; flex-direction: column; gap: 5px; padding: 8px; border-radius: 10px; border: 1px solid rgba(245, 190, 91, 0.4); background: rgba(245, 190, 91, 0.07); }
+.cartes-sous input:focus, .cartes-panel label input:focus { outline: none; border-color: rgba(245, 190, 91, 0.6); }
+.cartes-confirm { padding: 7px; border-radius: 10px; border: 1px solid rgba(245, 190, 91, 0.4); background: rgba(245, 190, 91, 0.07); }
+.cartes-panel .cartes-confirm button { padding: 5px 8px; font-size: 12.5px; }
+.cartes-panel .cartes-confirm button.danger { background: rgba(242, 121, 91, 0.22); border-color: rgba(242, 121, 91, 0.6); color: #ffc9b8; }
+.cartes-titre { margin-top: 4px; font-size: 13px; }
+.cartes-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; scrollbar-width: thin; }
+.cartes-liste li { display: flex; flex-direction: column; gap: 5px; padding: 5px 6px 5px 9px; border-radius: 9px; border-left: 3px solid transparent; }
+.cartes-liste li:hover { background: var(--hud-hover); }
+.cartes-liste li.ouverte { border-left-color: var(--hud-honey); background: rgba(245, 190, 91, 0.08); }
+.cartes-ligne { display: flex; align-items: center; gap: 6px; }
+.cartes-nom { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cartes-nom b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cartes-nom small { color: var(--hud-ink-3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.cartes-ouverte { color: var(--hud-honey) !important; }
+.cartes-outils { display: flex; gap: 3px; flex: none; }
+.cartes-panel .cartes-outils button { padding: 4px 8px; font-size: 12px; }
+.cartes-panel .cartes-outils .cartes-icone { display: grid; place-items: center; width: 30px; padding: 0; }
+
+/* Le point miel : des changements non enregistrés */
+.carte-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--hud-honey); box-shadow: 0 0 6px rgba(245, 190, 91, 0.6); }
+
+/* En haut à droite de la carte de test : enregistrer, le nom de la carte ouverte */
+.carte-chip {
+  position: absolute; z-index: 8; top: var(--hud-gap); right: var(--hud-gap); height: var(--hud-bar); max-width: min(260px, calc(100vw - 2 * var(--hud-gap)));
+  display: flex; align-items: center; gap: 1px; padding: 0 3px; box-sizing: border-box; border-radius: 999px;
+  background: var(--hud-glass); border: 1px solid var(--hud-line); box-shadow: var(--hud-shadow), var(--hud-hi);
+}
+.carte-chip button { height: calc(var(--hud-bar) - 8px); border: 0; background: none; color: var(--hud-ink); font: inherit; cursor: pointer; border-radius: 999px; }
+.carte-chip button:hover { background: var(--hud-hover); }
+.carte-chip button:focus-visible { outline: 2px solid var(--hud-honey); outline-offset: 1px; }
+.carte-chip-save { width: calc(var(--hud-bar) - 8px); display: grid; place-items: center; color: var(--hud-honey) !important; }
+.carte-chip-nom { min-width: 0; display: flex; align-items: center; gap: 7px; padding: 0 10px 0 6px; font-size: 13.5px; font-weight: 600; }
+.carte-chip-nom > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  /* téléphone : sous la barre du menu (comme les jauges), et les panneaux des modes descendent d'autant */
+  .carte-chip { top: calc(var(--hud-gap) + var(--hud-bar) + 8px); height: 34px; }
+  .carte-chip button { height: 28px; }
+  .carte-chip-save { width: 28px; }
+  .app:has(.carte-chip) .terra-panel { top: calc(var(--hud-gap) + var(--hud-bar) + 8px + 34px + 8px); }
+  .app:has(.carte-chip) .modeles-panel { max-height: calc(100% - var(--hud-gap) - var(--hud-bar) - 50px - 84px); }
+}

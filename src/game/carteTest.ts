@@ -35,6 +35,31 @@ export const ARRIVEE_CONSTRUCTION = !!params?.has('batir');
 /** Visionneuse de modèles (`?modeles`) : un seul modèle à la fois, à tourner et à signaler (ui/Visionneuse.tsx). */
 export const VISIONNEUSE = !CARTE_TEST && !!params?.has('modeles');
 
+/** Clé du choix « galerie en rangées » de la carte de test dans le navigateur. */
+const GALERIE_KEY = 'island-carte-test-galerie';
+
+/**
+ * La galerie en rangées (tous les objets et tous les modèles des packs, la maison du fond, les
+ * pans de mur) : seulement si on l'a demandée (Menu → Carte) ; sinon la carte de test est vide,
+ * on y fait apparaître les modèles un par un (modeles.ts).
+ */
+export const GALERIE = CARTE_TEST && (() => {
+  try {
+    return localStorage.getItem(GALERIE_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+
+/** Montrer ou non la galerie en rangées (au prochain chargement de la page). */
+export function setGalerie(on: boolean): void {
+  try {
+    localStorage.setItem(GALERIE_KEY, on ? '1' : '0');
+  } catch {
+    // stockage refusé : le choix ne tient pas
+  }
+}
+
 /** Adresse de la carte de test (en construction à l'arrivée si `build`), ou de la vraie partie (`on` faux). */
 export function testMapUrl(on: boolean, build = false): string {
   const url = new URL(location.href);

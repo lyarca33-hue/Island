@@ -4,7 +4,9 @@ import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
 import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
-import { ARRIVEE_CONSTRUCTION, CARTE_TEST, testMapUrl, VISIONNEUSE, visionneuseUrl } from './game/carteTest';
+import { ARRIVEE_CONSTRUCTION, CARTE_TEST, GALERIE, loadFlags, onFlags, setGalerie, testMapUrl, VISIONNEUSE, visionneuseUrl } from './game/carteTest';
+import { AtelierCartes } from './game/atelierCartes';
+import { RELIEF } from './game/ile';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions, loadFirstPerson } from './game/Game';
 import { preloadPacks } from './game/packs/assets';
@@ -23,13 +25,15 @@ import { BookReader } from './ui/BookReader';
 import { SavePanel } from './ui/SavePanel';
 import { TestFlags } from './ui/TestFlags';
 import { Visionneuse } from './ui/Visionneuse';
-import { Menu, MenuSection, Shortcuts } from './ui/Menu';
+import { Menu, MenuSection, Shortcuts, SHORTCUTS_TEST } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
 import { Magasin } from './ui/Magasin';
 import { PorteMonnaie } from './ui/PorteMonnaie';
 import { TerraformPanel } from './ui/TerraformPanel';
 import { BuildPanel } from './ui/BuildPanel';
+import { ModelesPanel } from './ui/ModelesPanel';
+import { CarteChip, CartesPanel } from './ui/CartesPanel';
 import { CamDial } from './ui/CamDial';
 
 /**
@@ -80,6 +84,13 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   /** Mode construction ouvert (touche N ou bouton maison). */
   const [build, setBuild] = useState(false);
   useEffect(() => (ready ? ready.construction.listen(() => setBuild(ready.building)) : undefined), [ready]);
+  /** Carte de test : mode Modèles ouvert (touche O ou bouton cube). */
+  const [placing, setPlacing] = useState(false);
+  useEffect(() => (ready?.modeles ? ready.modeles.listen(() => setPlacing(ready.placing)) : undefined), [ready]);
+  /** Carte de test : les cartes enregistrées (atelierCartes.ts) et la carte ouverte. */
+  const [atelier, setAtelier] = useState<AtelierCartes | null>(null);
+  /** Menu → Carte : le champ « Enregistrer sous » ouvert d'emblée (Ctrl+S sur une carte sans nom). */
+  const [nommer, setNommer] = useState(false);
   /** Souris capturée par la première personne (elle oriente la vue) : viseur au centre. */
   const [locked, setLocked] = useState(false);
   /** La souris peut être capturée (sinon on regarde en glissant ou à deux doigts). */
@@ -115,6 +126,9 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const [inv, setInv] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const missing = useMissingCount();
+  /** Carte de test : nombre de modèles signalés (à retirer ou à corriger). */
+  const [flagCount, setFlagCount] = useState(() => (CARTE_TEST ? loadFlags('retirer').length + loadFlags('corriger').length : 0));
+  useEffect(() => (CARTE_TEST ? onFlags(() => setFlagCount(loadFlags('retirer').length + loadFlags('corriger').length)) : undefined), []);
   const [fpsShown, setFpsShown] = useFpsShown();
   /** Fenêtre « Signaler » ouverte, avec son texte de départ. */
   const [report, setReport] = useState<string | null>(null);
@@ -138,6 +152,12 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2500);
   }, []);
   const toggleHud = useCallback(() => setHidden((h) => !h), []);
+  /** Carte de test : Menu → Carte (avec le champ « Enregistrer sous » si `nom`). */
+  const openCarte = useCallback((nom = false) => {
+    setNommer(nom);
+    setSection('carte');
+    setMenuOpen(true);
+  }, []);
   const shown = useRef(false);
   useEffect(() => {
     if (!shown.current) {
@@ -205,11 +225,32 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       replaceGame(s);
       flash('Partie du compte chargée.');
     };
-    g.start().then(() => {
+    // carte de test : les cartes enregistrées ; Ctrl+S enregistre celle qui est ouverte
+    const cartes = CARTE_TEST
+      ? new AtelierCartes(
+        { capturer: () => g.contenuCarte(), appliquer: (c) => g.appliquerCarte(c), notice: flash },
+        { n: RELIEF.n, mapSize: RELIEF.mapSize, half: RELIEF.half, cell: RELIEF.cell },
+      )
+      : null;
+    if (cartes) {
+      g.onCarteModifiee = () => cartes.marquer();
+      g.onSaveShortcut = () => {
+        if (cartes.courante.id) void cartes.enregistrer();
+        else openCarte(true);
+      };
+    }
+    let gone = false;
+    g.start().then(async () => {
       setLoading(false);
-      if (CARTE_TEST) flash('Carte de test : objets, construction (N) et terraformation (U). Ta partie reste intacte.');
-      // venu pour construire : on arrive directement en construction
+      if (cartes) {
+        await cartes.demarrer();
+        if (gone) return;
+        setAtelier(cartes);
+        flash('Carte de test : choisis un modèle dans le menu Modèles et clique au sol pour le poser. N : construire, U : terrain, Ctrl+S : enregistrer la carte.');
+      }
+      // venu pour construire : on arrive directement en construction ; sinon dans les modèles
       if (ARRIVEE_CONSTRUCTION) g.building = true;
+      else if (CARTE_TEST) g.placing = true;
     }).catch((e) => {
       console.error(e);
       setError('Le personnage n’a pas pu être chargé.');
@@ -218,11 +259,14 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       clearTimeout(noticeTimer.current);
       auto.stop();
       if (cloud.current === capture) cloud.current = null;
+      gone = true;
+      cartes?.arreter();
       g.dispose();
       game.current = null;
       setReady(null);
+      setAtelier(null);
     };
-  }, [recipe, flash, replaceGame, packsReady]);
+  }, [recipe, flash, replaceGame, packsReady, openCarte]);
 
   // le compte a une partie plus récente : le menu s'ouvre sur la question
   useEffect(() => cloud.subscribe((st) => {
@@ -258,18 +302,19 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
               >
                 <Icon name="user" />
               </button>
-              <button
-                className={`hud-icon${terra ? ' on' : ''}`}
+              {CARTE_TEST && <span className="hud-sep" />}
+              {CARTE_TEST && <button
+                className={`hud-icon${placing ? ' on' : ''}`}
                 onClick={(e) => {
-                  if (game.current) game.current.terraforming = !game.current.terraforming;
+                  if (game.current) game.current.placing = !game.current.placing;
                   e.currentTarget.blur();
                 }}
-                aria-pressed={terra}
-                aria-label="Terraformation"
-                title={terra ? 'Fermer la terraformation (U)' : 'Terraformation (U) : façonner l’île au pinceau'}
+                aria-pressed={placing}
+                aria-label="Modèles"
+                title={placing ? 'Fermer les modèles (O)' : 'Modèles (O) : faire apparaître et placer des modèles'}
               >
-                <Icon name="mountain" />
-              </button>
+                <Icon name="cube" />
+              </button>}
               {CARTE_TEST && <button
                 className={`hud-icon${build ? ' on' : ''}`}
                 onClick={(e) => {
@@ -282,6 +327,18 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
               >
                 <Icon name="house" />
               </button>}
+              <button
+                className={`hud-icon${terra ? ' on' : ''}`}
+                onClick={(e) => {
+                  if (game.current) game.current.terraforming = !game.current.terraforming;
+                  e.currentTarget.blur();
+                }}
+                aria-pressed={terra}
+                aria-label="Terraformation"
+                title={terra ? 'Fermer la terraformation (U)' : 'Terraformation (U) : façonner l’île au pinceau'}
+              >
+                <Icon name="mountain" />
+              </button>
               <span className="hud-sep" />
               <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
                 <Icon name="eyeOff" />
@@ -290,6 +347,8 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                 className={`hud-icon${report !== null ? ' on' : ''}`}
                 onClick={() => {
                   setMenuOpen(false);
+                  // carte de test : la fenêtre passe sous le panneau d'un mode ouvert, on le ferme
+                  if (CARTE_TEST && game.current) game.current.placing = game.current.building = game.current.terraforming = false;
                   setReport((r) => (r === null ? '' : null));
                 }}
                 aria-expanded={report !== null}
@@ -301,10 +360,30 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
             </>
           }
         >
-          <MenuSection title="Partie" icon="cloud" open={section === 'partie'} onToggle={fold('partie')}>
-            {CARTE_TEST ? (
-              <>
-                <p>Carte de test : chaque modèle du jeu en rangées, sur un terrain plat où l’on construit (N) et façonne le sol (U). Bâtiments et terrain sont gardés sur cet appareil ; ta partie t’attend sur l’île.</p>
+          {CARTE_TEST ? (
+            <>
+              <MenuSection title="Carte" icon="save" open={section === 'carte'} onToggle={fold('carte')}>
+                {atelier ? <CartesPanel atelier={atelier} nommer={nommer} onDone={() => setNommer(false)} contenu={ready ? () => ready.contenuCarte() : undefined} /> : <p>Chargement des cartes…</p>}
+                <div className="menu-form">
+                <label className="menu-check">
+                  <input
+                    type="checkbox"
+                    defaultChecked={GALERIE}
+                    onChange={(e) => {
+                      setGalerie(e.currentTarget.checked);
+                      location.reload();
+                    }}
+                  />
+                  Galerie de tous les modèles en rangées (la page se recharge)
+                </label>
+                </div>
+                <button type="button" className="menu-action" onClick={() => location.assign(visionneuseUrl(true))}>
+                  Visionneuse de modèles (un par un)
+                </button>
+                <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(false))}>Retour à l’île</button>
+              </MenuSection>
+              <MenuSection title="Signalements" icon="flag" badge={flagCount} open={section === 'signalements'} onToggle={fold('signalements')}>
+                <p>A : à retirer · E : à corriger, sur le modèle visé ou depuis le menu Modèles.</p>
                 {(['retirer', 'corriger'] as const).map((kind) => (
                   <TestFlags
                     key={kind}
@@ -315,68 +394,71 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                     }}
                   />
                 ))}
-              </>
-            ) : (
+              </MenuSection>
+              <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
+                <Shortcuts list={SHORTCUTS_TEST} />
+              </MenuSection>
+              <MenuSection title="Heure" icon="clock" open={section === 'heure'} onToggle={fold('heure')}>
+                <TimeControls game={ready} />
+              </MenuSection>
+              <MenuSection title="Affichage" icon="eye" open={section === 'affichage'} onToggle={fold('affichage')}>
+                <DisplayControls game={ready} fps={fpsShown} onFps={setFpsShown} />
+              </MenuSection>
+            </>
+          ) : (
+            <>
+            <MenuSection title="Partie" icon="cloud" open={section === 'partie'} onToggle={fold('partie')}>
               <SavePanel savedAt={savedAt} onNewGame={() => replaceGame(null)} />
-            )}
-            <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(!CARTE_TEST))}>
-              {CARTE_TEST ? 'Retour à l’île' : 'Carte de test (objets, construction, terraformation)'}
-            </button>
-            <button type="button" className="menu-action" onClick={() => location.assign(visionneuseUrl(true))}>
-              Visionneuse de modèles (un par un)
-            </button>
-          </MenuSection>
-          <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
-            <Shortcuts />
-          </MenuSection>
-          <MenuSection title="Recettes" icon="book" open={section === 'recettes'} onToggle={fold('recettes')}>
-            {ready && <RecipeBook game={ready} inline />}
-          </MenuSection>
-          <MenuSection title="Heure" icon="clock" open={section === 'heure'} onToggle={fold('heure')}>
-            <TimeControls game={ready} />
-          </MenuSection>
-          <MenuSection title="Affichage" icon="eye" open={section === 'affichage'} onToggle={fold('affichage')}>
-            <DisplayControls game={ready} fps={fpsShown} onFps={setFpsShown} />
-          </MenuSection>
-          <MenuSection title="Manques" icon="list" badge={missing} open={section === 'manques'} onToggle={fold('manques')}>
-            <MissingPanel
-              onReport={(text) => {
-                setMenuOpen(false);
-                setReport(text);
-              }}
-            />
-          </MenuSection>
-          <MenuSection title="IA des ordres" icon="sparkles" open={section === 'ia'} onToggle={fold('ia')}>
-            <AiSettingsForm />
-          </MenuSection>
-          <MenuSection title="Construction" icon="house" open={section === 'construction'} onToggle={fold('construction')}>
-            <p>Monte un bâtiment pièce par pièce sur la carte de test : murs en pierre, portes, fenêtres, sols, toits et décor, calés sur une grille de 2 m.</p>
-            {CARTE_TEST ? (
-              <button
-                className="menu-action"
-                onClick={() => {
-                  if (game.current) game.current.building = true;
-                  setMenuOpen(false);
-                }}
-              >
-                {build ? 'Construction ouverte' : 'Reprendre la construction (N)'}
+              <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(true))}>
+                Carte de test (modèles, construction, terrain)
               </button>
-            ) : (
+              <button type="button" className="menu-action" onClick={() => location.assign(visionneuseUrl(true))}>
+                Visionneuse de modèles (un par un)
+              </button>
+            </MenuSection>
+            <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
+              <Shortcuts />
+            </MenuSection>
+            <MenuSection title="Recettes" icon="book" open={section === 'recettes'} onToggle={fold('recettes')}>
+              {ready && <RecipeBook game={ready} inline />}
+            </MenuSection>
+            <MenuSection title="Heure" icon="clock" open={section === 'heure'} onToggle={fold('heure')}>
+              <TimeControls game={ready} />
+            </MenuSection>
+            <MenuSection title="Affichage" icon="eye" open={section === 'affichage'} onToggle={fold('affichage')}>
+              <DisplayControls game={ready} fps={fpsShown} onFps={setFpsShown} />
+            </MenuSection>
+            <MenuSection title="Manques" icon="list" badge={missing} open={section === 'manques'} onToggle={fold('manques')}>
+              <MissingPanel
+                onReport={(text) => {
+                  setMenuOpen(false);
+                  setReport(text);
+                }}
+              />
+            </MenuSection>
+            <MenuSection title="IA des ordres" icon="sparkles" open={section === 'ia'} onToggle={fold('ia')}>
+              <AiSettingsForm />
+            </MenuSection>
+            <MenuSection title="Construction" icon="house" open={section === 'construction'} onToggle={fold('construction')}>
+              <p>Monte un bâtiment pièce par pièce sur la carte de test : murs en pierre, portes, fenêtres, sols, toits et décor, calés sur une grille de 2 m.</p>
               <button className="menu-action" onClick={() => location.assign(testMapUrl(true, true))}>Construire sur la carte de test</button>
-            )}
-          </MenuSection>
-          <MenuSection title="Personnage" icon="user" open={section === 'perso'} onToggle={fold('perso')}>
-            <button className="menu-action" onClick={onEdit}>Modifier le personnage</button>
-          </MenuSection>
+            </MenuSection>
+            <MenuSection title="Personnage" icon="user" open={section === 'perso'} onToggle={fold('perso')}>
+              <button className="menu-action" onClick={onEdit}>Modifier le personnage</button>
+            </MenuSection>
+            </>
+          )}
         </Menu>
-        <NeedsHud
+        {!CARTE_TEST && <NeedsHud
           game={ready}
           onClock={() => {
             setSection('heure');
             setMenuOpen(true);
           }}
-        />
-        <PorteMonnaie game={ready} />
+        />}
+        {!CARTE_TEST && <PorteMonnaie game={ready} />}
+        {CARTE_TEST && atelier && <CarteChip atelier={atelier} onOpen={() => openCarte(false)} onNommer={() => openCarte(true)} />}
+        {placing && ready && <ModelesPanel game={ready} />}
         {terra && ready && <TerraformPanel game={ready} />}
         {build && ready && <BuildPanel game={ready} />}
         {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
@@ -398,13 +480,13 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
         <div className="hud-bottom-main">
           <TouchPad game={ready} can={can} />
           <HeldBar game={ready} held={held} can={can} />
-          <ChatBar
+          {!CARTE_TEST && <ChatBar
             game={ready}
             onNeedSettings={() => {
               setSection('ia');
               setMenuOpen(true);
             }}
-          />
+          />}
         </div>
       </div>
       {can.recipes && ready && !inv && <RecipeBook game={ready} onClose={() => ready.stopReading()} />}

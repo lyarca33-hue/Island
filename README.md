@@ -115,35 +115,39 @@ prévenu ; à zéro, c'est l'accident.
 
 ### La carte de test
 
-Pour inspecter les modèles un par un : ajouter `?test` à l'adresse
-(https://lyarca33-hue.github.io/Island/?test), ou Menu → Partie → « Carte de test ». Un grand
-terrain plat quadrillé tous les mètres, sans île ni maison (`src/game/carteTest.ts`), où l'on
-inspecte les modèles, construit (touche **N** ou bouton maison) et façonne le terrain (touche **U**
-ou bouton montagne), avec, en rangées bien séparées :
-- un exemplaire de chaque objet du catalogue : les petits flottent à hauteur du torse, puis les
-  gros objets et les meubles au sol ;
-- derrière, la galerie : chaque modèle de chaque pack (`public/packs`, états des aliments compris),
-  pack par pack derrière sa pancarte, les petits aussi en l'air. Ce sont des modèles à
-  regarder, pas des objets qu'on prend ;
-- derrière le perso au départ (se retourner), les pans de mur de bâtiment taillés dans le muret
-  de la ville (`src/game/packs/pansMur.ts`) : mur plein, mur avec fenêtre, mur avec porte et
-  pignon, puis une petite maison montée avec, sans toit, où l'on entre par la porte. Un pan fait
-  2 m de long sur 2,80 m de haut ; ils se posent bout à bout.
+Un bac à sable pour placer des modèles, construire et façonner le terrain : ajouter `?test` à
+l'adresse (https://lyarca33-hue.github.io/Island/?test), ou Menu → Partie → « Carte de test ». Un
+grand terrain plat quadrillé tous les mètres (`src/game/carteTest.ts`), avec un HUD réduit à
+l'essentiel : ni jauges, ni porte-monnaie, ni saisie, et les besoins du perso en pause.
 
-Pour rester fluide, seul ce qui est à moins de 18 m du perso est dessiné : le reste apparaît
-quand on s'approche.
+- **Modèles** (touche **O** ou bouton cube, ouvert à l'arrivée, `src/game/modeles.ts`,
+  `src/ui/ModelesPanel.tsx`) : tous les objets du jeu et tout le décor des packs, rangés par
+  familles, avec une recherche et des vignettes (`src/game/modelesCatalogue.ts`). On choisit un
+  modèle puis chaque clic au sol en pose un (sur une table ou un sol de bâtiment aussi) ; R / F le
+  tournent, Pg↑ / Pg↓ le montent, Échap ou clic droit le lâchent. Sans modèle en main, un clic
+  choisit un modèle posé, on le glisse pour le déplacer, Suppr l'enlève ; Ctrl+Z annule, Ctrl+D
+  duplique, 1 à 9 reprennent un modèle récent.
+- **Construction** (touche **N** ou bouton maison) et **terrain** (touche **U** ou bouton montagne).
+- **Cartes** (Menu → Carte, pastille en haut à droite, `src/game/atelierCartes.ts`,
+  `src/ui/CartesPanel.tsx`) : une carte, c'est le terrain, les bâtiments et les modèles posés.
+  Ctrl+S l'enregistre sous un nom, « Nouvelle carte » repart d'un terrain vide, « Mes cartes »
+  les rouvre sans recharger la page, et « Exporter » / « Importer » les passent en fichier `.json`.
+  Les cartes sont gardées dans le navigateur (IndexedDB) ; le travail en cours l'est aussi, à
+  chaque changement, pour qu'un rechargement ne perde rien.
 
-Le survol donne le nom de chaque modèle. **A** sur le modèle visé le signale « à retirer du jeu »,
-**E** le signale « à corriger » (encore la même touche pour annuler) ; Menu → Partie montre les deux
-listes, et « Envoyer la liste à Claude » l'ouvre dans la fenêtre Signaler (issue GitHub ou
-copier-coller), pour que Claude retire ou corrige ces modèles. Sur la carte de test, E ne sert
-donc pas à utiliser un objet.
+La galerie de l'ancienne carte de test (un exemplaire de chaque objet et chaque modèle des packs en
+rangées, la maison du kit Tripo au fond, les pans de mur du muret de la ville) revient avec la case
+« Galerie de tous les modèles en rangées » de Menu → Carte (la page se recharge). Pour rester
+fluide, seul ce qui y est à moins de 18 m du perso est dessiné.
 
-La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte, et Menu → Partie →
-« Retour à l'île » la retrouve. Les bâtiments et les retouches du terrain sont gardés dans le
-navigateur, à part de la partie. Menu → Construction (depuis l'île) ou `?batir` ouvre la carte de
-test directement en construction. Il y a de la place pour bâtir derrière le perso au départ et sur
-les côtés des rangées.
+Le survol donne le nom de chaque modèle. **A** sur le modèle visé (ou celui en main, ou choisi) le
+signale « à retirer du jeu », **E** le signale « à corriger » (encore la même touche pour annuler) ;
+Menu → Signalements montre les deux listes, et « Envoyer la liste à Claude » l'ouvre dans la
+fenêtre Signaler (issue GitHub ou copier-coller), pour que Claude retire ou corrige ces modèles.
+
+La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte, et Menu → Carte →
+« Retour à l'île » la retrouve. Menu → Construction (depuis l'île) ou `?batir` ouvre la carte de
+test directement en construction.
 
 ### La visionneuse de modèles
 
