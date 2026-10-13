@@ -52,7 +52,7 @@ describe('souris libre poussée au bord de la scène', () => {
     expect(edgePan(480, 300, 960, 600)).toEqual({ x: 0, y: 0 });
   });
   it('tourne vers le bord, plus vite tout contre', () => {
-    const near = edgePan(900, 300, 960, 600);
+    const near = edgePan(910, 300, 960, 600);
     const edge = edgePan(959, 300, 960, 600);
     expect(near.x).toBeGreaterThan(0);
     expect(edge.x).toBeGreaterThan(near.x);

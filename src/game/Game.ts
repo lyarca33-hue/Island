@@ -1134,7 +1134,12 @@ export class Game {
     this.fog = new FogOfWar(CARTE_PLATE ? () => 0 : heightAt, this.rooms.map((r) => r.rect));
     this.sightWalls = this.rooms.flatMap((r, i) => r.sightWalls(i));
     this.showFog();
-    this.resizeObs = new ResizeObserver(() => this.resize());
+    this.resizeObs = new ResizeObserver(() => {
+      // la scène a bougé sous une souris immobile (plein écran, sans pointermove) : on attend
+      // qu'elle bouge pour savoir si elle est encore au bord
+      this.hoverPan = null;
+      this.resize();
+    });
     // fenêtre passée d'un écran Retina à un écran externe (ou zoom du navigateur) : le
     // ResizeObserver ne le voit pas, mais le plafond de pixels en dépend
     let dprQuery: MediaQueryList | null = null;
@@ -1278,11 +1283,19 @@ export class Game {
   onMouseCapture: ((on: boolean) => void) | null = null;
 
   /**
-   * Première personne sans capture de la souris (coupée, ou refusée) : la souris reste libre, et
-   * poussée au bord de la scène elle fait tourner la vue (un doigt sur le pavé tactile suffit).
+   * Première personne sans capture de la souris (réglage coupé, d'office ou au menu) : la souris
+   * reste libre, et poussée au bord de la scène elle fait tourner la vue (un doigt sur le pavé
+   * tactile suffit). Une capture refusée une fois (Échap puis clic trop rapide) n'y passe pas.
    */
   private get freeLook(): boolean {
-    return this.fp && !this.pointerLocked && (this.noLock || !this.mouseCapture);
+    return this.fp && !this.pointerLocked && !this.mouseCapture;
+  }
+
+  /** La souris libre est dans la bande du bord où la vue tourne. */
+  private inPanZone(p: { x: number; y: number }): boolean {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const v = edgePan(p.x - r.left, p.y - r.top, r.width, r.height);
+    return v.x !== 0 || v.y !== 0;
   }
 
   /** Appelé quand la souris est capturée ou rendue (viseur du HUD). */
@@ -7495,6 +7508,8 @@ export class Game {
         }
       }
       if (e.buttons) this.onHover?.(null);
+      // au bord, la vue tourne sous la souris immobile : pas d'étiquette figée sur un objet qui défile
+      else if (this.hoverPan && this.inPanZone(this.hoverPan)) this.onHover?.(null);
       else this.hoverAt({ x: e.clientX, y: e.clientY });
     });
     on(el, 'pointerleave', () => {
