@@ -25,6 +25,8 @@ import { createPan, PAN_HEIGHT, PAN_THICK, panObstacles, type PanKind } from './
 import { createToonMaterial } from './toon';
 
 export const CARTE_TEST = typeof location !== 'undefined' && new URLSearchParams(location.search).has('test');
+/** Visionneuse de modèles (`?modeles`) : un seul modèle à la fois, à tourner et à signaler (ui/Visionneuse.tsx). */
+export const VISIONNEUSE = !CARTE_TEST && typeof location !== 'undefined' && new URLSearchParams(location.search).has('modeles');
 /** Page du créateur de bâtiment (`?batir`) : un sol plat, sans île ni maison, où l'on construit. */
 export const CARTE_BATIR = !CARTE_TEST && typeof location !== 'undefined' && new URLSearchParams(location.search).has('batir');
 /** Carte de test ou page du créateur de bâtiment : un sol plat à la place de l'île, et pas de partie à sauver. */
@@ -37,6 +39,16 @@ export function batirUrl(on: boolean): string {
   if (on) url.searchParams.set('batir', '');
   else url.searchParams.delete('batir');
   return url.toString().replace('batir=', 'batir');
+}
+
+/** Adresse de la visionneuse de modèles, ou de la vraie partie (`on` faux). */
+export function visionneuseUrl(on: boolean): string {
+  const url = new URL(location.href);
+  url.searchParams.delete('test');
+  url.searchParams.delete('batir');
+  if (on) url.searchParams.set('modeles', '');
+  else url.searchParams.delete('modeles');
+  return url.toString().replace('modeles=', 'modeles');
 }
 
 /** Adresse de la carte de test, ou de la vraie partie (`on` faux). */
@@ -63,7 +75,7 @@ const GAP_SMALL = 0.5;
 const GAP_BIG = 1.2;
 const ALLEY = 2;
 /** Le pack de nourriture Quaternius est à une autre échelle (une pomme de 80 cm). */
-const PACK_SCALE: Partial<Record<PackId, number>> = { nourriture: 0.12 };
+export const PACK_SCALE: Partial<Record<PackId, number>> = { nourriture: 0.12 };
 
 /** Un modèle à ranger : l'objet, et sa boîte dans le repère du monde une fois tourné, posé à l'origine. */
 interface Entry {
@@ -181,6 +193,17 @@ const small = (e: Entry) => {
 };
 
 /**
+ * Les modèles de la galerie, pack par pack : tous ceux des packs (public/packs), sans ceux qui
+ * n'habillent que des objets retirés du jeu ni ceux retirés eux-mêmes (retires.ts).
+ */
+export function galleryModels(): Array<{ pack: PackId; models: string[] }> {
+  const look = (id: string) => `${FOOD_LOOKS[id].pack ?? 'nourriture'}/${FOOD_LOOKS[id].model}`;
+  const kept = new Set(Object.keys(FOOD_LOOKS).filter((id) => !RETIRES.has(id)).map(look));
+  const gone = new Set([...Object.keys(FOOD_LOOKS).filter((id) => RETIRES.has(id)).map(look).filter((m) => !kept.has(m)), ...RETIRES_PACK]);
+  return (Object.keys(PACK_SIZES) as PackId[]).map((pack) => ({ pack, models: Object.keys(PACK_SIZES[pack]).filter((n) => !gone.has(`${pack}/${n}`)) }));
+}
+
+/**
  * Pose les objets du jeu en rangées (petits en l'air, puis gros, puis meubles), puis la
  * galerie des packs. Rend ce qu'il faut ajouter à la scène.
  */
@@ -193,12 +216,7 @@ export function buildTestMap(items: WorldItem[]): TestMap {
   rows.place(all.filter((a) => !a.item.def.portable).map((a) => a.e), { gap: GAP_BIG, half: HALF_ITEMS, float: false });
 
   // la galerie : pack par pack, une pancarte devant chaque pack
-  const packs = Object.keys(PACK_SIZES) as PackId[];
-  // sans les modèles qui n'habillent que des objets retirés du jeu (retires.ts)
-  const look = (id: string) => `${FOOD_LOOKS[id].pack ?? 'nourriture'}/${FOOD_LOOKS[id].model}`;
-  const kept = new Set(Object.keys(FOOD_LOOKS).filter((id) => !RETIRES.has(id)).map(look));
-  const gone = new Set([...Object.keys(FOOD_LOOKS).filter((id) => RETIRES.has(id)).map(look).filter((m) => !kept.has(m)), ...RETIRES_PACK]);
-  const gallery = packs.map((p) => ({ p, models: Object.keys(PACK_SIZES[p]).filter((n) => !gone.has(`${p}/${n}`)).map((n) => packEntry(p, n)) }));
+  const gallery = galleryModels().map(({ pack: p, models }) => ({ p, models: models.map((n) => packEntry(p, n)) }));
   for (const tiny of [true, false]) {
     const list = gallery.flatMap(({ p, models }) => {
       const these = models.filter((m) => small(m) === tiny);
@@ -370,6 +388,47 @@ export function toggleFlag(ref: string, kind: FlagKind = 'retirer'): boolean {
 
 export function clearFlags(kind: FlagKind = 'retirer'): void {
   saveFlags(kind, []);
+}
+
+/** Est-ce que `ref` est signalé à `kind` ? */
+export const isFlagged = (ref: string, kind: FlagKind) => loadFlags(kind).includes(ref);
+
+/** Commentaires de Greg sur les modèles (visionneuse), par repère : ils partent avec les listes. */
+const COMMENTS_KEY = 'rp-island-commentaires-modeles';
+
+export function loadComments(): Record<string, string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(COMMENTS_KEY) ?? '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === 'string')) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Commente le modèle `ref` (texte vide : plus de commentaire). */
+export function setComment(ref: string, text: string): void {
+  const all = loadComments();
+  if (text.trim()) all[ref] = text;
+  else delete all[ref];
+  try {
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify(all));
+  } catch {
+    // stockage indisponible : le commentaire dure le temps de la page
+  }
+  for (const f of flagListeners) f();
+}
+
+const LIST_TITLE: Record<FlagKind, string> = { retirer: 'Modèles à retirer du jeu', corriger: 'Modèles à corriger sur Blender' };
+
+/** Le texte envoyé à Claude pour la liste `kind` : un modèle par ligne, avec son commentaire. */
+export function flagListText(kind: FlagKind): string {
+  const flags = loadFlags(kind);
+  const notes = loadComments();
+  const line = (f: string) => {
+    const note = notes[f]?.trim();
+    return note ? `- ${f} : ${note.replace(/\s*\n\s*/g, ' / ')}` : `- ${f}`;
+  };
+  return `# ${LIST_TITLE[kind]} (${flags.length})\n\nSignalés sur la carte de test ou dans la visionneuse :\n\n${flags.map(line).join('\n')}`;
 }
 
 /** Prévient `fn` à chaque changement de la liste ; rend de quoi arrêter. */

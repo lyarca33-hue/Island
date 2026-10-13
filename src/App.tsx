@@ -4,7 +4,7 @@ import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
 import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
-import { batirUrl, CARTE_BATIR, CARTE_PLATE, CARTE_TEST, testMapUrl } from './game/carteTest';
+import { batirUrl, CARTE_BATIR, CARTE_PLATE, CARTE_TEST, testMapUrl, VISIONNEUSE, visionneuseUrl } from './game/carteTest';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions, loadFirstPerson } from './game/Game';
 import { preloadPacks } from './game/packs/assets';
@@ -22,6 +22,7 @@ import { RecipeBook } from './ui/RecipeBook';
 import { BookReader } from './ui/BookReader';
 import { SavePanel } from './ui/SavePanel';
 import { TestFlags } from './ui/TestFlags';
+import { Visionneuse } from './ui/Visionneuse';
 import { Menu, MenuSection, Shortcuts } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
@@ -50,6 +51,8 @@ export function App() {
     setRun((n) => n + 1);
   }, []);
 
+  // visionneuse de modèles (?modeles) : sa propre page, sans monde ni partie
+  if (VISIONNEUSE) return <Visionneuse />;
   if (mode === 'creator') {
     return <Creator initial={recipe} onDone={(r) => { setRecipe(r); setMode('game'); }} />;
   }
@@ -325,6 +328,9 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                 {CARTE_TEST ? 'Retour à l’île' : 'Carte de test (objets en rangées)'}
               </button>
             )}
+            <button type="button" className="menu-action" onClick={() => location.assign(visionneuseUrl(true))}>
+              Visionneuse de modèles (un par un)
+            </button>
           </MenuSection>
           <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
             <Shortcuts />
