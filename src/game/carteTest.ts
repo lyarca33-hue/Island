@@ -15,6 +15,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { LAY_FLAT, type WorldItem } from './items/carry';
+import { FOOD_LOOKS } from './items/interior';
+import { RETIRES } from './items/retires';
 import { packModel, packSize } from './packs/assets';
 import { type ModelName, PACK_SIZES, type PackId } from './packs/manifest';
 import { createToonMaterial } from './toon';
@@ -176,7 +178,11 @@ export function buildTestMap(items: WorldItem[]): TestMap {
 
   // la galerie : pack par pack, une pancarte devant chaque pack
   const packs = Object.keys(PACK_SIZES) as PackId[];
-  const gallery = packs.map((p) => ({ p, models: Object.keys(PACK_SIZES[p]).map((n) => packEntry(p, n)) }));
+  // sans les modèles qui n'habillent que des objets retirés du jeu (retires.ts)
+  const look = (id: string) => `${FOOD_LOOKS[id].pack ?? 'nourriture'}/${FOOD_LOOKS[id].model}`;
+  const kept = new Set(Object.keys(FOOD_LOOKS).filter((id) => !RETIRES.has(id)).map(look));
+  const gone = new Set(Object.keys(FOOD_LOOKS).filter((id) => RETIRES.has(id)).map(look).filter((m) => !kept.has(m)));
+  const gallery = packs.map((p) => ({ p, models: Object.keys(PACK_SIZES[p]).filter((n) => !gone.has(`${p}/${n}`)).map((n) => packEntry(p, n)) }));
   for (const tiny of [true, false]) {
     const list = gallery.flatMap(({ p, models }) => {
       const these = models.filter((m) => small(m) === tiny);
