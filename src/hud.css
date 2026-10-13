@@ -443,3 +443,8 @@
 .hud-fps.mid b { color: var(--hud-mid); }
 .hud-fps.low b { color: var(--hud-low); }
 .hud-fps.ok b { color: var(--hud-up); }
+
+/* carte de test : modèles signalés à retirer */
+.test-flags ul { margin: 4px 0 8px; padding-left: 18px; max-height: 180px; overflow-y: auto; font-size: 12px; }
+.test-flags .save-link { padding: 0; border: none; background: none; color: var(--hud-ink-3); font-size: 12px; text-decoration: underline; cursor: pointer; }
+.test-flags li .save-link { margin-left: 4px; text-decoration: none; }

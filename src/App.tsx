@@ -21,6 +21,7 @@ import { InventoryPanel } from './ui/InventoryPanel';
 import { RecipeBook } from './ui/RecipeBook';
 import { BookReader } from './ui/BookReader';
 import { SavePanel } from './ui/SavePanel';
+import { TestFlags } from './ui/TestFlags';
 import { Menu, MenuSection, Shortcuts } from './ui/Menu';
 import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
@@ -289,7 +290,15 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
         >
           <MenuSection title="Partie" icon="cloud" open={section === 'partie'} onToggle={fold('partie')}>
             {CARTE_TEST ? (
-              <p>Carte de test : un sol plat et chaque objet du jeu en rangées. Rien n’y est sauvé, ta partie t’attend sur l’île.</p>
+              <>
+                <p>Carte de test : un sol plat et chaque modèle du jeu en rangées. Rien n’y est sauvé, ta partie t’attend sur l’île.</p>
+                <TestFlags
+                  onSend={(text) => {
+                    setMenuOpen(false);
+                    setReport(text);
+                  }}
+                />
+              </>
             ) : (
               <SavePanel savedAt={savedAt} onNewGame={() => replaceGame(null)} />
             )}
