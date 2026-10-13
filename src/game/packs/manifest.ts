@@ -28,7 +28,7 @@ export const PACK_SIZES = {
     "baguette-perime": [0.185, 0.102, 0.595],
     "banane": [0.067, 0.116, 0.187],
     "banane-perime": [0.067, 0.116, 0.187],
-    "beurre": [0.109, 0.035, 0.061],
+    "beurre": [0.099, 0.039, 0.058],
     "carotte": [0.086, 0.08, 0.175],
     "carotte-perime": [0.086, 0.08, 0.175],
     "champignon": [0.055, 0.036, 0.06],

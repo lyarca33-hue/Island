@@ -220,3 +220,25 @@ node tools/build_plats_assets.mjs --src "<Bureau>/Assets" --out public/packs/pla
 
 Un nouveau modèle : sa ligne dans `PLATS` (nom, taille, rotation), relancer, puis sa ligne dans
 `FOOD_LOOKS` (`src/game/items/interior.ts`).
+
+
+## `retouche_glb/` : retoucher un modèle d'un pack sans ses sources
+
+Les packs (`public/models/*.glb`, `public/packs/*.glb`) sont compressés en meshopt, que
+l'import glTF de Blender ne lit pas. Ces scripts Python (sans dépendance, pas besoin de Node)
+servent à corriger un seul modèle dans Blender puis à le remettre dans son pack :
+
+```bash
+# 1. pack lisible par Blender (sommets et indices décompressés)
+python3 tools/retouche_glb/glb.py public/packs/aliments.glb /tmp/aliments-plat.glb
+# 2. dans Blender : importer /tmp/aliments-plat.glb, corriger l'objet, puis l'exporter seul
+#    en .glb avec sa matrice remise à l'identité (le nœud du pack garde sa place et son échelle)
+# 3. remettre le maillage dans le pack (et, au besoin, une nouvelle image WebP pour son atlas)
+python3 tools/retouche_glb/splice.py public/packs/aliments.glb /tmp/banane.glb banane /tmp/banane-atlas.webp
+```
+
+`splice.py` remplace le maillage du nœud nommé (`boite-lettres/#corps` vise l'enfant sans nom
+du nœud `boite-lettres`), garde le matériau d'origine pour les primitives dont le matériau
+s'appelle `atlas…`, ajoute les autres matériaux (sans texture), puis retire du fichier ce qui
+n'est plus utilisé. Le nouveau maillage est stocké sans compression. Penser à mettre à jour la
+taille du modèle dans `src/game/packs/manifest.ts` si sa boîte change.
