@@ -7165,6 +7165,11 @@ export class Game {
 
   set terraforming(on: boolean) {
     if (on === this.terraform.on) return;
+    // la carte de test n'a pas d'île à façonner (un sol plat quadrillé)
+    if (on && CARTE_TEST) {
+      this.onNotice?.('La terraformation se fait sur l’île, pas sur la carte de test.');
+      return;
+    }
     // le pinceau se manie de dessus
     if (on && this.fp) this.firstPerson = false;
     this.terraform.on = on;
