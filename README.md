@@ -162,8 +162,10 @@ suivant. Au milieu, le modèle seul sur un sol quadrillé : glisser pour tourner
 doigts) pour zoomer, clic droit pour déplacer, « Recadrer » (R) pour revenir. À droite, ses infos
 (taille, triangles, maillages, textures, pièces qui bougent, que l'on peut jouer ou poser au
 curseur, et ce que l'objet permet dans le jeu), un commentaire, et les deux signalements de la
-carte de test : « Supprimer » (A) et « Corriger sur Blender » (E). Ce sont les mêmes listes que
-sur la carte de test ; « Envoyer la liste à Claude » les envoie avec les commentaires.
+carte de test : « Supprimer » (A) et « Corriger sur Blender » (E), plus « Trop anguleux » (T) et
+« Pas assez lisse » (L), des modèles à adoucir ou lisser. Ce sont les mêmes listes que
+sur la carte de test ; dans la visionneuse, « Copier la liste » la met directement dans le
+presse-papiers, avec les commentaires, à coller dans la discussion avec Claude.
 
 L'onglet « Corrigés sur Blender » de la liste ne garde que les modèles déjà retouchés, avec ce
 qui a été fait et la PR (`src/game/items/corriges.ts`, à compléter après chaque retouche).
