@@ -183,7 +183,7 @@ export function buildModel(def: ItemDef): THREE.Object3D {
   const dressed = new THREE.Group();
   for (const p of parts) {
     // un matériau par objet : l'usure (durability.ts) ternit chaque meuble pour lui seul
-    const mesh = new THREE.Mesh(p.geometry, createToonMaterial({ color: p.color, rimStrength: 0.15 }));
+    const mesh = new THREE.Mesh(p.geometry, createToonMaterial({ color: p.color, rimStrength: 0 }));
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     dressed.add(mesh);

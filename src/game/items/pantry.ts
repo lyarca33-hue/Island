@@ -15,7 +15,7 @@ import { UPKEEP_STOCK } from './upkeep';
 import { LIFE_STOCK } from './life';
 import { FECULENT_PANTRY, FECULENT_STOCK } from './feculents';
 
-const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
+const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0 });
 
 function mesh(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, toon(color));

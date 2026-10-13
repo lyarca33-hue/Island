@@ -43,7 +43,7 @@ export interface ToonOptions {
   color: THREE.ColorRepresentation;
   /** Couleur du liseré (rim light). */
   rim?: THREE.ColorRepresentation;
-  /** Force du liseré (0 = aucun). */
+  /** Force du liseré (0 = aucun, par défaut : il donnait aux modèles un air brillant, vernis). */
   rimStrength?: number;
   map?: THREE.Texture | null;
   /** Ombrage fondu (softToonGradient) au lieu des paliers nets. */
@@ -53,7 +53,7 @@ export interface ToonOptions {
 export function createToonMaterial(o: ToonOptions): THREE.MeshToonMaterial {
   const m = new THREE.MeshToonMaterial({ color: o.color, map: o.map ?? null, gradientMap: o.soft ? softToonGradient() : toonGradient() });
   const rim = new THREE.Color(o.rim ?? 0xfff1d6);
-  const strength = o.rimStrength ?? 0.3;
+  const strength = o.rimStrength ?? 0;
   if (strength > 0) {
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uRimColor = { value: rim };

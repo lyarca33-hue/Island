@@ -3540,7 +3540,7 @@ export class Game {
     this.gloved = {
       item: gloves,
       shown: c.dressHands(() => {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.11, 0.035), createToonMaterial({ color, rimStrength: 0.15 }));
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.11, 0.035), createToonMaterial({ color, rimStrength: 0 }));
         m.position.y = 0.04;
         return m;
       }),

@@ -151,7 +151,7 @@ export class PostFx {
     // bloom en rgb ; en alpha, le masque du perso caché (flouté ensuite avec le bloom : l'aura)
     this.brightMat = new THREE.ShaderMaterial({
       uniforms: {
-        tScene: { value: null }, threshold: { value: 0.85 },
+        tScene: { value: null }, threshold: { value: 1.0 }, // au-dessus des surfaces éclairées : seules les lampes brillent
         tDepth: { value: this.sceneRT.depthTexture }, tCharDepth: { value: this.charRT.depthTexture },
         fullTexel: { value: new THREE.Vector2() }, gap: { value: 0 },
       },
