@@ -28,6 +28,7 @@ import { NeedsHud, TimeControls } from './ui/TimeHud';
 import { Magasin } from './ui/Magasin';
 import { PorteMonnaie } from './ui/PorteMonnaie';
 import { TerraformPanel } from './ui/TerraformPanel';
+import { BuildPanel } from './ui/BuildPanel';
 import { CamDial } from './ui/CamDial';
 
 /**
@@ -73,6 +74,9 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   /** Mode terraformation ouvert (touche U ou bouton montagne). */
   const [terra, setTerra] = useState(false);
   useEffect(() => (ready ? ready.terraform.listen(() => setTerra(ready.terraforming)) : undefined), [ready]);
+  /** Mode construction ouvert (touche N ou bouton maison). */
+  const [build, setBuild] = useState(false);
+  useEffect(() => (ready ? ready.construction.listen(() => setBuild(ready.building)) : undefined), [ready]);
   /** Souris capturée par la première personne (elle oriente la vue) : viseur au centre. */
   const [locked, setLocked] = useState(false);
   useEffect(() => {
@@ -256,6 +260,18 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
               >
                 <Icon name="mountain" />
               </button>
+              <button
+                className={`hud-icon${build ? ' on' : ''}`}
+                onClick={(e) => {
+                  if (game.current) game.current.building = !game.current.building;
+                  e.currentTarget.blur();
+                }}
+                aria-pressed={build}
+                aria-label="Construction"
+                title={build ? 'Fermer la construction (N)' : 'Construction (N) : monter un bâtiment pièce par pièce'}
+              >
+                <Icon name="house" />
+              </button>
               <span className="hud-sep" />
               <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
                 <Icon name="eyeOff" />
@@ -320,6 +336,18 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           <MenuSection title="IA des ordres" icon="sparkles" open={section === 'ia'} onToggle={fold('ia')}>
             <AiSettingsForm />
           </MenuSection>
+          <MenuSection title="Construction" icon="house" open={section === 'construction'} onToggle={fold('construction')}>
+            <p>Monte un bâtiment pièce par pièce : murs en pierre, portes, fenêtres, sols, toits et décor, calés sur une grille de 2 m.</p>
+            <button
+              className="menu-action"
+              onClick={() => {
+                if (game.current) game.current.building = true;
+                setMenuOpen(false);
+              }}
+            >
+              {build ? 'Construction ouverte' : 'Ouvrir la construction (N)'}
+            </button>
+          </MenuSection>
           <MenuSection title="Personnage" icon="user" open={section === 'perso'} onToggle={fold('perso')}>
             <button className="menu-action" onClick={onEdit}>Modifier le personnage</button>
           </MenuSection>
@@ -333,6 +361,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
         />
         <PorteMonnaie game={ready} />
         {terra && ready && <TerraformPanel game={ready} />}
+        {build && ready && <BuildPanel game={ready} />}
         {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
         <HoverTip game={ready} hidden={!!ctx || !!drag} />
         {fpsShown && <FpsCounter game={ready} />}

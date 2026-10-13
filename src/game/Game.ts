@@ -60,6 +60,7 @@ import { TRIPO_HOUSES, TripoHouseModel } from './campagne';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { Terraform, TERRA_TOOLS } from './terraform';
+import { Construction } from './construction';
 import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo, GRASS_MIN } from './autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
@@ -533,6 +534,8 @@ export class Game {
   onViewChange: ((firstPerson: boolean) => void) | null = null;
   /** Mode terraformation (terraform.ts) : le clic gauche retouche le relief au pinceau. */
   terraform!: Terraform;
+  /** Mode construction (construction.ts) : le clic gauche pose les pièces d'un bâtiment. */
+  construction!: Construction;
   /** Dernière place de la souris sur la vue, pour le pinceau (la caméra bouge : on revise à chaque image). */
   private terraPointer: { x: number; y: number } | null = null;
   private post: PostFx;
@@ -950,6 +953,17 @@ export class Game {
     // terraformation : le relief se retouche partout, sauf dans les pièces (leur sol reste à plat)
     this.terraform = new Terraform(this.island, this.rooms.map((r) => r.rect));
     this.scene.add(this.terraform.root);
+    // construction : les bâtiments posés pièce par pièce (sur la carte de test aussi, sans sauvegarde)
+    this.construction = new Construction({
+      ground: CARTE_TEST ? () => 0 : heightAt,
+      clearGrass: (x0, x1, z0, z1) => {
+        if (!CARTE_TEST) this.island.clearGrass(x0, x1, z0, z1);
+      },
+      changed: () => {
+        this.character.nav = this.buildNav();
+      },
+    });
+    this.scene.add(this.construction.root);
     // un calque de saleté par sol, posé dans la pièce (caché tant que c'est propre)
     this.salissure = new Salissure(this.rooms.map((r) => ({ name: r.spec.name, rect: r.rect })));
     this.salissure.floors.forEach((f, i) => this.rooms[i].group.add(f.build()));
@@ -1145,6 +1159,7 @@ export class Game {
   set firstPerson(on: boolean) {
     if (on === this.fp) return;
     if (on && this.terraform?.on) this.terraforming = false;
+    if (on && this.construction?.on) this.building = false;
     this.fp = on;
     this.look = null;
     // on repart du regard droit devant, un peu baissé (de quoi voir le plan de travail)
@@ -1380,6 +1395,7 @@ export class Game {
     // carte de test : la maison assemblée se contourne
     if (CARTE_TEST) nav.add(TEST_HOUSE_BOX, TEST_HOUSE, 0, true);
     if (CARTE_TEST) for (const o of TEST_PAN_OBSTACLES) nav.add(o.box, o.pos, o.yaw, true);
+    for (const o of this.construction?.obstacles() ?? []) nav.add(o.box, o.pos, o.yaw, o.wall);
     return nav;
   }
 
@@ -7176,7 +7192,7 @@ export class Game {
 
   setZoom(factor: number): void {
     // en terraformation, on peut reculer bien plus loin : voir toute la colline qu'on façonne
-    this.zoom = THREE.MathUtils.clamp(this.zoom * factor, this.terraform?.on ? TERRA_ZOOM_MIN : ZOOM_MIN, ZOOM_MAX);
+    this.zoom = THREE.MathUtils.clamp(this.zoom * factor, this.terraform?.on || this.construction?.on ? TERRA_ZOOM_MIN : ZOOM_MIN, ZOOM_MAX);
   }
 
   /** Mode terraformation ouvert (bouton du HUD, touche U). */
@@ -7193,7 +7209,25 @@ export class Game {
     }
     // le pinceau se manie de dessus
     if (on && this.fp) this.firstPerson = false;
+    if (on) this.building = false;
     this.terraform.on = on;
+    if (!on) {
+      this.terraPointer = null;
+      this.zoom = Math.max(this.zoom, ZOOM_MIN);
+    }
+  }
+
+  /** Mode construction ouvert (bouton du HUD, touche N). */
+  get building(): boolean {
+    return this.construction.on;
+  }
+
+  set building(on: boolean) {
+    if (on === this.construction.on) return;
+    // les pièces se posent de dessus
+    if (on && this.fp) this.firstPerson = false;
+    if (on) this.terraforming = false;
+    this.construction.on = on;
     if (!on) {
       this.terraPointer = null;
       this.zoom = Math.max(this.zoom, ZOOM_MIN);
@@ -7258,6 +7292,12 @@ export class Game {
     on(window, 'keydown', (e) => {
       if (typing(e)) return;
       this.shift = e.shiftKey;
+      // construction : Ctrl+Z (la lettre Z, AZERTY ou QWERTY) annule la dernière pièce, sans faire marcher le perso
+      if (this.construction.on && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        this.construction.undo();
+        return;
+      }
       this.keys.add(e.code);
       // carte de test, E : signaler le modèle visé à corriger (à la place de « utiliser »)
       if (e.code === 'KeyE' && !e.repeat) {
@@ -7266,6 +7306,12 @@ export class Game {
       }
       if (e.code === 'KeyX' && !e.repeat) this.firstPerson = !this.fp;
       if (e.code === 'KeyU' && !e.repeat) this.terraforming = !this.terraform.on;
+      if (e.code === 'KeyN' && !e.repeat) this.building = !this.construction.on;
+      // en construction, 1 à 9 : la pièce ; R : la tourner ; Suppr : démolir
+      const nine = /^Digit([1-9])$/.exec(e.code);
+      if (nine && this.construction.on) this.construction.pickNumber(+nine[1]);
+      if (e.code === 'KeyR' && !e.repeat && this.construction.on) this.construction.rotate();
+      if ((e.code === 'Delete' || e.code === 'Backspace') && !e.repeat && this.construction.on) this.construction.setTool(this.construction.tool === 'demolir' ? 'poser' : 'demolir');
       // en terraformation, 1 à 6 : le pinceau
       const digit = /^Digit([1-6])$/.exec(e.code);
       if (digit && this.terraform.on) this.terraform.setTool(TERRA_TOOLS[+digit[1] - 1].id);
@@ -7330,7 +7376,7 @@ export class Game {
       if (this.pointerLocked) document.exitPointerLock();
     });
     on(el, 'pointermove', (e) => {
-      if (this.terraform.on) {
+      if (this.terraform.on || this.construction.on) {
         this.terraPointer = { x: e.clientX, y: e.clientY };
         return;
       }
@@ -7369,6 +7415,7 @@ export class Game {
     on(el, 'pointerleave', () => {
       this.onHover?.(null);
       if (this.terraform.on && !this.terraform.pressed) this.terraPointer = null;
+      if (this.construction.on && !this.construction.pressed) this.terraPointer = null;
     });
     on(el, 'contextmenu', (ev) => {
       ev.preventDefault();
@@ -7409,6 +7456,15 @@ export class Game {
         el.setPointerCapture?.(e.pointerId);
         return;
       }
+      // construction : le clic gauche pose (ou démolit) la pièce, le perso ne bouge pas
+      if (this.construction.on) {
+        this.terraPointer = { x: e.clientX, y: e.clientY };
+        this.aim(e.clientX, e.clientY);
+        this.construction.aim(this.raycaster.ray);
+        this.construction.press();
+        el.setPointerCapture?.(e.pointerId);
+        return;
+      }
       if (this.fp && e.pointerType === 'mouse' && (this.pointerLocked || !this.noLock)) {
         // première personne à la souris : un premier clic capture la souris (sans agir), puis
         // chaque clic agit sur ce qui est sous le viseur
@@ -7442,9 +7498,12 @@ export class Game {
     on(window, 'pointercancel', () => {
       this.look = null;
       this.terraform.release();
+      this.construction.release();
     });
     on(window, 'pointerup', (e) => {
-      if (e.button === 0) this.terraform.release();
+      if (e.button !== 0) return;
+      this.terraform.release();
+      this.construction.release();
     });
     on(window, 'pointerup', (e) => {
       const pr = this.press;
@@ -8143,7 +8202,8 @@ export class Game {
     const axes = this.keyAxes();
     this.velo.steer(axes.f, axes.s);
     // R : pivoter le meuble vers la droite, F : vers la gauche
-    this.character.setTurnInput((this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
+    // (en construction, R tourne la pièce à poser)
+    this.character.setTurnInput(this.construction.on ? 0 : (this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
     this.character.update(dt, GROUND_HALF - 14);
     const c = this.character;
     const held = c.heldItems;
@@ -8248,6 +8308,12 @@ export class Game {
       this.terraform.aim(tp ? this.raycaster.ray : null);
       this.terraform.update(dt);
     }
+    if (this.construction.on) {
+      const tp = this.terraPointer;
+      if (tp) this.aim(tp.x, tp.y);
+      this.construction.aim(tp ? this.raycaster.ray : null);
+    }
+    this.construction.update(dt, this.character.position, !this.fp);
     this.rainView.copy(toCamera);
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
@@ -9765,6 +9831,10 @@ export class Game {
       relief: {
         save: () => this.terraform.save(),
         load: (x) => this.terraform.load(x),
+      },
+      batiments: {
+        save: () => this.construction.save(),
+        load: (x) => this.construction.load(x),
       },
       salissure: {
         save: () => this.salissure.save(),
