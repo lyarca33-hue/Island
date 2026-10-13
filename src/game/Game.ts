@@ -89,6 +89,17 @@ const FP_LOOK = 0.005;
  * qui rame (Firefox regroupe alors les mouvements d'une image) reste un vrai mouvement.
  */
 const FP_SPIKE = 400;
+/** Souris tenue contre le bord de l'écran en glissant : pixels de glisser simulés par seconde. */
+const FP_EDGE = 500;
+/** Distance au bord de la fenêtre (px) où la souris glissée fait tourner la vue en continu. */
+const EDGE_ZONE = 4;
+
+/** Bord de la fenêtre où se trouve le point (x, y) : -1 (gauche, haut), 1 (droite, bas) ou 0. */
+function edgeDir(x: number, y: number): { x: number; y: number } {
+  const w = window.innerWidth, h = window.innerHeight;
+  return { x: x <= EDGE_ZONE ? -1 : x >= w - 1 - EDGE_ZONE ? 1 : 0, y: y <= EDGE_ZONE ? -1 : y >= h - 1 - EDGE_ZONE ? 1 : 0 };
+}
+
 /** Radians tournés par pixel de défilement horizontal (deux doigts sur le pavé tactile). */
 const FP_SCROLL = 0.004;
 /** Le regard suit le perso qui agit seul : délai après un mouvement de souris (ms), et vivacité. */
@@ -520,7 +531,7 @@ export class Game {
   /** Regard vers le haut (+) ou le bas (-) à la première personne (radians). */
   private pitch = FP_PITCH;
   /** Appui sur le sol ou un meuble à la première personne : un glisser tourne la vue, un clic agit. */
-  private look: { x: number; y: number; dragging: boolean; shift: boolean } | null = null;
+  private look: { x: number; y: number; dragging: boolean; shift: boolean; edge?: { x: number; y: number } } | null = null;
   /** Dernier mouvement de la vue par le joueur (ms) : le regard suit le perso passé ce délai. */
   private lookedAt = 0;
   /** Appelé quand on passe d'une vue à l'autre (bouton du HUD). */
@@ -7321,6 +7332,7 @@ export class Game {
         if (!lk.dragging && Math.hypot(e.clientX - lk.x, e.clientY - lk.y) > DRAG_START) lk.dragging = true;
         if (lk.dragging) {
           this.turnView(e.clientX - lk.x, e.clientY - lk.y);
+          lk.edge = edgeDir(e.clientX, e.clientY);
           lk.x = e.clientX;
           lk.y = e.clientY;
         }
@@ -9578,6 +9590,10 @@ export class Game {
     // immobile, le perso se tourne vers où l'on regarde (cap du perso : x = sin, z = cos)
     this.character.faceView(Math.atan2(-Math.cos(this.yaw), -Math.sin(this.yaw)), dt);
     this.followGaze(dt);
+    // souris non capturée, glissée jusqu'au bord de l'écran : elle ne peut aller plus loin, la vue
+    // continue de tourner tant qu'on la tient contre le bord
+    const edge = this.look?.dragging ? this.look.edge : null;
+    if (edge && (edge.x || edge.y)) this.turnView(edge.x * FP_EDGE * dt, edge.y * FP_EDGE * dt);
     if (c.aspect !== aspect) {
       c.aspect = aspect;
       c.updateProjectionMatrix();
