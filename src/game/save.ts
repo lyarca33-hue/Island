@@ -71,6 +71,8 @@ export interface GameSave {
   salissure?: unknown;
   /** Les retouches de l'île (terraform.ts) : relief et sols peints. Absent : l'île d'origine. */
   relief?: unknown;
+  /** Les bâtiments montés en mode construction (construction.ts). Absent : aucun. */
+  batiments?: unknown;
 }
 
 /** Ce que le jeu ouvre à la sauvegarde (Game.saveAccess) : ses objets et de quoi les refaire. */
@@ -105,6 +107,8 @@ export interface SaveAccess {
   salissure?: { save(): unknown; load(x: unknown): void };
   /** Les retouches de l'île (terraform.ts), et leur retour. */
   relief?: { save(): unknown; load(x: unknown): void };
+  /** Les bâtiments montés (construction.ts), et leur retour. */
+  batiments?: { save(): unknown; load(x: unknown): void };
   /** Après le chargement : chemins à refaire autour des meubles déplacés. */
   done(): void;
 }
@@ -149,6 +153,7 @@ export function captureGame(a: SaveAccess): GameSave {
   const weather: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(a.weather)) if (typeof v === 'number' || typeof v === 'string' || v === null) weather[k] = v;
   const relief = a.relief?.save();
+  const batiments = a.batiments?.save();
   return {
     v: 1,
     savedAt: Date.now(),
@@ -166,6 +171,7 @@ export function captureGame(a: SaveAccess): GameSave {
     ...(a.delivery() ? { commande: structuredClone(a.delivery()!) } : {}),
     ...(a.salissure ? { salissure: a.salissure.save() } : {}),
     ...(relief ? { relief } : {}),
+    ...(batiments ? { batiments } : {}),
   };
 }
 
@@ -238,6 +244,7 @@ export function applyGame(a: SaveAccess, s: GameSave): void {
   if (s.salissure) a.salissure?.load(s.salissure);
   // toujours : une partie sans retouches rend l'île d'origine (même si l'on en avait fait avant)
   a.relief?.load(s.relief);
+  a.batiments?.load(s.batiments);
   a.done();
 }
 

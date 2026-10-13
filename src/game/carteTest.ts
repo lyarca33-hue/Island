@@ -25,6 +25,19 @@ import { createPan, PAN_HEIGHT, PAN_THICK, panObstacles, type PanKind } from './
 import { createToonMaterial } from './toon';
 
 export const CARTE_TEST = typeof location !== 'undefined' && new URLSearchParams(location.search).has('test');
+/** Page du créateur de bâtiment (`?batir`) : un sol plat, sans île ni maison, où l'on construit. */
+export const CARTE_BATIR = !CARTE_TEST && typeof location !== 'undefined' && new URLSearchParams(location.search).has('batir');
+/** Carte de test ou page du créateur de bâtiment : un sol plat à la place de l'île, et pas de partie à sauver. */
+export const CARTE_PLATE = CARTE_TEST || CARTE_BATIR;
+
+/** Adresse de la page du créateur de bâtiment, ou de la vraie partie (`on` faux). */
+export function batirUrl(on: boolean): string {
+  const url = new URL(location.href);
+  url.searchParams.delete('test');
+  if (on) url.searchParams.set('batir', '');
+  else url.searchParams.delete('batir');
+  return url.toString().replace('batir=', 'batir');
+}
 
 /** Adresse de la carte de test, ou de la vraie partie (`on` faux). */
 export function testMapUrl(on: boolean): string {
