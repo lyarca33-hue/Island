@@ -6,7 +6,7 @@ import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
 import { CARTE_TEST, testMapUrl } from './game/carteTest';
 import { cloud } from './game/cloud';
-import { Game, type ContextMenu as Menu3D, type HandActions } from './game/Game';
+import { Game, type ContextMenu as Menu3D, type HandActions, loadFirstPerson } from './game/Game';
 import { preloadPacks } from './game/packs/assets';
 import { loadTripo } from './game/items/tripo';
 import { AutoSave, clearLocal, type GameSave, loadLocal, saveLocal } from './game/save';
@@ -64,8 +64,12 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
   const [ready, setReady] = useState<Game | null>(null);
-  /** Vue à la première personne (touche X ou bouton de la barre). */
-  const [firstPerson, setFirstPerson] = useState(false);
+  /**
+   * Vue à la première personne (touche X ou bouton de la barre). Lue tout de suite, pas à la
+   * création du jeu : sinon, pendant le chargement, la barre du bas s'affiche un instant au centre
+   * (disposition de la vue de dessus) puis disparaît.
+   */
+  const [firstPerson, setFirstPerson] = useState(loadFirstPerson);
   /** Mode terraformation ouvert (touche U ou bouton montagne). */
   const [terra, setTerra] = useState(false);
   useEffect(() => (ready ? ready.terraform.listen(() => setTerra(ready.terraforming)) : undefined), [ready]);
@@ -361,7 +365,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       {can.book && ready && !inv && <BookReader key={can.book} game={ready} id={can.book} onClose={() => ready.stopReading()} />}
       {inv && ready && <InventoryPanel game={ready} refId={inv} onClose={() => setInv(null)} />}
       <Magasin game={ready} />
-      {firstPerson && (
+      {firstPerson && !loading && (
         <div className={`fp-aim${locked ? ' locked' : ''}`} aria-hidden>
           <span className="fp-dot" />
           {!locked && <span className="fp-hint">Clic : la souris oriente la vue · Échap : la libérer</span>}

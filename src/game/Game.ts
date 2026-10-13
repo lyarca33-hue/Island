@@ -106,7 +106,7 @@ const FP_MARGIN = 0.12;
 const FP_KEY = 'rp-island-premiere-personne';
 
 /** Vue à la première personne mémorisée (iso par défaut). */
-function loadFirstPerson(): boolean {
+export function loadFirstPerson(): boolean {
   try {
     return localStorage.getItem(FP_KEY) === '1';
   } catch {
