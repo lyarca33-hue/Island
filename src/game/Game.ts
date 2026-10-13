@@ -57,6 +57,7 @@ import { ROOMS } from './rooms';
 import { TRIPO_HOUSES, TripoHouseModel } from './campagne';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
+import { Terraform, TERRA_TOOLS } from './terraform';
 import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo, GRASS_MIN } from './autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
@@ -70,6 +71,8 @@ const CAM_DIST = 80;
 /** Hauteur de la vue au zoom 1 (m), plus serrée qu'Arena Tactic : un seul perso à montrer. */
 const VIEW_HEIGHT = 6;
 const ZOOM_MIN = 0.5;
+/** Recul permis en terraformation (vue de 6 / 0,15 = 40 m de haut). */
+const TERRA_ZOOM_MIN = 0.15;
 const ZOOM_MAX = 2.5;
 /** Hauteur du point suivi au-dessus des pieds du perso (m). */
 const FOCUS_HEIGHT = 0.9;
@@ -521,6 +524,10 @@ export class Game {
   private lookedAt = 0;
   /** Appelé quand on passe d'une vue à l'autre (bouton du HUD). */
   onViewChange: ((firstPerson: boolean) => void) | null = null;
+  /** Mode terraformation (terraform.ts) : le clic gauche retouche le relief au pinceau. */
+  terraform!: Terraform;
+  /** Dernière place de la souris sur la vue, pour le pinceau (la caméra bouge : on revise à chaque image). */
+  private terraPointer: { x: number; y: number } | null = null;
   private post: PostFx;
   /** Brouillard de guerre (brouillard.ts) : seul ce que le perso voit se montre net. */
   private fog!: FogOfWar;
@@ -917,6 +924,9 @@ export class Game {
       const m = 0.3;
       this.island.clearGrass(spec.rect.x0 - m, spec.rect.x1 + m, spec.rect.z0 - m, spec.rect.z1 + m);
     }
+    // terraformation : le relief se retouche partout, sauf dans les pièces (leur sol reste à plat)
+    this.terraform = new Terraform(this.island, this.rooms.map((r) => r.rect));
+    this.scene.add(this.terraform.root);
     // un calque de saleté par sol, posé dans la pièce (caché tant que c'est propre)
     this.salissure = new Salissure(this.rooms.map((r) => ({ name: r.spec.name, rect: r.rect })));
     this.salissure.floors.forEach((f, i) => this.rooms[i].group.add(f.build()));
@@ -1111,6 +1121,7 @@ export class Game {
 
   set firstPerson(on: boolean) {
     if (on === this.fp) return;
+    if (on && this.terraform?.on) this.terraforming = false;
     this.fp = on;
     this.look = null;
     // on repart du regard droit devant, un peu baissé (de quoi voir le plan de travail)
@@ -7126,7 +7137,24 @@ export class Game {
   }
 
   setZoom(factor: number): void {
-    this.zoom = THREE.MathUtils.clamp(this.zoom * factor, ZOOM_MIN, ZOOM_MAX);
+    // en terraformation, on peut reculer bien plus loin : voir toute la colline qu'on façonne
+    this.zoom = THREE.MathUtils.clamp(this.zoom * factor, this.terraform?.on ? TERRA_ZOOM_MIN : ZOOM_MIN, ZOOM_MAX);
+  }
+
+  /** Mode terraformation ouvert (bouton du HUD, touche U). */
+  get terraforming(): boolean {
+    return this.terraform.on;
+  }
+
+  set terraforming(on: boolean) {
+    if (on === this.terraform.on) return;
+    // le pinceau se manie de dessus
+    if (on && this.fp) this.firstPerson = false;
+    this.terraform.on = on;
+    if (!on) {
+      this.terraPointer = null;
+      this.zoom = Math.max(this.zoom, ZOOM_MIN);
+    }
   }
 
   private resize(): void {
@@ -7190,6 +7218,10 @@ export class Game {
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.useKey();
       if (e.code === 'KeyX' && !e.repeat) this.firstPerson = !this.fp;
+      if (e.code === 'KeyU' && !e.repeat) this.terraforming = !this.terraform.on;
+      // en terraformation, 1 à 6 : le pinceau
+      const digit = /^Digit([1-6])$/.exec(e.code);
+      if (digit && this.terraform.on) this.terraform.setTool(TERRA_TOOLS[+digit[1] - 1].id);
       // Entrée : écrire dans la saisie, souris rendue
       if (e.code === 'Enter' && this.pointerLocked) document.exitPointerLock();
       if (e.code === 'KeyB' && !e.repeat) this.drink();
@@ -7244,6 +7276,10 @@ export class Game {
       if (this.pointerLocked) document.exitPointerLock();
     });
     on(el, 'pointermove', (e) => {
+      if (this.terraform.on) {
+        this.terraPointer = { x: e.clientX, y: e.clientY };
+        return;
+      }
       if (this.pointerLocked) {
         // souris capturée : elle tourne la tête ; l'objet sous le viseur montre son usure
         const clamp = (v: number) => THREE.MathUtils.clamp(v, -FP_SPIKE, FP_SPIKE);
@@ -7275,7 +7311,10 @@ export class Game {
       if (e.buttons) this.onHover?.(null);
       else this.hoverAt({ x: e.clientX, y: e.clientY });
     });
-    on(el, 'pointerleave', () => this.onHover?.(null));
+    on(el, 'pointerleave', () => {
+      this.onHover?.(null);
+      if (this.terraform.on && !this.terraform.pressed) this.terraPointer = null;
+    });
     on(el, 'contextmenu', (ev) => {
       ev.preventDefault();
       // souris capturée : le menu de ce qui est sous le viseur, et la souris rendue pour y choisir
@@ -7306,6 +7345,15 @@ export class Game {
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
       this.onMenu?.(null);
+      // terraformation : le clic gauche tient le pinceau, le perso ne bouge pas
+      if (this.terraform.on) {
+        this.terraPointer = { x: e.clientX, y: e.clientY };
+        this.aim(e.clientX, e.clientY);
+        this.terraform.aim(this.raycaster.ray);
+        this.terraform.press();
+        el.setPointerCapture?.(e.pointerId);
+        return;
+      }
       if (this.fp && e.pointerType === 'mouse' && (this.pointerLocked || !this.noLock)) {
         // première personne à la souris : un premier clic capture la souris (sans agir), puis
         // chaque clic agit sur ce qui est sous le viseur
@@ -7336,7 +7384,13 @@ export class Game {
       this.look = null;
       if (!lk.dragging) this.pointAt(e.clientX, e.clientY, lk.shift, this.hitAt(e.clientX, e.clientY));
     });
-    on(window, 'pointercancel', () => (this.look = null));
+    on(window, 'pointercancel', () => {
+      this.look = null;
+      this.terraform.release();
+    });
+    on(window, 'pointerup', (e) => {
+      if (e.button === 0) this.terraform.release();
+    });
     on(window, 'pointerup', (e) => {
       const pr = this.press;
       if (!pr || e.button !== 0) return;
@@ -8080,6 +8134,12 @@ export class Game {
     w.update(this.clock, dt, (dt * this.clock.speed) / 3600);
     this.island.setSeason(look.grass, Math.max(look.snow, w.cover), w.wet);
     this.island.update(dt, Math.max(w.rain, w.cloud * 0.4), this.focus.x, this.focus.z, this.fp ? 1 : this.zoom);
+    if (this.terraform.on) {
+      const tp = this.terraPointer;
+      if (tp) this.aim(tp.x, tp.y);
+      this.terraform.aim(tp ? this.raycaster.ray : null);
+      this.terraform.update(dt);
+    }
     this.rainView.copy(toCamera);
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
@@ -9576,6 +9636,10 @@ export class Game {
           this.salissure.soilItem(item, sale[0], 'poussière');
           this.salissure.soilItem(item, sale[1], 'crasse');
         }
+      },
+      relief: {
+        save: () => this.terraform.save(),
+        load: (x) => this.terraform.load(x),
       },
       salissure: {
         save: () => this.salissure.save(),

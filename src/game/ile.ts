@@ -141,8 +141,13 @@ function hills(x: number, z: number): number {
   return h;
 }
 
-/** Hauteur du sol de l'île au point (x, z) (m) ; sous SEA_LEVEL, c'est la mer. */
+/** Hauteur du sol de l'île au point (x, z) (m), retouches de la terraformation comprises ; sous SEA_LEVEL, c'est la mer. */
 export function heightAt(x: number, z: number): number {
+  return naturalHeight(x, z) + editAt(x, z);
+}
+
+/** Hauteur du relief tel que le jeu le fait, sans les retouches (m). */
+function naturalHeight(x: number, z: number): number {
   const d = edgeDistance(x, z);
   const share = hillShare(x, z, d);
   const inland = share > 0 ? hills(x, z) * share : 0;
@@ -186,7 +191,7 @@ export function heightAt(x: number, z: number): number {
 export function groundKind(x: number, z: number): 'herbe' | 'sable' | 'roche' | 'mer' {
   const h = heightAt(x, z);
   if (h < SEA_LEVEL) return 'mer';
-  const s = splatAt(x, z);
+  const s = paintedSplat(x, z);
   if (s.roche > 0.5) return 'roche';
   return s.sable > 0.5 ? 'sable' : 'herbe';
 }
@@ -516,23 +521,111 @@ function rippleTexture(): THREE.CanvasTexture {
 
 /** Côté (texels) des cartes de hauteur et de sols, sur ±RELIEF_HALF. */
 const MAP_SIZE = 256;
+/** Côté de la grille du relief (cases de CELL m). */
+const GRID_N = Math.round((2 * RELIEF_HALF) / CELL);
+
+/**
+ * La terraformation (terraform.ts) : la grille du relief (sommets espacés de CELL m sur
+ * ±RELIEF_HALF), ce qu'on a ajouté ou retiré à chaque sommet, et les sols peints sur les cartes.
+ */
+export const RELIEF = {
+  half: RELIEF_HALF,
+  cell: CELL,
+  /** Cases par côté : (n + 1)² sommets. */
+  n: GRID_N,
+  /** Hauteur ajoutée à chaque sommet (m), rang par rang (z), puis le long de x. */
+  edits: new Float32Array((GRID_N + 1) * (GRID_N + 1)),
+  /** Texels par côté des cartes de sols. */
+  mapSize: MAP_SIZE,
+  /** Sols peints : parts voulues (sable, roche, terre, pelouse, de 0 à 255) par texel… */
+  paint: new Uint8Array(MAP_SIZE * MAP_SIZE * 4),
+  /** … et part de la peinture sur le sol d'origine (0 à 255). */
+  paintW: new Uint8Array(MAP_SIZE * MAP_SIZE),
+};
+
+/** Hauteur du relief d'origine à un sommet de la grille (gardée : les pinceaux la relisent sans cesse). */
+let naturalGrid: Float32Array | null = null;
+export function naturalGridHeight(i: number, j: number): number {
+  if (!naturalGrid) {
+    const n = GRID_N + 1;
+    naturalGrid = new Float32Array(n * n);
+    for (let jj = 0; jj < n; jj++) for (let ii = 0; ii < n; ii++) naturalGrid[jj * n + ii] = naturalHeight(-RELIEF_HALF + ii * CELL, -RELIEF_HALF + jj * CELL);
+  }
+  return naturalGrid[j * (GRID_N + 1) + i];
+}
+
+/** Retouche du relief au point (x, z) : entre les quatre sommets voisins de la grille. */
+function editAt(x: number, z: number): number {
+  const fx = (x + RELIEF_HALF) / CELL, fz = (z + RELIEF_HALF) / CELL;
+  if (!(fx >= 0 && fz >= 0 && fx < GRID_N && fz < GRID_N)) return 0;
+  const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
+  const e = RELIEF.edits, n = GRID_N + 1, k = j * n + i;
+  const a = e[k], b = e[k + 1], c = e[k + n], d = e[k + n + 1];
+  if (a === 0 && b === 0 && c === 0 && d === 0) return 0;
+  return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz;
+}
+
+/**
+ * Parts des sols d'origine (4 par texel) et hauteur d'origine de chaque texel des cartes, calculées
+ * une fois : la peinture et les retouches s'y ajoutent à chaque coup de pinceau.
+ */
+let naturalSplat: Uint8Array | null = null;
+let naturalTexelHeight: Float32Array | null = null;
+export function naturalSplatMap(): Uint8Array {
+  if (naturalSplat) return naturalSplat;
+  const n = MAP_SIZE;
+  naturalSplat = new Uint8Array(n * n * 4);
+  naturalTexelHeight = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    naturalTexelHeight[j * n + i] = naturalHeight(texelCoord(i), texelCoord(j));
+    const s = splatAt(texelCoord(i), texelCoord(j)), k = (j * n + i) * 4;
+    naturalSplat[k] = Math.round(s.sable * 255);
+    naturalSplat[k + 1] = Math.round(s.roche * 255);
+    naturalSplat[k + 2] = Math.round(s.terre * 255);
+    naturalSplat[k + 3] = Math.round(s.pelouse * 255);
+  }
+  return naturalSplat;
+}
+
+/** Milieu d'un texel des cartes (m), sur x ou z. */
+const texelCoord = (i: number) => ((i + 0.5) / MAP_SIZE) * 2 * RELIEF_HALF - RELIEF_HALF;
+
+/** Parts des sols au point (x, z), peinture comprise. */
+function paintedSplat(x: number, z: number): { sable: number; roche: number; terre: number; pelouse: number } {
+  const i = Math.floor(((x + RELIEF_HALF) / (2 * RELIEF_HALF)) * MAP_SIZE), j = Math.floor(((z + RELIEF_HALF) / (2 * RELIEF_HALF)) * MAP_SIZE);
+  const k = j * MAP_SIZE + i;
+  const w = i >= 0 && j >= 0 && i < MAP_SIZE && j < MAP_SIZE ? RELIEF.paintW[k] / 255 : 0;
+  const s = splatAt(x, z);
+  if (!w) return s;
+  const p = RELIEF.paint;
+  const mix = (a: number, c: number) => a + (p[k * 4 + c] / 255 - a) * w;
+  return { sable: mix(s.sable, 0), roche: mix(s.roche, 1), terre: mix(s.terre, 2), pelouse: mix(s.pelouse, 3) };
+}
+
+/** Rectangle de texels (inclus) des cartes qui couvre [x0, x1] × [z0, z1]. */
+function texelRect(x0: number, x1: number, z0: number, z1: number): [number, number, number, number] {
+  const t = (v: number) => ((v + RELIEF_HALF) / (2 * RELIEF_HALF)) * MAP_SIZE;
+  const c = (v: number) => THREE.MathUtils.clamp(v, 0, MAP_SIZE - 1);
+  return [c(Math.floor(t(x0) - 1)), c(Math.ceil(t(x1) + 1)), c(Math.floor(t(z0) - 1)), c(Math.ceil(t(z1) + 1))];
+}
+
+/** Remplit les cartes de hauteur et de sols sur un rectangle de texels (inclus). */
+function fillMaps(hData: Uint16Array, sData: Uint8Array, i0: number, i1: number, j0: number, j1: number): void {
+  const n = MAP_SIZE, base = naturalSplatMap(), nh = naturalTexelHeight!, p = RELIEF.paint, pw = RELIEF.paintW;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const k = j * n + i;
+    hData[k] = THREE.DataUtils.toHalfFloat(nh[k] + editAt(texelCoord(i), texelCoord(j)));
+    const w = pw[k] / 255;
+    for (let c = 0; c < 4; c++) sData[k * 4 + c] = Math.round(base[k * 4 + c] + (p[k * 4 + c] - base[k * 4 + c]) * w);
+  }
+}
 
 /** Hauteurs (pour l'eau : la profondeur) et parts des sols (pour le terrain), en textures. */
 function bakeMaps(): { height: THREE.DataTexture; splat: THREE.DataTexture } {
   const n = MAP_SIZE;
   const hData = new Uint16Array(n * n);
   const sData = new Uint8Array(n * n * 4);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const x = ((i + 0.5) / n) * 2 * RELIEF_HALF - RELIEF_HALF;
-    const z = ((j + 0.5) / n) * 2 * RELIEF_HALF - RELIEF_HALF;
-    const k = j * n + i;
-    hData[k] = THREE.DataUtils.toHalfFloat(heightAt(x, z));
-    const s = splatAt(x, z);
-    sData[k * 4] = Math.round(s.sable * 255);
-    sData[k * 4 + 1] = Math.round(s.roche * 255);
-    sData[k * 4 + 2] = Math.round(s.terre * 255);
-    sData[k * 4 + 3] = Math.round(s.pelouse * 255);
-  }
+  fillMaps(hData, sData, 0, n - 1, 0, n - 1);
   const height = new THREE.DataTexture(hData, n, n, THREE.RedFormat, THREE.HalfFloatType);
   const splat = new THREE.DataTexture(sData, n, n, THREE.RGBAFormat, THREE.UnsignedByteType);
   for (const t of [height, splat]) {
@@ -543,30 +636,72 @@ function bakeMaps(): { height: THREE.DataTexture; splat: THREE.DataTexture } {
   return { height, splat };
 }
 
-/** Grille du relief, sur toute l'île (collines comprises). */
-function terrainGeometry(): THREE.BufferGeometry {
-  const n = Math.round((2 * RELIEF_HALF) / CELL);
-  const pos = new Float32Array((n + 1) * (n + 1) * 3);
-  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
-    const x = -RELIEF_HALF + i * CELL, z = -RELIEF_HALF + j * CELL;
-    const k = (j * (n + 1) + i) * 3;
-    pos[k] = x;
-    pos[k + 1] = heightAt(x, z);
-    pos[k + 2] = z;
-  }
+/** Triangles du relief : tout au fond, sous l'eau opaque, rien à dessiner. */
+function terrainIndex(pos: Float32Array): number[] {
+  const n = GRID_N;
   const idx: number[] = [];
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const a = j * (n + 1) + i, b = a + 1, c = a + n + 1, d = c + 1;
-    // tout au fond, sous l'eau opaque : rien à dessiner
     if (Math.max(pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1], pos[d * 3 + 1]) < -3) continue;
     idx.push(a, c, b, b, c, d);
   }
+  return idx;
+}
+
+/** Grille du relief, sur toute l'île (collines comprises). */
+function terrainGeometry(): THREE.BufferGeometry {
+  const n = GRID_N;
+  const pos = new Float32Array((n + 1) * (n + 1) * 3);
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+    const k = (j * (n + 1) + i) * 3;
+    pos[k] = -RELIEF_HALF + i * CELL;
+    pos[k + 1] = naturalGridHeight(i, j) + RELIEF.edits[j * (n + 1) + i];
+    pos[k + 2] = -RELIEF_HALF + j * CELL;
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setIndex(idx);
+  g.setIndex(terrainIndex(pos));
   g.computeVertexNormals();
   g.computeBoundingSphere();
   return g;
+}
+
+/**
+ * Remet les sommets (et leurs normales) de la grille du relief sur [i0, i1] × [j0, j1] à leur
+ * hauteur. Normales comme computeVertexNormals : la somme des faces voisines (pondérées par leur aire).
+ */
+function reshapeGrid(g: THREE.BufferGeometry, i0: number, i1: number, j0: number, j1: number): void {
+  const n = GRID_N, m = n + 1;
+  const posAttr = g.getAttribute('position') as THREE.BufferAttribute;
+  const nrmAttr = g.getAttribute('normal') as THREE.BufferAttribute;
+  const pos = posAttr.array as Float32Array, nrm = nrmAttr.array as Float32Array;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) pos[(j * m + i) * 3 + 1] = naturalGridHeight(i, j) + RELIEF.edits[j * m + i];
+  const y = (i: number, j: number) => pos[(j * m + i) * 3 + 1];
+  // normales des sommets touchés et de leurs voisins (leurs faces ont changé)
+  const a0 = Math.max(0, i0 - 1), a1 = Math.min(n, i1 + 1), b0 = Math.max(0, j0 - 1), b1 = Math.min(n, j1 + 1);
+  for (let j = b0; j <= b1; j++) for (let i = a0; i <= a1; i++) {
+    let nx = 0, ny = 0, nz = 0;
+    // chaque case (i-1..i, j-1..j) autour du sommet : deux triangles (a, c, b) et (b, c, d)
+    for (let cj = j - 1; cj <= j; cj++) for (let ci = i - 1; ci <= i; ci++) {
+      if (ci < 0 || cj < 0 || ci >= n || cj >= n) continue;
+      const ya = y(ci, cj), yb = y(ci + 1, cj), yc = y(ci, cj + 1), yd = y(ci + 1, cj + 1);
+      const isA = ci === i && cj === j, isB = ci + 1 === i && cj === j, isC = ci === i && cj + 1 === j, isD = ci + 1 === i && cj + 1 === j;
+      // (a, c, b) : normale (ya - yb, 1, ya - yc) × CELL² / ... ; (b, c, d) : (yc - yd, 1, yb - yd)
+      if (isA || isB || isC) { nx += (ya - yb) * CELL; ny += CELL * CELL; nz += (ya - yc) * CELL; }
+      if (isB || isC || isD) { nx += (yc - yd) * CELL; ny += CELL * CELL; nz += (yb - yd) * CELL; }
+    }
+    const l = Math.hypot(nx, ny, nz) || 1, k = (j * m + i) * 3;
+    nrm[k] = nx / l;
+    nrm[k + 1] = ny / l;
+    nrm[k + 2] = nz / l;
+  }
+  // rangs entiers : une seule plage contiguë à renvoyer à la carte graphique
+  posAttr.clearUpdateRanges();
+  posAttr.addUpdateRange(b0 * m * 3, (b1 - b0 + 1) * m * 3);
+  posAttr.needsUpdate = true;
+  nrmAttr.clearUpdateRanges();
+  nrmAttr.addUpdateRange(b0 * m * 3, (b1 - b0 + 1) * m * 3);
+  nrmAttr.needsUpdate = true;
 }
 
 // ---------------------------------------------------------------- matériaux
@@ -789,6 +924,11 @@ export interface Island {
   clearGrass(x0: number, x1: number, z0: number, z1: number): void;
   /** Teinte de l'herbe, part de neige (0 à 1), sol mouillé (0 à 1). */
   setSeason(grass: [number, number, number], snow: number, wet: number): void;
+  /**
+   * Le relief ou les sols ont changé sur [x0, x1] × [z0, z1] (terraformation, RELIEF) : le terrain
+   * et ses cartes suivent. `done` : fin du coup de pinceau (routes, triangles du fond, contours).
+   */
+  reshape(x0: number, x1: number, z0: number, z1: number, done?: boolean): void;
 }
 
 export function createIsland(): Island {
@@ -820,9 +960,12 @@ export function createIsland(): Island {
   root.add(sea);
 
   const road = asphaltTexture(true), lane = asphaltTexture(false), path = pathTexture();
+  const ways: Array<{ way: Way; mesh: THREE.Mesh }> = [];
+  const wayRepeat = (w: Way) => (w.kind === 'chemin' ? w.width * 4 : w.width * 2);
   for (const w of WAYS) {
     const map = w.kind === 'route' ? road : w.kind === 'allee' ? lane : path;
-    const mesh = new THREE.Mesh(wayGeometry(w, w.kind === 'chemin' ? w.width * 4 : w.width * 2), wayMaterial(u, map, w.kind === 'chemin'));
+    const mesh = new THREE.Mesh(wayGeometry(w, wayRepeat(w)), wayMaterial(u, map, w.kind === 'chemin'));
+    ways.push({ way: w, mesh });
     mesh.name = w.kind;
     mesh.receiveShadow = true;
     // l'une après l'autre (route par-dessus l'allée, par-dessus le chemin), puis l'herbe
@@ -846,6 +989,25 @@ export function createIsland(): Island {
       u.uGrass.value.setRGB(grass[0], grass[1], grass[2]);
       u.uSnow.value = snow;
       u.uWet.value = wet;
+    },
+    reshape(x0, x1, z0, z1, done) {
+      const g = terrain.geometry;
+      const cell = (v: number, up: boolean) => THREE.MathUtils.clamp(up ? Math.ceil((v + RELIEF_HALF) / CELL) : Math.floor((v + RELIEF_HALF) / CELL), 0, GRID_N);
+      reshapeGrid(g, cell(x0, false), cell(x1, true), cell(z0, false), cell(z1, true));
+      const [i0, i1, j0, j1] = texelRect(x0, x1, z0, z1);
+      fillMaps(height.image.data as Uint16Array, splat.image.data as Uint8Array, i0, i1, j0, j1);
+      height.needsUpdate = splat.needsUpdate = true;
+      if (!done) return;
+      // un fond remonté au-dessus de l'eau se dessine ; un trou creusé loin sous l'eau s'efface
+      g.setIndex(terrainIndex(g.getAttribute('position').array as Float32Array));
+      g.computeBoundingSphere();
+      g.computeBoundingBox();
+      // les routes et chemins qui passent par là épousent le nouveau relief
+      for (const { way, mesh } of ways) {
+        if (!way.points.some(([px, pz]) => px > x0 - 12 && px < x1 + 12 && pz > z0 - 12 && pz < z1 + 12)) continue;
+        mesh.geometry.dispose();
+        mesh.geometry = wayGeometry(way, wayRepeat(way));
+      }
     },
   };
 }
