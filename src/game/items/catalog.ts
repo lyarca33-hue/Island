@@ -10,7 +10,8 @@ import { lightAllPasses } from '../postfx';
 import { createToonMaterial } from '../toon';
 import type { GripType } from './grips';
 import { KITCHEN_ITEMS } from './kitchen';
-import { DISHES } from './recipes';
+import { DISHES, RECIPE_BY_DISH, RECIPES } from './recipes';
+import { RETIRES } from './retires';
 import { FRESH_THINGS, PAN_FOOD, PANTRY_ITEMS } from './pantry';
 import { PREP_FRESH, PREP_ITEMS, PREP_PAN_FOOD } from './prep';
 import { UPKEEP_ITEMS } from './upkeep';
@@ -521,7 +522,8 @@ function disks(n: number, r: number, h: number, skin: THREE.ColorRepresentation,
   return g;
 }
 
-export const ITEMS: ItemDef[] = [
+/** Toutes les fiches, retirées comprises (voir ITEMS). */
+const ALL_ITEMS: ItemDef[] = [
   {
     id: 'tasse',
     name: 'tasse',
@@ -1530,4 +1532,22 @@ export const ITEMS: ItemDef[] = [
   ...MENAGE_ITEMS,
 ];
 
+/** Les objets du jeu : toutes les fiches sauf celles retirées du jeu (retires.ts). */
+export const ITEMS: ItemDef[] = ALL_ITEMS.filter((d) => !RETIRES.has(d.id));
+
 export const ITEM_BY_ID = new Map(ITEMS.map((d) => [d.id, d]));
+/** Toutes les fiches par id, retirées comprises : pour vérifier les fiches elles-mêmes (tests). */
+export const FICHE_BY_ID = new Map(ALL_ITEMS.map((d) => [d.id, d]));
+/** Les recettes qui ne se font plus parce qu'un objet est retiré du jeu. */
+export const RECETTES_RETIREES: typeof RECIPES = [];
+
+// une recette dont le plat ou un ingrédient obligatoire est retiré du jeu ne se fait plus
+{
+  const names = new Set(ITEMS.map((d) => d.name));
+  for (let i = RECIPES.length - 1; i >= 0; i--) {
+    const r = RECIPES[i];
+    if (ITEM_BY_ID.has(r.dish) && r.needs.every((n) => names.has(n))) continue;
+    RECETTES_RETIREES.push(...RECIPES.splice(i, 1));
+    RECIPE_BY_DISH.delete(r.dish);
+  }
+}

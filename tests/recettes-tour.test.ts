@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ITEM_BY_ID } from '../src/game/items/catalog';
+import { FICHE_BY_ID as ITEM_BY_ID } from '../src/game/items/catalog';
 import { LEEK_SOUP, SOUP_VEG, SOUPS } from '../src/game/items/feculents';
 import { JUICES, juiceFor } from '../src/game/items/pantry';
 import { STRAINED } from '../src/game/items/patisserie';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Argent, euros, groceryAisle, HOUSE_ALWAYS, orderTotal, priceOf, readCommande, sellPrice, START_MONEY } from '../src/game/argent';
-import { ITEM_BY_ID } from '../src/game/items/catalog';
+import { ITEM_BY_ID, ITEMS } from '../src/game/items/catalog';
 import { STOCK } from '../src/game/items/pantry';
 
 const def = (id: string) => ITEM_BY_ID.get(id)!;
@@ -37,7 +37,8 @@ describe('argent', () => {
 
   it('chaque aliment de la liste de courses a son rayon et un prix', () => {
     const aisle = groceryAisle();
-    expect(aisle.map((d) => d.name).sort()).toEqual(Object.keys(STOCK).sort());
+    const sold = new Set(ITEMS.map((d) => d.name));
+    expect(aisle.map((d) => d.name).sort()).toEqual(Object.keys(STOCK).filter((n) => sold.has(n)).sort());
     for (const d of aisle) expect(priceOf(d)).toBeGreaterThan(0);
     expect(orderTotal([{ id: 'pomme', n: 3 }, { id: 'pain', n: 1 }])).toBe(priceOf(def('pomme')) * 3 + priceOf(def('pain')));
     expect(orderTotal([{ id: 'inconnu', n: 3 }])).toBe(0);
@@ -56,7 +57,7 @@ describe('argent', () => {
 
   it('rachète les légumes du jardin et les pommes, pas le reste sans étoiles ni le périmé', () => {
     for (const id of ['carotte', 'tomate', 'pomme-de-terre', 'concombre', 'pomme']) expect(sellPrice(def(id), 0, 'frais')).toBeGreaterThan(0);
-    expect(sellPrice(def('chips'), 0, 'frais')).toBe(0);
+    expect(sellPrice(def('farine'), 0, 'frais')).toBe(0);
     expect(sellPrice(def('assiette'), 0, 'frais')).toBe(0);
     expect(sellPrice(def('omelette'), 4, 'périmé')).toBe(0);
   });
@@ -73,7 +74,7 @@ describe('argent', () => {
     expect(aisle.find((r) => r.def.id === 'chaise')?.broken).toBe(1);
     expect(aisle.some((r) => r.def.id === 'pomme' || r.def.id === 'lettre')).toBe(false);
     // les pastilles et la vaisselle sont toujours en rayon
-    for (const id of HOUSE_ALWAYS) expect(aisle.some((r) => r.def.id === id)).toBe(true);
+    for (const id of HOUSE_ALWAYS.filter((id) => ITEM_BY_ID.has(id))) expect(aisle.some((r) => r.def.id === id)).toBe(true);
     expect(a.takeBroken('chaise')?.p).toEqual([1, 0, 2]);
     expect(a.takeBroken('chaise')).toBeUndefined();
   });

@@ -101,7 +101,7 @@ describe('ordres tapés dans toute la maison', () => {
     ['installe-toi sur le canapé', [{ kind: 'asseoir', ref: 'canape' }]],
     ['passe le balai', [{ kind: 'balayer' }]],
     ['ajoute du sel', [{ kind: 'assaisonner', epice: 'sel' }]],
-    ['commande des pâtes', [{ kind: 'acheter', lignes: [{ id: 'paquet-pates', n: 1 }] }]],
+    ['commande du beurre', [{ kind: 'acheter', lignes: [{ id: 'beurre', n: 1 }] }]],
   ];
   for (const [ordre, attendu] of cases) it(`« ${ordre} »`, () => expect(parse(ordre)).toEqual(attendu));
 });

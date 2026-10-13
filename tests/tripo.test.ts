@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { ITEM_BY_ID } from '../src/game/items/catalog';
+import { FICHE_BY_ID as ITEM_BY_ID } from '../src/game/items/catalog';
 import { clipY, gatherXZ, stretchY, TRIPO_LOOKS } from '../src/game/items/tripo';
 
 /** Aire totale des triangles d'une géométrie sans index. */

@@ -894,6 +894,8 @@ export class Game {
       const kept = new Set(this.character.carried);
       this.riders = [...this.riders.filter((r) => r.base !== item), ...riders.filter((r) => !kept.has(r.item)).map((r) => ({ base: item, ...r }))];
     };
+    // (un objet retiré du jeu, retires.ts, n'a plus de fiche : il n'est pas posé)
+    const known = (id: string) => ITEM_BY_ID.has(id);
     const add = (id: string) => {
       const item = new WorldItem(ITEM_BY_ID.get(id)!);
       this.items.push(item);
@@ -908,7 +910,7 @@ export class Game {
       this.scene.add(this.testMap.group);
       this.character.placeAt(TEST_START, Math.PI);
     }
-    for (const [id, x, y, z, rot] of [...(CARTE_TEST ? [] : START_ITEMS), ...rooms.flatMap((r) => r.items ?? [])]) {
+    for (const [id, x, y, z, rot] of [...(CARTE_TEST ? [] : START_ITEMS), ...rooms.flatMap((r) => r.items ?? [])].filter(([id]) => known(id))) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -920,7 +922,7 @@ export class Game {
     }
     // les meubles rangés contre les murs, et ce qui est posé dessus (micro-ondes sur le placard)
     for (const spec of rooms) {
-      const runItems = spec.runs.flatMap((r) => r.items.filter((id): id is string => typeof id === 'string').map(add));
+      const runItems = spec.runs.flatMap((r) => r.items.filter((id): id is string => typeof id === 'string' && known(id)).map(add));
       const placed = new Set<WorldItem>();
       placeRuns(spec, (id) => {
         const it = runItems.find((i) => i.def.id === id && !placed.has(i));
@@ -930,7 +932,7 @@ export class Game {
     }
     for (const [id, under, x = 0, z = 0, rot = 0] of rooms.flatMap((r) => r.onTop ?? [])) {
       const base = this.items.find((i) => i.def.id === under);
-      if (!base) continue;
+      if (!base || !known(id)) continue;
       const it = add(id);
       // décalé de (x, z) sur le dessus, dans le repère du meuble dessous
       base.object.updateMatrixWorld(true);
@@ -999,21 +1001,16 @@ export class Game {
     }
     for (const [id, stove, i] of CARTE_TEST ? [] : START_ON_STOVE) {
       const where = this.items.find((it) => it.def.id === stove);
-      if (!where) continue;
+      if (!where || !known(id)) continue;
       const it = add(id);
       it.object.position.copy(this.spotWorld(where, i));
       it.object.rotation.y = where.object.rotation.y;
     }
     // les meubles de rangement remplis (remplissage.ts) : chaque objet à la première place libre du dedans
-    // carte de test : la boîte de pastilles et celle de thé, pleines, posées avec les autres
-    for (const it of CARTE_TEST ? this.items : []) {
-      if (it.def.id === 'pastilles') this.tablets.set(it, TABLETS);
-      if (it.def.id === 'sachets-the') this.teaBoxes.set(it, TEA_BAGS);
-    }
     for (const [holder, n, ids] of CARTE_TEST ? [] : START_CONTENTS) {
       const where = this.items.filter((it) => it.def.id === holder)[n];
       if (!where) continue;
-      for (const id of ids) {
+      for (const id of ids.filter(known)) {
         const it = add(id);
         const free = this.freeSlots(where, it).filter((i) => !this.doors.has(where) || this.insideSlot(where, i));
         if (!free.length) {
@@ -1032,7 +1029,7 @@ export class Game {
     const worktop = CARTE_TEST ? undefined : this.items.find((i) => i.def.id === 'plan-de-travail');
     if (worktop) {
       worktop.object.updateMatrixWorld(true);
-      for (const [id, x, z, rot] of START_ON_WORKTOP) {
+      for (const [id, x, z, rot] of START_ON_WORKTOP.filter(([id]) => known(id))) {
         const it = add(id);
         it.object.quaternion.setFromAxisAngle(UP, worktop.object.rotation.y + rot);
         if (it.def.layFlat) it.object.quaternion.multiply(LAY_FLAT);
@@ -1044,7 +1041,7 @@ export class Game {
     const island = CARTE_TEST ? undefined : this.items.find((i) => i.def.id === 'ilot');
     if (island) {
       island.object.updateMatrixWorld(true);
-      for (const [id, x, z, rot] of START_ON_ISLAND) {
+      for (const [id, x, z, rot] of START_ON_ISLAND.filter(([id]) => known(id))) {
         const it = add(id);
         it.object.quaternion.setFromAxisAngle(UP, island.object.rotation.y + rot);
         const at = new THREE.Vector3(x, island.box.max.y, z).applyMatrix4(island.object.matrixWorld);
@@ -3610,9 +3607,18 @@ export class Game {
     if (!c.hands.free) return this.notice('Pose d’abord ce que tu tiens pour sortir le sac.');
     c.approachThen(this.doorStand(bin), bin.object.position, () => this.withDoorOpen(bin, () => {
       this.binFill.set(bin, 0);
+      const bagDef = ITEM_BY_ID.get('sac-poubelle');
+      // sac poubelle retiré du jeu (retires.ts) : la poubelle se vide, sans sac à porter ni à remettre
+      if (!bagDef) {
+        this.showTrash(bin);
+        const d = this.doors.get(bin);
+        if (d) d.target = 0;
+        this.onNotice?.('Poubelle vidée.');
+        return;
+      }
       this.bagless.add(bin);
       this.showTrash(bin);
-      const bag = new WorldItem(ITEM_BY_ID.get('sac-poubelle')!);
+      const bag = new WorldItem(bagDef);
       bin.object.updateMatrixWorld(true);
       bag.object.position.copy(new THREE.Vector3(0, bin.size.y * 0.3, 0).applyMatrix4(bin.object.matrixWorld));
       this.items.push(bag);
@@ -8762,7 +8768,7 @@ export class Game {
     if (bowl && mix && batter?.name === CAKE_BATTER) return this.pourCake(bowl, mix.parts, ref, running);
     // les œufs battus avec une garniture : l'omelette garnie
     const cooksId = batter && (batter.name === 'œufs battus' ? omeletteFor(mix!.parts) : batter.cooks);
-    const cooks = cooksId && ITEM_BY_ID.get(cooksId)!.name;
+    const cooks = cooksId && ITEM_BY_ID.get(cooksId)?.name;
     const pan = cooks ? this.panFor(ref, (p) => !!p.def.cookware!.holds.includes(cooks) && !this.character.carried.includes(p)) : undefined;
     // le pain perdu : la pâte imbibe les tranches de pain posées dans la poêle
     const soaked = pan && batter?.soaks ? this.inPan(pan).filter((i) => batter.soaks!.includes(i.name)) : [];
@@ -9128,6 +9134,7 @@ export class Game {
     if (!pot) this.onNotice?.('Prends de quoi tartiner : confiture, miel, pâte à tartiner (garde-manger) ou beurre (frigo).');
     else if (!knife) this.onNotice?.('Il faut aussi un couteau dans l’autre main.');
     else if (!bread || !ok(bread)) this.onNotice?.(bread?.name === 'crêpe' ? 'La crêpe n’est pas cuite.' : 'Rien à tartiner : coupe du pain en tranches (ou fais une crêpe), et pose-le.');
+    else if (!ITEM_BY_ID.has(`${SPREAD_ON[bread.name]}-${SPREADS[pot.name]}`)) this.onNotice?.('On ne peut plus tartiner ça.');
     else {
       return this.gesture(knife, bread, 'stir', this.above(bread, 0.005), () => {
         if (!this.items.includes(bread)) return;
@@ -9284,7 +9291,9 @@ export class Game {
     for (const it of this.items) count(it.name);
     for (const names of this.bags.values()) names.forEach(count);
     for (const name of this.delivery?.names ?? []) count(name);
-    return Object.entries(STOCK).flatMap(([name, n]): Array<[string, number]> => ((have.get(name) ?? 0) < n ? [[name, n - (have.get(name) ?? 0)]] : []));
+    // (un aliment retiré du jeu, retires.ts, n'est plus sur la liste)
+    const sold = new Set(ITEMS.map((d) => d.name));
+    return Object.entries(STOCK).flatMap(([name, n]): Array<[string, number]> => (sold.has(name) && (have.get(name) ?? 0) < n ? [[name, n - (have.get(name) ?? 0)]] : []));
   }
 
   /** La liste écrite : « banane (2), miel, chips ». */
@@ -9341,7 +9350,8 @@ export class Game {
     const names: string[] = [];
     const house: Delivery['house'] = [];
     for (const { id, n } of lines) {
-      const def = ITEM_BY_ID.get(id)!;
+      const def = ITEM_BY_ID.get(id);
+      if (!def) continue;
       // un objet cassé racheté n'est plus à racheter ; un meuble garde où il était
       for (let i = 0; i < n; i++) (def.food || STOCK[def.name] ? names.push(def.name) : house.push({ id, at: this.argent.takeBroken(id) }));
     }
@@ -9412,6 +9422,14 @@ export class Game {
     loose.forEach((h, i) => this.placeBought(h, i));
     if (loose.length) this.character.nav = this.buildNav();
     const def = ITEM_BY_ID.get('sac-courses');
+    // sac de courses retiré du jeu (retires.ts) : les courses sont posées devant la porte, sans sac
+    if (!def && d.names.length) {
+      const ids = d.names.map((n) => ITEMS.find((x) => x.name === n)?.id).filter((id): id is string => !!id);
+      ids.forEach((id, i) => this.placeBought({ id }, loose.length + i));
+      this.character.nav = this.buildNav();
+      this.onNotice?.('Ding-dong ! Les courses sont arrivées : elles sont dehors, à côté de la porte d’entrée.');
+      return;
+    }
     if (!def || !d.names.length) {
       if (loose.length) this.onNotice?.('Ding-dong ! La commande est arrivée : ce qui est cassé a été remplacé.');
       return;
@@ -9505,7 +9523,8 @@ export class Game {
     if (!inBag) return;
     const placed: string[] = [];
     for (const id of ids) {
-      const def = ITEM_BY_ID.get(id)!;
+      const def = ITEM_BY_ID.get(id);
+      if (!def) continue;
       const it = new WorldItem(def);
       const free = this.freeSlots(shelf, it);
       if (!free.length) break;

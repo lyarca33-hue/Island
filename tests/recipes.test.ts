@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DISHES, RECIPE_BY_DISH, RECIPES } from '../src/game/items/recipes';
 import { normalize } from '../src/orders/parser';
+import { RECETTES_RETIREES } from '../src/game/items/catalog';
 
 describe('recettes', () => {
   it('chaque recette donne un plat qui existe', () => {
@@ -9,7 +10,8 @@ describe('recettes', () => {
   });
 
   it('chaque plat a sa recette', () => {
-    for (const d of DISHES) expect(RECIPE_BY_DISH.get(d.id), d.id).toBeDefined();
+    // (ou une recette qui ne se fait plus parce qu'un objet est retiré du jeu)
+    for (const d of DISHES) expect(RECIPE_BY_DISH.get(d.id) ?? RECETTES_RETIREES.find((r) => r.dish === d.id), d.id).toBeDefined();
   });
 
   it('pas deux recettes pour le même plat', () => {

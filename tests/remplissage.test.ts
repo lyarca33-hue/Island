@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { ITEM_BY_ID } from '../src/game/items/catalog';
+import { FICHE_BY_ID as ITEM_BY_ID } from '../src/game/items/catalog';
 import { buildFiller, START_CONTENTS } from '../src/game/items/remplissage';
 import { cellsOf, GRIDS, pack } from '../src/game/items/cases';
 

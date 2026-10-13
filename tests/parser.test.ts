@@ -142,7 +142,7 @@ describe('ordres de la cuisine : magasin, marché, appareils', () => {
 
   it('le magasin et le marché', () => {
     expect(parse('va au magasin')).toEqual([{ kind: 'magasin' }]);
-    expect(parse('achète 2 tomates et du lait')).toEqual([{ kind: 'acheter', lignes: [{ id: 'tomate', n: 2 }, { id: 'lait', n: 1 }] }]);
+    expect(parse('achète 2 tomates et du beurre')).toEqual([{ kind: 'acheter', lignes: [{ id: 'tomate', n: 2 }, { id: 'beurre', n: 1 }] }]);
     expect(parse('achète des pommes de terre')).toEqual([{ kind: 'acheter', lignes: [{ id: 'pomme-de-terre', n: 1 }] }]);
     expect(parse('commande les courses')).toEqual([{ kind: 'courses' }]);
     expect(parse('achète une licorne')).toBeNull();
