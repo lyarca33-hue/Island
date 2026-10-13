@@ -115,11 +115,14 @@ Pour inspecter les modèles un par un : ajouter `?test` à l'adresse
 (https://lyarca33-hue.github.io/Island/?test), ou Menu → Partie → « Carte de test ». Un sol plat
 quadrillé tous les mètres, sans île ni maison (`src/game/carteTest.ts`), avec, en rangées bien
 séparées :
-- un exemplaire de chaque objet du catalogue : les petits sur des présentoirs à hauteur des yeux,
-  puis les gros objets et les meubles au sol ;
+- un exemplaire de chaque objet du catalogue : les petits flottent à hauteur des yeux, puis les
+  gros objets et les meubles au sol ;
 - derrière, la galerie : chaque modèle de chaque pack (`public/packs`, états des aliments compris),
-  pack par pack derrière sa pancarte, les petits aussi sur présentoirs. Ce sont des modèles à
+  pack par pack derrière sa pancarte, les petits aussi en l'air. Ce sont des modèles à
   regarder, pas des objets qu'on prend.
+
+Pour rester fluide, seul ce qui est à moins de 18 m du perso est dessiné : le reste apparaît
+quand on s'approche.
 
 Rien n'y est chargé ni sauvé : la vraie partie reste intacte, et Menu → Partie → « Retour à
 l'île » la retrouve.
