@@ -26,6 +26,7 @@ import { MissingPanel, useMissingCount } from './ui/MissingPanel';
 import { NeedsHud, TimeControls } from './ui/TimeHud';
 import { Magasin } from './ui/Magasin';
 import { PorteMonnaie } from './ui/PorteMonnaie';
+import { TerraformPanel } from './ui/TerraformPanel';
 
 /**
  * On entre directement dans le monde avec le dernier perso créé (un perso par défaut sinon) ;
@@ -65,6 +66,9 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   useEffect(() => setCamAngle(ready?.cameraAngle ?? 0), [ready]);
   /** Vue à la première personne (touche X ou bouton de la barre). */
   const [firstPerson, setFirstPerson] = useState(false);
+  /** Mode terraformation ouvert (touche U ou bouton montagne). */
+  const [terra, setTerra] = useState(false);
+  useEffect(() => (ready ? ready.terraform.listen(() => setTerra(ready.terraforming)) : undefined), [ready]);
   /** Souris capturée par la première personne (elle oriente la vue) : viseur au centre. */
   const [locked, setLocked] = useState(false);
   useEffect(() => {
@@ -252,6 +256,18 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
               >
                 <Icon name="user" />
               </button>
+              <button
+                className={`hud-icon${terra ? ' on' : ''}`}
+                onClick={(e) => {
+                  if (game.current) game.current.terraforming = !game.current.terraforming;
+                  e.currentTarget.blur();
+                }}
+                aria-pressed={terra}
+                aria-label="Terraformation"
+                title={terra ? 'Fermer la terraformation (U)' : 'Terraformation (U) : façonner l’île au pinceau'}
+              >
+                <Icon name="mountain" />
+              </button>
               <span className="hud-sep" />
               <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
                 <Icon name="eyeOff" />
@@ -316,6 +332,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           }}
         />
         <PorteMonnaie game={ready} />
+        {terra && ready && <TerraformPanel game={ready} />}
         {report !== null && <FeedbackPanel initial={report} onClose={() => setReport(null)} />}
         <HoverTip game={ready} hidden={!!ctx || !!drag} />
         {fpsShown && <FpsCounter game={ready} />}
