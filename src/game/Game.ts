@@ -32,7 +32,7 @@ import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
-import { CARTE_TEST, createTestFloor, layoutTestMap, TEST_START } from './carteTest';
+import { CARTE_TEST, createTestFloor, createTestHouse, layoutTestMap, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -783,7 +783,7 @@ export class Game {
     // l'île : pelouse, plage, falaises, mer et routes autour du carré où l'on marche
     this.island = createIsland();
     // carte de test (carteTest.ts) : un sol plat quadrillé à la place de l'île
-    if (CARTE_TEST) this.scene.add(createTestFloor(GROUND_HALF));
+    if (CARTE_TEST) this.scene.add(createTestFloor(GROUND_HALF), createTestHouse());
     else this.scene.add(this.island.root);
     // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
     loadInterior()
@@ -1355,6 +1355,8 @@ export class Game {
     const nav = new Nav();
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
+    // carte de test : la maison assemblée se contourne
+    if (CARTE_TEST) nav.add(TEST_HOUSE_BOX, TEST_HOUSE, 0, true);
     return nav;
   }
 
