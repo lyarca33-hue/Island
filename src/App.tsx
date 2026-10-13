@@ -99,7 +99,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   /** Fenêtre « Signaler » ouverte, avec son texte de départ. */
   const [report, setReport] = useState<string | null>(null);
   /** Partie du menu dépliée. */
-  const [section, setSection] = useState<string | null>('raccourcis');
+  const [section, setSection] = useState<string | null>(null);
   const fold = (id: string) => () => setSection((s) => (s === id ? null : id));
   /** Interface masquée (touche H) : il ne reste que la scène, les messages et les menus ouverts exprès. */
   const [hidden, setHidden] = useState(false);
