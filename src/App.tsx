@@ -4,7 +4,7 @@ import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
 import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
-import { ARRIVEE_CONSTRUCTION, CARTE_TEST, GALERIE, loadFlags, onFlags, setGalerie, testMapUrl, VISIONNEUSE, visionneuseUrl } from './game/carteTest';
+import { ARRIVEE_CONSTRUCTION, CARTE_TEST, FLAG_KINDS, GALERIE, loadFlags, onFlags, setGalerie, testMapUrl, VISIONNEUSE, visionneuseUrl } from './game/carteTest';
 import { AtelierCartes } from './game/atelierCartes';
 import { RELIEF } from './game/ile';
 import { cloud } from './game/cloud';
@@ -383,8 +383,8 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                 <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(false))}>Retour à l’île</button>
               </MenuSection>
               <MenuSection title="Signalements" icon="flag" badge={flagCount} open={section === 'signalements'} onToggle={fold('signalements')}>
-                <p>A : à retirer · E : à corriger, sur le modèle visé ou depuis le menu Modèles.</p>
-                {(['retirer', 'corriger'] as const).map((kind) => (
+                <p>A : à retirer · E : à corriger, sur le modèle visé ou depuis le menu Modèles. « Trop anguleux » se met dans la visionneuse.</p>
+                {FLAG_KINDS.map((kind) => (
                   <TestFlags
                     key={kind}
                     kind={kind}

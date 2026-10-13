@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
-import { clearFlags, type FlagKind, flagListText, loadComments, loadFlags, onFlags, toggleFlag } from '../game/carteTest';
+import { clearFlags, type FlagKind, FLAG_WORD, flagListText, loadComments, loadFlags, onFlags, toggleFlag } from '../game/carteTest';
 
-const KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E' };
+const KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E', anguleux: 'T' };
+/** Comment signaler, quand la liste est vide. */
+const HOW: Record<FlagKind, string> = {
+  retirer: 'Vise un modèle et appuie sur A pour le signaler à retirer.',
+  corriger: 'Vise un modèle et appuie sur E pour le signaler à corriger.',
+  anguleux: 'Dans la visionneuse, T (ou le bouton « Trop anguleux ») signale un modèle trop anguleux.',
+};
 
 /**
  * Carte de test (Menu → Partie) et visionneuse de modèles : une liste de modèles signalés, à retirer
@@ -19,12 +25,12 @@ export function TestFlags({ kind, onSend }: { kind: FlagKind; onSend: (text: str
       }),
     [kind],
   );
-  if (!flags.length) return <p>Vise un modèle et appuie sur {KEY[kind]} pour le signaler à {kind}.</p>;
+  if (!flags.length) return <p>{HOW[kind]}</p>;
   return (
     <div className="test-flags">
       <p>
         <b>
-          À {kind} ({flags.length})
+          {FLAG_WORD[kind].replace(/^./, (c) => c.toUpperCase())} ({flags.length})
         </b>{' '}
         : {KEY[kind]} sur un modèle l’ajoute ou l’enlève.
       </p>

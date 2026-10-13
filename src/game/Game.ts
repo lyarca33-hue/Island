@@ -32,7 +32,7 @@ import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
-import { buildTestMap, CARTE_TEST, GALERIE, loadTestRelief, saveTestRelief, TEST_PAN_OBSTACLES, TEST_PROTECT, cullTestMap, type FlagKind, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
+import { buildTestMap, CARTE_TEST, GALERIE, loadTestRelief, saveTestRelief, TEST_PAN_OBSTACLES, TEST_PROTECT, cullTestMap, FLAG_KINDS, FLAG_WORD, type FlagKind, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -7773,7 +7773,7 @@ export class Game {
       const hit = this.testModelAt(x, y);
       if (!hit) return this.onHover?.(null);
       const it = hit.item;
-      const flagged = (['retirer', 'corriger'] as const).filter((k) => loadFlags(k).includes(hit.ref)).map((k) => ` · à ${k}`).join('');
+      const flagged = FLAG_KINDS.filter((k) => loadFlags(k).includes(hit.ref)).map((k) => ` · ${FLAG_WORD[k]}`).join('');
       this.onHover?.({
         name: hit.name,
         grade: (it ? gradeName(it.condition, FEMININE.has(it.name)) : '') + flagged,

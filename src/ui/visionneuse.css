@@ -98,3 +98,6 @@
 .vis-fixed a { color: var(--hud-honey); }
 .vis-fixed p { margin: 4px 0 0; }
 .vis-fixed .save-link { padding: 0; border: none; background: none; color: var(--hud-ink-2); text-decoration: underline; cursor: pointer; font-size: 12px; }
+/* « trop anguleux » : à adoucir sur Blender */
+.vis-tag.angle { background: #c9a7f2; color: #24103d; }
+.vis-flag.anguleux.on { background: #c9a7f2; color: #24103d; border-color: transparent; }

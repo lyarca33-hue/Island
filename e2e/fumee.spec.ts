@@ -143,6 +143,12 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   await expect(page.locator('.vis-item')).toContainText(['banane', 'bêche', 'beurre', 'boîte aux lettres']);
   await page.locator('.vis-item', { hasText: 'bêche' }).click();
   await expect(page.locator('.vis-fixed')).toContainText('Corrigé sur Blender');
+  // le tag « trop anguleux » part dans sa propre liste
+  await page.getByRole('button', { name: /Trop anguleux/ }).click();
+  await expect(page.locator('.vis-item.on .vis-tag.angle')).toBeVisible();
+  await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).last().click();
+  await expect(page.locator('.feedback textarea')).toHaveValue(/Modèles trop anguleux[^\n]*\n[\s\S]*- objet beche \(bêche\)/);
+  await page.locator('.feedback').getByRole('button', { name: 'Fermer' }).click();
   await page.screenshot({ path: info.outputPath('visionneuse.png') });
   expect(erreurs).toEqual([]);
 });

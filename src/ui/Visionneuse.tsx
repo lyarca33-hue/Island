@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   type FlagKind,
+  FLAG_KINDS,
   galleryModels,
   isFlagged,
   loadComments,
@@ -30,7 +31,7 @@ import './visionneuse.css';
  * tourne en glissant et qu'on zoome à la molette (ou à deux doigts). À gauche la liste de tous les
  * modèles (objets du jeu, puis la galerie des packs, comme sur la carte de test) ; à droite ses
  * infos (taille, triangles, pièces qui bougent, ce qu'on peut en faire), un commentaire, et les deux
- * signalements de la carte de test : à supprimer (A), à corriger sur Blender (E). Les listes partent
+ * signalements de la carte de test : à supprimer (A), à corriger sur Blender (E), et trop anguleux (T). Les listes partent
  * à Claude avec les commentaires (« Envoyer la liste à Claude »).
  */
 
@@ -339,7 +340,8 @@ class Viewer {
   }
 }
 
-const KIND_LABEL: Record<FlagKind, string> = { retirer: 'Supprimer', corriger: 'Corriger sur Blender' };
+const KIND_LABEL: Record<FlagKind, string> = { retirer: 'Supprimer', corriger: 'Corriger sur Blender', anguleux: 'Trop anguleux' };
+const KIND_KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E', anguleux: 'T' };
 
 export function Visionneuse() {
   const entries = useMemo(allEntries, []);
@@ -418,7 +420,7 @@ export function Visionneuse() {
       .map((e, i) => ({ e, i }))
       .filter(({ e }) => onglet === 'tous' || !!e.fixed)
       .filter(({ e }) => !q || e.ref.toLowerCase().includes(q) || e.label.toLowerCase().includes(q))
-      .filter(({ e }) => !onlyFlagged || isFlagged(e.ref, 'retirer') || isFlagged(e.ref, 'corriger') || !!notes[e.ref]);
+      .filter(({ e }) => !onlyFlagged || FLAG_KINDS.some((k) => isFlagged(e.ref, k)) || !!notes[e.ref]);
     // (version : relu à chaque signalement)
   }, [entries, onglet, query, onlyFlagged, notes, version]);
 
@@ -458,6 +460,7 @@ export function Visionneuse() {
       else if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') go(-1);
       else if (e.key.toLowerCase() === 'a') toggleFlag(entry.ref, 'retirer');
       else if (e.key.toLowerCase() === 'e') toggleFlag(entry.ref, 'corriger');
+      else if (e.key.toLowerCase() === 't') toggleFlag(entry.ref, 'anguleux');
       else if (e.key.toLowerCase() === 'r') viewer.current?.fit();
       else if (e.code === 'Space') setPlaying((p) => !p);
       else return;
@@ -500,6 +503,7 @@ export function Visionneuse() {
                   <span>{e.label}</span>
                   {flagged(e.ref, 'retirer') && <span className="vis-tag del" title="À supprimer">S</span>}
                   {flagged(e.ref, 'corriger') && <span className="vis-tag fix" title="À corriger sur Blender">B</span>}
+                  {flagged(e.ref, 'anguleux') && <span className="vis-tag angle" title="Trop anguleux">◇</span>}
                   {notes[e.ref] && <span className="vis-tag note" title={notes[e.ref]}>✎</span>}
                   {e.fixed && <span className="vis-tag done" title={`Corrigé sur Blender le ${dateFr(e.fixed.date)}`}>✓</span>}
                 </button>
@@ -524,7 +528,7 @@ export function Visionneuse() {
           </button>
         </div>
         {(!ready || busy) && <div className="vis-loading">Chargement…</div>}
-        <p className="vis-help">Glisser : tourner · Molette ou deux doigts : zoomer · Clic droit : déplacer · A : supprimer · E : Blender</p>
+        <p className="vis-help">Glisser : tourner · Molette ou deux doigts : zoomer · Clic droit : déplacer · A : supprimer · E : Blender · T : trop anguleux</p>
       </main>
 
       <aside className="vis-info" ref={infoRef}>
@@ -551,12 +555,12 @@ export function Visionneuse() {
               </div>
             )}
             <div className="vis-flags">
-              {(['retirer', 'corriger'] as const).map((kind) => {
+              {FLAG_KINDS.map((kind) => {
                 const on = flagged(entry.ref, kind);
                 return (
                   <button key={kind} type="button" className={`vis-flag ${kind}${on ? ' on' : ''}`} aria-pressed={on} onClick={() => toggleFlag(entry.ref, kind)}>
                     {on ? '✓ ' : ''}
-                    {KIND_LABEL[kind]} <kbd>{kind === 'retirer' ? 'A' : 'E'}</kbd>
+                    {KIND_LABEL[kind]} <kbd>{KIND_KEY[kind]}</kbd>
                   </button>
                 );
               })}
@@ -641,7 +645,7 @@ export function Visionneuse() {
 
             <h3>Listes à envoyer</h3>
             <div className="vis-lists">
-              {(['retirer', 'corriger'] as const).map((kind) => (
+              {FLAG_KINDS.map((kind) => (
                 <TestFlags key={kind} kind={kind} onSend={setReport} />
               ))}
             </div>

@@ -162,7 +162,8 @@ suivant. Au milieu, le modèle seul sur un sol quadrillé : glisser pour tourner
 doigts) pour zoomer, clic droit pour déplacer, « Recadrer » (R) pour revenir. À droite, ses infos
 (taille, triangles, maillages, textures, pièces qui bougent, que l'on peut jouer ou poser au
 curseur, et ce que l'objet permet dans le jeu), un commentaire, et les deux signalements de la
-carte de test : « Supprimer » (A) et « Corriger sur Blender » (E). Ce sont les mêmes listes que
+carte de test : « Supprimer » (A) et « Corriger sur Blender » (E), plus « Trop anguleux » (T), un
+modèle à adoucir. Ce sont les mêmes listes que
 sur la carte de test ; « Envoyer la liste à Claude » les envoie avec les commentaires.
 
 L'onglet « Corrigés sur Blender » de la liste ne garde que les modèles déjà retouchés, avec ce
