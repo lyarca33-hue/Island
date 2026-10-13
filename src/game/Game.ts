@@ -38,6 +38,7 @@ import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, JUICES, juiceFor, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { fillerColor, START_CONTENTS } from './items/remplissage';
+import { MouseLookFilter } from './mouseLook';
 import { cellsOf, GRIDS, pack, type Cell } from './items/cases';
 import { forgetIcons, itemIcon } from './items/vignettes';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
@@ -83,12 +84,6 @@ const FP_PITCH = -0.15;
 const FP_PITCH_MAX = 1.35;
 /** Radians tournés par pixel de souris glissée à la première personne. */
 const FP_LOOK = 0.005;
-/**
- * Plafond d'un mouvement de souris capturée (px) : certains navigateurs envoient parfois un saut
- * parasite de plusieurs centaines de pixels. Plafonné, pas ignoré : un geste rapide sur un jeu
- * qui rame (Firefox regroupe alors les mouvements d'une image) reste un vrai mouvement.
- */
-const FP_SPIKE = 400;
 /** Souris tenue contre le bord de l'écran en glissant : pixels de glisser simulés par seconde. */
 const FP_EDGE = 500;
 /** Distance au bord de la fenêtre (px) où la souris glissée fait tourner la vue en continu. */
@@ -1196,6 +1191,9 @@ export class Game {
     const r = this.renderer.domElement.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
+
+  /** Filtre les sauts parasites de la souris capturée (retour du curseur caché au centre). */
+  private lookFilter = new MouseLookFilter();
 
   /** La capture de la souris a échoué : on regarde en glissant (jusqu'à une capture réussie). */
   private noLock = false;
@@ -7295,15 +7293,20 @@ export class Game {
     on(el, 'wheel', (e) => {
       // (empêché aussi pour le défilement horizontal : sinon Firefox y voit « page précédente »)
       e.preventDefault();
-      // à la première personne, pas de zoom ; deux doigts glissés sur le pavé tactile tournent la tête
+      // à la première personne, pas de zoom : deux doigts glissés sur le pavé tactile (ou la
+      // molette) tournent la tête, de côté comme de haut en bas
       if (!this.fp) {
         if (e.deltaY) this.setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
-      } else if (e.deltaX) this.turnView((e.deltaX * (e.deltaMode === 1 ? 16 : 1) * FP_SCROLL) / FP_LOOK, 0);
+      } else if (e.deltaX || e.deltaY) {
+        const k = ((e.deltaMode === 1 ? 16 : 1) * FP_SCROLL) / FP_LOOK;
+        this.turnView(e.deltaX * k, e.deltaY * k);
+      }
     }, { passive: false });
     const lockChange = () => {
       this.look = null;
       this.onHover?.(null);
       if (this.pointerLocked) this.noLock = false;
+      this.lookFilter.reset();
       this.onPointerLock?.(this.pointerLocked);
     };
     // capture refusée (aperçu dans un cadre, navigateur) : on regarde en glissant, comme au doigt
@@ -7322,8 +7325,8 @@ export class Game {
       }
       if (this.pointerLocked) {
         // souris capturée : elle tourne la tête ; l'objet sous le viseur montre son usure
-        const clamp = (v: number) => THREE.MathUtils.clamp(v, -FP_SPIKE, FP_SPIKE);
-        this.turnView(clamp(e.movementX), clamp(e.movementY));
+        const m = this.lookFilter.filter(e.movementX, e.movementY);
+        this.turnView(m.x, m.y);
         this.hoverAt(this.aimPoint(e));
         return;
       }
