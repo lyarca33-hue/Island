@@ -32,7 +32,7 @@ import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
-import { buildTestMap, CARTE_TEST, loadTestRelief, saveTestRelief, TEST_PAN_OBSTACLES, TEST_PROTECT, cullTestMap, type FlagKind, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
+import { buildTestMap, CARTE_TEST, GALERIE, loadTestRelief, saveTestRelief, TEST_PAN_OBSTACLES, TEST_PROTECT, cullTestMap, type FlagKind, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -52,7 +52,7 @@ import { KitchenSound } from './sound';
 import { createPrecipitation, createWindowDrops, outdoorPanes, type Precipitation, Weather, type WindowDrops } from './meteo';
 import { createToonMaterial } from './toon';
 import { footprint, Nav, overlaps } from './nav';
-import { Needs } from './needs';
+import { Needs, NEEDS } from './needs';
 import { BODY_STATES, BodyTemp, type BodyState } from './temperature';
 import { placeRuns, Room, WALL_H, WALL_T } from './room';
 import { ROOMS } from './rooms';
@@ -61,6 +61,8 @@ import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type Fl
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { Terraform, TERRA_TOOLS } from './terraform';
 import { Construction, loadBatiments, saveBatiments } from './construction';
+import { loadModelesBrouillon, Modeles, saveModelesBrouillon } from './modeles';
+import type { ContenuCarte } from './cartes';
 import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo, GRASS_MIN } from './autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
@@ -563,6 +565,14 @@ export class Game {
   terraform!: Terraform;
   /** Mode construction (construction.ts) : le clic gauche pose les pièces d'un bâtiment. */
   construction!: Construction;
+  /** Carte de test, mode Modèles (modeles.ts) : faire apparaître des modèles et les placer. */
+  modeles: Modeles | null = null;
+  /** Carte de test, Ctrl+S : enregistrer la carte (App, atelierCartes.ts). */
+  onSaveShortcut: (() => void) | null = null;
+  /** Carte de test : le terrain, les bâtiments ou les modèles ont changé (la carte ouverte n'est plus à jour). */
+  onCarteModifiee: (() => void) | null = null;
+  /** Une carte se charge : ses changements ne comptent pas comme des modifications. */
+  private chargementCarte = false;
   /** Dernière place de la souris sur la vue, pour le pinceau (la caméra bouge : on revise à chaque image). */
   private terraPointer: { x: number; y: number } | null = null;
   private post: PostFx;
@@ -833,7 +843,7 @@ export class Game {
     this.island = createIsland();
     this.scene.add(this.island.root);
     if (CARTE_TEST) {
-      this.scene.add(createTestHouse());
+      if (GALERIE) this.scene.add(createTestHouse());
       // pas de touffes d'herbe : les objets posés au sol restent bien visibles
       this.island.clearGrass(-GROUND_HALF - 20, GROUND_HALF + 20, -GROUND_HALF - 20, GROUND_HALF + 20);
     }
@@ -841,6 +851,7 @@ export class Game {
     loadInterior()
       .then(() => {
         for (const it of this.items) it.restyle();
+        this.modeles?.restyle();
         forgetIcons();
       })
       .catch((e) => console.warn('pack intérieur non chargé', e));
@@ -937,14 +948,14 @@ export class Game {
       this.scene.add(item.object);
       return item;
     };
-    // carte de test : un exemplaire de chaque objet du catalogue, en rangées, et aucune pièce
+    // carte de test : aucune pièce ; avec la galerie, un exemplaire de chaque objet du catalogue en rangées
     const rooms = CARTE_TEST ? [] : ROOMS;
-    if (CARTE_TEST) {
+    if (GALERIE) {
       for (const def of ITEMS) add(def.id);
       this.testMap = buildTestMap(this.items);
       this.scene.add(this.testMap.group);
       this.character.placeAt(TEST_START, Math.PI);
-    }
+    } else if (CARTE_TEST) this.character.placeAt(new THREE.Vector3(0, 0, 0), Math.PI);
     for (const [id, x, y, z, rot] of [...(CARTE_TEST ? [] : START_ITEMS), ...rooms.flatMap((r) => r.items ?? [])].filter(([id]) => known(id))) {
       const item = add(id);
       item.object.position.set(x, y, z);
@@ -985,11 +996,14 @@ export class Game {
       this.island.clearGrass(spec.rect.x0 - m, spec.rect.x1 + m, spec.rect.z0 - m, spec.rect.z1 + m);
     }
     // terraformation : le relief se retouche partout, sauf dans les pièces (leur sol reste à plat)
-    this.terraform = new Terraform(this.island, [...this.rooms.map((r) => r.rect), ...(CARTE_TEST ? TEST_PROTECT : [])]);
+    this.terraform = new Terraform(this.island, [...this.rooms.map((r) => r.rect), ...(GALERIE ? TEST_PROTECT : [])]);
     // carte de test : les retouches du terrain gardées dans le navigateur, à part de la partie
     if (CARTE_TEST) {
       this.terraform.load(loadTestRelief());
-      this.terraform.onEdited = () => saveTestRelief(this.terraform.save());
+      this.terraform.onEdited = () => {
+        saveTestRelief(this.terraform.save());
+        this.carteModifiee();
+      };
     }
     this.scene.add(this.terraform.root);
     // construction : les bâtiments posés pièce par pièce (sur la carte de test)
@@ -998,12 +1012,32 @@ export class Game {
       clearGrass: (x0, x1, z0, z1) => this.island.clearGrass(x0, x1, z0, z1),
       changed: () => {
         this.character.nav = this.buildNav();
-        if (CARTE_TEST) saveBatiments(this.construction.save());
+        if (!CARTE_TEST) return;
+        saveBatiments(this.construction.save());
+        this.carteModifiee();
       },
     });
     this.scene.add(this.construction.root);
     // carte de test : les bâtiments gardés dans le navigateur, à part de la partie
     if (CARTE_TEST) this.construction.load(loadBatiments());
+    if (CARTE_TEST) {
+      // les modèles qu'on fait apparaître et qu'on place, gardés eux aussi dans le navigateur
+      const modeles = this.modeles = new Modeles({
+        ground: heightAt,
+        surfaces: () => [this.construction.root],
+        perso: () => this.character.position,
+        changed: () => {
+          this.character.nav = this.buildNav();
+          saveModelesBrouillon(modeles.save());
+          this.carteModifiee();
+        },
+        notice: (t) => this.onNotice?.(t),
+      });
+      this.scene.add(modeles.root);
+      modeles.load(loadModelesBrouillon());
+      // rien ne presse sur la carte de test : ni faim, ni soif, ni froid qui fasse mal
+      this.needs.pause(NEEDS.map((n) => n.key));
+    }
     // un calque de saleté par sol, posé dans la pièce (caché tant que c'est propre)
     this.salissure = new Salissure(this.rooms.map((r) => ({ name: r.spec.name, rect: r.rect })));
     this.salissure.floors.forEach((f, i) => this.rooms[i].group.add(f.build()));
@@ -1203,8 +1237,7 @@ export class Game {
 
   set firstPerson(on: boolean) {
     if (on === this.fp) return;
-    if (on && this.terraform?.on) this.terraforming = false;
-    if (on && this.construction?.on) this.building = false;
+    if (on) this.ouvrirMode(null);
     this.fp = on;
     this.look = null;
     this.hoverPan = null;
@@ -1489,9 +1522,10 @@ export class Game {
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
     // carte de test : la maison assemblée se contourne
-    if (CARTE_TEST) nav.add(TEST_HOUSE_BOX, TEST_HOUSE, 0, true);
-    if (CARTE_TEST) for (const o of TEST_PAN_OBSTACLES) nav.add(o.box, o.pos, o.yaw, true);
+    if (GALERIE) nav.add(TEST_HOUSE_BOX, TEST_HOUSE, 0, true);
+    if (GALERIE) for (const o of TEST_PAN_OBSTACLES) nav.add(o.box, o.pos, o.yaw, true);
     for (const o of this.construction?.obstacles() ?? []) nav.add(o.box, o.pos, o.yaw, o.wall);
+    for (const o of this.modeles?.obstacles() ?? []) nav.add(o.box, o.pos, o.yaw, o.wall);
     return nav;
   }
 
@@ -7288,7 +7322,40 @@ export class Game {
 
   setZoom(factor: number): void {
     // en terraformation, on peut reculer bien plus loin : voir toute la colline qu'on façonne
-    this.zoom = THREE.MathUtils.clamp(this.zoom * factor, this.terraform?.on || this.construction?.on ? TERRA_ZOOM_MIN : ZOOM_MIN, ZOOM_MAX);
+    this.zoom = THREE.MathUtils.clamp(this.zoom * factor, this.modeOuvert ? TERRA_ZOOM_MIN : ZOOM_MIN, ZOOM_MAX);
+  }
+
+  /** Les modes d'édition (terrain, construction, et sur la carte de test les modèles) : un seul ouvert à la fois. */
+  private get modes(): Array<Terraform | Construction | Modeles> {
+    return [this.terraform, this.construction, this.modeles].filter((m): m is Terraform | Construction | Modeles => !!m);
+  }
+
+  /** Le mode d'édition ouvert (le clic gauche est à lui, le perso ne marche pas au clic), ou null. */
+  get modeOuvert(): Terraform | Construction | Modeles | null {
+    return this.modes.find((m) => m.on) ?? null;
+  }
+
+  /** Ouvre un mode d'édition (et ferme les autres), ou les ferme tous (null). */
+  private ouvrirMode(mode: Terraform | Construction | Modeles | null): void {
+    for (const m of this.modes) if (m !== mode && m.on) m.on = false;
+    if (mode) {
+      // on édite de dessus
+      if (this.fp) this.firstPerson = false;
+      mode.on = true;
+      return;
+    }
+    this.terraPointer = null;
+    this.zoom = Math.max(this.zoom, ZOOM_MIN);
+  }
+
+  /** Mode Modèles ouvert (carte de test : bouton du HUD, touche O). */
+  get placing(): boolean {
+    return !!this.modeles?.on;
+  }
+
+  set placing(on: boolean) {
+    if (!this.modeles || on === this.modeles.on) return;
+    this.ouvrirMode(on ? this.modeles : null);
   }
 
   /** Mode terraformation ouvert (bouton du HUD, touche U). */
@@ -7298,14 +7365,7 @@ export class Game {
 
   set terraforming(on: boolean) {
     if (on === this.terraform.on) return;
-    // le pinceau se manie de dessus
-    if (on && this.fp) this.firstPerson = false;
-    if (on) this.building = false;
-    this.terraform.on = on;
-    if (!on) {
-      this.terraPointer = null;
-      this.zoom = Math.max(this.zoom, ZOOM_MIN);
-    }
+    this.ouvrirMode(on ? this.terraform : null);
   }
 
   /** Mode construction ouvert (page du créateur de bâtiment : bouton du HUD, touche N). */
@@ -7320,14 +7380,7 @@ export class Game {
       this.onNotice?.('La construction se fait sur la carte de test : Menu → Construction.');
       return;
     }
-    // les pièces se posent de dessus
-    if (on && this.fp) this.firstPerson = false;
-    if (on) this.terraforming = false;
-    this.construction.on = on;
-    if (!on) {
-      this.terraPointer = null;
-      this.zoom = Math.max(this.zoom, ZOOM_MIN);
-    }
+    this.ouvrirMode(on ? this.construction : null);
   }
 
   private resize(): void {
@@ -7389,20 +7442,61 @@ export class Game {
       if (typing(e)) return;
       this.shift = e.shiftKey;
       // construction : Ctrl+Z (la lettre Z, AZERTY ou QWERTY) annule la dernière pièce, sans faire marcher le perso
-      if (this.construction.on && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      const ctrl = e.ctrlKey || e.metaKey, letter = e.key.toLowerCase();
+      if (this.construction.on && ctrl && letter === 'z') {
         e.preventDefault();
         this.construction.undo();
         return;
       }
+      // carte de test : Ctrl+Z annule (modèles), Ctrl+D duplique, Ctrl+S enregistre la carte ; aucun
+      // raccourci avec Ctrl ne fait marcher le perso
+      if (CARTE_TEST && ctrl) {
+        if (letter === 'z' && this.modeles?.on) {
+          e.preventDefault();
+          this.modeles.annuler();
+        } else if (letter === 'd' && this.modeles?.on) {
+          e.preventDefault();
+          this.modeles.dupliquer();
+        } else if (letter === 's') {
+          e.preventDefault();
+          if (!e.repeat) this.onSaveShortcut?.();
+        }
+        return;
+      }
+      // mode Modèles : R / F tournent le modèle, Pg↑ / Pg↓ le montent, Suppr l'enlève, Échap le lâche, 1 à 9 : un récent
+      const md = this.modeles;
+      if (md?.on) {
+        if (e.code === 'KeyR' || e.code === 'KeyF') {
+          md.tourner(e.code === 'KeyR' ? 1 : -1, e.shiftKey);
+          return;
+        }
+        if (e.code === 'PageUp' || e.code === 'PageDown') {
+          e.preventDefault();
+          md.monter((e.code === 'PageUp' ? 1 : -1) * (e.shiftKey ? 0.01 : 0.1));
+          return;
+        }
+        if ((e.code === 'Delete' || e.code === 'Backspace') && !e.repeat) {
+          md.enlever();
+          return;
+        }
+        if (e.code === 'Escape' && md.lacher()) return;
+        const recent = /^Digit([1-9])$/.exec(e.code);
+        if (recent && !e.repeat) {
+          const key = md.recents()[+recent[1] - 1];
+          if (key) md.prendre(key);
+          return;
+        }
+      }
       this.keys.add(e.code);
       // carte de test, E : signaler le modèle visé à corriger (à la place de « utiliser »)
       if (e.code === 'KeyE' && !e.repeat) {
-        if (this.testMap) this.flagAimed('corriger');
+        if (CARTE_TEST) this.flagAimed('corriger');
         else this.useKey();
       }
       if (e.code === 'KeyX' && !e.repeat) this.firstPerson = !this.fp;
       if (e.code === 'KeyU' && !e.repeat) this.terraforming = !this.terraform.on;
       if (e.code === 'KeyN' && !e.repeat) this.building = !this.construction.on;
+      if (e.code === 'KeyO' && !e.repeat && this.modeles) this.placing = !this.modeles.on;
       // en construction, 1 à 9 : la pièce ; R : la tourner ; Suppr : démolir
       const nine = /^Digit([1-9])$/.exec(e.code);
       if (nine && this.construction.on) this.construction.pickNumber(+nine[1]);
@@ -7418,7 +7512,7 @@ export class Game {
       if (e.key.toLowerCase() === 'm' && !e.repeat) this.eat();
       if (e.code === 'KeyT' && !e.repeat) this.throwItem();
       // carte de test, A (la lettre, AZERTY ou QWERTY) : signaler le modèle visé à retirer du jeu
-      if (this.testMap && e.key.toLowerCase() === 'a' && !e.repeat) this.flagAimed('retirer');
+      if (CARTE_TEST && e.key.toLowerCase() === 'a' && !e.repeat) this.flagAimed('retirer');
       if (e.code === 'Space') {
         // Espace : sauter (pas de défilement de la page ni de bouton pressé)
         e.preventDefault();
@@ -7475,8 +7569,12 @@ export class Game {
       if (this.pointerLocked) document.exitPointerLock();
     });
     on(el, 'pointermove', (e) => {
-      if (this.terraform.on || this.construction.on) {
+      if (this.modeOuvert) {
         this.terraPointer = { x: e.clientX, y: e.clientY };
+        // mode Modèles, rien en main : le nom du modèle sous la souris
+        const md = this.modeles;
+        if (md?.on && !md.enMain && !md.pressed && !e.buttons) this.hoverAt({ x: e.clientX, y: e.clientY });
+        else this.onHover?.(null);
         return;
       }
       if (this.pointerLocked) {
@@ -7518,11 +7616,16 @@ export class Game {
     on(el, 'pointerleave', () => {
       this.hoverPan = null;
       this.onHover?.(null);
-      if (this.terraform.on && !this.terraform.pressed) this.terraPointer = null;
-      if (this.construction.on && !this.construction.pressed) this.terraPointer = null;
+      const mode = this.modeOuvert;
+      if (mode && !mode.pressed) this.terraPointer = null;
     });
     on(el, 'contextmenu', (ev) => {
       ev.preventDefault();
+      // mode Modèles : le clic droit lâche le modèle en main (ou la sélection), sans menu
+      if (this.modeles?.on) {
+        this.modeles.lacher();
+        return;
+      }
       this.hoverPan = null;
       // souris capturée : le menu de ce qui est sous le viseur, et la souris rendue pour y choisir
       const { x: clientX, y: clientY } = this.aimPoint(ev);
@@ -7553,21 +7656,14 @@ export class Game {
       this.hoverPan = null;
       if (e.button !== 0) return;
       this.onMenu?.(null);
-      // terraformation : le clic gauche tient le pinceau, le perso ne bouge pas
-      if (this.terraform.on) {
+      // terraformation (le pinceau), construction (poser, démolir), modèles (poser, choisir, glisser) :
+      // le clic gauche est au mode ouvert, le perso ne bouge pas
+      const mode = this.modeOuvert;
+      if (mode) {
         this.terraPointer = { x: e.clientX, y: e.clientY };
         this.aim(e.clientX, e.clientY);
-        this.terraform.aim(this.raycaster.ray);
-        this.terraform.press();
-        el.setPointerCapture?.(e.pointerId);
-        return;
-      }
-      // construction : le clic gauche pose (ou démolit) la pièce, le perso ne bouge pas
-      if (this.construction.on) {
-        this.terraPointer = { x: e.clientX, y: e.clientY };
-        this.aim(e.clientX, e.clientY);
-        this.construction.aim(this.raycaster.ray);
-        this.construction.press();
+        mode.aim(this.raycaster.ray);
+        mode.press();
         el.setPointerCapture?.(e.pointerId);
         return;
       }
@@ -7603,13 +7699,11 @@ export class Game {
     });
     on(window, 'pointercancel', () => {
       this.look = null;
-      this.terraform.release();
-      this.construction.release();
+      for (const m of this.modes) m.release();
     });
     on(window, 'pointerup', (e) => {
       if (e.button !== 0) return;
-      this.terraform.release();
-      this.construction.release();
+      for (const m of this.modes) m.release();
     });
     on(window, 'pointerup', (e) => {
       const pr = this.press;
@@ -7628,33 +7722,47 @@ export class Game {
 
   /** Carte de test : le modèle sous le point (x, y), objet du jeu ou modèle de la galerie, le plus proche. */
   private testModelAt(x: number, y: number): { ref: string; name: string; item: WorldItem | null } | null {
-    if (!this.testMap) return null;
+    if (!CARTE_TEST) return null;
     const hit = this.hitAt(x, y);
-    const g = galleryHit(this.testMap, this.raycaster);
     const itemDist = hit ? hit.point.distanceTo(this.raycaster.ray.origin) : Infinity;
-    if (g && g.distance < itemDist) return { ref: g.ref, name: g.ref.slice('pack '.length), item: null };
+    // les modèles posés (mode Modèles) et ceux de la galerie : le plus proche gagne
+    const placed = this.modeles?.hit(this.raycaster) ?? null;
+    const g = this.testMap ? galleryHit(this.testMap, this.raycaster) : null;
+    const best = [placed && { ref: placed.signal, name: placed.name, item: null, distance: placed.distance }, g && { ref: g.ref, name: g.ref.slice('pack '.length), item: null, distance: g.distance }]
+      .filter((c): c is { ref: string; name: string; item: null; distance: number } => !!c)
+      .sort((a, b) => a.distance - b.distance)[0];
+    if (best && best.distance < itemDist) return { ref: best.ref, name: best.name, item: null };
     return hit ? { ref: `objet ${hit.item.def.id} (${hit.item.name})`, name: hit.item.name, item: hit.item } : null;
   }
 
   /** Carte de test, touche A (à retirer du jeu) ou E (à corriger) : signale (ou ne signale plus) le modèle visé. */
   private flagAimed(kind: FlagKind): void {
-    const at = this.pointerLocked ? this.aimPoint({ clientX: 0, clientY: 0 }) : this.testAim;
+    // mode Modèles : le modèle choisi ou en main d'abord
+    const signal = this.modeles?.on ? this.modeles.cibleSignal() : null;
+    if (signal) {
+      const name = this.modeles?.selection?.entry.label ?? this.modeles?.enMain?.entry.label ?? signal;
+      const on = toggleFlag(signal, kind);
+      this.onNotice?.(on ? `${name} : signalé à ${kind} (Menu → Signalements pour l’envoyer).` : `${name} : n’est plus signalé à ${kind}.`);
+      return;
+    }
+    // dans un mode d'édition, la souris est suivie par terraPointer (pas par la bulle)
+    const at = this.pointerLocked ? this.aimPoint({ clientX: 0, clientY: 0 }) : this.modeOuvert ? this.terraPointer : this.testAim;
     const hit = at && this.testModelAt(at.x, at.y);
     if (!hit) {
       this.onNotice?.(`Vise un modèle avec la souris, puis ${kind === 'retirer' ? 'A' : 'E'} pour le signaler.`);
       return;
     }
     const on = toggleFlag(hit.ref, kind);
-    this.onNotice?.(on ? `${hit.name} : signalé à ${kind} (Menu → Partie pour l’envoyer).` : `${hit.name} : n’est plus signalé à ${kind}.`);
-    this.hoverAt(at);
+    this.onNotice?.(on ? `${hit.name} : signalé à ${kind} (Menu → Signalements pour l’envoyer).` : `${hit.name} : n’est plus signalé à ${kind}.`);
+    if (!this.modeOuvert) this.hoverAt(at);
   }
 
   /** Bulle d'usure de l'objet (ou de la porte, des rideaux) sous le point (x, y) de l'écran. */
   private hoverAt({ x, y }: { x: number; y: number }): void {
     const el = this.renderer.domElement;
     const r = el.getBoundingClientRect();
-    if (this.testMap) {
-      // carte de test : le nom de tout modèle visé (galerie comprise), et s'il est signalé
+    if (CARTE_TEST) {
+      // carte de test : le nom de tout modèle visé (galerie et modèles posés compris), et s'il est signalé
       this.testAim = { x, y };
       const hit = this.testModelAt(x, y);
       if (!hit) return this.onHover?.(null);
@@ -8309,7 +8417,7 @@ export class Game {
     this.velo.steer(axes.f, axes.s);
     // R : pivoter le meuble vers la droite, F : vers la gauche
     // (en construction, R tourne la pièce à poser)
-    this.character.setTurnInput(this.construction.on ? 0 : (this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
+    this.character.setTurnInput(this.construction.on || this.modeles?.on ? 0 : (this.keys.has('KeyF') ? 1 : 0) - (this.keys.has('KeyR') ? 1 : 0));
     this.character.update(dt, WALK_BOUND);
     const c = this.character;
     const held = c.heldItems;
@@ -8405,18 +8513,16 @@ export class Game {
       this.testCull = 0.25;
       cullTestMap(this.testMap, this.items, this.character.position);
     }
-    if (this.terraform.on) {
+    // le mode ouvert vise sous la souris (la caméra bouge : on revise à chaque image)
+    const mode = this.modeOuvert;
+    if (mode) {
       const tp = this.terraPointer;
       if (tp) this.aim(tp.x, tp.y);
-      this.terraform.aim(tp ? this.raycaster.ray : null);
-      this.terraform.update(dt);
+      mode.aim(tp ? this.raycaster.ray : null);
     }
-    if (this.construction.on) {
-      const tp = this.terraPointer;
-      if (tp) this.aim(tp.x, tp.y);
-      this.construction.aim(tp ? this.raycaster.ray : null);
-    }
+    this.terraform.update(dt);
     this.construction.update(dt, this.character.position, !this.fp);
+    this.modeles?.update(dt);
     this.rainView.copy(toCamera);
     this.precip.update(dt, this.character.position, w, this.rainHidden);
     this.windowDrops.update(dt, w);
@@ -8611,7 +8717,8 @@ export class Game {
     this.tickLife(hours);
     this.tickDirt(dt, hours);
     const before = this.needs.health;
-    this.tickBody(dt, hours);
+    // carte de test : ni froid, ni chaud, ni blessure
+    if (!CARTE_TEST) this.tickBody(dt, hours);
     this.needs.tick(hours, this.character.lying ? 'sleep' : this.character.seated ? 'sit' : this.character.moveGait, this.clock.isNight);
     // prévenir le joueur quand la santé passe sous un seuil
     const after = this.needs.health;
@@ -9859,6 +9966,50 @@ export class Game {
   }
 
   /** La partie en cours, à sauver (voir save.ts). */
+  /** Carte de test : le terrain, les bâtiments ou les modèles ont changé. */
+  private carteModifiee(): void {
+    if (!this.chargementCarte) this.onCarteModifiee?.();
+  }
+
+  /** Carte de test : ce qui fait la carte (terrain, bâtiments, modèles posés, où se tient le perso). */
+  contenuCarte(): ContenuCarte {
+    const p = this.character.position;
+    return {
+      relief: this.terraform.save(),
+      batiments: this.construction.save() as ContenuCarte['batiments'],
+      modeles: this.modeles?.save() ?? null,
+      depart: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100, Math.round(this.character.root.rotation.y * 1000) / 1000],
+    };
+  }
+
+  /**
+   * Carte de test : ouvre une carte (terrain, bâtiments, modèles), sans recharger la page. Refusé
+   * (faux) pendant un geste ; le brouillon gardé dans le navigateur devient cette carte.
+   */
+  appliquerCarte(c: ContenuCarte): boolean {
+    if (!this.modeles || this.modes.some((m) => m.pressed)) return false;
+    this.chargementCarte = true;
+    try {
+      this.ouvrirMode(null);
+      this.press = null;
+      this.look = null;
+      this.onDrag?.(null);
+      this.terraform.load(c.relief);
+      saveTestRelief(this.terraform.save());
+      this.construction.load(c.batiments);
+      saveBatiments(this.construction.save());
+      const { ignores } = this.modeles.load(c.modeles);
+      saveModelesBrouillon(this.modeles.save());
+      if (ignores) this.onNotice?.(`${ignores} modèle${ignores > 1 ? 's' : ''} inconnu${ignores > 1 ? 's' : ''} laissé${ignores > 1 ? 's' : ''} de côté.`);
+      const [x, z, yaw] = c.depart ?? [0, 0, Math.PI];
+      this.character.placeAt(new THREE.Vector3(x, 0, z), yaw);
+      this.character.nav = this.buildNav();
+    } finally {
+      this.chargementCarte = false;
+    }
+    return true;
+  }
+
   saveState(): GameSave {
     return captureGame(this.saveAccess());
   }

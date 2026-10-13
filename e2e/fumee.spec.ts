@@ -140,3 +140,30 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   await page.screenshot({ path: info.outputPath('visionneuse.png') });
   expect(erreurs).toEqual([]);
 });
+
+test('la carte de test : poser un modèle et enregistrer la carte', async ({ page }) => {
+  const erreurs: string[] = [];
+  page.on('pageerror', (e) => erreurs.push(`exception : ${e.message}`));
+  page.on('console', (m) => {
+    if (m.type() === 'error') erreurs.push(`console : ${m.text()}`);
+  });
+  await page.goto('/?test');
+  await expect(page.getByText('Chargement…')).toHaveCount(0, { timeout: 120_000 });
+  // un HUD simple : ni jauges, ni porte-monnaie, ni saisie ; le menu des modèles ouvert
+  await expect(page.locator('.modeles-panel')).toBeVisible();
+  await expect(page.locator('.carte-chip')).toBeVisible();
+  await expect(page.locator('.hud-status')).toHaveCount(0);
+  // une chaise, posée par la console (le clic dépend de la vitesse du rendu sans carte graphique)
+  await page.locator('.modeles-panel input[type=search]').fill('chaise');
+  await page.locator('.modeles-panel input[type=search]').press('Enter');
+  const posee = await page.evaluate(() => {
+    const g = (window as unknown as { game: { modeles: { count: number; load(x: unknown): unknown }; appliquerCarte(c: unknown): boolean } }).game;
+    return g.appliquerCarte({ relief: null, batiments: null, modeles: [['objet:chaise', 3, 0, 3, 0]] }) && g.modeles.count;
+  });
+  expect(posee).toBe(1);
+  await page.keyboard.press('Control+s');
+  await page.getByLabel('Nom de la nouvelle carte').fill('Essai');
+  await page.getByRole('button', { name: 'OK' }).click();
+  await expect(page.locator('.carte-chip')).toContainText('Essai');
+  expect(erreurs, erreurs.join('\n')).toEqual([]);
+});

@@ -71,10 +71,31 @@ export const SHORTCUTS: Array<[string, string]> = [
 ];
 
 /** Les raccourcis, chaque touche dessinée comme une touche (« ZQSD / ↑↓←→ » : deux touches). */
-export function Shortcuts() {
+/** Raccourcis de la carte de test : poser des modèles, construire, façonner le terrain. */
+export const SHORTCUTS_TEST: Array<[string, string]> = [
+  ['O', 'Modèles : en faire apparaître et les placer'],
+  ['Clic', 'Poser le modèle en main (autant de fois qu’on veut) ; sans modèle en main, choisir un modèle posé et le glisser'],
+  ['R / F', 'Tourner le modèle (Maj : par petits pas)'],
+  ['Pg↑ / Pg↓', 'Monter ou descendre le modèle (Maj : au centimètre)'],
+  ['Suppr', 'Enlever le modèle choisi'],
+  ['Échap / Clic droit', 'Lâcher le modèle en main'],
+  ['1 / 9', 'Reprendre un modèle récent'],
+  ['Ctrl+Z', 'Annuler (modèles et construction)'],
+  ['Ctrl+D', 'Dupliquer le modèle choisi'],
+  ['Ctrl+S', 'Enregistrer la carte'],
+  ['N', 'Construction'],
+  ['U', 'Terrain'],
+  ['A / E', 'Signaler le modèle visé : à retirer, à corriger'],
+  ['ZQSD / ↑↓←→', 'Marcher'],
+  ['Molette', 'Zoomer'],
+  ['X', 'Vue à la première personne'],
+  ['H', 'Masquer l’interface'],
+];
+
+export function Shortcuts({ list = SHORTCUTS }: { list?: Array<[string, string]> }) {
   return (
     <dl className="menu-keys">
-      {SHORTCUTS.map(([k, v]) => (
+      {list.map(([k, v]) => (
         <div key={k}>
           <dt>{k.split(' / ').map((x) => <kbd key={x} className="key">{x}</kbd>)}</dt>
           <dd>{v}</dd>

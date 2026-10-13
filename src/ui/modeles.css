@@ -1,0 +1,99 @@
+/* Carte de test, panneau « Modèles » : même panneau que la terraformation (terraform.css), plus large, avec une grille de vignettes */
+.modeles-panel {
+  width: min(348px, calc(100vw - 2 * var(--hud-gap)));
+  max-height: calc(100% - var(--hud-gap) - var(--hud-bar) - 10px - 84px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain;
+}
+.modeles-count { color: var(--hud-ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.modeles-search {
+  display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: 9px; color: var(--hud-ink-3);
+  border: 1px solid var(--hud-line); background: var(--hud-well);
+}
+.modeles-search:focus-within { border-color: rgba(245, 190, 91, 0.6); color: var(--hud-honey); }
+.modeles-search input {
+  flex: 1; min-width: 0; height: 32px; padding: 0; border: 0; outline: none; background: none; color: var(--hud-ink); font: inherit; font-size: 13px;
+}
+.modeles-search input::placeholder { color: var(--hud-ink-3); }
+
+.modeles-tabs { grid-template-columns: repeat(3, 1fr); }
+.modeles-tabs button { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.modeles-tab-n { color: var(--hud-ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.modeles-tabs button.active .modeles-tab-n { color: rgba(255, 226, 168, 0.7); }
+
+.modeles-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.modeles-chips button {
+  min-height: 24px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--hud-line); background: transparent;
+  color: var(--hud-ink-2); font: inherit; font-size: 12px; cursor: pointer;
+}
+.modeles-chips button:hover { color: var(--hud-ink); background: rgba(255, 240, 215, 0.08); }
+.modeles-chips button.active { background: rgba(245, 190, 91, 0.22); border-color: rgba(245, 190, 91, 0.6); color: #ffe2a8; }
+
+.modeles-grid-wrap {
+  flex: none; display: flex; flex-direction: column; gap: 6px; max-height: min(296px, 38vh); min-height: 64px; overflow-y: auto; scrollbar-width: thin;
+  padding: 4px; border-radius: 11px; background: rgba(0, 0, 0, 0.14); overscroll-behavior: contain;
+}
+.modeles-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.modeles-msg { padding: 6px 4px; text-align: center; }
+.modele-tile {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 4px 3px 5px; border-radius: 9px;
+  border: 1px solid transparent; background: rgba(255, 240, 215, 0.05); color: var(--hud-ink-2); font: inherit; cursor: pointer;
+}
+.modele-tile:hover:not(:disabled) { background: rgba(255, 240, 215, 0.13); color: var(--hud-ink); }
+.modele-tile.active { background: rgba(245, 190, 91, 0.22); border-color: rgba(245, 190, 91, 0.6); color: #ffe2a8; }
+.modele-tile:disabled { opacity: 0.4; cursor: default; }
+.modele-name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; width: 100%;
+  font-size: 10.5px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; min-height: 2.4em;
+}
+.modele-thumb { display: grid; place-items: center; width: 100%; aspect-ratio: 1; color: var(--hud-ink-3); }
+.modele-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.modele-thumb.wait { border-radius: 7px; background: rgba(255, 240, 215, 0.05); animation: modele-wait 1.2s ease-in-out infinite; }
+@keyframes modele-wait { 50% { background: rgba(255, 240, 215, 0.1); } }
+/* signalé : rouge à retirer, ambre à corriger */
+.modele-flag { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(46, 33, 26, 0.9); }
+.modele-flag.retirer { background: var(--hud-low); }
+.modele-flag.corriger { background: var(--hud-mid); }
+
+/* le modèle en main ou choisi, et de quoi le signaler */
+.modele-current {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 7px; padding: 5px 7px; border-radius: 10px;
+  border: 1px solid rgba(245, 190, 91, 0.32); background: rgba(245, 190, 91, 0.08);
+}
+.modele-current-what { color: var(--hud-honey); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.modele-current-thumb { width: 30px; flex: none; }
+.modele-current-name { flex: 1; min-width: 0; color: var(--hud-ink); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modele-current-name small { color: var(--hud-ink-3); font-size: 11.5px; }
+.modele-flag-btn {
+  display: flex; align-items: center; gap: 4px; min-height: 24px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--hud-line);
+  background: transparent; color: var(--hud-ink-2); font: inherit; font-size: 11.5px; cursor: pointer;
+}
+.modele-flag-btn:hover { background: rgba(255, 240, 215, 0.1); color: var(--hud-ink); }
+.modele-flag-btn.retirer.on { background: rgba(242, 121, 91, 0.22); border-color: rgba(242, 121, 91, 0.6); color: #ffc9b8; }
+.modele-flag-btn.corriger.on { background: rgba(242, 193, 78, 0.2); border-color: rgba(242, 193, 78, 0.6); color: #ffe2a8; }
+
+/* tourner, hauteur, dupliquer, enlever, annuler : mêmes boutons que la construction */
+.modeles-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.modeles-actions > button, .modeles-lift button {
+  display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 4px 6px; border-radius: 9px;
+  border: 1px solid var(--hud-line); background: rgba(255, 240, 215, 0.06); color: var(--hud-ink); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.modeles-actions button:hover:not(:disabled) { background: rgba(255, 240, 215, 0.14); }
+.modeles-actions button:disabled { opacity: 0.45; cursor: default; }
+.modeles-lift { grid-column: span 2; display: flex; align-items: center; gap: 4px; padding-left: 4px; color: var(--hud-ink-2); font-size: 12.5px; }
+.modeles-lift > span { flex: 1; white-space: nowrap; }
+.modeles-lift b { color: var(--hud-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.modeles-lift button { width: 34px; padding: 0; }
+
+.modeles-check { display: flex; align-items: center; gap: 8px; color: var(--hud-ink-2); cursor: pointer; align-self: flex-start; }
+.modeles-check input { margin: 0; accent-color: var(--hud-honey); }
+
+/* écran tactile : des cases et des boutons plus grands */
+@media (pointer: coarse) {
+  .modeles-chips button { min-height: 30px; }
+  .modeles-actions > button, .modeles-lift button { min-height: 36px; }
+  .modele-flag-btn { min-height: 30px; }
+}
+@media (max-width: 400px) {
+  .modeles-grid-wrap { max-height: 30vh; }
+  .modeles-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
