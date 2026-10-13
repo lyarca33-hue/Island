@@ -34,8 +34,8 @@ const FIRST_ROW = 42;
 /** Où le perso commence : devant la première rangée, tourné vers elle. */
 export const TEST_START = new THREE.Vector3(0, 0, FIRST_ROW + 3);
 
-/** Hauteur (m) où flottent les petits objets : à hauteur des yeux du perso. */
-const FLOAT_H = 1.35;
+/** Hauteur (m) où flottent les petits objets : à hauteur du torse du perso. */
+const FLOAT_H = 1.1;
 /** Petit objet (qui flotte) : sa plus grande dimension (m) au plus. */
 const SMALL = 0.7;
 /** Demi-longueur d'une rangée (m), écarts entre deux objets (petits, gros) et allée entre deux rangées. */
@@ -243,4 +243,58 @@ export function cullTestMap(map: TestMap, items: WorldItem[], at: THREE.Vector3)
   const near = (o: THREE.Object3D, radius: number) => Math.hypot(o.position.x - at.x, o.position.z - at.z) - radius < SHOW_RADIUS;
   for (const { obj, radius } of map.shown) obj.visible = near(obj, radius);
   for (const it of items) it.object.visible = near(it.object, it.size.length() / 2);
+}
+
+/**
+ * Modèles signalés « à retirer du jeu » sur la carte de test (touche A sur le modèle visé), gardés
+ * dans le navigateur. Menu → Partie les envoie à Claude, qui les retire ensuite.
+ * Un repère par modèle : `objet <id> (<nom>)` pour un objet du jeu, `pack <pack>/<modèle>` pour la galerie.
+ */
+const FLAGS_KEY = 'rp-island-a-retirer';
+const flagListeners = new Set<() => void>();
+
+export function loadFlags(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FLAGS_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFlags(flags: string[]): void {
+  try {
+    localStorage.setItem(FLAGS_KEY, JSON.stringify(flags));
+  } catch {
+    // stockage indisponible : la liste dure le temps de la page
+  }
+  for (const f of flagListeners) f();
+}
+
+/** Signale le modèle `ref`, ou le retire de la liste s'il y était ; vrai s'il est maintenant signalé. */
+export function toggleFlag(ref: string): boolean {
+  const flags = loadFlags();
+  const on = !flags.includes(ref);
+  saveFlags(on ? [...flags, ref] : flags.filter((f) => f !== ref));
+  return on;
+}
+
+export function clearFlags(): void {
+  saveFlags([]);
+}
+
+/** Prévient `fn` à chaque changement de la liste ; rend de quoi arrêter. */
+export function onFlags(fn: () => void): () => void {
+  flagListeners.add(fn);
+  return () => flagListeners.delete(fn);
+}
+
+/** Le repère du modèle de la galerie touché par le rayon (null : aucun), et sa distance. */
+export function galleryHit(map: TestMap, ray: THREE.Raycaster): { ref: string; distance: number } | null {
+  const shown = map.shown.filter((s) => s.obj.visible && s.obj.name).map((s) => s.obj);
+  const hit = ray.intersectObjects(shown, true)[0];
+  if (!hit) return null;
+  let o: THREE.Object3D | null = hit.object;
+  while (o && o.parent !== map.group) o = o.parent;
+  return o?.name ? { ref: `pack ${o.name}`, distance: hit.distance } : null;
 }
