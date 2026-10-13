@@ -128,6 +128,9 @@ l'essentiel : ni jauges, ni porte-monnaie, ni saisie, et les besoins du perso en
   choisit un modèle posé, on le glisse pour le déplacer, Suppr l'enlève ; Ctrl+Z annule, Ctrl+D
   duplique, 1 à 9 reprennent un modèle récent.
 - **Construction** (touche **N** ou bouton maison) et **terrain** (touche **U** ou bouton montagne).
+  Le terrain est couvert de l'herbe façon Zelda de l'île (touffes qui ondulent au vent, quelques
+  fleurs) : peint en sable, terre ou roche, ou en pente raide, il n'en a plus ; repeint en herbe, elle
+  repousse. Elle reste rase sous les planchers des bâtiments et repousse quand on les retire.
 - **Cartes** (Menu → Carte, pastille en haut à droite, `src/game/atelierCartes.ts`,
   `src/ui/CartesPanel.tsx`) : une carte, c'est le terrain, les bâtiments et les modèles posés.
   Ctrl+S l'enregistre sous un nom, « Nouvelle carte » repart d'un terrain vide, « Mes cartes »
