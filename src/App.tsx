@@ -28,6 +28,7 @@ import { NeedsHud, TimeControls } from './ui/TimeHud';
 import { Magasin } from './ui/Magasin';
 import { PorteMonnaie } from './ui/PorteMonnaie';
 import { TerraformPanel } from './ui/TerraformPanel';
+import { CamDial } from './ui/CamDial';
 
 /**
  * On entre directement dans le monde avec le dernier perso créé (un perso par défaut sinon) ;
@@ -63,8 +64,6 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   const host = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
   const [ready, setReady] = useState<Game | null>(null);
-  const [camAngle, setCamAngle] = useState(0);
-  useEffect(() => setCamAngle(ready?.cameraAngle ?? 0), [ready]);
   /** Vue à la première personne (touche X ou bouton de la barre). */
   const [firstPerson, setFirstPerson] = useState(false);
   /** Mode terraformation ouvert (touche U ou bouton montagne). */
@@ -227,23 +226,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           tools={
             <>
               <span className="hud-sep" />
-              <input
-                type="range"
-                className="cam-slider"
-                min={0}
-                max={360}
-                step={1}
-                value={Math.round(camAngle)}
-                onChange={(e) => {
-                  const deg = Number(e.target.value);
-                  game.current?.setCameraAngle(deg);
-                  setCamAngle(deg);
-                }}
-                // relâché : rendre le clavier au perso (ZQSD)
-                onPointerUp={(e) => e.currentTarget.blur()}
-                aria-label="Faire tourner la caméra"
-                title="Faire tourner la caméra autour du perso"
-              />
+              <CamDial game={ready} />
               <button
                 className={`hud-icon${firstPerson ? ' on' : ''}`}
                 onClick={(e) => {
