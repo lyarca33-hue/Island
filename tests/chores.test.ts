@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHORES, choreAmount, choreFor, type ChoreKind } from '../src/game/items/chores';
-import { ITEM_BY_ID } from '../src/game/items/catalog';
+import { FICHE_BY_ID as ITEM_BY_ID } from '../src/game/items/catalog';
 
 describe('gestes de ménage', () => {
   const kinds = Object.keys(CHORES) as ChoreKind[];
