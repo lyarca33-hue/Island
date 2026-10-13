@@ -79,14 +79,19 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
   useEffect(() => (ready ? ready.construction.listen(() => setBuild(ready.building)) : undefined), [ready]);
   /** Souris capturée par la première personne (elle oriente la vue) : viseur au centre. */
   const [locked, setLocked] = useState(false);
+  /** La souris peut être capturée (sinon on regarde en glissant ou à deux doigts). */
+  const [capture, setCapture] = useState(true);
   useEffect(() => {
     if (!ready) return;
     setFirstPerson(ready.firstPerson);
+    setCapture(ready.mouseCapture);
     ready.onViewChange = setFirstPerson;
     ready.onPointerLock = setLocked;
+    ready.onMouseCapture = setCapture;
     return () => {
       ready.onViewChange = null;
       ready.onPointerLock = null;
+      ready.onMouseCapture = null;
     };
   }, [ready]);
   const [loading, setLoading] = useState(true);
@@ -409,7 +414,8 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
       {firstPerson && !loading && (
         <div className={`fp-aim${locked ? ' locked' : ''}`} aria-hidden>
           <span className="fp-dot" />
-          {!locked && <span className="fp-hint">Clic : la souris oriente la vue · Échap : la libérer</span>}
+          {!locked && capture && <span className="fp-hint">Clic : la souris oriente la vue · Échap : la libérer</span>}
+          {!locked && !capture && <span className="fp-hint fades">Glisser (clic maintenu) ou deux doigts : tourner la vue</span>}
         </div>
       )}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}

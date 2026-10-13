@@ -37,3 +37,16 @@ export class MouseLookFilter {
     return out;
   }
 }
+
+/**
+ * La souris capturée bute à droite et en bas. Firefox sous Linux (X11) sur un écran haute
+ * définition (échelle 2 : Mac Retina sous Linux Mint…) enferme le curseur caché dans une boîte
+ * comptée en pixels logiques au lieu de physiques : le quart haut-gauche de la fenêtre, dont le
+ * coin bas-droit est justement le centre où Firefox ramène le curseur. Glissé vers la droite ou
+ * vers le bas, le curseur bute aussitôt : movementX / movementY restent à 0 et la vue se bloque,
+ * sans rien que la page puisse rattraper (les Firefox d'avant la 154 y perdent, eux, les petits
+ * pas d'un côté). Là, on regarde sans capture : en glissant, ou à deux doigts.
+ */
+export function captureBlocked(ua: string, dpr: number): boolean {
+  return /Firefox\//.test(ua) && /Linux|X11/.test(ua) && !/Android/.test(ua) && dpr >= 1.5;
+}

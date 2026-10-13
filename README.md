@@ -31,7 +31,10 @@ ouvre le créateur, et « Jouer » ramène sur la map.
 - X (ou le bouton du bonhomme en haut à gauche) : vue à la première personne, par les yeux du perso ;
   la souris oriente la vue comme dans un jeu de tir (un clic la capture, Échap la libère) et un clic
   agit sur ce qui est sous le viseur ; deux doigts glissés sur le pavé tactile (ou la molette) tournent aussi la
-  tête ; au doigt, on glisse pour regarder. Z avance là où l'on regarde.
+  tête ; au doigt, on glisse pour regarder. Z avance là où l'on regarde. Avec Firefox sous Linux sur
+  un écran haute définition, la souris capturée bute vers la droite et le bas (défaut de Firefox) : la
+  capture y est coupée d'office et l'on regarde en glissant ou à deux doigts (Menu → Affichage pour la
+  remettre).
   Quand le perso agit seul (marche vers un clic, ordres enchaînés), la vue suit son regard ; bouger la
   souris reprend la main. X encore : retour à la vue de dessus. Dans cette vue, le bas
   de l'écran se range en petit dans le coin en bas à gauche (gestes réduits à leur touche, saisie
