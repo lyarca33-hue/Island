@@ -101,3 +101,6 @@
 /* « trop anguleux » : à adoucir sur Blender */
 .vis-tag.angle { background: #c9a7f2; color: #24103d; }
 .vis-flag.anguleux.on { background: #c9a7f2; color: #24103d; border-color: transparent; }
+/* « pas assez lisse » : à lisser sur Blender */
+.vis-tag.lisse { background: #7fd6c8; color: #0d2e29; }
+.vis-flag.lisse.on { background: #7fd6c8; color: #0d2e29; border-color: transparent; }

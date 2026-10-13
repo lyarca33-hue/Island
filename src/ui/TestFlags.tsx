@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { clearFlags, type FlagKind, FLAG_WORD, flagListText, loadComments, loadFlags, onFlags, toggleFlag } from '../game/carteTest';
 
-const KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E', anguleux: 'T' };
+const KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E', anguleux: 'T', lisse: 'L' };
 /** Comment signaler, quand la liste est vide. */
 const HOW: Record<FlagKind, string> = {
   retirer: 'Vise un modèle et appuie sur A pour le signaler à retirer.',
   corriger: 'Vise un modèle et appuie sur E pour le signaler à corriger.',
   anguleux: 'Dans la visionneuse, T (ou le bouton « Trop anguleux ») signale un modèle trop anguleux.',
+  lisse: 'Dans la visionneuse, L (ou le bouton « Pas assez lisse ») signale un modèle pas assez lisse.',
 };
 
 /**

@@ -383,7 +383,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                 <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(false))}>Retour à l’île</button>
               </MenuSection>
               <MenuSection title="Signalements" icon="flag" badge={flagCount} open={section === 'signalements'} onToggle={fold('signalements')}>
-                <p>A : à retirer · E : à corriger, sur le modèle visé ou depuis le menu Modèles. « Trop anguleux » se met dans la visionneuse.</p>
+                <p>A : à retirer · E : à corriger, sur le modèle visé ou depuis le menu Modèles. « Trop anguleux » et « Pas assez lisse » se mettent dans la visionneuse.</p>
                 {FLAG_KINDS.map((kind) => (
                   <TestFlags
                     key={kind}

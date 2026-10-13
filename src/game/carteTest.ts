@@ -382,12 +382,12 @@ export function cullTestMap(map: TestMap, items: WorldItem[], at: THREE.Vector3)
  * Un repère par modèle : `objet <id> (<nom>)` pour un objet du jeu, `pack <pack>/<modèle>` pour la galerie.
  */
 /** Les deux listes : à retirer du jeu (touche A), à corriger (touche E). */
-export type FlagKind = 'retirer' | 'corriger' | 'anguleux';
-/** Les listes, dans l'ordre où on les montre ; « trop anguleux » se met dans la visionneuse (touche T). */
-export const FLAG_KINDS: readonly FlagKind[] = ['retirer', 'corriger', 'anguleux'];
+export type FlagKind = 'retirer' | 'corriger' | 'anguleux' | 'lisse';
+/** Les listes, dans l'ordre où on les montre ; « trop anguleux » (T) et « pas assez lisse » (L) se mettent dans la visionneuse. */
+export const FLAG_KINDS: readonly FlagKind[] = ['retirer', 'corriger', 'anguleux', 'lisse'];
 /** Ce que dit le signalement, après le nom du modèle (« à retirer », « trop anguleux »). */
-export const FLAG_WORD: Record<FlagKind, string> = { retirer: 'à retirer', corriger: 'à corriger', anguleux: 'trop anguleux' };
-const FLAGS_KEY: Record<FlagKind, string> = { retirer: 'rp-island-a-retirer', corriger: 'rp-island-a-corriger', anguleux: 'rp-island-trop-anguleux' };
+export const FLAG_WORD: Record<FlagKind, string> = { retirer: 'à retirer', corriger: 'à corriger', anguleux: 'trop anguleux', lisse: 'pas assez lisse' };
+const FLAGS_KEY: Record<FlagKind, string> = { retirer: 'rp-island-a-retirer', corriger: 'rp-island-a-corriger', anguleux: 'rp-island-trop-anguleux', lisse: 'rp-island-pas-assez-lisse' };
 const flagListeners = new Set<() => void>();
 
 export function loadFlags(kind: FlagKind = 'retirer'): string[] {
@@ -452,6 +452,7 @@ const LIST_TITLE: Record<FlagKind, string> = {
   retirer: 'Modèles à retirer du jeu',
   corriger: 'Modèles à corriger sur Blender',
   anguleux: 'Modèles trop anguleux (à adoucir sur Blender)',
+  lisse: 'Modèles pas assez lisses (à lisser sur Blender)',
 };
 
 /** Le texte envoyé à Claude pour la liste `kind` : un modèle par ligne, avec son commentaire. */

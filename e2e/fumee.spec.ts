@@ -149,6 +149,12 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).last().click();
   await expect(page.locator('.feedback textarea')).toHaveValue(/Modèles trop anguleux[^\n]*\n[\s\S]*- objet beche \(bêche\)/);
   await page.locator('.feedback').getByRole('button', { name: 'Fermer' }).click();
+  // et « pas assez lisse », la quatrième liste
+  await page.getByRole('button', { name: /Pas assez lisse/ }).click();
+  await expect(page.locator('.vis-item.on .vis-tag.lisse')).toBeVisible();
+  await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).last().click();
+  await expect(page.locator('.feedback textarea')).toHaveValue(/Modèles pas assez lisses[^\n]*\n[\s\S]*- objet beche \(bêche\)/);
+  await page.locator('.feedback').getByRole('button', { name: 'Fermer' }).click();
   await page.screenshot({ path: info.outputPath('visionneuse.png') });
   expect(erreurs).toEqual([]);
 });

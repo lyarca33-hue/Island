@@ -31,7 +31,7 @@ import './visionneuse.css';
  * tourne en glissant et qu'on zoome à la molette (ou à deux doigts). À gauche la liste de tous les
  * modèles (objets du jeu, puis la galerie des packs, comme sur la carte de test) ; à droite ses
  * infos (taille, triangles, pièces qui bougent, ce qu'on peut en faire), un commentaire, et les deux
- * signalements de la carte de test : à supprimer (A), à corriger sur Blender (E), et trop anguleux (T). Les listes partent
+ * signalements de la carte de test : à supprimer (A), à corriger sur Blender (E), trop anguleux (T) et pas assez lisse (L). Les listes partent
  * à Claude avec les commentaires (« Envoyer la liste à Claude »).
  */
 
@@ -340,8 +340,8 @@ class Viewer {
   }
 }
 
-const KIND_LABEL: Record<FlagKind, string> = { retirer: 'Supprimer', corriger: 'Corriger sur Blender', anguleux: 'Trop anguleux' };
-const KIND_KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E', anguleux: 'T' };
+const KIND_LABEL: Record<FlagKind, string> = { retirer: 'Supprimer', corriger: 'Corriger sur Blender', anguleux: 'Trop anguleux', lisse: 'Pas assez lisse' };
+const KIND_KEY: Record<FlagKind, string> = { retirer: 'A', corriger: 'E', anguleux: 'T', lisse: 'L' };
 
 export function Visionneuse() {
   const entries = useMemo(allEntries, []);
@@ -461,6 +461,7 @@ export function Visionneuse() {
       else if (e.key.toLowerCase() === 'a') toggleFlag(entry.ref, 'retirer');
       else if (e.key.toLowerCase() === 'e') toggleFlag(entry.ref, 'corriger');
       else if (e.key.toLowerCase() === 't') toggleFlag(entry.ref, 'anguleux');
+      else if (e.key.toLowerCase() === 'l') toggleFlag(entry.ref, 'lisse');
       else if (e.key.toLowerCase() === 'r') viewer.current?.fit();
       else if (e.code === 'Space') setPlaying((p) => !p);
       else return;
@@ -504,6 +505,7 @@ export function Visionneuse() {
                   {flagged(e.ref, 'retirer') && <span className="vis-tag del" title="À supprimer">S</span>}
                   {flagged(e.ref, 'corriger') && <span className="vis-tag fix" title="À corriger sur Blender">B</span>}
                   {flagged(e.ref, 'anguleux') && <span className="vis-tag angle" title="Trop anguleux">◇</span>}
+                  {flagged(e.ref, 'lisse') && <span className="vis-tag lisse" title="Pas assez lisse">≈</span>}
                   {notes[e.ref] && <span className="vis-tag note" title={notes[e.ref]}>✎</span>}
                   {e.fixed && <span className="vis-tag done" title={`Corrigé sur Blender le ${dateFr(e.fixed.date)}`}>✓</span>}
                 </button>
@@ -528,7 +530,7 @@ export function Visionneuse() {
           </button>
         </div>
         {(!ready || busy) && <div className="vis-loading">Chargement…</div>}
-        <p className="vis-help">Glisser : tourner · Molette ou deux doigts : zoomer · Clic droit : déplacer · A : supprimer · E : Blender · T : trop anguleux</p>
+        <p className="vis-help">Glisser : tourner · Molette ou deux doigts : zoomer · Clic droit : déplacer · A : supprimer · E : Blender · T : trop anguleux · L : pas assez lisse</p>
       </main>
 
       <aside className="vis-info" ref={infoRef}>
