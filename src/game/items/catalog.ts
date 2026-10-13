@@ -1477,26 +1477,32 @@ const ALL_ITEMS: ItemDef[] = [
         mat.side = THREE.DoubleSide;
         return m;
       };
-      // verre transparent : corps droit, épaule qui se resserre, col
-      const body = clear(mesh(new THREE.CylinderGeometry(R, R, CARAFE_BODY, 22, 1, true), 0xdcecf2, 0, CARAFE_BODY / 2, 0), 0.35);
-      const shoulder = clear(mesh(new THREE.CylinderGeometry(N, R, CARAFE_H - CARAFE_BODY - 0.02, 22, 1, true), 0xdcecf2, 0, (CARAFE_BODY + CARAFE_H - 0.02) / 2, 0), 0.4);
-      const neck = clear(mesh(new THREE.CylinderGeometry(N * 1.05, N, 0.02, 22, 1, true), 0xdcecf2, 0, CARAFE_H - 0.01, 0), 0.45);
-      const bottom = mesh(new THREE.CircleGeometry(R, 22).rotateX(-Math.PI / 2), 0xc9e0e8, 0, 0.003, 0);
+      // verre transparent : corps droit, épaule qui se resserre en douceur, col évasé (tour de révolution)
+      const B = CARAFE_BODY, H = CARAFE_H;
+      const profile = [
+        [R * 0.94, 0], [R * 0.99, 0.004], [R, 0.012], [R, B * 0.5], [R, B],
+        [R * 0.97, B + (H - B) * 0.18], [R * 0.86, B + (H - B) * 0.36], [N * 1.35, B + (H - B) * 0.56], [N * 1.08, B + (H - B) * 0.74],
+        [N, H - 0.012], [N * 1.03, H - 0.004], [N * 1.1, H],
+      ].map(([r, y]) => new THREE.Vector2(r, y));
+      const glass = clear(mesh(new THREE.LatheGeometry(profile, 48), 0xdcecf2), 0.38);
+      const bottom = mesh(new THREE.CircleGeometry(R * 0.94, 48).rotateX(-Math.PI / 2), 0xc9e0e8, 0, 0.003, 0);
       // le bec, à l'avant
-      const spout = clear(mesh(new THREE.BoxGeometry(0.018, 0.006, 0.024), 0xdcecf2, 0, CARAFE_H - 0.002, -N - 0.008), 0.6);
-      // l'anse : un demi-anneau à l'arrière, ses deux bouts sur le corps
-      const handle = mesh(new THREE.TorusGeometry(0.05, 0.007, 8, 16, Math.PI), 0xc9e0e8, 0, CARAFE_H * 0.55, R - 0.004);
-      handle.rotation.set(0, -Math.PI / 2, Math.PI / 2);
+      const spout = clear(mesh(new THREE.BoxGeometry(0.018, 0.006, 0.024), 0xdcecf2, 0, H - 0.002, -N - 0.008), 0.6);
+      // l'anse, à l'arrière (+Z) : ses deux bouts sur le verre, le milieu bien dehors pour la main
+      const curve = new THREE.CatmullRomCurve3([
+        [0.165, R - 0.003], [0.162, R + 0.022], [0.14, R + 0.034], [0.1, R + 0.031], [0.07, R + 0.017], [0.058, R - 0.003],
+      ].map(([y, z]) => new THREE.Vector3(0, y, z)));
+      const handle = mesh(new THREE.TubeGeometry(curve, 40, 0.0065, 10), 0xc9e0e8);
       // colonne d'eau (comme la bouteille) dans la partie droite
-      const water = mesh(new THREE.CylinderGeometry(R * 0.92, R * 0.92, 1, 22).translate(0, 0.5, 0), 0x9fcde6, 0, 0.006, 0);
+      const water = mesh(new THREE.CylinderGeometry(R * 0.92, R * 0.92, 1, 48).translate(0, 0.5, 0), 0x9fcde6, 0, 0.006, 0);
       water.name = 'liquide';
       water.userData.column = true;
       water.renderOrder = -1;
       water.scale.y = 0.001;
       // trace de calcaire au fond
-      const stain = mesh(new THREE.RingGeometry(R * 0.5, R * 0.9, 22).rotateX(-Math.PI / 2), 0xb9b2a0, 0, 0.007, 0);
+      const stain = mesh(new THREE.RingGeometry(R * 0.5, R * 0.9, 48).rotateX(-Math.PI / 2), 0xb9b2a0, 0, 0.007, 0);
       stain.name = 'sale';
-      return group(water, bottom, body, shoulder, neck, spout, handle, stain);
+      return group(water, bottom, glass, spout, handle, stain);
     },
   },
   {
