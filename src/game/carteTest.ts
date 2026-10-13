@@ -1,5 +1,5 @@
 /**
- * Carte de test (`?test` dans l'adresse) : un sol plat quadrillé, sans île ni maison, pour
+ * Carte de test (`?test` dans l'adresse) : un grand terrain plat quadrillé, sans île ni maison, pour
  * inspecter un par un tous les modèles du jeu, posés en rangées bien séparées :
  * - les objets du catalogue (un exemplaire de chacun) : les petits flottent à hauteur des yeux,
  *   les gros objets puis les meubles sont au sol ;
@@ -11,6 +11,9 @@
  * Tout au fond, la maison assemblée du kit Tripo (décor, on n'y entre pas).
  * Derrière le perso au départ, les pans de mur taillés dans le muret de la ville (pansMur.ts) : un
  * de chaque, et une petite maison montée avec, sans toit, où l'on entre par la porte.
+ * On y construit aussi (construction.ts, touche N) et on y façonne le terrain (terraform.ts,
+ * touche U) : le terrain plat est le relief de l'île aplani (ile.ts : flattenIsland). Les bâtiments
+ * et les retouches du terrain sont gardés dans le navigateur, à part de la partie.
  * La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte.
  */
 import * as THREE from 'three';
@@ -24,27 +27,40 @@ import { type ModelName, PACK_SIZES, type PackId } from './packs/manifest';
 import { createPan, PAN_HEIGHT, PAN_THICK, panObstacles, type PanKind } from './packs/pansMur';
 import { createToonMaterial } from './toon';
 
-export const CARTE_TEST = typeof location !== 'undefined' && new URLSearchParams(location.search).has('test');
-/** Page du créateur de bâtiment (`?batir`) : un sol plat, sans île ni maison, où l'on construit. */
-export const CARTE_BATIR = !CARTE_TEST && typeof location !== 'undefined' && new URLSearchParams(location.search).has('batir');
-/** Carte de test ou page du créateur de bâtiment : un sol plat à la place de l'île, et pas de partie à sauver. */
-export const CARTE_PLATE = CARTE_TEST || CARTE_BATIR;
+const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+/** Carte de test (`?test`, ou `?batir`, l'ancienne page du créateur de bâtiment). */
+export const CARTE_TEST = !!params && (params.has('test') || params.has('batir'));
+/** On y arrive en construction (`?batir`). */
+export const ARRIVEE_CONSTRUCTION = !!params?.has('batir');
 
-/** Adresse de la page du créateur de bâtiment, ou de la vraie partie (`on` faux). */
-export function batirUrl(on: boolean): string {
+/** Adresse de la carte de test (en construction à l'arrivée si `build`), ou de la vraie partie (`on` faux). */
+export function testMapUrl(on: boolean, build = false): string {
   const url = new URL(location.href);
   url.searchParams.delete('test');
-  if (on) url.searchParams.set('batir', '');
-  else url.searchParams.delete('batir');
-  return url.toString().replace('batir=', 'batir');
+  url.searchParams.delete('batir');
+  if (on) url.searchParams.set(build ? 'batir' : 'test', '');
+  return url.toString().replace(/([?&])(test|batir)=(?=&|#|$)/, '$1$2');
 }
 
-/** Adresse de la carte de test, ou de la vraie partie (`on` faux). */
-export function testMapUrl(on: boolean): string {
-  const url = new URL(location.href);
-  if (on) url.searchParams.set('test', '');
-  else url.searchParams.delete('test');
-  return url.toString().replace('test=', 'test');
+/** Clé des retouches du terrain de la carte de test dans le navigateur. */
+const RELIEF_KEY = 'island-carte-test-relief';
+
+export function loadTestRelief(): unknown {
+  try {
+    const raw = localStorage.getItem(RELIEF_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveTestRelief(x: unknown): void {
+  try {
+    if (x) localStorage.setItem(RELIEF_KEY, JSON.stringify(x));
+    else localStorage.removeItem(RELIEF_KEY);
+  } catch {
+    // stockage plein ou refusé : les retouches restent pour cette visite
+  }
 }
 
 /** Bord avant de la première rangée (m) : les rangées s'enfoncent vers -z jusqu'au bout du carré où l'on marche. */
@@ -75,28 +91,6 @@ interface Entry {
 export interface TestMap {
   group: THREE.Group;
   shown: Array<{ obj: THREE.Object3D; radius: number }>;
-}
-
-/** Le sol plat : herbe claire quadrillée tous les mètres (de quoi juger les tailles). */
-export function createTestFloor(half: number): THREE.Mesh {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#9fbf7a';
-  g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = '#86a865';
-  g.lineWidth = 4;
-  g.strokeRect(0, 0, 128, 128);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(half * 2, half * 2);
-  tex.anisotropy = 8;
-  const geo = new THREE.PlaneGeometry(half * 2, half * 2).rotateX(-Math.PI / 2);
-  const mesh = new THREE.Mesh(geo, createToonMaterial({ color: 0xffffff, map: tex, rimStrength: 0 }));
-  mesh.name = 'sol-test';
-  mesh.position.y = -0.002;
-  return mesh;
 }
 
 /** Une pancarte debout (le nom d'un pack), tournée vers +z. */
@@ -302,6 +296,12 @@ export const TEST_PANS: PanSpot[] = (() => {
 export const TEST_PAN_OBSTACLES = TEST_PANS.flatMap((p) =>
   panObstacles(p.kind).map((box) => ({ box, pos: new THREE.Vector3(p.x, p.y ?? 0, p.z), yaw: p.yaw ?? 0 })),
 );
+
+/** Où le pinceau de la terraformation ne touche pas le sol : sous la maison du fond et les pans de mur. */
+export const TEST_PROTECT: Array<{ x0: number; x1: number; z0: number; z1: number }> = [
+  { x0: TEST_HOUSE.x + TEST_HOUSE_BOX.min.x, x1: TEST_HOUSE.x + TEST_HOUSE_BOX.max.x, z0: TEST_HOUSE.z + TEST_HOUSE_BOX.min.z, z1: TEST_HOUSE.z + TEST_HOUSE_BOX.max.z },
+  ...TEST_PANS.map((p) => ({ x0: p.x - 1.1, x1: p.x + 1.1, z0: p.z - 1.1, z1: p.z + 1.1 })),
+];
 
 /** Pose les pans de mur (et leur pancarte) sur la carte. */
 function addWalls(map: TestMap): void {
