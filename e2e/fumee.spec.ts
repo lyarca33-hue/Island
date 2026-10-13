@@ -137,6 +137,12 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   await page.locator('.vis-comment textarea').fill('charnière à revoir');
   await page.getByRole('button', { name: 'Envoyer la liste à Claude' }).click();
   await expect(page.locator('.feedback textarea')).toHaveValue(/objet frigo \(frigo\) : charnière à revoir/);
+  await page.locator('.feedback').getByRole('button', { name: 'Fermer' }).click();
+  // l'onglet des modèles déjà corrigés sur Blender
+  await page.getByRole('tab', { name: /Corrigés sur Blender/ }).click();
+  await expect(page.locator('.vis-item')).toContainText(['banane', 'bêche', 'beurre', 'boîte aux lettres']);
+  await page.locator('.vis-item', { hasText: 'bêche' }).click();
+  await expect(page.locator('.vis-fixed')).toContainText('Corrigé sur Blender');
   await page.screenshot({ path: info.outputPath('visionneuse.png') });
   expect(erreurs).toEqual([]);
 });

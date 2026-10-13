@@ -241,4 +241,5 @@ python3 tools/retouche_glb/splice.py public/packs/aliments.glb /tmp/banane.glb b
 du nœud `boite-lettres`), garde le matériau d'origine pour les primitives dont le matériau
 s'appelle `atlas…`, ajoute les autres matériaux (sans texture), puis retire du fichier ce qui
 n'est plus utilisé. Le nouveau maillage est stocké sans compression. Penser à mettre à jour la
-taille du modèle dans `src/game/packs/manifest.ts` si sa boîte change.
+taille du modèle dans `src/game/packs/manifest.ts` si sa boîte change. Ajouter ensuite le modèle à
+`src/game/items/corriges.ts` : il apparaît dans l'onglet « Corrigés sur Blender » de la visionneuse.

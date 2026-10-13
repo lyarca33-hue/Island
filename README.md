@@ -162,6 +162,9 @@ curseur, et ce que l'objet permet dans le jeu), un commentaire, et les deux sign
 carte de test : « Supprimer » (A) et « Corriger sur Blender » (E). Ce sont les mêmes listes que
 sur la carte de test ; « Envoyer la liste à Claude » les envoie avec les commentaires.
 
+L'onglet « Corrigés sur Blender » de la liste ne garde que les modèles déjà retouchés, avec ce
+qui a été fait et la PR (`src/game/items/corriges.ts`, à compléter après chaque retouche).
+
 ### L'île
 
 Autour de la maison, une île faite par le jeu, sans modèle à charger (`src/game/ile.ts`) : le
