@@ -9,6 +9,8 @@
  * Pour rester fluide, seul ce qui est près du perso est dessiné (cullTestMap) : la galerie entière
  * fait près de 5 millions de triangles.
  * Tout au fond, la maison assemblée du kit Tripo (décor, on n'y entre pas).
+ * Derrière le perso au départ, les pans de mur taillés dans le muret de la ville (pansMur.ts) : un
+ * de chaque, et une petite maison montée avec, sans toit, où l'on entre par la porte.
  * La partie n'y est ni chargée ni sauvée : la vraie partie reste intacte.
  */
 import * as THREE from 'three';
@@ -19,6 +21,7 @@ import { FOOD_LOOKS } from './items/interior';
 import { RETIRES } from './items/retires';
 import { packModel, packSize } from './packs/assets';
 import { type ModelName, PACK_SIZES, type PackId } from './packs/manifest';
+import { createPan, PAN_HEIGHT, PAN_THICK, panObstacles, type PanKind } from './packs/pansMur';
 import { createToonMaterial } from './toon';
 
 export const CARTE_TEST = typeof location !== 'undefined' && new URLSearchParams(location.search).has('test');
@@ -194,6 +197,7 @@ export function buildTestMap(items: WorldItem[]): TestMap {
       rows.map.shown.push({ obj: e.obj, radius: e.box.getSize(new THREE.Vector3()).length() / 2 });
     }
   }
+  addWalls(rows.map);
   // les objets du jeu restent dans la scène du jeu ; seule la galerie est ajoutée
   return rows.map;
 }
@@ -236,6 +240,70 @@ export function createTestHouse(): THREE.Group {
     })
     .catch((e) => console.warn('maison de test non chargée', e));
   return group;
+}
+
+/** Un pan de mur posé (repère de la carte) : centre au sol, lacet, hauteur du bas. */
+interface PanSpot {
+  kind: PanKind;
+  x: number;
+  z: number;
+  yaw?: number;
+  y?: number;
+}
+
+/** Où sont les pans de mur : en rangée, puis la maison montée avec (centre, en m). */
+const PANS_ROW_Z = 50;
+const PANS_HOUSE = new THREE.Vector3(7, 0, 53);
+
+/**
+ * Les pans de mur de la carte de test : un de chaque en rangée, puis une maison de 6 × 4 m (dedans)
+ * montée avec, porte vers le départ du perso (-z), un pignon sur chaque petit côté.
+ */
+export const TEST_PANS: PanSpot[] = (() => {
+  const row: PanSpot[] = [
+    { kind: 'mur', x: -14, z: PANS_ROW_Z },
+    { kind: 'mur-fenetre', x: -11.5, z: PANS_ROW_Z },
+    { kind: 'mur-porte', x: -9, z: PANS_ROW_Z },
+    { kind: 'pignon', x: -5, z: PANS_ROW_Z },
+  ];
+  // les grands côtés passent devant les bouts des petits : les coins se ferment
+  const d = 2 + PAN_THICK / 2, side = 3 - PAN_THICK / 2, q = Math.PI / 2;
+  const house: PanSpot[] = [
+    { kind: 'mur-fenetre', x: -2, z: -d },
+    { kind: 'mur-porte', x: 0, z: -d },
+    { kind: 'mur-fenetre', x: 2, z: -d },
+    { kind: 'mur', x: -2, z: d },
+    { kind: 'mur-fenetre', x: 0, z: d },
+    { kind: 'mur', x: 2, z: d },
+    { kind: 'mur', x: -side, z: -1, yaw: q },
+    { kind: 'mur-fenetre', x: -side, z: 1, yaw: q },
+    { kind: 'mur-fenetre', x: side, z: -1, yaw: q },
+    { kind: 'mur', x: side, z: 1, yaw: q },
+    { kind: 'pignon', x: -side, z: 0, yaw: q, y: PAN_HEIGHT },
+    { kind: 'pignon', x: side, z: 0, yaw: q, y: PAN_HEIGHT },
+  ];
+  return [...row, ...house.map((p) => ({ ...p, x: p.x + PANS_HOUSE.x, z: p.z + PANS_HOUSE.z }))];
+})();
+
+/** Ce qui bloque le passage dans les pans de mur (la porte de la maison laisse entrer). */
+export const TEST_PAN_OBSTACLES = TEST_PANS.flatMap((p) =>
+  panObstacles(p.kind).map((box) => ({ box, pos: new THREE.Vector3(p.x, p.y ?? 0, p.z), yaw: p.yaw ?? 0 })),
+);
+
+/** Pose les pans de mur (et leur pancarte) sur la carte. */
+function addWalls(map: TestMap): void {
+  const label = sign('pans de mur');
+  label.obj.position.set(-16.5, FLOAT_H, PANS_ROW_Z + 0.6);
+  label.obj.rotation.y = Math.PI;
+  map.group.add(label.obj);
+  map.shown.push({ obj: label.obj, radius: 1 });
+  for (const p of TEST_PANS) {
+    const pan = createPan(p.kind);
+    pan.position.set(p.x, p.y ?? 0, p.z);
+    pan.rotation.y = p.yaw ?? 0;
+    map.group.add(pan);
+    map.shown.push({ obj: pan, radius: p.kind === 'pignon' ? 2.2 : 1.8 });
+  }
 }
 
 /** Distance (m, au sol) jusqu'où les modèles de la carte de test sont dessinés autour du perso. */

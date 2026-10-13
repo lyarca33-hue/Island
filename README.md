@@ -119,7 +119,11 @@ séparées :
   gros objets et les meubles au sol ;
 - derrière, la galerie : chaque modèle de chaque pack (`public/packs`, états des aliments compris),
   pack par pack derrière sa pancarte, les petits aussi en l'air. Ce sont des modèles à
-  regarder, pas des objets qu'on prend.
+  regarder, pas des objets qu'on prend ;
+- derrière le perso au départ (se retourner), les pans de mur de bâtiment taillés dans le muret
+  de la ville (`src/game/packs/pansMur.ts`) : mur plein, mur avec fenêtre, mur avec porte et
+  pignon, puis une petite maison montée avec, sans toit, où l'on entre par la porte. Un pan fait
+  2 m de long sur 2,80 m de haut ; ils se posent bout à bout.
 
 Pour rester fluide, seul ce qui est à moins de 18 m du perso est dessiné : le reste apparaît
 quand on s'approche.
