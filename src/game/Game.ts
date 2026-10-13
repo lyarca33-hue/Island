@@ -32,7 +32,7 @@ import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
-import { CARTE_TEST, createTestFloor, createTestHouse, layoutTestMap, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START } from './carteTest';
+import { buildTestMap, CARTE_TEST, createTestFloor, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -569,6 +569,8 @@ export class Game {
   /** Les maisons Tripo où l'on entre (campagne.ts), chacune avec sa pièce du rez-de-chaussée. */
   private tripoHouses = CARTE_TEST ? [] : TRIPO_HOUSES.map(([h, spec]) => new TripoHouseModel(h, spec));
   private tripoRooms = new Map<TripoHouseModel, Room>();
+  /** Carte de test (carteTest.ts) : présentoirs à contourner et galerie des packs. */
+  private testMap: TestMap | null = null;
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
   /** Rotation voulue de la caméra autour du perso (radians, depuis la vue de départ). */
@@ -887,7 +889,8 @@ export class Game {
     const rooms = CARTE_TEST ? [] : ROOMS;
     if (CARTE_TEST) {
       for (const def of ITEMS) add(def.id);
-      layoutTestMap(this.items);
+      this.testMap = buildTestMap(this.items);
+      this.scene.add(this.testMap.group);
       this.character.placeAt(TEST_START, Math.PI);
     }
     for (const [id, x, y, z, rot] of [...(CARTE_TEST ? [] : START_ITEMS), ...rooms.flatMap((r) => r.items ?? [])]) {
@@ -1354,6 +1357,7 @@ export class Game {
   private buildNav(skip?: WorldItem): Nav {
     const nav = new Nav();
     for (const o of this.rooms.flatMap((r) => r.obstacles)) nav.add(o.box, o.pos, o.yaw, o.wall);
+    for (const o of this.testMap?.obstacles ?? []) nav.add(o.box, o.pos, o.yaw);
     for (const it of this.items) if (it !== skip && this.isObstacle(it)) nav.add(this.navBox(it), it.object.position, it.object.rotation.y);
     // carte de test : la maison assemblée se contourne
     if (CARTE_TEST) nav.add(TEST_HOUSE_BOX, TEST_HOUSE, 0, true);
