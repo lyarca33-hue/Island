@@ -765,7 +765,7 @@ const tone = () => (toneTex ??= toneTexture());
 
 /** Pas d'herbe (rouge à 1) : sous les routes et chemins ; les pièces s'y ajoutent (clearGrass). */
 const MASK_SIZE = 512;
-function grassMask(): { tex: THREE.DataTexture; clear(x0: number, x1: number, z0: number, z1: number): void } {
+function grassMask(): { tex: THREE.DataTexture; clear(x0: number, x1: number, z0: number, z1: number): void; reset(): void } {
   const n = MASK_SIZE, data = new Uint8Array(n * n);
   const cell = (2 * RELIEF_HALF) / n;
   const clearDisc = (x: number, z: number, r: number) => {
@@ -780,16 +780,24 @@ function grassMask(): { tex: THREE.DataTexture; clear(x0: number, x1: number, z0
     const c = wayCurve(w);
     for (const p of c.getSpacedPoints(Math.ceil(c.getLength() / 0.3))) clearDisc(p.x, p.z, w.width / 2 + 0.15);
   }
+  // les routes seules, pour rendre l'herbe là où une pièce a été retirée (reset)
+  const ways = data.slice();
   const tex = new THREE.DataTexture(data, n, n, THREE.RedFormat, THREE.UnsignedByteType);
   tex.magFilter = tex.minFilter = THREE.LinearFilter;
   tex.needsUpdate = true;
   return {
     tex,
     clear(x0, x1, z0, z1) {
-      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const i0 = Math.max(0, Math.floor((x0 + RELIEF_HALF) / cell - 0.5)), i1 = Math.min(n - 1, Math.ceil((x1 + RELIEF_HALF) / cell - 0.5));
+      const j0 = Math.max(0, Math.floor((z0 + RELIEF_HALF) / cell - 0.5)), j1 = Math.min(n - 1, Math.ceil((z1 + RELIEF_HALF) / cell - 0.5));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
         const cx = (i + 0.5) * cell - RELIEF_HALF, cz = (j + 0.5) * cell - RELIEF_HALF;
         if (cx > x0 && cx < x1 && cz > z0 && cz < z1) data[j * n + i] = 255;
       }
+      tex.needsUpdate = true;
+    },
+    reset() {
+      data.set(ways);
       tex.needsUpdate = true;
     },
   };
@@ -944,6 +952,8 @@ export interface Island {
   setGrassDensity(d: number): void;
   /** Pas d'herbe dans ce rectangle (une pièce de la maison). */
   clearGrass(x0: number, x1: number, z0: number, z1: number): void;
+  /** L'herbe repousse partout sauf sur les routes (avant de redégager les pièces qui restent). */
+  resetGrass(): void;
   /** Teinte de l'herbe, part de neige (0 à 1), sol mouillé (0 à 1). */
   setSeason(grass: [number, number, number], snow: number, wet: number): void;
   /**
@@ -1007,6 +1017,7 @@ export function createIsland(): Island {
     },
     setGrassDensity: grass.setDensity,
     clearGrass: mask.clear,
+    resetGrass: mask.reset,
     setSeason(grass, snow, wet) {
       u.uGrass.value.setRGB(grass[0], grass[1], grass[2]);
       u.uSnow.value = snow;

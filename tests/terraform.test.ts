@@ -13,6 +13,7 @@ function fakeIsland(): Island & { calls: Array<[number, number, number, number, 
     update() {},
     setGrassDensity() {},
     clearGrass() {},
+    resetGrass() {},
     setSeason() {},
     reshape(x0, x1, z0, z1, done) {
       calls.push([x0, x1, z0, z1, !!done]);

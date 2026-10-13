@@ -504,6 +504,11 @@ export class Construction {
     this.after();
   }
 
+  /** Redégage l'herbe sous chaque plancher (après resetGrass : un plancher retiré la laisse repousser). */
+  clearFloorsGrass(): void {
+    for (const p of this.placed) if (p.def.layer === 'sol') this.host.clearGrass(p.x - GRID / 2 - 0.2, p.x + GRID / 2 + 0.2, p.z - GRID / 2 - 0.2, p.z + GRID / 2 + 0.2);
+  }
+
   /** Démolit tout (ça ne s'annule pas : le panneau demande confirmation). */
   clearAll(): void {
     for (const p of [...this.placed]) this.removePlaced(p);

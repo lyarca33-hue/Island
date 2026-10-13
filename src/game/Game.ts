@@ -842,9 +842,10 @@ export class Game {
     if (CARTE_TEST) flattenIsland();
     this.island = createIsland();
     this.scene.add(this.island.root);
-    if (CARTE_TEST) {
-      if (GALERIE) this.scene.add(createTestHouse());
-      // pas de touffes d'herbe : les objets posés au sol restent bien visibles
+    // carte de test : l'herbe façon Zelda de l'île, qui suit la terraformation (pas de touffes sur
+    // le sable, la terre, la roche ni les pentes raides) ; la galerie reste rase, ses objets bien visibles
+    if (CARTE_TEST && GALERIE) {
+      this.scene.add(createTestHouse());
       this.island.clearGrass(-GROUND_HALF - 20, GROUND_HALF + 20, -GROUND_HALF - 20, GROUND_HALF + 20);
     }
     // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
@@ -1013,6 +1014,11 @@ export class Game {
       changed: () => {
         this.character.nav = this.buildNav();
         if (!CARTE_TEST) return;
+        // l'herbe repousse là où un plancher a été retiré, et reste rase sous ceux qui restent
+        if (!GALERIE) {
+          this.island.resetGrass();
+          this.construction.clearFloorsGrass();
+        }
         saveBatiments(this.construction.save());
         this.carteModifiee();
       },
