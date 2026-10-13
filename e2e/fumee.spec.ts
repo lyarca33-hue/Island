@@ -130,17 +130,17 @@ test('la visionneuse de modèles : un modèle, ses infos, un signalement avec co
   await page.goto('/?modeles');
   await expect(page.locator('.vis-item').first()).toBeVisible();
   await expect(page.locator('.vis-loading')).toHaveCount(0, { timeout: 120_000 });
-  await page.locator('.vis-search').fill('frigo');
+  await page.locator('.vis-search').fill('laver');
   await page.locator('.vis-item').first().click();
   await expect(page.locator('.vis-loading')).toHaveCount(0, { timeout: 120_000 });
-  await expect(page.locator('.vis-info h2')).toHaveText('frigo');
+  await expect(page.locator('.vis-info h2')).toHaveText('machine à laver');
   await expect(page.locator('.vis-parts li')).toContainText(['porte']);
   await page.getByRole('button', { name: /Corriger sur Blender/ }).click();
   await page.locator('.vis-comment textarea').fill('charnière à revoir');
   // « Copier » met la liste dans le presse-papiers
   await page.getByRole('button', { name: 'Copier la liste' }).click();
   await expect(page.getByRole('button', { name: 'Copié ✓' })).toBeVisible();
-  await expect.poll(presse).toMatch(/objet frigo \(frigo\) : charnière à revoir/);
+  await expect.poll(presse).toMatch(/objet machine-a-laver \(machine à laver\) : charnière à revoir/);
   // l'onglet des modèles déjà corrigés sur Blender
   await page.getByRole('tab', { name: /Corrigés sur Blender/ }).click();
   await expect(page.locator('.vis-item')).toContainText(['banane', 'bêche', 'beurre', 'boîte aux lettres']);
