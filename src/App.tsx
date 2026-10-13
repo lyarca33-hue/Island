@@ -415,7 +415,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
         <div className={`fp-aim${locked ? ' locked' : ''}`} aria-hidden>
           <span className="fp-dot" />
           {!locked && capture && <span className="fp-hint">Clic : la souris oriente la vue · Échap : la libérer</span>}
-          {!locked && !capture && <span className="fp-hint fades">Glisser (clic maintenu) ou deux doigts : tourner la vue</span>}
+          {!locked && !capture && <span className="fp-hint fades">Souris près du bord de la fenêtre : la vue tourne · glisser ou deux doigts aussi</span>}
         </div>
       )}
       {ctx && <ContextMenu menu={ctx} onClose={() => setCtx(null)} />}
