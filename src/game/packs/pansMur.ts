@@ -6,6 +6,7 @@
  * tomber juste à 2,80 m) et amincis à une cinquantaine de centimètres, un sur deux retourné pour que
  * les pierres ne se répètent pas. Les ouvertures (porte, fenêtre) et le haut en pointe du pignon
  * sont découpés net dans les pierres ; un cadre en bois (rives pour le pignon) recouvre la coupe.
+ * Les pierres prennent le brun du pont en pierre de la ville (PONT_TINT).
  * Le pan est couché le long de x, face vers ±z, posé au sol (y = 0) et centré : deux pans se
  * mettent bout à bout tous les 2 m.
  */
@@ -182,10 +183,19 @@ function panGeometries(): Promise<Map<PanKind, THREE.BufferGeometry> & { materia
     const muret = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrixWorld);
     const map = new Map(PAN_KINDS.map((k) => [k, panGeometry(muret, k)] as const));
     for (const g of map.values()) g.computeBoundingSphere();
-    return Object.assign(map, { material: m.material as THREE.Material });
+    // un matériau à eux : le muret de la ville garde sa couleur
+    const material = (m.material as THREE.MeshToonMaterial).clone();
+    material.color.multiply(PONT_TINT);
+    return Object.assign(map, { material });
   });
   return geos;
 }
+
+/**
+ * Teinte des pierres (linéaire) : la couleur moyenne de la texture du pont en pierre (pack ville,
+ * `pont-pierre`) sur celle du muret, pour que les pans aient le brun du pont.
+ */
+const PONT_TINT = new THREE.Color(0.43 / 0.516, 0.222 / 0.358, 0.0585 / 0.194);
 
 const wood = createToonMaterial({ color: 0x6e4a2c, rimStrength: 0 });
 const sillStone = createToonMaterial({ color: 0xcdbb94, rimStrength: 0 });
