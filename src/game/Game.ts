@@ -32,7 +32,7 @@ import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
 import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
-import { buildTestMap, CARTE_TEST, TEST_PAN_OBSTACLES, createTestFloor, cullTestMap, type FlagKind, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
+import { buildTestMap, CARTE_BATIR, CARTE_PLATE, CARTE_TEST, TEST_PAN_OBSTACLES, createTestFloor, cullTestMap, type FlagKind, galleryHit, loadFlags, toggleFlag, createTestHouse, TEST_HOUSE, TEST_HOUSE_BOX, TEST_START, type TestMap } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -60,7 +60,7 @@ import { TRIPO_HOUSES, TripoHouseModel } from './campagne';
 import { DIRTY, itemDirtWords, Salissure, USE_GRIME, type FloorDirtKind, type FloorTool } from './salissure';
 import { applyGame, captureGame, type GameSave, type SaveAccess } from './save';
 import { Terraform, TERRA_TOOLS } from './terraform';
-import { Construction } from './construction';
+import { Construction, loadBatiments, saveBatiments } from './construction';
 import { AutoQuality, AUTO_MAX, AUTO_SOFTWARE_START, gpuInfo, GRASS_MIN } from './autoQuality';
 import { fitRenderer, lightAllPasses, loadQuality, PostFx, QUALITY_PIXELS, saveQuality, skipDarkLights, type Quality } from './postfx';
 
@@ -542,7 +542,7 @@ export class Game {
   /** Brouillard de guerre (brouillard.ts) : seul ce que le perso voit se montre net. */
   private fog!: FogOfWar;
   private sightWalls: SightWall[] = [];
-  private fogOn = CARTE_TEST ? false : loadFogOn();
+  private fogOn = CARTE_PLATE ? false : loadFogOn();
   private character = new Character();
   private sun: THREE.DirectionalLight;
   private hemi: THREE.HemisphereLight;
@@ -583,7 +583,7 @@ export class Game {
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
   private activeRoom: Room | null = null;
   /** Les maisons Tripo où l'on entre (campagne.ts), chacune avec sa pièce du rez-de-chaussée. */
-  private tripoHouses = CARTE_TEST ? [] : TRIPO_HOUSES.map(([h, spec]) => new TripoHouseModel(h, spec));
+  private tripoHouses = CARTE_PLATE ? [] : TRIPO_HOUSES.map(([h, spec]) => new TripoHouseModel(h, spec));
   private tripoRooms = new Map<TripoHouseModel, Room>();
   /** Carte de test (carteTest.ts) : présentoirs à contourner et galerie des packs. */
   private testMap: TestMap | null = null;
@@ -804,6 +804,8 @@ export class Game {
     this.island = createIsland();
     // carte de test (carteTest.ts) : un sol plat quadrillé à la place de l'île
     if (CARTE_TEST) this.scene.add(createTestFloor(GROUND_HALF), createTestHouse());
+    // créateur de bâtiment : le même sol plat, vide
+    else if (CARTE_BATIR) this.scene.add(createTestFloor(GROUND_HALF));
     else this.scene.add(this.island.root);
     // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
     loadInterior()
@@ -906,14 +908,14 @@ export class Game {
       return item;
     };
     // carte de test : un exemplaire de chaque objet du catalogue, en rangées, et aucune pièce
-    const rooms = CARTE_TEST ? [] : ROOMS;
+    const rooms = CARTE_PLATE ? [] : ROOMS;
     if (CARTE_TEST) {
       for (const def of ITEMS) add(def.id);
       this.testMap = buildTestMap(this.items);
       this.scene.add(this.testMap.group);
       this.character.placeAt(TEST_START, Math.PI);
     }
-    for (const [id, x, y, z, rot] of [...(CARTE_TEST ? [] : START_ITEMS), ...rooms.flatMap((r) => r.items ?? [])].filter(([id]) => known(id))) {
+    for (const [id, x, y, z, rot] of [...(CARTE_PLATE ? [] : START_ITEMS), ...rooms.flatMap((r) => r.items ?? [])].filter(([id]) => known(id))) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -955,15 +957,18 @@ export class Game {
     this.scene.add(this.terraform.root);
     // construction : les bâtiments posés pièce par pièce (sur la carte de test aussi, sans sauvegarde)
     this.construction = new Construction({
-      ground: CARTE_TEST ? () => 0 : heightAt,
+      ground: CARTE_PLATE ? () => 0 : heightAt,
       clearGrass: (x0, x1, z0, z1) => {
-        if (!CARTE_TEST) this.island.clearGrass(x0, x1, z0, z1);
+        if (!CARTE_PLATE) this.island.clearGrass(x0, x1, z0, z1);
       },
       changed: () => {
         this.character.nav = this.buildNav();
+        if (CARTE_BATIR) saveBatiments(this.construction.save());
       },
     });
     this.scene.add(this.construction.root);
+    // page du créateur : les bâtiments gardés dans le navigateur, à part de la partie
+    if (CARTE_BATIR) this.construction.load(loadBatiments());
     // un calque de saleté par sol, posé dans la pièce (caché tant que c'est propre)
     this.salissure = new Salissure(this.rooms.map((r) => ({ name: r.spec.name, rect: r.rect })));
     this.salissure.floors.forEach((f, i) => this.rooms[i].group.add(f.build()));
@@ -1013,7 +1018,7 @@ export class Game {
       const n = item.def.heat?.spots.length ?? 0;
       if (n) this.heaters.set(item, { on: Array(n).fill(false), warm: Array(n).fill(0), unused: 0 });
     }
-    for (const [id, stove, i] of CARTE_TEST ? [] : START_ON_STOVE) {
+    for (const [id, stove, i] of CARTE_PLATE ? [] : START_ON_STOVE) {
       const where = this.items.find((it) => it.def.id === stove);
       if (!where || !known(id)) continue;
       const it = add(id);
@@ -1021,7 +1026,7 @@ export class Game {
       it.object.rotation.y = where.object.rotation.y;
     }
     // les meubles de rangement remplis (remplissage.ts) : chaque objet à la première place libre du dedans
-    for (const [holder, n, ids] of CARTE_TEST ? [] : START_CONTENTS) {
+    for (const [holder, n, ids] of CARTE_PLATE ? [] : START_CONTENTS) {
       const where = this.items.filter((it) => it.def.id === holder)[n];
       if (!where) continue;
       for (const id of ids.filter(known)) {
@@ -1040,7 +1045,7 @@ export class Game {
       }
     }
     this.tickStowed(0, true);
-    const worktop = CARTE_TEST ? undefined : this.items.find((i) => i.def.id === 'plan-de-travail');
+    const worktop = CARTE_PLATE ? undefined : this.items.find((i) => i.def.id === 'plan-de-travail');
     if (worktop) {
       worktop.object.updateMatrixWorld(true);
       for (const [id, x, z, rot] of START_ON_WORKTOP.filter(([id]) => known(id))) {
@@ -1052,7 +1057,7 @@ export class Game {
       }
     }
     // la théière, sur l'îlot
-    const island = CARTE_TEST ? undefined : this.items.find((i) => i.def.id === 'ilot');
+    const island = CARTE_PLATE ? undefined : this.items.find((i) => i.def.id === 'ilot');
     if (island) {
       island.object.updateMatrixWorld(true);
       for (const [id, x, z, rot] of START_ON_ISLAND.filter(([id]) => known(id))) {
@@ -1099,7 +1104,7 @@ export class Game {
 
     // sans le perso vu à travers les murs (son aura) : une passe de couleur en moins à chaque image
     this.post = new PostFx(this.renderer, this.scene, this.camera);
-    this.fog = new FogOfWar(CARTE_TEST ? () => 0 : heightAt, this.rooms.map((r) => r.rect));
+    this.fog = new FogOfWar(CARTE_PLATE ? () => 0 : heightAt, this.rooms.map((r) => r.rect));
     this.sightWalls = this.rooms.flatMap((r, i) => r.sightWalls(i));
     this.showFog();
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -7203,8 +7208,8 @@ export class Game {
   set terraforming(on: boolean) {
     if (on === this.terraform.on) return;
     // la carte de test n'a pas d'île à façonner (un sol plat quadrillé)
-    if (on && CARTE_TEST) {
-      this.onNotice?.('La terraformation se fait sur l’île, pas sur la carte de test.');
+    if (on && CARTE_PLATE) {
+      this.onNotice?.(CARTE_BATIR ? 'La terraformation se fait sur l’île : ici, le sol est plat pour bâtir.' : 'La terraformation se fait sur l’île, pas sur la carte de test.');
       return;
     }
     // le pinceau se manie de dessus
@@ -7217,13 +7222,18 @@ export class Game {
     }
   }
 
-  /** Mode construction ouvert (bouton du HUD, touche N). */
+  /** Mode construction ouvert (page du créateur de bâtiment : bouton du HUD, touche N). */
   get building(): boolean {
     return this.construction.on;
   }
 
   set building(on: boolean) {
     if (on === this.construction.on) return;
+    // le créateur de bâtiment a sa page (?batir), comme la carte de test
+    if (on && !CARTE_BATIR) {
+      this.onNotice?.('Le créateur de bâtiment a sa page : Menu → Construction.');
+      return;
+    }
     // les pièces se posent de dessus
     if (on && this.fp) this.firstPerson = false;
     if (on) this.terraforming = false;
@@ -8137,7 +8147,7 @@ export class Game {
   private groundPoint(cx: number, cy: number): THREE.Vector3 | null {
     this.aim(cx, cy);
     // dehors, le relief de l'île ; le plan invisible du sol en dernier recours
-    const hit = (CARTE_TEST ? undefined : this.raycaster.intersectObject(this.island.terrain, false)[0]) ?? this.raycaster.intersectObject(this.ground, false)[0];
+    const hit = (CARTE_PLATE ? undefined : this.raycaster.intersectObject(this.island.terrain, false)[0]) ?? this.raycaster.intersectObject(this.ground, false)[0];
     if (!hit) return null;
     // un clic sur un mur : au pied du mur, dans la pièce
     let point = hit.point, distance = hit.distance;
@@ -8291,10 +8301,10 @@ export class Game {
     // météo : pluie, flocons, gouttes aux vitres ; sol plus sombre mouillé, blanchi par la neige tombée
     const w = this.weather;
     w.update(this.clock, dt, (dt * this.clock.speed) / 3600);
-    if (this.testMap) {
+    if (CARTE_PLATE) {
       // carte de test : pas d'île à animer, et seul ce qui est près du perso est dessiné
       this.testCull -= dt;
-      if (this.testCull <= 0) {
+      if (this.testMap && this.testCull <= 0) {
         this.testCull = 0.25;
         cullTestMap(this.testMap, this.items, this.character.position);
       }
@@ -9647,7 +9657,7 @@ export class Game {
     // à la première personne, la tête suit la souris presque tout de suite
     this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * (this.fp ? 30 : 8));
     const p = this.character.position;
-    this.lift.position.y = CARTE_TEST ? 0 : heightAt(p.x, p.z);
+    this.lift.position.y = CARTE_PLATE ? 0 : heightAt(p.x, p.z);
     this.focus.lerp(new THREE.Vector3(p.x, FOCUS_HEIGHT + this.lift.position.y, p.z), Math.min(1, dt * 5));
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
     const aspect = w / h;

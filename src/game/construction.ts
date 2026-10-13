@@ -681,3 +681,24 @@ export class Construction {
     this.changed();
   }
 }
+
+/** Clé des bâtiments de la page du créateur (`?batir`) dans le navigateur. */
+const BATIR_KEY = 'island-batiments';
+
+export function loadBatiments(): unknown {
+  try {
+    const raw = localStorage.getItem(BATIR_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveBatiments(x: unknown): void {
+  try {
+    if (x) localStorage.setItem(BATIR_KEY, JSON.stringify(x));
+    else localStorage.removeItem(BATIR_KEY);
+  } catch {
+    // stockage plein ou refusé : les bâtiments restent pour cette visite
+  }
+}

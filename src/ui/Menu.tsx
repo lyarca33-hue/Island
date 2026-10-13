@@ -64,7 +64,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['Entrée', 'Écrire'],
   ['Tab', 'Parole ↔ Action'],
   ['U', 'Terraformation : façonner l’île au pinceau (1 à 6 : le pinceau)'],
-  ['N', 'Construction : monter un bâtiment pièce par pièce (1 à 9 : la pièce, R : tourner, Suppr : démolir, Ctrl+Z : annuler)'],
+  ['N', 'Créateur de bâtiment (sa page, Menu → Construction) : construire (1 à 9 : la pièce, R : tourner, Suppr : démolir, Ctrl+Z : annuler)'],
   ['X', 'Vue à la première personne ↔ vue de dessus (la souris oriente la vue, Échap la libère)'],
   ['H', 'Masquer / afficher l’interface'],
   ['Échap', 'Menu'],

@@ -4,7 +4,7 @@ import { defaultRecipe, type Recipe } from './creator/recipe';
 import { loadAnimationSource, loadSitAnimations } from './creator/source';
 import { Avatar } from './creator/avatar';
 import { prefetchModel } from './creator/vrm';
-import { CARTE_TEST, testMapUrl } from './game/carteTest';
+import { batirUrl, CARTE_BATIR, CARTE_PLATE, CARTE_TEST, testMapUrl } from './game/carteTest';
 import { cloud } from './game/cloud';
 import { Game, type ContextMenu as Menu3D, type HandActions, loadFirstPerson } from './game/Game';
 import { preloadPacks } from './game/packs/assets';
@@ -177,7 +177,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
     Avatar.onMissingImport = () => flash('Ton perso VRoid importé n’est pas sur cet appareil : perso de base en attendant.');
     // la partie gardée dans le navigateur, puis sauvée toute seule (et envoyée au compte Google)
     // carte de test : ni chargée ni sauvée, la vraie partie reste intacte
-    const saved = CARTE_TEST ? null : loadLocal();
+    const saved = CARTE_PLATE ? null : loadLocal();
     if (saved) {
       try {
         g.loadState(saved);
@@ -186,7 +186,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
         console.error('Partie sauvée illisible', e);
       }
     }
-    const capture = () => (CARTE_TEST ? null : { ...g.saveState(), recipe });
+    const capture = () => (CARTE_PLATE ? null : { ...g.saveState(), recipe });
     const auto = new AutoSave(capture, (s, leaving) => {
       setSavedAt(s.savedAt);
       cloud.push(s, leaving);
@@ -200,6 +200,8 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
     g.start().then(() => {
       setLoading(false);
       if (CARTE_TEST) flash('Carte de test : rien n’est sauvé. Menu → Partie pour revenir à l’île.');
+      // créateur de bâtiment : on arrive directement en construction
+      if (CARTE_BATIR) g.building = true;
     }).catch((e) => {
       console.error(e);
       setError('Le personnage n’a pas pu être chargé.');
@@ -260,7 +262,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
               >
                 <Icon name="mountain" />
               </button>
-              <button
+              {CARTE_BATIR && <button
                 className={`hud-icon${build ? ' on' : ''}`}
                 onClick={(e) => {
                   if (game.current) game.current.building = !game.current.building;
@@ -271,7 +273,7 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
                 title={build ? 'Fermer la construction (N)' : 'Construction (N) : monter un bâtiment pièce par pièce'}
               >
                 <Icon name="house" />
-              </button>
+              </button>}
               <span className="hud-sep" />
               <button className="hud-icon" onClick={toggleHud} aria-label="Masquer l’interface" title="Masquer l’interface (H)">
                 <Icon name="eyeOff" />
@@ -292,7 +294,9 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
           }
         >
           <MenuSection title="Partie" icon="cloud" open={section === 'partie'} onToggle={fold('partie')}>
-            {CARTE_TEST ? (
+            {CARTE_BATIR ? (
+              <p>Créateur de bâtiment : un sol plat pour construire. Tes bâtiments sont gardés sur cet appareil ; ta partie t’attend sur l’île.</p>
+            ) : CARTE_TEST ? (
               <>
                 <p>Carte de test : un sol plat et chaque modèle du jeu en rangées. Rien n’y est sauvé, ta partie t’attend sur l’île.</p>
                 {(['retirer', 'corriger'] as const).map((kind) => (
@@ -309,9 +313,13 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
             ) : (
               <SavePanel savedAt={savedAt} onNewGame={() => replaceGame(null)} />
             )}
-            <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(!CARTE_TEST))}>
-              {CARTE_TEST ? 'Retour à l’île' : 'Carte de test (objets en rangées)'}
-            </button>
+            {CARTE_BATIR ? (
+              <button type="button" className="menu-action" onClick={() => location.assign(batirUrl(false))}>Retour à l’île</button>
+            ) : (
+              <button type="button" className="menu-action" onClick={() => location.assign(testMapUrl(!CARTE_TEST))}>
+                {CARTE_TEST ? 'Retour à l’île' : 'Carte de test (objets en rangées)'}
+              </button>
+            )}
           </MenuSection>
           <MenuSection title="Raccourcis" icon="keyboard" open={section === 'raccourcis'} onToggle={fold('raccourcis')}>
             <Shortcuts />
@@ -337,16 +345,20 @@ function World({ recipe, onEdit, onReplace }: { recipe: Recipe; onEdit: () => vo
             <AiSettingsForm />
           </MenuSection>
           <MenuSection title="Construction" icon="house" open={section === 'construction'} onToggle={fold('construction')}>
-            <p>Monte un bâtiment pièce par pièce : murs en pierre, portes, fenêtres, sols, toits et décor, calés sur une grille de 2 m.</p>
-            <button
-              className="menu-action"
-              onClick={() => {
-                if (game.current) game.current.building = true;
-                setMenuOpen(false);
-              }}
-            >
-              {build ? 'Construction ouverte' : 'Ouvrir la construction (N)'}
-            </button>
+            <p>Monte un bâtiment pièce par pièce sur sa propre page : murs en pierre, portes, fenêtres, sols, toits et décor, calés sur une grille de 2 m.</p>
+            {CARTE_BATIR ? (
+              <button
+                className="menu-action"
+                onClick={() => {
+                  if (game.current) game.current.building = true;
+                  setMenuOpen(false);
+                }}
+              >
+                {build ? 'Construction ouverte' : 'Reprendre la construction (N)'}
+              </button>
+            ) : (
+              <button className="menu-action" onClick={() => location.assign(batirUrl(true))}>Ouvrir le créateur de bâtiment</button>
+            )}
           </MenuSection>
           <MenuSection title="Personnage" icon="user" open={section === 'perso'} onToggle={fold('perso')}>
             <button className="menu-action" onClick={onEdit}>Modifier le personnage</button>

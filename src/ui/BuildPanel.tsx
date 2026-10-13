@@ -6,7 +6,7 @@ import './terraform.css';
 import './build.css';
 
 /**
- * Le panneau du mode construction (bouton maison ou touche N) : les familles de pièces (murs, sols,
+ * Le panneau du créateur de bâtiment (sa page `?batir` ; bouton maison ou touche N) : les familles de pièces (murs, sols,
  * toits, décor), la pièce à poser, tourner, démolir, annuler, et de quoi tout démolir.
  */
 export function BuildPanel({ game }: { game: Game }) {
@@ -64,7 +64,6 @@ export function BuildPanel({ game }: { game: Game }) {
           ? 'Clic sur une pièce pour la démolir (glisser pour en démolir plusieurs).'
           : `${piece.hint}. Clic pour poser, glisser pour poser une rangée ; sur une place prise, la pièce remplace l’ancienne.`}
       </p>
-      <p className="terra-hint">Un terrain plat aide : aplanis-le d’abord avec la terraformation (U).</p>
       {asking ? (
         <div className="terra-confirm">
           <span>Démolir les {c.count} pièces posées ?</span>
