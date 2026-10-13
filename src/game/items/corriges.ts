@@ -22,6 +22,13 @@ export const CORRIGES: Correction[] = [
   { objets: ['beche'], date: '2026-10-13', pr: 198, quoi: 'le dos du manche et de la poignée, gris, reprend la texture bois de l’avant' },
   { objets: ['beurre'], packs: ['aliments/beurre'], date: '2026-10-13', pr: 198, quoi: 'le papier froissé du bas est ramené sous le pain, posé sur un beurrier en faïence' },
   { objets: ['boite-lettres'], date: '2026-10-13', pr: 198, quoi: 'les deux anneaux qui flottaient sous la boîte sont retirés' },
+  { objets: ['bol'], date: '2026-10-13', pr: 203, quoi: 'maillage refait lisse et rond (plus de facettes), texture d’une seule teinte' },
+  { objets: ['carafe'], date: '2026-10-13', pr: 203, quoi: 'l’anse ressort du verre au lieu d’être dedans ; verre arrondi en un seul tour (48 côtés au lieu de 22)' },
+  { objets: ['casserole'], date: '2026-10-13', pr: 203, quoi: 'maillage refait lisse et rond (plus de facettes), texture recuite en aplats' },
+  { objets: ['crumble'], packs: ['plats/crumble'], date: '2026-10-13', pr: 203, quoi: 'maillage refait d’un seul tenant et adouci, texture recuite' },
+  { objets: ['four'], date: '2026-10-13', pr: 203, quoi: 'faces du caisson redressées bien à plat, plis peints dans la texture adoucis' },
+  { objets: ['lettre'], date: '2026-10-13', pr: 203, quoi: 'les taches noires sur le papier sont effacées, le cachet de cire reste' },
+  { objets: ['machine-a-laver'], date: '2026-10-13', pr: 203, quoi: 'faces du caisson redressées bien à plat, plis peints dans la texture adoucis' },
 ];
 
 /** La correction d'un objet du jeu (`id`) ou d'un modèle de pack (`pack/modèle`), s'il y en a une. */
