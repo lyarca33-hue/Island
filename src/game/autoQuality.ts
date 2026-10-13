@@ -4,7 +4,7 @@
  * dessine sans carte graphique (Firefox sous Linux quand le pilote est mis de côté), descend tout
  * seul jusqu'à ce que le jeu tienne ses ~50 images par seconde. D'abord la finesse de l'image (le
  * navigateur l'agrandit) ; tout en bas, l'herbe 3D de l'île s'éclaircit (moins de touffes, plus
- * larges), pour de bon dans la partie. Éclairage, contours et effets restent les mêmes.
+ * larges), pour de bon dans la partie. Éclairage et effets restent les mêmes.
  */
 
 /** Plafond le plus fin (celui de la qualité normale) et le plus grossier en mode auto. */

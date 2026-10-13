@@ -1,14 +1,12 @@
 /**
  * Post-traitement HD-2D, repris d'Arena Tactic (client/src/render/hd2d/postfx.ts) et allégé :
  * la scène est dessinée UNE fois dans une cible qui garde sa profondeur, puis UNE passe finale
- * fait le reste (accentuation de la netteté, contours encrés depuis la profondeur, bloom,
- * étalonnage, vignettage, conversion sRGB).
+ * fait le reste (accentuation de la netteté, bloom, étalonnage, vignettage, conversion sRGB).
+ * Pas de contours encrés autour des modèles : ils faisaient un liseré gris sur chaque objet.
  *
  * Pas de flou de profondeur : toute la scène reste nette. La passe finale accentue légèrement
  * les détails (façon AMD CAS, sur 4 voisins déjà en cache) pour compenser l'agrandissement par
  * le navigateur quand le plafond de pixels est atteint.
- *
- * Persos : seule leur silhouette est encrée (calque LAYER_CHARACTER), comme dans Arena Tactic.
  *
  * Perso caché (option seeThrough, en jeu) : derrière un mur, un toit ou un meuble, il se voit en
  * transparence, entouré d'une aura claire. Le perso est redessiné seul dans une cible à lui (couleur
@@ -18,7 +16,7 @@
 import * as THREE from 'three';
 import type { FogOfWar } from './brouillard';
 
-/** Calque des maillages de persos : contour limité à la silhouette. */
+/** Calque des maillages de persos : redessinés seuls pour l'option seeThrough. */
 export const LAYER_CHARACTER = 4;
 
 /**
@@ -121,7 +119,6 @@ export class PostFx {
   private seeThrough: boolean;
   /** Perso couché sous la couette : on ne le montre pas à travers (elle le cache pour de vrai). */
   tucked = false;
-  private charMat = new THREE.MeshBasicMaterial({ colorWrite: false, fog: false });
   private quad: THREE.Mesh;
   private quadScene = new THREE.Scene();
   private quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -140,8 +137,7 @@ export class PostFx {
     this.camera = camera;
     // cibles des flous sans tampon de profondeur : seuls des quads plein écran y sont dessinés
     const opts = { type: THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace, depthBuffer: false };
-    // pas de MSAA : les contours encrés viennent de la profondeur (non lissée de toute façon), et sur
-    // un GPU intégré une cible HalfFloat multi-échantillons coûte très cher en mémoire et en débit
+    // pas de MSAA : sur un GPU intégré une cible HalfFloat multi-échantillons coûte très cher en mémoire et en débit
     this.sceneRT = new THREE.WebGLRenderTarget(1, 1, { ...opts, depthBuffer: true, samples: 0, depthTexture: new THREE.DepthTexture(1, 1) });
     this.brightRT = new THREE.WebGLRenderTarget(1, 1, opts);
     this.blurRT = new THREE.WebGLRenderTarget(1, 1, opts);
@@ -184,7 +180,7 @@ export class PostFx {
         tCharDepth: { value: this.charRT.depthTexture }, tBloom: { value: this.brightRT.texture },
         tChar: { value: this.charRT.texture }, seeThrough: { value: seeThrough ? 1 : 0 },
         texel: { value: new THREE.Vector2() }, near: { value: 0.1 }, range: { value: 399.9 }, persp: { value: 0 },
-        ink: { value: 0.8 }, bloom: { value: 0.5 }, aspect: { value: 1 },
+        bloom: { value: 0.5 }, aspect: { value: 1 },
         sharpen: { value: 0.5 },
         lift: { value: new THREE.Vector3(0.0, 0.004, 0.014) }, gain: { value: new THREE.Vector3(1.05, 1.0, 0.95) },
         saturation: { value: 1.12 },
@@ -195,24 +191,16 @@ export class PostFx {
       fragmentShader: `
         uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tCharDepth; uniform sampler2D tBloom;
         uniform sampler2D tChar; uniform float seeThrough;
-        uniform vec2 texel; uniform float near; uniform float range; uniform float persp; uniform float ink; uniform float bloom; uniform float aspect;
+        uniform vec2 texel; uniform float near; uniform float range; uniform float persp; uniform float bloom; uniform float aspect;
         uniform float sharpen;
         uniform vec3 lift; uniform vec3 gain; uniform float saturation; varying vec2 vUv;
         uniform float fogOn; uniform sampler2D tFog; uniform vec3 fogBox; uniform mat4 fogInvVP;
         // profondeur en mètres : linéaire en orthographique, en 1/z en perspective (première personne)
         float lin(float raw){ return persp > 0.5 ? near * (near + range) / (near + range - raw * range) : near + raw * range; }
         float raw(vec2 o){ return texture2D(tDepth, vUv + o * texel).r; }
-        // 1 si le pixel montre un perso : sa profondeur seule égale celle de la scène (pas masqué par un
-        // décor) ; textureLod car appelé dans une branche (pas de dérivées implicites)
-        float ch(vec2 o, float sceneRaw){
-          float cd = textureLod(tCharDepth, vUv + o * texel, 0.0).r;
-          return step(cd, 0.9999) * step(abs(lin(cd) - lin(sceneRaw)), 0.02);
-        }
         vec3 toSrgb(vec3 c){ c = max(c, 0.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
         void main(){
-          // profondeur du pixel et de ses 4 voisins, lue une seule fois
-          float r0 = raw(vec2(0.0)), rxp = raw(vec2(1.0,0.0)), rxm = raw(vec2(-1.0,0.0)), ryp = raw(vec2(0.0,1.0)), rym = raw(vec2(0.0,-1.0));
-          float c0 = lin(r0);
+          float r0 = raw(vec2(0.0));
           // netteté adaptative (AMD CAS simplifié) : renforce les détails peu contrastés, épargne
           // les bords déjà francs (pas de halo) ; poids négatif sur la croix des 4 voisins
           vec3 c = texture2D(tScene, vUv).rgb;
@@ -222,19 +210,6 @@ export class PostFx {
           vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
           vec3 wgt = -amp * mix(0.125, 0.2, sharpen);
           c = max((c + (nE + nW + nN + nS) * wgt) / (1.0 + 4.0 * wgt), 0.0);
-          // contours : dérivée SECONDE de la profondeur, nulle sur toute surface plane (sol vu en
-          // biais), forte seulement sur les vraies arêtes et silhouettes
-          float e;
-          if (persp > 0.5) {
-            // en perspective, c'est 1/z (donc la profondeur brute) qui varie linéairement sur un plan :
-            // sa dérivée seconde, ramenée en mètres ; estompée au loin (précision du tampon)
-            float k = range / (near * (near + range)) * c0 * c0;
-            e = max(abs(rxp + rxm - 2.0 * r0), abs(ryp + rym - 2.0 * r0)) * k * (1.0 - smoothstep(40.0, 90.0, c0));
-          } else e = max(abs(lin(rxp) + lin(rxm) - 2.0 * c0), abs(lin(ryp) + lin(rym) - 2.0 * c0));
-          // persos : arêtes intérieures ignorées, seule la silhouette reste encrée (le masque ne sert
-          // qu'au-dessus du seuil d'encre : calculé seulement là)
-          if (e > 0.16) e *= 1.0 - ch(vec2(0.0), r0) * ch(vec2(1.0,0.0), rxp) * ch(vec2(-1.0,0.0), rxm) * ch(vec2(0.0,1.0), ryp) * ch(vec2(0.0,-1.0), rym);
-          c = mix(c, vec3(0.02, 0.018, 0.035), smoothstep(0.16, 0.4, e) * ink);
           vec4 b = texture2D(tBloom, vUv);
           c += b.rgb * bloom;
           if (seeThrough > 0.5) {
@@ -365,7 +340,8 @@ export class PostFx {
     u.persp.value = (this.camera as THREE.PerspectiveCamera).isPerspectiveCamera ? 1 : 0;
     r.setRenderTarget(this.sceneRT);
     r.render(this.scene, this.camera);
-    this.renderCharacter();
+    // sans l'option seeThrough, le perso redessiné seul ne servirait à rien
+    if (this.seeThrough) this.renderCharacter();
     if (this.fog) {
       // caméra telle que dessinée à l'instant (matrixWorld à jour après le rendu)
       (u.fogInvVP.value as THREE.Matrix4).multiplyMatrices(this.camera.matrixWorld, this.camera.projectionMatrixInverse);
@@ -411,14 +387,13 @@ export class PostFx {
   }
 
   /**
-   * Les seuls maillages de persos (calque LAYER_CHARACTER) : leur profondeur, et en jeu leur couleur
-   * (vue à travers le décor quand il les cache) ; sinon un matériau sans couleur, moins cher.
+   * Les seuls maillages de persos (calque LAYER_CHARACTER) : leur profondeur et leur couleur
+   * (vues à travers le décor quand il les cache).
    */
   private renderCharacter(): void {
     const r = this.renderer, cam = this.camera, scene = this.scene;
     const bg = scene.background, layers = cam.layers.mask;
     scene.background = null;
-    scene.overrideMaterial = this.seeThrough ? null : this.charMat;
     cam.layers.set(LAYER_CHARACTER);
     r.setRenderTarget(this.charRT);
     scene.matrixWorldAutoUpdate = false; // positions déjà calculées par le rendu principal
@@ -431,7 +406,6 @@ export class PostFx {
     } finally {
       shadows.autoUpdate = autoShadows;
       scene.matrixWorldAutoUpdate = true;
-      scene.overrideMaterial = null;
       scene.background = bg;
       cam.layers.mask = layers;
     }
@@ -444,7 +418,7 @@ export class PostFx {
 
   dispose(): void {
     for (const t of [this.sceneRT, this.brightRT, this.blurRT, this.charRT, this.fogRT, this.fogTmp]) t?.dispose();
-    for (const m of [this.charMat, this.brightMat, this.blurMat, this.finalMat]) m.dispose();
+    for (const m of [this.brightMat, this.blurMat, this.finalMat]) m.dispose();
     this.quad.geometry.dispose();
   }
 }
