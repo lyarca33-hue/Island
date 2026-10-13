@@ -58,19 +58,19 @@ describe('argent', () => {
   it('rachète les légumes du jardin et les pommes, pas le reste sans étoiles ni le périmé', () => {
     for (const id of ['carotte', 'tomate', 'pomme-de-terre', 'concombre', 'pomme']) expect(sellPrice(def(id), 0, 'frais')).toBeGreaterThan(0);
     expect(sellPrice(def('farine'), 0, 'frais')).toBe(0);
-    expect(sellPrice(def('assiette'), 0, 'frais')).toBe(0);
+    expect(sellPrice(def('bol'), 0, 'frais')).toBe(0);
     expect(sellPrice(def('omelette'), 4, 'périmé')).toBe(0);
   });
 
   it('note les objets cassés à racheter, pas les aliments', () => {
     const a = new Argent();
-    a.noteBroken(def('assiette'), at, rot);
-    a.noteBroken(def('assiette'), at, rot);
+    a.noteBroken(def('bol'), at, rot);
+    a.noteBroken(def('bol'), at, rot);
     a.noteBroken(def('chaise'), at, rot);
     a.noteBroken(def('pomme'), at, rot);
     a.noteBroken(def('lettre'), at, rot);
     const aisle = a.houseAisle();
-    expect(aisle.find((r) => r.def.id === 'assiette')?.broken).toBe(2);
+    expect(aisle.find((r) => r.def.id === 'bol')?.broken).toBe(2);
     expect(aisle.find((r) => r.def.id === 'chaise')?.broken).toBe(1);
     expect(aisle.some((r) => r.def.id === 'pomme' || r.def.id === 'lettre')).toBe(false);
     // les pastilles et la vaisselle sont toujours en rayon
@@ -93,8 +93,8 @@ describe('argent', () => {
   });
 
   it('relit une commande en attente, et ignore une illisible', () => {
-    const c = readCommande({ hours: 0.2, names: ['pomme', 3], house: [{ id: 'assiette' }, { id: 'disparu' }] });
-    expect(c).toEqual({ hours: 0.2, names: ['pomme'], house: [{ id: 'assiette' }] });
+    const c = readCommande({ hours: 0.2, names: ['pomme', 3], house: [{ id: 'bol' }, { id: 'disparu' }] });
+    expect(c).toEqual({ hours: 0.2, names: ['pomme'], house: [{ id: 'bol' }] });
     expect(readCommande(undefined)).toBeNull();
     expect(readCommande({ names: [] })).toBeNull();
   });

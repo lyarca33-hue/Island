@@ -26,6 +26,8 @@ export const RETIRES = new Set([
   // deuxième liste (13 octobre) : meubles et appareils
   'pot-ustensiles', 'egouttoir', 'congelateur', 'machine-a-cafe', 'etagere-epices', 'armoire', 'lavabo', 'lit', 'toilettes', 'garde-manger',
   'poubelle',
+  // troisième liste (13 octobre)
+  'assiette', 'conteneur', 'crochets', 'fenetre', 'frigo', 'gaziniere', 'horloge', 'huile', 'ilot', 'jambon', 'livre-violet', 'livre-recettes',
 ]);
 
 /**
