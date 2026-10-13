@@ -31,7 +31,8 @@ import { type Ball, Towel, type TowelHold } from './items/towel';
 import { poseRig } from './items/rigs';
 import { shadowOnlyPass, SMALL_CASTER } from './items/merge';
 import { isTwoHanded } from './items/grips';
-import { ITEM_BY_ID, type ItemDef } from './items/catalog';
+import { ITEM_BY_ID, ITEMS, type ItemDef } from './items/catalog';
+import { CARTE_TEST, createTestFloor, layoutTestMap, TEST_START } from './carteTest';
 import { type Doneness, doneness, DONENESS_HUNGER, donenessWord, Puffs, showDoneness, waterCap } from './items/cooking';
 import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
@@ -525,7 +526,7 @@ export class Game {
   /** Brouillard de guerre (brouillard.ts) : seul ce que le perso voit se montre net. */
   private fog!: FogOfWar;
   private sightWalls: SightWall[] = [];
-  private fogOn = loadFogOn();
+  private fogOn = CARTE_TEST ? false : loadFogOn();
   private character = new Character();
   private sun: THREE.DirectionalLight;
   private hemi: THREE.HemisphereLight;
@@ -566,7 +567,7 @@ export class Game {
   /** Pièce où est le perso (gardée dans les passages), null dehors. */
   private activeRoom: Room | null = null;
   /** Les maisons Tripo où l'on entre (campagne.ts), chacune avec sa pièce du rez-de-chaussée. */
-  private tripoHouses = TRIPO_HOUSES.map(([h, spec]) => new TripoHouseModel(h, spec));
+  private tripoHouses = CARTE_TEST ? [] : TRIPO_HOUSES.map(([h, spec]) => new TripoHouseModel(h, spec));
   private tripoRooms = new Map<TripoHouseModel, Room>();
   private container: HTMLElement;
   private focus = new THREE.Vector3(0, FOCUS_HEIGHT, 0);
@@ -781,7 +782,9 @@ export class Game {
     this.scene.add(this.ground);
     // l'île : pelouse, plage, falaises, mer et routes autour du carré où l'on marche
     this.island = createIsland();
-    this.scene.add(this.island.root);
+    // carte de test (carteTest.ts) : un sol plat quadrillé à la place de l'île
+    if (CARTE_TEST) this.scene.add(createTestFloor(GROUND_HALF));
+    else this.scene.add(this.island.root);
     // canapé, tables, chaises et tabouret du pack intérieur, dès qu'il est chargé (items/interior.ts)
     loadInterior()
       .then(() => {
@@ -880,7 +883,14 @@ export class Game {
       this.scene.add(item.object);
       return item;
     };
-    for (const [id, x, y, z, rot] of [...START_ITEMS, ...ROOMS.flatMap((r) => r.items ?? [])]) {
+    // carte de test : un exemplaire de chaque objet du catalogue, en rangées, et aucune pièce
+    const rooms = CARTE_TEST ? [] : ROOMS;
+    if (CARTE_TEST) {
+      for (const def of ITEMS) add(def.id);
+      layoutTestMap(this.items);
+      this.character.placeAt(TEST_START, Math.PI);
+    }
+    for (const [id, x, y, z, rot] of [...(CARTE_TEST ? [] : START_ITEMS), ...rooms.flatMap((r) => r.items ?? [])]) {
       const item = add(id);
       item.object.position.set(x, y, z);
       item.object.rotation.y = rot;
@@ -891,7 +901,7 @@ export class Game {
       }
     }
     // les meubles rangés contre les murs, et ce qui est posé dessus (micro-ondes sur le placard)
-    for (const spec of ROOMS) {
+    for (const spec of rooms) {
       const runItems = spec.runs.flatMap((r) => r.items.filter((id): id is string => typeof id === 'string').map(add));
       const placed = new Set<WorldItem>();
       placeRuns(spec, (id) => {
@@ -900,7 +910,7 @@ export class Game {
         return it;
       });
     }
-    for (const [id, under, x = 0, z = 0, rot = 0] of ROOMS.flatMap((r) => r.onTop ?? [])) {
+    for (const [id, under, x = 0, z = 0, rot = 0] of rooms.flatMap((r) => r.onTop ?? [])) {
       const base = this.items.find((i) => i.def.id === under);
       if (!base) continue;
       const it = add(id);
@@ -909,7 +919,7 @@ export class Game {
       it.object.position.copy(new THREE.Vector3(x, base.box.max.y, z).applyMatrix4(base.object.matrixWorld));
       it.object.rotation.y = base.object.rotation.y + rot;
     }
-    for (const spec of ROOMS) {
+    for (const spec of rooms) {
       const room = new Room(spec, (id) => this.items.find((i) => i.def.id === id)?.object.position);
       this.rooms.push(room);
       this.scene.add(room.group);
@@ -966,7 +976,7 @@ export class Game {
       const n = item.def.heat?.spots.length ?? 0;
       if (n) this.heaters.set(item, { on: Array(n).fill(false), warm: Array(n).fill(0), unused: 0 });
     }
-    for (const [id, stove, i] of START_ON_STOVE) {
+    for (const [id, stove, i] of CARTE_TEST ? [] : START_ON_STOVE) {
       const where = this.items.find((it) => it.def.id === stove);
       if (!where) continue;
       const it = add(id);
@@ -974,7 +984,12 @@ export class Game {
       it.object.rotation.y = where.object.rotation.y;
     }
     // les meubles de rangement remplis (remplissage.ts) : chaque objet à la première place libre du dedans
-    for (const [holder, n, ids] of START_CONTENTS) {
+    // carte de test : la boîte de pastilles et celle de thé, pleines, posées avec les autres
+    for (const it of CARTE_TEST ? this.items : []) {
+      if (it.def.id === 'pastilles') this.tablets.set(it, TABLETS);
+      if (it.def.id === 'sachets-the') this.teaBoxes.set(it, TEA_BAGS);
+    }
+    for (const [holder, n, ids] of CARTE_TEST ? [] : START_CONTENTS) {
       const where = this.items.filter((it) => it.def.id === holder)[n];
       if (!where) continue;
       for (const id of ids) {
@@ -993,7 +1008,7 @@ export class Game {
       }
     }
     this.tickStowed(0, true);
-    const worktop = this.items.find((i) => i.def.id === 'plan-de-travail');
+    const worktop = CARTE_TEST ? undefined : this.items.find((i) => i.def.id === 'plan-de-travail');
     if (worktop) {
       worktop.object.updateMatrixWorld(true);
       for (const [id, x, z, rot] of START_ON_WORKTOP) {
@@ -1005,7 +1020,7 @@ export class Game {
       }
     }
     // la théière, sur l'îlot
-    const island = this.items.find((i) => i.def.id === 'ilot');
+    const island = CARTE_TEST ? undefined : this.items.find((i) => i.def.id === 'ilot');
     if (island) {
       island.object.updateMatrixWorld(true);
       for (const [id, x, z, rot] of START_ON_ISLAND) {
@@ -1052,7 +1067,7 @@ export class Game {
 
     // sans le perso vu à travers les murs (son aura) : une passe de couleur en moins à chaque image
     this.post = new PostFx(this.renderer, this.scene, this.camera);
-    this.fog = new FogOfWar(heightAt, this.rooms.map((r) => r.rect));
+    this.fog = new FogOfWar(CARTE_TEST ? () => 0 : heightAt, this.rooms.map((r) => r.rect));
     this.sightWalls = this.rooms.flatMap((r, i) => r.sightWalls(i));
     this.showFog();
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -7925,7 +7940,7 @@ export class Game {
   private groundPoint(cx: number, cy: number): THREE.Vector3 | null {
     this.aim(cx, cy);
     // dehors, le relief de l'île ; le plan invisible du sol en dernier recours
-    const hit = this.raycaster.intersectObject(this.island.terrain, false)[0] ?? this.raycaster.intersectObject(this.ground, false)[0];
+    const hit = (CARTE_TEST ? undefined : this.raycaster.intersectObject(this.island.terrain, false)[0]) ?? this.raycaster.intersectObject(this.ground, false)[0];
     if (!hit) return null;
     // un clic sur un mur : au pied du mur, dans la pièce
     let point = hit.point, distance = hit.distance;
@@ -9400,7 +9415,7 @@ export class Game {
     // à la première personne, la tête suit la souris presque tout de suite
     this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * (this.fp ? 30 : 8));
     const p = this.character.position;
-    this.lift.position.y = heightAt(p.x, p.z);
+    this.lift.position.y = CARTE_TEST ? 0 : heightAt(p.x, p.z);
     this.focus.lerp(new THREE.Vector3(p.x, FOCUS_HEIGHT + this.lift.position.y, p.z), Math.min(1, dt * 5));
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
     const aspect = w / h;
