@@ -24,7 +24,8 @@ export const RETIRES = new Set([
   // vêtements
   'pull', 'cintre', 'serviette', 'chaussure', 'chausson', 'botte',
   // deuxième liste (13 octobre) : meubles et appareils
-  'pot-ustensiles', 'egouttoir', 'congelateur', 'machine-a-cafe', 'etagere-epices', 'armoire', 'lavabo',
+  'pot-ustensiles', 'egouttoir', 'congelateur', 'machine-a-cafe', 'etagere-epices', 'armoire', 'lavabo', 'lit', 'toilettes', 'garde-manger',
+  'poubelle',
 ]);
 
 /**
