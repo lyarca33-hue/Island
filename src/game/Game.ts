@@ -38,7 +38,7 @@ import { PAIRING_SAY, pairing, seasonWord } from './items/condiments';
 import { DISH_FEMININE, RECIPE_BY_DISH, RECIPES, type Recipe as DishRecipe } from './items/recipes';
 import { DRINK_COLORS, DRINK_EFFECTS, JUICES, juiceFor, PANTRY_FEMININE, PANTRY_PLURAL, STOCK } from './items/pantry';
 import { fillerColor, START_CONTENTS } from './items/remplissage';
-import { MouseLookFilter } from './mouseLook';
+import { MouseLookFilter, captureBlocked } from './mouseLook';
 import { cellsOf, GRIDS, pack, type Cell } from './items/cases';
 import { forgetIcons, itemIcon } from './items/vignettes';
 import { AGE_FRIDGE, COOL_FRIDGE, COOL_PER_HOUR, FRESH_HUNGER, freshness, pointsFor, shelfLife, SKILL_MAX, skillLevel, SPOILED_HARM, STAR_HEAL, STAR_VERDICT, starsHunger, starText, warmth, WARMTH_HUNGER, XP_COOKED, XP_DISH, XP_GESTURE } from './items/freshness';
@@ -105,6 +105,18 @@ const FP_FOLLOW = 3;
 const FP_LEAN = 0.14;
 const FP_MARGIN = 0.12;
 const FP_KEY = 'rp-island-premiere-personne';
+/** Capture de la souris à la première personne choisie dans le menu ('1' / '0'), sinon automatique. */
+const CAPTURE_KEY = 'rp-island-capture-souris';
+
+/** Choix mémorisé de la capture de la souris (null : pas de choix, réglage automatique). */
+function loadCapture(): boolean | null {
+  try {
+    const v = localStorage.getItem(CAPTURE_KEY);
+    return v === '1' ? true : v === '0' ? false : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Vue à la première personne mémorisée (iso par défaut). */
 export function loadFirstPerson(): boolean {
@@ -1193,6 +1205,12 @@ export class Game {
    */
   private lockPointer(): void {
     if (!this.fp || this.pointerLocked || !matchMedia('(pointer: fine)').matches) return;
+    // capture coupée (menu, ou Firefox sous Linux en haute définition où elle bute à droite et en
+    // bas) : on regarde en glissant, comme quand la capture est refusée
+    if (!this.mouseCapture) {
+      this.noLock = true;
+      return;
+    }
     try {
       const p = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
       p?.catch?.(() => (this.noLock = true));
@@ -1214,6 +1232,33 @@ export class Game {
 
   /** La capture de la souris a échoué : on regarde en glissant (jusqu'à une capture réussie). */
   private noLock = false;
+
+  /** Capture de la souris choisie dans le menu (null : automatique). */
+  private captureChoice = loadCapture();
+
+  /**
+   * La souris capturée oriente la vue à la première personne (sinon : glisser, ou deux doigts).
+   * Par défaut oui, sauf là où la capture bute à droite et en bas (voir captureBlocked).
+   */
+  get mouseCapture(): boolean {
+    return this.captureChoice ?? !captureBlocked(navigator.userAgent, window.devicePixelRatio);
+  }
+
+  set mouseCapture(on: boolean) {
+    this.captureChoice = on;
+    try {
+      localStorage.setItem(CAPTURE_KEY, on ? '1' : '0');
+    } catch {
+      // stockage indisponible : réglage pour cette partie seulement
+    }
+    // le prochain clic dans la scène capture la souris ; coupée, on la rend tout de suite
+    this.noLock = !on;
+    if (!on && this.pointerLocked) document.exitPointerLock();
+    this.onMouseCapture?.(on);
+  }
+
+  /** Appelé quand le réglage de la capture change (rappel du HUD). */
+  onMouseCapture: ((on: boolean) => void) | null = null;
 
   /** Appelé quand la souris est capturée ou rendue (viseur du HUD). */
   onPointerLock: ((locked: boolean) => void) | null = null;
@@ -7475,7 +7520,7 @@ export class Game {
         el.setPointerCapture?.(e.pointerId);
         return;
       }
-      if (this.fp && e.pointerType === 'mouse' && (this.pointerLocked || !this.noLock)) {
+      if (this.fp && e.pointerType === 'mouse' && (this.pointerLocked || (!this.noLock && this.mouseCapture))) {
         // première personne à la souris : un premier clic capture la souris (sans agir), puis
         // chaque clic agit sur ce qui est sous le viseur
         if (!this.pointerLocked) return this.lockPointer();

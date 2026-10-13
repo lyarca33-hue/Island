@@ -32,6 +32,8 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
   useEffect(() => setQuality(game?.quality ?? null), [game]);
   const [fog, setFog] = useState(game?.fogOfWar ?? true);
   useEffect(() => setFog(game?.fogOfWar ?? true), [game]);
+  const [capture, setCapture] = useState(game?.mouseCapture ?? true);
+  useEffect(() => setCapture(game?.mouseCapture ?? true), [game]);
   if (!game) return null;
   return (
     <div className="menu-form time-controls">
@@ -54,6 +56,11 @@ export function DisplayControls({ game, fps, onFps }: { game: Game | null; fps: 
         <input type="checkbox" checked={fps} onChange={(e) => onFps(e.target.checked)} />
         <span>Afficher les images par seconde</span>
       </label>
+      <label className="menu-check">
+        <input type="checkbox" checked={capture} onChange={(e) => { game.mouseCapture = e.target.checked; setCapture(e.target.checked); }} />
+        <span>Première personne : la souris capturée tourne la vue</span>
+      </label>
+      <small>Décoché : on regarde en glissant (clic maintenu) ou à deux doigts. Décoché d’office avec Firefox sous Linux sur un écran haute définition, où le curseur capturé bute vers la droite et vers le bas.</small>
       <SoundControls game={game} />
     </div>
   );
