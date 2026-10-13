@@ -66,7 +66,7 @@ export const ACC_COLORS = [
   '#f4efe6', '#1d1a22', '#c2413a', '#e58bb0', '#e9c27a', '#d98b3a', '#3e78c9', '#3c9c78', '#6c4ab8', '#8a5638', '#9aa3b5', '#7ec8d8',
 ];
 
-const mat = (c: THREE.ColorRepresentation) => createToonMaterial({ color: c, rimStrength: 0.15 });
+const mat = (c: THREE.ColorRepresentation) => createToonMaterial({ color: c, rimStrength: 0 });
 const SEG = 28;
 
 function mesh(g: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {

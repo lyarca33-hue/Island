@@ -19,7 +19,7 @@ import { PREP_CUPBOARD, STOVE_RECIPES } from './prep';
 import { DISHES as RECIPE_DISHES } from './recipes';
 import { UPKEEP_CUPBOARD } from './upkeep';
 
-const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
+const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0 });
 
 function mesh(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, toon(color));

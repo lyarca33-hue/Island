@@ -28,7 +28,7 @@ const pending = new Map<PackId, Array<{ name: string; into: THREE.Group; own: bo
 /** Matériau toon équivalent (un par matériau du pack, partagé par tous les modèles). */
 function toonOf(m: THREE.Material): THREE.Material {
   const src = m as THREE.MeshStandardMaterial;
-  const t = createToonMaterial({ color: src.color ?? 0xffffff, map: src.map ?? null, rimStrength: 0.15 });
+  const t = createToonMaterial({ color: src.color ?? 0xffffff, map: src.map ?? null, rimStrength: 0 });
   if (src.transparent) {
     t.transparent = true;
     t.opacity = src.opacity;

@@ -199,7 +199,7 @@ export const RECIPE_BY_DISH = new Map(RECIPES.map((r) => [r.dish, r]));
 /** Noms des plats au féminin (accord des messages). */
 export const DISH_FEMININE = ['salade composée', 'tartine à la tomate', 'salade verte', 'salade de fruits', 'poêlée de légumes', 'bruschetta', 'poire au chocolat'];
 
-const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
+const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0 });
 
 function mesh(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, toon(color));

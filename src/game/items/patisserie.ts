@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { createToonMaterial } from '../toon';
 import type { ItemDef } from './catalog';
 
-const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0.15 });
+const toon = (color: THREE.ColorRepresentation) => createToonMaterial({ color, rimStrength: 0 });
 
 function mesh(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, toon(color));
