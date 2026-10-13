@@ -140,6 +140,19 @@ donc pas à utiliser un objet.
 Rien n'y est chargé ni sauvé : la vraie partie reste intacte, et Menu → Partie → « Retour à
 l'île » la retrouve.
 
+### La visionneuse de modèles
+
+Pour regarder un modèle à la fois : ajouter `?modeles` à l'adresse
+(https://lyarca33-hue.github.io/Island/?modeles), ou Menu → Partie → « Visionneuse de modèles »
+(`src/ui/Visionneuse.tsx`). À gauche, la liste de tous les modèles (objets du jeu, puis la
+galerie pack par pack, comme sur la carte de test), avec une recherche ; ← et → passent au
+suivant. Au milieu, le modèle seul sur un sol quadrillé : glisser pour tourner, molette (ou deux
+doigts) pour zoomer, clic droit pour déplacer, « Recadrer » (R) pour revenir. À droite, ses infos
+(taille, triangles, maillages, textures, pièces qui bougent, que l'on peut jouer ou poser au
+curseur, et ce que l'objet permet dans le jeu), un commentaire, et les deux signalements de la
+carte de test : « Supprimer » (A) et « Corriger sur Blender » (E). Ce sont les mêmes listes que
+sur la carte de test ; « Envoyer la liste à Claude » les envoie avec les commentaires.
+
 ### L'île
 
 Autour de la maison, une île faite par le jeu, sans modèle à charger (`src/game/ile.ts`) : le
